@@ -15,7 +15,8 @@
 |---|---|
 | `docs/ROUTE-MAP.md` | **Popolna struktura vseh strani in API rut** (iz build loga produkcijskega deploymenta) |
 | `docs/BUILD-LOG.txt` | Surov build log (Next.js build output) |
-| `docs/DEPLOYMENTS.md` | Zgodovina vseh 15 ohranjenih deploymentov s commit sporočili |
+| `docs/DEPLOYMENTS.md` | Zgodovina vseh 15 ohranjenih deploymentov s commit sporočili (okrnjena) |
+| `docs/DEPLOYMENTS-FULL.md` | **POLNA (neokrnjena) commit sporočila** vseh 15 deploymentov + forenzična časovnica izgube vira |
 | `config/vercel.json` | Rekonstruirana Vercel konfiguracija (crons, git nastavitve) |
 | `config/ENV-VARS.md` | Seznam okoljskih spremenljivk projekta (imena, ne vrednosti) |
 | `assets/` | Vsi javno dostopni statični viri žive aplikacije (JS chunki, CSS, fonti) |
@@ -23,7 +24,7 @@
 
 ## Kaj ŽAL NI bilo mogoče rešiti
 
-- **Izvorna koda (TS/TSX)** — Vercel za git-povezane deploymente **ne hrani izvornih datotek** prek API-ja (`/v13/deployments/{id}/files` → "File tree not found"; preverjeno na vseh 15 deploymentih + kontrolni projekti). Source mape (.map) so onemogočene (403).
+- **Izvorna koda (TS/TSX)** — Vercel za git-povezane deploymente **ne hrani izvornih datotek** prek API-ja (`/v13/deployments/{id}/files` → "File tree not found"; preverjeno na vseh 15 deploymentih + kontrolni projekti). Source mape (.map): zaščita je bila začasno izklopljena za preverbo — edina javno dostopna mapa je bila `polyfill-nomodule.js` (framework, ne aplikacijska koda); aplikacijski chunki map nimajo. Zaščita je bila vrnjena na `protectedSourcemaps: true`.
 - Avtentificirani del frontend bundle-a (chunki se naložijo šele po prijavi) in strežniška koda (lambda funkcije) niso dostopni prek javnega API-ja.
 
 ## Poti do popolne obnovitve
@@ -31,7 +32,8 @@
 1. **Z.ai kontejner** — commiti imajo avtorja `Z User <z@container>`: aplikacija je bila razvijana v Z.ai Code okolju. **Če je projekt še vedno odprt v Z.ai računu, je tam CELA koda.**
 2. **Lokalna kopija** — morebitna kopija na razvojnem računalniku.
 3. **Rebuild po specifikaciji** — `docs/ROUTE-MAP.md` vsebuje popolno funkcionalno specifikacijo (130+ API rut + strani); baza s podatki je nedotaknjena v Neon. Aplikacijo je mogoče znova zgraditi proti obstoječi bazi.
-4. **Prijava v živo aplikacijo** — če so na voljo administratorski podatki, se da iz žive aplikacije pridobiti še preostanek frontend bundle-a.
+4. **Prijava v živo aplikacijo** — če so na voljo administratorski podatki, se da iz žive aplikacije pridobiti še preostanek frontend bundle-a. (Opomba: demo prijava `/api/auth/demo` je na produkciji onemogočena — zahteva `DEMO_ACCESS=on`, ki ga ni mogoče spremeniti brez novega deploymenta.)
+5. **Obnova GitHub računa** — če je račun izbrisal lastnik, GitHub omogoča obnovo (restore) v omejenem obdobju prek podpore (github.support). Po obnovi bi bil repo `markec12345678/Roksal-Railing-Manager` spet dostopen.
 
 ## Dejanski status aplikacije (6. 10. 2026, 20:30 UTC)
 
