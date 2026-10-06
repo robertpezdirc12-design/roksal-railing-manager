@@ -1,5 +1,6 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { ThemeProvider } from "next-themes";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 
@@ -14,25 +15,17 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Z.ai Code Scaffold - AI-Powered Development",
-  description: "Modern Next.js scaffold optimized for AI-powered development with Z.ai. Built with TypeScript, Tailwind CSS, and shadcn/ui.",
-  keywords: ["Z.ai", "Next.js", "TypeScript", "Tailwind CSS", "shadcn/ui", "AI development", "React"],
-  authors: [{ name: "Z.ai Team" }],
+  title: "Roksal Railing Manager",
+  description: "Upravljanje ograj — projekti, teren, proizvodnja, računi. Rekonstrukcija R431 (vir: Vercel deployment R430).",
   icons: {
-    icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
+    icon: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='4' y='6' width='24' height='3.2' rx='1.6' fill='%23f59e0b'/%3E%3Crect x='4' y='14' width='24' height='3.2' rx='1.6' fill='%23f59e0b'/%3E%3Crect x='5.5' y='6' width='3.4' height='22' rx='1.7' fill='%231d2b3e'/%3E%3Crect x='14.3' y='6' width='3.4' height='22' rx='1.7' fill='%231d2b3e'/%3E%3Crect x='23.1' y='6' width='3.4' height='22' rx='1.7' fill='%231d2b3e'/%3E%3C/svg%3E",
   },
-  openGraph: {
-    title: "Z.ai Code Scaffold",
-    description: "AI-powered development with modern React stack",
-    url: "https://chat.z.ai",
-    siteName: "Z.ai",
-    type: "website",
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "Z.ai Code Scaffold",
-    description: "AI-powered development with modern React stack",
-  },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
@@ -41,12 +34,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="sl" suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}
       >
-        {children}
-        <Toaster />
+        <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
+          {children}
+          <Toaster />
+        </ThemeProvider>
       </body>
     </html>
   );

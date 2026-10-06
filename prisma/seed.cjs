@@ -1,0 +1,210 @@
+// Roksal Railing Manager — demo seed (rekonstrukcija R431)
+/* eslint-disable @typescript-eslint/no-require-imports */
+// Zrcali originalni prisma/seed.cjs: "demo podatki naseljeni (uporabniki, stranke, projekti, zaloga, profili)"
+const crypto = require('crypto')
+
+function hashPassword (password) {
+  const salt = crypto.randomBytes(16).toString('hex')
+  const hash = crypto.scryptSync(password, salt, 64).toString('hex')
+  return `${salt}:${hash}`
+}
+
+const { PrismaClient } = require('@prisma/client')
+const db = new PrismaClient()
+
+async function main () {
+  console.log('[seed] brišem obstoječe podatke …')
+  await db.notification.deleteMany()
+  await db.auditLog.deleteMany()
+  await db.materialPrice.deleteMany()
+  await db.stockLot.deleteMany()
+  await db.supplier.deleteMany()
+  await db.inventoryItem.deleteMany()
+  await db.profile.deleteMany()
+  await db.measurement.deleteMany()
+  await db.workOrderEvent.deleteMany()
+  await db.workOrder.deleteMany()
+  await db.productionOrder.deleteMany()
+  await db.payment.deleteMany()
+  await db.invoice.deleteMany()
+  await db.quoteLine.deleteMany()
+  await db.quote.deleteMany()
+  await db.opportunity.deleteMany()
+  await db.lead.deleteMany()
+  await db.project.deleteMany()
+  await db.customer.deleteMany()
+  await db.session.deleteMany()
+  await db.user.deleteMany()
+
+  console.log('[seed] naseljujem uporabnike …')
+  const users = await Promise.all([
+    db.user.create({ data: { email: 'admin@roksal.si', passwordHash: hashPassword('Admin123!'), name: 'Robert Pezdirc', role: 'ADMIN' } }),
+    db.user.create({ data: { email: 'vodja@roksal.si', passwordHash: hashPassword('Vodja123!'), name: 'Matej Kovač', role: 'VODJA' } }),
+    db.user.create({ data: { email: 'monter@roksal.si', passwordHash: hashPassword('Monter123!'), name: 'Luka Novak', role: 'MONTER' } }),
+    db.user.create({ data: { email: 'skladisce@roksal.si', passwordHash: hashPassword('Skladisce123!'), name: 'Tomaž Zupan', role: 'SKLADISCE' } }),
+    db.user.create({ data: { email: 'proizvodnja@roksal.si', passwordHash: hashPassword('Proizvodnja123!'), name: 'Ana Kos', role: 'PROIZVODNJA' } })
+  ])
+  const [admin, vodja, monter, skladisce, proizvodnja] = users
+
+  console.log('[seed] naseljujem stranke …')
+  const cs = await Promise.all([
+    db.customer.create({ data: { name: 'Marko Novak', email: 'marko.novak@gmail.com', phone: '041 234 567', address: 'Trg svobode 12', city: 'Ljubljana', taxId: 'SI12345678' } }),
+    db.customer.create({ data: { name: 'Petra Horvat', email: 'petra.horvat@siol.net', phone: '031 987 654', address: 'Vrtna ulica 4', city: 'Kranj' } }),
+    db.customer.create({ data: { name: 'Hotel Zvezda d.o.o.', email: 'info@hotelzvezda.si', phone: '01 555 12 34', address: 'Obala 8', city: 'Portorož', taxId: 'SI87654321' } }),
+    db.customer.create({ data: { name: 'Janez Kovač', email: 'janez.kovac@outlook.com', phone: '040 111 222', address: 'Gozdarska 22', city: 'Celje' } }),
+    db.customer.create({ data: { name: 'Vrtec Sonček', email: 'info@vtec-soncek.si', phone: '02 333 44 55', address: 'Ulica bratov Janša 3', city: 'Maribor' } }),
+    db.customer.create({ data: { name: 'Ivan Zajc', email: 'ivan.zajc@gmail.com', phone: '051 777 888', address: 'Kettejeva 17', city: 'Nova Gorica' } }),
+    db.customer.create({ data: { name: 'Stanovanjsko društvo Rožna dolina', email: 'uprava@sd-roznadolina.si', phone: '01 234 56 78', address: 'Rožna dolina 18', city: 'Ljubljana' } }),
+    db.customer.create({ data: { name: 'Gostilna Pri Lipi', email: 'gostilna@prilipi.si', phone: '07 888 99 00', address: 'Lipa 5', city: 'Novo mesto' } })
+  ])
+
+  console.log('[seed] naseljujem projekte …')
+  const projects = await Promise.all([
+    db.project.create({ data: { code: 'P-2026-001', title: 'Ograja terasa — Novak', status: 'TEREN', customerId: cs[0].id, address: 'Trg svobode 12, Ljubljana', note: 'Alu ograja, antracit RAL 7016' } }),
+    db.project.create({ data: { code: 'P-2026-002', title: 'Balustrada — Horvat', status: 'AKTIVNI', customerId: cs[1].id, address: 'Vrtna ulica 4, Kranj', note: 'Steklena balustrada z leseno oporo' } }),
+    db.project.create({ data: { code: 'P-2026-003', title: 'Hotel Zvezda — balkoni', status: 'NACRT', customerId: cs[2].id, address: 'Obala 8, Portorož', note: '48 balkonov, inox' } }),
+    db.project.create({ data: { code: 'P-2026-004', title: 'Nadstrešek + ograja — Kovač', status: 'ZAKLJUCEN', customerId: cs[3].id, address: 'Gozdarska 22, Celje' } }),
+    db.project.create({ data: { code: 'P-2026-005', title: 'Vrtec Sonček — igrala ograja', status: 'TEREN', customerId: cs[4].id, address: 'Ulica bratov Janša 3, Maribor', note: 'Varnostna ograja okoli igrišča' } }),
+    db.project.create({ data: { code: 'P-2026-006', title: 'Stanovanjska hiša Zajc — stopnišče', status: 'AKTIVNI', customerId: cs[5].id, address: 'Kettejeva 17, Nova Gorica' } }),
+    db.project.create({ data: { code: 'P-2026-007', title: 'SD Rožna dolina — skupne površine', status: 'NACRT', customerId: cs[6].id, address: 'Rožna dolina 18, Ljubljana' } }),
+    db.project.create({ data: { code: 'P-2026-008', title: 'Gostilna Pri Lipi — vrt', status: 'ARHIV', customerId: cs[7].id, address: 'Lipa 5, Novo mesto' } })
+  ])
+
+  console.log('[seed] naseljujem ponudbe …')
+  const quoteDefs = [
+    { code: 'PON-2026-001', projectId: projects[0].id, customerId: cs[0].id, status: 'SPREJET', lines: [['Alu ograja L-profil, antracit', 24, 89], ['Stebri 80×80 mm', 13, 45], ['Montaža', 24, 35]] },
+    { code: 'PON-2026-002', projectId: projects[1].id, customerId: cs[1].id, status: 'POSLAN', lines: [['Steklena balustrada 10 mm', 12, 145], ['Lesena opora (termo jesen)', 12, 68], ['Montaža', 12, 40]] },
+    { code: 'PON-2026-003', projectId: projects[2].id, customerId: cs[2].id, status: 'OSNUTEK', lines: [['Inox balkonska ograja V2A', 380, 120], ['Montaža', 380, 25]] },
+    { code: 'PON-2026-004', projectId: projects[3].id, customerId: cs[3].id, status: 'ZAKLENJEN', lines: [['Kovana ograja po meri', 18, 160], ['Nadstrešek polikarbonat', 12, 95], ['Montaža', 18, 45]] },
+    { code: 'PON-2026-005', projectId: projects[4].id, customerId: cs[4].id, status: 'POSLAN', lines: [['Varnostna ograja igrišče', 65, 72], ['Vrata s samozapiranjem', 2, 320]] }
+  ]
+  const quotes = []
+  for (const q of quoteDefs) {
+    const lines = q.lines.map(([description, qty, unitPrice]) => ({ description, qty, unitPrice, total: qty * unitPrice }))
+    const subtotal = lines.reduce((s, l) => s + l.total, 0)
+    const vat = Math.round(subtotal * 0.22 * 100) / 100
+    quotes.push(await db.quote.create({ data: { code: q.code, projectId: q.projectId, customerId: q.customerId, status: q.status, subtotal, vat, total: subtotal + vat, lines: { create: lines } } }))
+  }
+
+  console.log('[seed] naseljujem račune in plačila …')
+  const invoices = await Promise.all([
+    db.invoice.create({ data: { code: 'RA-2026-001', projectId: projects[0].id, quoteId: quotes[0].id, status: 'PLACAN', subtotal: quotes[0].subtotal, vat: quotes[0].vat, total: quotes[0].total, paid: quotes[0].total, dueDate: new Date('2026-09-20') } }),
+    db.invoice.create({ data: { code: 'RA-2026-002', projectId: projects[3].id, quoteId: quotes[3].id, status: 'DELNO_PLACAN', subtotal: quotes[3].subtotal, vat: quotes[3].vat, total: quotes[3].total, paid: 1000, dueDate: new Date('2026-10-15') } }),
+    db.invoice.create({ data: { code: 'RA-2026-003', projectId: projects[4].id, quoteId: quotes[4].id, status: 'IZDAN', subtotal: quotes[4].subtotal, vat: quotes[4].vat, total: quotes[4].total, paid: 0, dueDate: new Date('2026-11-01') } })
+  ])
+  await db.payment.create({ data: { invoiceId: invoices[0].id, amount: quotes[0].total, method: 'NAKAZNICA', reference: 'NAR-2026-991' } })
+  await db.payment.create({ data: { invoiceId: invoices[1].id, amount: 1000, method: 'NAKAZNICA', reference: 'NAR-2026-992' } })
+
+  console.log('[seed] naseljujem naloge (terenski tok) …')
+  const today = new Date(); today.setHours(0, 0, 0, 0)
+  const tom = new Date(today); tom.setDate(tom.getDate() + 1)
+  const wos = await Promise.all([
+    db.workOrder.create({ data: { code: 'N-2026-001', projectId: projects[0].id, title: 'Montaža ograje — Novak, 1. dan', status: 'V_TEKU', assigneeId: monter.id, scheduledFor: today, startedAt: new Date(Date.now() - 3600000 * 3) } }),
+    db.workOrder.create({ data: { code: 'N-2026-002', projectId: projects[4].id, title: 'Zajem mer — vrtec Sonček', status: 'V_ZAJEMU', assigneeId: monter.id, scheduledFor: today, startedAt: new Date(Date.now() - 3600000 * 5) } }),
+    db.workOrder.create({ data: { code: 'N-2026-003', projectId: projects[1].id, title: 'Dostava stekla — Horvat', status: 'NAPROGRAMIRAN', assigneeId: monter.id, scheduledFor: tom } }),
+    db.workOrder.create({ data: { code: 'N-2026-004', projectId: projects[5].id, title: 'Predmontaža stopnišča', status: 'V_PREVERI', assigneeId: monter.id, scheduledFor: today } }),
+    db.workOrder.create({ data: { code: 'N-2026-005', projectId: projects[0].id, title: 'Montaža ograje — Novak, 2. dan', status: 'NAPROGRAMIRAN', assigneeId: monter.id, scheduledFor: tom } }),
+    db.workOrder.create({ data: { code: 'N-2026-006', projectId: projects[3].id, title: 'Zaključna kontrola — Kovač', status: 'ZAKLJUCEN', assigneeId: monter.id, scheduledFor: new Date(Date.now() - 86400000 * 6), completedAt: new Date(Date.now() - 86400000 * 6), summary: 'Vse v redu, oddano.' } })
+  ])
+  await db.workOrderEvent.createMany({ data: [
+    { workOrderId: wos[0].id, userId: monter.id, type: 'DODELJEN', note: 'Dodeljeno monterju Luki' },
+    { workOrderId: wos[0].id, userId: monter.id, type: 'ZACETEK', note: 'ZAČNI DELO — Na terenu' },
+    { workOrderId: wos[1].id, userId: monter.id, type: 'ZACETEK', note: 'ZAČNI DELO' },
+    { workOrderId: wos[1].id, userId: monter.id, type: 'ZAJEM', note: 'ZAJEM — merjenje igrišča' },
+    { workOrderId: wos[5].id, userId: monter.id, type: 'ZAKLJUCEK', note: 'ZAKLJUČI TEREN' }
+  ] })
+
+  console.log('[seed] naseljujem meritve …')
+  await db.measurement.createMany({ data: [
+    { projectId: projects[0].id, workOrderId: wos[0].id, authorId: monter.id, type: 'OGRAJA', location: 'Terasa — severna stran', lengthCm: 1240, heightCm: 110, posts: 9, segments: 4, handrail: true, note: 'Nagib terase 3°' },
+    { projectId: projects[1].id, authorId: monter.id, type: 'BALUSTRADA', location: 'Dnevna soba', lengthCm: 480, heightCm: 95, posts: 0, segments: 2, handrail: true },
+    { projectId: projects[4].id, workOrderId: wos[1].id, authorId: monter.id, type: 'OGRAJA', location: 'Igrišče — obod', lengthCm: 3200, heightCm: 120, posts: 22, segments: 8, handrail: false, slopeDeg: 2.5 },
+    { projectId: projects[5].id, workOrderId: wos[3].id, authorId: monter.id, type: 'OGRAJA', location: 'Stopnišče — nadstropje 1', lengthCm: 860, heightCm: 100, posts: 6, segments: 3, handrail: true, slopeDeg: 38 }
+  ] })
+
+  console.log('[seed] naseljujem katalog profilov …')
+  await db.profile.createMany({ data: [
+    { sku: 'ALU-L-80', name: 'Alu L-profil 80×80', material: 'ALU', type: 'OGRAJA', pricePerM: 89, description: 'Anodiziran aluminij, RAL po naročilu' },
+    { sku: 'ALU-OKR-60', name: 'Alu okrogli profil Ø60', material: 'ALU', type: 'OGRAJA', pricePerM: 76 },
+    { sku: 'INOX-V2A-50', name: 'Inox cev V2A Ø50.8', material: 'INOX', type: 'OGRAJA', pricePerM: 120, description: 'Ploščato brusena izvedba' },
+    { sku: 'INOX-BAL-10', name: 'Inox balustrada 10 mm steklo', material: 'STIKLO', type: 'BALUSTRADA', pricePerM: 145 },
+    { sku: 'KOV-TRAD', name: 'Kovana ograja — tradicionalna', material: 'KOVANO ŽELEZO', type: 'OGRAJA', pricePerM: 160 },
+    { sku: 'KOV-MOD', name: 'Kovana ograja — moderna', material: 'KOVANO ŽELEZO', type: 'OGRAJA', pricePerM: 175 },
+    { sku: 'ALU-NAG-45', name: 'Alu nagibna ograja 45°', material: 'ALU', type: 'NAGIBNA', pricePerM: 95 },
+    { sku: 'STIK-8-CL', name: 'Steklena stena 8 mm clear', material: 'STIKLO', type: 'BALUSTRADA', pricePerM: 130 },
+    { sku: 'ALU-ROK-42', name: 'Alu ročaj Ø42', material: 'ALU', type: 'OGRAJA', pricePerM: 32 },
+    { sku: 'INOX-ROK-42', name: 'Inox ročaj Ø42', material: 'INOX', type: 'OGRAJA', pricePerM: 48 },
+    { sku: 'ALU-VR-100', name: 'Vrata ALU 1000 mm', material: 'ALU', type: 'OGRAJA', pricePerM: 320 },
+    { sku: 'PRAG-ALU', name: 'Prag alu 40 mm', material: 'ALU', type: 'OGRAJA', pricePerM: 28 }
+  ] })
+
+  console.log('[seed] naseljujem zalogo …')
+  const items = await Promise.all([
+    db.inventoryItem.create({ data: { sku: 'ALU-L-80-6M', name: 'Alu L-profil 80×80, 6 m', unit: 'kos', qty: 42, reorderAt: 12, location: 'A-01' } }),
+    db.inventoryItem.create({ data: { sku: 'ALU-OKR-60-6M', name: 'Alu okrogli profil Ø60, 6 m', unit: 'kos', qty: 8, reorderAt: 15, location: 'A-02' } }),
+    db.inventoryItem.create({ data: { sku: 'INOX-50-6M', name: 'Inox cev V2A Ø50.8, 6 m', unit: 'kos', qty: 24, reorderAt: 8, location: 'B-01' } }),
+    db.inventoryItem.create({ data: { sku: 'STIK-10-CL', name: 'Steklo 10 mm clear', unit: 'm2', qty: 36, reorderAt: 10, location: 'C-01' } }),
+    db.inventoryItem.create({ data: { sku: 'RAL-7016', name: 'Barva RAL 7016 antracit', unit: 'l', qty: 18, reorderAt: 6, location: 'D-01' } }),
+    db.inventoryItem.create({ data: { sku: 'VIJ-INOX-M8', name: 'Vijaki inox M8×60', unit: 'kos', qty: 950, reorderAt: 200, location: 'D-02' } }),
+    db.inventoryItem.create({ data: { sku: 'LEP-MS', name: 'Lepilo za steklo MS', unit: 'kos', qty: 4, reorderAt: 10, location: 'D-03' } }),
+    db.inventoryItem.create({ data: { sku: 'ALU-ROK-42-6M', name: 'Alu ročaj Ø42, 6 m', unit: 'kos', qty: 30, reorderAt: 10, location: 'A-03' } }),
+    db.inventoryItem.create({ data: { sku: 'TES-SIL', name: 'Tesnilo silikon črno', unit: 'kos', qty: 120, reorderAt: 30, location: 'D-04' } }),
+    db.inventoryItem.create({ data: { sku: 'ANC-M12', name: 'Sidrni kotički M12', unit: 'kos', qty: 65, reorderAt: 50, location: 'D-05' } })
+  ])
+  const suppliers = await Promise.all([
+    db.supplier.create({ data: { name: 'AluPro d.o.o.', email: 'nabava@alupro.si', phone: '01 222 33 44' } }),
+    db.supplier.create({ data: { name: 'InoxTrade s.r.o.', email: 'objednavky@inoxtrade.cz', phone: '+420 555 112 233' } }),
+    db.supplier.create({ data: { name: 'Steklarna Vegova', email: 'info@steklarna-vegova.si', phone: '02 444 55 66' } })
+  ])
+  await db.stockLot.createMany({ data: [
+    { itemId: items[0].id, qty: 30, unitCost: 52, supplierId: suppliers[0].id },
+    { itemId: items[0].id, qty: 12, unitCost: 54, supplierId: suppliers[0].id },
+    { itemId: items[2].id, qty: 24, unitCost: 88, supplierId: suppliers[1].id },
+    { itemId: items[3].id, qty: 36, unitCost: 95, supplierId: suppliers[2].id },
+    { itemId: items[7].id, qty: 30, unitCost: 19, supplierId: suppliers[0].id }
+  ] })
+  await db.materialPrice.createMany({ data: [
+    { itemId: items[0].id, supplierId: suppliers[0].id, price: 54 },
+    { itemId: items[2].id, supplierId: suppliers[1].id, price: 88 },
+    { itemId: items[3].id, supplierId: suppliers[2].id, price: 95 }
+  ] })
+
+  console.log('[seed] naseljujem CRM …')
+  const leads = await Promise.all([
+    db.lead.create({ data: { customerId: null, name: 'Simon Vidmar', email: 'simon.vidmar@gmail.com', phone: '041 555 666', source: 'SPLET', status: 'NOV', note: 'Vprašanje prek spletne forme — ograja za hišo' } }),
+    db.lead.create({ data: { customerId: null, name: 'Mojca Kos', email: 'mojca.kos@siol.net', phone: '031 444 333', source: 'PRIPOROČILO', status: 'KONTAKTIRAN', note: 'Priporočila sosedka (Novak)' } }),
+    db.lead.create({ data: { customerId: cs[6].id, name: 'SD Rožna dolina — obnova', source: 'TELEFON', status: 'KVALIFIKACIJAN', note: 'Obnova ograj okoli treh blokov' } })
+  ])
+  await db.opportunity.createMany({ data: [
+    { leadId: leads[0].id, title: 'Ograja hiša Vidmar', stage: 'PONUDBA', value: 4200, probability: 60, expectedClose: new Date('2026-10-20') },
+    { leadId: leads[1].id, title: 'Terasa Kos — balustrada', stage: 'KVALIFIKACIJA', value: 2600, probability: 30, expectedClose: new Date('2026-11-05') },
+    { leadId: leads[2].id, title: 'SD Rožna dolina — 3 bloki', stage: 'POGAJANJA', value: 18500, probability: 75, expectedClose: new Date('2026-10-30') }
+  ] })
+
+  console.log('[seed] naseljujem proizvodnjo …')
+  await db.productionOrder.createMany({ data: [
+    { code: 'PR-2026-001', projectId: projects[0].id, title: 'Izdelava segmentov ograje — Novak', status: 'V_IZDELAVI', dueAt: new Date(Date.now() + 86400000 * 2) },
+    { code: 'PR-2026-002', projectId: projects[1].id, title: 'Rez stekla — Horvat', status: 'DOKONCAN', dueAt: new Date(Date.now() - 86400000) },
+    { code: 'PR-2026-003', projectId: projects[5].id, title: 'Zvar stopniščnega okvirja — Zajc', status: 'NAVRTEN', dueAt: new Date(Date.now() + 86400000 * 5) }
+  ] })
+
+  console.log('[seed] naseljujem revizijo in obvestila …')
+  await db.auditLog.createMany({ data: [
+    { userId: admin.id, action: 'SETUP_COMPLETE', entity: 'sistem', detail: JSON.stringify({ note: 'Inicialna nastavitev' }) },
+    { userId: admin.id, action: 'USER_ROLE_CHANGE', entity: 'user', entityId: monter.id, detail: JSON.stringify({ from: 'MONTER', to: 'MONTER', note: 'potrditev po setupu' }) },
+    { userId: vodja.id, action: 'QUOTE_ISSUE', entity: 'quote', entityId: quotes[1].id, projectId: projects[1].id, detail: JSON.stringify({ code: 'PON-2026-002' }) },
+    { userId: monter.id, action: 'WO_TRANSITION', entity: 'workOrder', entityId: wos[0].id, projectId: projects[0].id, detail: JSON.stringify({ from: 'NAPROGRAMIRAN', to: 'V_TEKU' }) },
+    { userId: skladisce.id, action: 'STOCK_LOT_ADD', entity: 'inventoryItem', entityId: items[0].id, detail: JSON.stringify({ qty: 12, unitCost: 54 }) },
+    { userId: proizvodnja.id, action: 'PRODUCTION_STATUS', entity: 'productionOrder', detail: JSON.stringify({ code: 'PR-2026-002', to: 'DOKONCAN' }) },
+    { userId: admin.id, action: 'PAYMENT_RECORD', entity: 'invoice', entityId: invoices[0].id, projectId: projects[0].id, detail: JSON.stringify({ amount: quotes[0].total }) }
+  ] })
+  await db.notification.createMany({ data: [
+    { userId: monter.id, title: 'Nov nalog dodeljen', body: 'N-2026-003 — Dostava stekla, Horvat (jutri)' },
+    { userId: vodja.id, title: 'Nizka zaloga', body: 'Lepilo za steklo MS — pod mejo naročila (4/10)' },
+    { userId: admin.id, title: 'Delno plačan račun', body: 'RA-2026-002 — prejeto 1.000,00 € od 4.542,60 €' }
+  ] })
+
+  console.log('[seed] demo podatki naseljeni (uporabniki, stranke, projekti, zaloga, profili) ✓')
+}
+
+main().catch((e) => { console.error(e); process.exit(1) }).finally(() => db.$disconnect())

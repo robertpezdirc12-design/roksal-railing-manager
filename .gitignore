@@ -52,3 +52,5 @@ prompt
 server.log
 # Skills directory
 /skills/
+# database (sqlite — demo podatki se seedirajo z node prisma/seed.cjs)
+/db/

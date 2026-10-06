@@ -1,0 +1,194 @@
+'use client'
+
+// DANES — operativni vhod (R429 §7: ŠKOLJKA nad NalogCenter)
+// Terenski tok: DANES → MOJI NALOGI → ODPRI NALOG → ZAČNI DELO → ZAJEM → PREVERI → ZAKLJUČI TEREN
+
+import { useState } from 'react'
+import { CalendarCheck, ChevronRight, MapPin, Play, Camera, CheckCircle2, CheckCheck, Loader2 } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
+import { useToast } from '@/hooks/use-toast'
+import { useAppStore } from '@/lib/store'
+import { apiPost, fmtDate, fmtDateTime, useApi } from '@/lib/api-client'
+import { ErrorBox, LoadingRows, PageHeader, StatusBadge, EmptyState } from '@/components/roksal/ui-bits'
+import { hasPerm } from '@/lib/permissions-core'
+
+interface WorkOrderRow {
+  id: string; code: string; title: string; status: string
+  scheduledFor: string | null; startedAt: string | null; completedAt: string | null; summary: string | null
+  project: { code: string; title: string; address: string | null; customer: { name: string } | null } | null
+  assignee: { name: string } | null
+  _count: { measurements: number; events: number }
+}
+
+// koraki terenskega toka (VERBATIM R429)
+const TOK_STEPS = ['NAPROGRAMIRAN', 'V_TEKU', 'V_ZAJEMU', 'V_PREVERI', 'ZAKLJUCEN']
+const TOK_LABELS: Record<string, string> = {
+  NAPROGRAMIRAN: 'Naprogramiran', V_TEKU: 'V teku', V_ZAJEMU: 'V zajemu', V_PREVERI: 'V preveri', ZAKLJUCEN: 'Zaključen',
+}
+const NEXT_ACTION: Record<string, { to: string; label: string; icon: typeof Play }> = {
+  NAPROGRAMIRAN: { to: 'V_TEKU', label: 'ZAČNI DELO', icon: Play },
+  V_TEKU: { to: 'V_ZAJEMU', label: 'ZAJEM', icon: Camera },
+  V_ZAJEMU: { to: 'V_PREVERI', label: 'PREVERI', icon: CheckCircle2 },
+  V_PREVERI: { to: 'ZAKLJUCEN', label: 'ZAKLJUČI TEREN', icon: CheckCheck },
+}
+
+export default function DanesModule () {
+  const user = useAppStore((s) => s.user)
+  const setTab = useAppStore((s) => s.setTab)
+  const setSection = useAppStore((s) => s.setSection)
+  const { toast } = useToast()
+  const [busy, setBusy] = useState<string | null>(null)
+  const today = useApi<{ data: WorkOrderRow[] }>('/api/nalog?scope=today')
+  const open = useApi<{ data: WorkOrderRow[] }>('/api/nalog?scope=open')
+
+  const canTransition = hasPerm(user?.perms, 'nalog.transition')
+
+  async function transition (wo: WorkOrderRow, to: string, label: string) {
+    setBusy(wo.id)
+    try {
+      await apiPost(`/api/nalog/${wo.id}/transition`, { to, note: label })
+      toast({ title: `${label} — ${wo.code}`, description: 'Prehod terenskega toka uspešno izveden.' })
+      await Promise.all([today.reload(), open.reload()])
+    } catch (e) {
+      toast({
+        title: 'Prehod zavrnjen',
+        description: e instanceof Error ? e.message : 'Napaka',
+        variant: 'destructive',
+      })
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const todayList = today.data?.data ?? []
+  const openList = (open.data?.data ?? []).filter((w) => w.status !== 'NAPROGRAMIRAN')
+
+  return (
+    <div className="space-y-5">
+      <PageHeader
+        title="Danes"
+        desc="Operativni vhod — terenski tok dneva (R429 §7)"
+        actions={
+          <Button variant="outline" size="sm" onClick={() => { setSection('projekti'); setTab('nalogi') }}>
+            Vsi nalogi <ChevronRight className="size-4" aria-hidden />
+          </Button>
+        }
+      />
+
+      {/* statika dneva */}
+      <div className="grid grid-cols-3 gap-3">
+        <Card><CardContent className="p-4">
+          <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Danes</div>
+          <div className="text-2xl font-bold text-roksal-amber">{todayList.length}</div>
+        </CardContent></Card>
+        <Card><CardContent className="p-4">
+          <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Odprtih</div>
+          <div className="text-2xl font-bold">{(open.data?.data ?? []).length}</div>
+        </CardContent></Card>
+        <Card><CardContent className="p-4">
+          <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">V teku</div>
+          <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{openList.filter((w) => w.status === 'V_TEKU' || w.status === 'V_ZAJEMU').length}</div>
+        </CardContent></Card>
+      </div>
+
+      {/* MOJI NALOGI — današnji */}
+      <section aria-label="Današnji nalogi">
+        <h2 className="mb-2 flex items-center gap-2 text-sm font-bold uppercase tracking-widest text-muted-foreground">
+          <CalendarCheck className="size-4 text-roksal-amber" aria-hidden /> Današnji nalogi
+        </h2>
+        <ErrorBox error={today.error} />
+        {today.loading ? <LoadingRows /> : !today.error && todayList.length === 0 ? (
+          <EmptyState title="Danes ni nalog" desc="Koledar je prazen — uživaj v mirnem dnevu." icon={CalendarCheck} />
+        ) : (
+          <ul className="space-y-3">
+            {todayList.map((wo) => (
+              <WorkOrderCard key={wo.id} wo={wo} busy={busy === wo.id} canTransition={canTransition} onTransition={transition} />
+            ))}
+          </ul>
+        )}
+      </section>
+
+      {/* odprti (v teku / zajem / preveri) */}
+      {openList.length > 0 ? (
+        <section aria-label="Nalogi v teku">
+          <h2 className="mb-2 text-sm font-bold uppercase tracking-widest text-muted-foreground">V teku (odprti)</h2>
+          <ul className="space-y-3">
+            {openList.map((wo) => (
+              <WorkOrderCard key={wo.id} wo={wo} busy={busy === wo.id} canTransition={canTransition} onTransition={transition} />
+            ))}
+          </ul>
+        </section>
+      ) : null}
+    </div>
+  )
+}
+
+function WorkOrderCard ({ wo, busy, canTransition, onTransition }: {
+  wo: WorkOrderRow
+  busy: boolean
+  canTransition: boolean
+  onTransition: (wo: WorkOrderRow, to: string, label: string) => Promise<void>
+}) {
+  const action = NEXT_ACTION[wo.status]
+  const stepIdx = TOK_STEPS.indexOf(wo.status)
+  return (
+    <Card>
+      <CardContent className="p-4">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-xs font-semibold text-roksal-amber">{wo.code}</span>
+              <StatusBadge status={wo.status} />
+            </div>
+            <div className="mt-1 font-semibold leading-snug text-foreground">{wo.title}</div>
+            {wo.project ? (
+              <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+                <span>{wo.project.customer?.name ?? '—'}</span>
+                {wo.project.address ? <span className="inline-flex items-center gap-1"><MapPin className="size-3" aria-hidden />{wo.project.address}</span> : null}
+                <span className="font-mono">{wo.project.code}</span>
+              </div>
+            ) : null}
+          </div>
+          <div className="text-right text-xs text-muted-foreground">
+            <div>{fmtDate(wo.scheduledFor)}</div>
+            {wo.assignee ? <div className="mt-0.5">{wo.assignee.name}</div> : null}
+          </div>
+        </div>
+
+        {/* vizualizacija terenskega toka */}
+        <ol className="mt-3 flex items-center gap-1" aria-label="Terenski tok">
+          {TOK_STEPS.map((s, i) => (
+            <li key={s} className="flex flex-1 items-center gap-1">
+              <div
+                className={
+                  'h-1.5 flex-1 rounded-full ' +
+                  (i < stepIdx ? 'bg-roksal-green' : i === stepIdx ? 'bg-roksal-amber' : 'bg-secondary')
+                }
+                title={TOK_LABELS[s]}
+              />
+            </li>
+          ))}
+        </ol>
+        <div className="mt-1 flex justify-between text-[10px] font-medium text-muted-foreground">
+          {TOK_STEPS.map((s) => <span key={s} className={wo.status === s ? 'text-roksal-amber' : ''}>{TOK_LABELS[s].split(' ')[0]}</span>)}
+        </div>
+
+        {wo.summary ? <p className="mt-2 text-xs text-muted-foreground">{wo.summary}</p> : null}
+
+        {action && canTransition ? (
+          <Button
+            size="sm" className="mt-3 w-full sm:w-auto" disabled={busy}
+            onClick={() => void onTransition(wo, action.to, action.label)}
+          >
+            {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <action.icon className="size-4" aria-hidden />}
+            {action.label}
+          </Button>
+        ) : null}
+        {wo.status === 'ZAKLJUCEN' && wo.completedAt ? (
+          <div className="mt-2 text-xs text-muted-foreground">Zaključeno {fmtDateTime(wo.completedAt)}</div>
+        ) : null}
+      </CardContent>
+    </Card>
+  )
+}

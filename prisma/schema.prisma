@@ -1,8 +1,7 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+// Roksal Railing Manager — REKONSTRUKCIJA (R431)
+// Vir: blueprint iz GitLab recovery repo (route-map, RBAC katalog R425–R428, IA register R429)
+// Original: Next.js 16 + Prisma (PostgreSQL/Neon) — tu: SQLite (sandbox)
+// SPORAZUM: ta shema je EN VIR — module (subagenti) NE spreminjajo sheme!
 
 generator client {
   provider = "prisma-client-js"
@@ -13,20 +12,304 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ─── Identiteta & dostop ────────────────────────────────────────────────────
+
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  role         String // ADMIN | VODJA | MONTER | SKLADISCE | PROIZVODNJA
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  sessions     Session[]
+  auditLogs    AuditLog[]
+  workOrders   WorkOrder[]     @relation("assignee")
+  woEvents     WorkOrderEvent[]
+  measurements Measurement[]
 }
 
-model Post {
+model Session {
   id        String   @id @default(cuid())
-  title     String
-  content   String?
-  published Boolean  @default(false)
-  authorId  String
+  token     String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  expiresAt DateTime
+}
+
+// ─── CRM ────────────────────────────────────────────────────────────────────
+
+model Customer {
+  id        String   @id @default(cuid())
+  name      String
+  email     String?
+  phone     String?
+  address   String?
+  city      String?
+  taxId     String?
+  note      String?
+  createdAt DateTime @default(now())
+
+  projects Project[]
+  quotes   Quote[]
+  leads    Lead[]
+}
+
+model Lead {
+  id         String    @id @default(cuid())
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id])
+  name       String
+  email      String?
+  phone      String?
+  source     String    @default("SPLET") // SPLET | TELEFON | PRIPOROČILO | SEJEM
+  status     String    @default("NOV") // NOV | KONTAKTIRAN | KVALIFIKACIJAN | IZGUBLJEN | PRETVORJEN
+  note       String?
+  createdAt  DateTime  @default(now())
+
+  opportunities Opportunity[]
+}
+
+model Opportunity {
+  id           String    @id @default(cuid())
+  leadId       String?
+  lead         Lead?     @relation(fields: [leadId], references: [id])
+  title        String
+  stage        String    @default("KVALIFIKACIJA") // KVALIFIKACIJA | PONUDBA | POGAJANJA | ZMAGOVALNA | IZGUBLJENA
+  value        Float     @default(0)
+  probability  Int       @default(50)
+  expectedClose DateTime?
+  note         String?
+  createdAt    DateTime  @default(now())
+}
+
+// ─── Projekti & ponudbe ─────────────────────────────────────────────────────
+
+model Project {
+  id         String    @id @default(cuid())
+  code       String    @unique // npr. P-2026-001
+  title      String
+  status     String    @default("AKTIVNI") // NACRT | AKTIVNI | TEREN | ZAKLJUCEN | ARHIV
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id])
+  address    String?
+  note       String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  quotes           Quote[]
+  workOrders       WorkOrder[]
+  measurements     Measurement[]
+  invoices         Invoice[]
+  productionOrders ProductionOrder[]
+}
+
+model Quote {
+  id         String    @id @default(cuid())
+  code       String    @unique // npr. PON-2026-001
+  projectId  String?
+  project    Project?  @relation(fields: [projectId], references: [id])
+  customerId String?
+  customer   Customer? @relation(fields: [customerId], references: [id])
+  status     String    @default("OSNUTEK") // OSNUTEK | POSLAN | SPREJET | ZAVRNJEN | ZAKLENJEN
+  subtotal   Float     @default(0)
+  vat        Float     @default(0)
+  total      Float     @default(0)
+  note       String?
+  signature  String? // podpis stranke (data URL)
+  signedAt   DateTime?
+  signedBy   String?
+  createdAt  DateTime  @default(now())
+
+  lines   QuoteLine[]
+  invoices Invoice[]
+}
+
+model QuoteLine {
+  id          String @id @default(cuid())
+  quoteId     String
+  quote       Quote  @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  description String
+  qty         Float
+  unitPrice   Float
+  total       Float
+}
+
+model Invoice {
+  id        String    @id @default(cuid())
+  code      String    @unique // npr. RA-2026-001
+  projectId String?
+  project   Project?  @relation(fields: [projectId], references: [id])
+  quoteId   String?
+  quote     Quote?    @relation(fields: [quoteId], references: [id])
+  status    String    @default("IZDAN") // OSNUTEK | IZDAN | DELNO_PLACAN | PLACAN | ZAPRT
+  subtotal  Float     @default(0)
+  vat       Float     @default(0)
+  total     Float     @default(0)
+  paid      Float     @default(0)
+  dueDate   DateTime?
+  note      String?
+  createdAt DateTime  @default(now())
+
+  payments Payment[]
+}
+
+model Payment {
+  id        String   @id @default(cuid())
+  invoiceId String
+  invoice   Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  amount    Float
+  method    String   @default("NAKAZNICA") // NAKAZNICA | GOTOVINA | KARTICA
+  reference String?
+  createdAt DateTime @default(now())
+}
+
+// ─── Nalogi (terenski tok) ──────────────────────────────────────────────────
+
+model WorkOrder {
+  id           String    @id @default(cuid())
+  code         String    @unique // npr. N-2026-001
+  projectId    String?
+  project      Project?  @relation(fields: [projectId], references: [id])
+  title        String
+  status       String    @default("NAPROGRAMIRAN") // NAPROGRAMIRAN | V_TEKU | V_ZAJEMU | V_PREVERI | ZAKLJUCEN
+  assigneeId   String?
+  assignee     User?     @relation("assignee", fields: [assigneeId], references: [id])
+  scheduledFor DateTime?
+  startedAt    DateTime?
+  completedAt  DateTime?
+  summary      String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  events       WorkOrderEvent[]
+  measurements Measurement[]
+}
+
+model WorkOrderEvent {
+  id          String     @id @default(cuid())
+  workOrderId String
+  workOrder   WorkOrder  @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  userId      String?
+  user        User?      @relation(fields: [userId], references: [id])
+  type        String // DODELJEN | ZACETEK | ZAJEM | PREVERITEV | ZAKLJUCEK | KOMENTAR
+  note        String?
+  createdAt   DateTime   @default(now())
+}
+
+// ─── Zajem (meritve, foto) ──────────────────────────────────────────────────
+
+model Measurement {
+  id          String      @id @default(cuid())
+  projectId   String?
+  project     Project?    @relation(fields: [projectId], references: [id])
+  workOrderId String?
+  workOrder   WorkOrder?  @relation(fields: [workOrderId], references: [id])
+  authorId    String?
+  author      User?       @relation(fields: [authorId], references: [id])
+  type        String      @default("OGRAJA") // OGRAJA | BALUSTRADA | NAGIB | OSTANEO
+  location    String?
+  lengthCm    Float?
+  heightCm    Float?
+  posts       Int?
+  segments    Int?
+  handrail    Boolean     @default(true)
+  slopeDeg    Float?
+  params      String? // JSON (profileId, barva, dodatki …)
+  note        String?
+  createdAt   DateTime    @default(now())
+}
+
+// ─── Katalog & zaloga ───────────────────────────────────────────────────────
+
+model Profile {
+  id          String  @id @default(cuid())
+  sku         String  @unique
+  name        String
+  material    String  @default("ALU") // ALU | INOX | KOVANO ŽELEZO | STIKLO
+  type        String  @default("OGRAJA") // OGRAJA | BALUSTRADA | NAGIBNA
+  pricePerM   Float   @default(0)
+  description String?
+  active      Boolean @default(true)
+}
+
+model InventoryItem {
+  id        String   @id @default(cuid())
+  sku       String   @unique
+  name      String
+  unit      String   @default("m") // m | kos | kg | l
+  qty       Float    @default(0)
+  reorderAt Float    @default(0)
+  location  String?
+  createdAt DateTime @default(now())
+
+  lots   StockLot[]
+  prices MaterialPrice[]
+}
+
+model StockLot {
+  id          String   @id @default(cuid())
+  itemId      String
+  item        InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  qty         Float
+  unitCost    Float    @default(0)
+  supplierId  String?
+  deliveredAt DateTime @default(now())
+}
+
+model Supplier {
+  id    String  @id @default(cuid())
+  name  String
+  email String?
+  phone String?
+  note  String?
+}
+
+model MaterialPrice {
+  id         String        @id @default(cuid())
+  itemId     String?
+  item       InventoryItem? @relation(fields: [itemId], references: [id])
+  supplierId String?
+  price      Float
+  createdAt  DateTime      @default(now())
+}
+
+// ─── Proizvodnja ────────────────────────────────────────────────────────────
+
+model ProductionOrder {
+  id        String    @id @default(cuid())
+  code      String    @unique // npr. PR-2026-001
+  projectId String?
+  project   Project?  @relation(fields: [projectId], references: [id])
+  title     String
+  status    String    @default("NAVRTEN") // NAVRTEN | V_IZDELAVI | DOKONCAN | ODPOSLAN
+  dueAt     DateTime?
+  note      String?
+  createdAt DateTime  @default(now())
+}
+
+// ─── Revizija & obvestila ───────────────────────────────────────────────────
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  action    String // npr. LOGIN, LOGOUT, QUOTE_ISSUE, PAYMENT_RECORD, WO_TRANSITION, USER_ROLE_CHANGE …
+  entity    String // ime entitete (invoice, workOrder …)
+  entityId  String?
+  projectId String? // null = sistemski dogodek (R428: globalni pregled)
+  detail    String? // JSON
+  createdAt DateTime @default(now())
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String?
+  title     String
+  body      String
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
 }

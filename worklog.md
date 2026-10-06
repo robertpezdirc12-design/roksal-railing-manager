@@ -40,3 +40,109 @@ Stage Summary:
 - Baza (Neon) z VSI poslovnimi podatki je cela in živa — največja vrednost je varna
 - Varnost: exfil workflow je stal 17.9.–6.10. (~3 tedne) → rotacija Neon gesla, SESSION_SECRET, API_KEY_PEPPER, BLOB_READ_WRITE_TOKEN, ROKSAL_SETUP_TOKEN obvezna; tudi žetona, prilepljena v ta chat
 - Rezenrvena pot: rekonstrukcija iz blueprinta (route map + RBAC katalog + IA + imena datotek + živa aplikacija kot referenca)
+
+---
+Task ID: 3
+Agent: main (Z.ai Code)
+Task: Temelji rekonstrukcije Roksal Railing Manager (frontend ogrodje + backend jedro)
+
+Work Log:
+- Izluščil originalno temo iz rešenega produkcjskega CSS: navy #1d2b3e + amber #f59e0b, radius .75rem, Geist fonti, dark popover #1a2744 → zapisano v globals.css (light+dark) z --roksal-* spremenljivkami
+- Prisma shema (SQLite, EN VIR): User/Session/Customer/Lead/Opportunity/Project/Quote/QuoteLine/Invoice/Payment/WorkOrder/WorkOrderEvent/Measurement/Profile/InventoryItem/StockLot/Supplier/MaterialPrice/ProductionOrder/AuditLog/Notification
+- Seed prisma/seed.cjs: 5 uporabnikov (vsa vloga), 8 strank, 8 projektov, 5 ponudb s pozicijami, 3 računi + plačila, 6 nalogov (danes: V_TEKU/V_ZAJEMU/V_PREVERI), 4 meritve, 12 profilov, 10 zalognih artiklov + losi + 3 dobavitelji, CRM (3 vodi + 3 priložnosti), 3 proizvodni nalogi, revizija + obvestila
+- Jedro: src/lib/permissions-core.ts (38 pravic; MONTER 15, SKLADISCE 9, PROIZVODNJA 10, READS_ALL_PROJECTS), nav-registry.ts (IA 5 sekcij, 29 zavihkov z vrati), auth.ts (Bearer seje, scrypt, requirePermission fail-closed), audit.ts (writeAudit/readAudit/readAuditGlobal R428), store.ts (zustand persist), api-client.ts (apiGet/apiPost/apiPatch/useApi + fmt EUR/datum)
+- API: auth/login|logout|session, public/health|version, audit (R428 semantika: projectId per-projekt, brez = sistemski + READS_ALL_PROJECTS, prazen niz = 400), users (GET users.read, PATCH users.write + revizija), projects (GET/POST + [id] GET/PATCH), nalog (GET scope=today|open|mine|all, POST, [id], [id]/transition s FLOW terenskega toka), notifications, dashboard (KPI agregat)
+- Frontend: page.tsx (boot validacija seje, "Nalagam prijavo…"), login-screen (demo gumbi za 5 vlog), app-shell (sticky header, desktop sidebar, mobile bottom-nav z DANES prvim, notifications popover, theme toggle, sticky footer), module-view (lazy + vrata + fail-closed), ui-bits (PageHeader/StatCard/StatusBadge/EmptyState/ErrorBox/LoadingRows)
+- Moduli (jaz, polni): danes (terenski tok z gumbi ZAČNI DELO/ZAJEM/PREVERI/ZAKLJUČI TEREN + vizualizacija korakov), dashboard (KPI), projekti (seznam+detail+ustvari), teren, varnost (audit sistemski/projekt), vodja-ekipa (uporabniki+vloge+aktivacija), profil
+- 22 šolsjk modulov (ModulePlaceholder — POŠTENE ŠKOLJKE po R429 §4) pripravljenih za nadomestitev s strani subagentov
+- Lint čist; dev server deluje; API testi: prijava OK, 401 brez žetona, prehodi naloga OK (+zavrnjeni nedovoljeni), MONTER pravilno brez audit.read
+
+Stage Summary:
+- Temelj deluje end-to-end: prijava → ogrodje IA → danes z terenskim tokom → revizija
+- Subagenti 4-a/4-b/4-c nadomestijo šolsjke: 4-a stranke/ponudbe/računi+plačila/kalkulator/signatura; 4-b nalogi-center/meritve/foto/nagib; 4-c zaloga/katalog/crm/proizvodnja/logistika/material-v5
+- SPORAZUM: prisma/schema.prisma, src/lib/*, app-shell/module-view in moji moduli so ZAŠČITENI — subagenti ne spreminjajo
+
+---
+Task ID: 4-a
+Agent: full-stack-developer
+Task: Poslovni tok PROJEKTI — stranke, ponudbe, računi+plačila (R425), kalkulator, signatura (API + UI)
+
+Work Log:
+- API stranke: /api/customers (GET seznam q/limit + _count projekti/ponudbe — customers.read; POST ustvari — customers.write, revizija CUSTOMER_CREATE), /api/customers/[id] (GET podrobnost s projekti+ponudbami; PATCH urejanje — customers.write, CUSTOMER_UPDATE)
+- API ponudbe: /api/quotes (GET seznam s customer/project/_count lines + filter q/status; POST s pozicijami lines[{description,qty,unitPrice}] — validacija pozicij, subtotal/vat 22 %/total zaokroženo na 2 dec, koda PON-<leto>-<seq> robustno iz max obstoječe — quotes.create, QUOTE_CREATE), /api/quotes/[id] (GET s pozicijami+računi; PATCH status — vrata quotes.create, SPREJET dodatno zahteva quotes.approve, ZAKLENJEN ZAVRNJEN prek PATCH (samo podpis), zaklenjene ponudbe nespremenljive — QUOTE_STATUS)
+- API signatura: /api/quotes/[id]/sign (POST {signature,signedBy} — data URL validacija + limit 2 MB, samo POSLAN/SPREJET, enkratno — shrani signature/signedAt/signedBy, status ZAKLENJEN — deal.lock, revizija DEAL_LOCK brez podpisa v detail)
+- API računi: /api/invoices (GET seznam s project/quote/_count payments + q/status; POST {quoteId,projectId?} — samo iz SPREJET/ZAKLENJEN ponudbe, prekopira zneske, koda RA-<leto>-<seq>, rok +30 dni privzeto — invoices.issue, INVOICE_ISSUE), /api/invoices/[id] (GET s plačili; PATCH status — ročno samo OSNUTEK/IZDAN/ZAPRT, PLACAN/DELNO_PLACAN izključno prek plačil — INVOICE_STATUS)
+- API plačila (R425 LOČITEV): /api/payments (GET seznam z računi + filter invoiceId — payments.read; POST {invoiceId,amount,method,reference?} — ponovni izračun paid iz VSEH plačil, status PLACAN/DELNO_PLACAN — payments.manage, revizija PAYMENT_RECORD)
+- UI stranke.tsx: iskanje, kartice s kontakti (email/telefon/naslov/DDV) + števci, dialog novo/urejanje (isti obrazec), podrobnost s projekti/ponudbami stranke (max-h scroll), Uredi samo z customers.write
+- UI ponudbe.tsx: seznam kartic (status badge, znesek, št. pozicij, lokot za zaklenjene), filter po statusu + iskanje, podrobnost: tabela pozicij + Osnova/DDV 22 %/Skupaj, podpis stranke (img + podpisnik + čas) kadar obstaja, izdani računi; gumbi Označi kot poslan (quotes.create) in Označi kot sprejeto (quotes.approve — skrit brez pravice)
+- UI racuni.tsx: tabela računov (Koda/Stranka/Status/Skupaj/Plačano/Odprto/Rok, odprto rdeče), podrobnost z zgodovino plačil, dialog Zapiši plačilo (predizpolnjen odprti znesek, način NAKAZNICA/GOTOVINA/KARTICA, sklic — payments.manage), dialog Izdaj račun iz ponudbe (invoices.issue, samo SPREJET/ZAKLENJEN), ločen sklop Zadnja plačila (payments.read, max-h-96 scroll)
+- UI kalkulator.tsx: izbira profila iz /api/catalog (toleranten normalizator; fiksni fallback ALU-L-80 89, ALU-OKR-60 76, INOX-V2A-50 120, INOX-BAL-10 145, KOV-TRAD 160, KOV-MOD 175 €/m — 4-c je medtem odprl /api/catalog in se uporablja pravi seznam), dolžina m + št. stebrov (45 €/kos) + montaža switch (35 €/m), živ izračun pozicij + DDV 22 %, gumb Ustvari osnutek ponudbe (quotes.create) → dialog z izbiro stranke + opombo → POST /api/quotes
+- UI signatura.tsx: izbira ponudbe (samo POSLAN/SPREJET), canvas podpisna tablica (Pointer Events = miška+dotik, touch-none, DPR skaliranje, belo ozadje, setPointerCapture v try/catch), Počisti, ime podpisnika, Podpiši in zakleni posel (deal.lock, drugače razlaga), po uspehu zelena potrditev + reset
+- A11y popravki: DialogTitle vedno prisoten v dialogih podrobnosti (sr-only med nalaganjem) — Radix zahteva
+- Testiranje E2E (curl + agent-browser v izolirani seji): prijava ADMIN/MONTER; monter 403 na quotes PATCH/sign/payments/invoices; tok OSNUTEK→POSLAN→(podpis)→ZAKLENJEN; ponovno podpisovanje/spreminjanje zaklenjene zavrnjeno; izdaja računa iz OSNUTEK zavrnjena; delno plačilo 1000 → DELNO_PLACAN, doplačilo → PLACAN; ročni PLACAN zavrnjen; ZAPRT OK; revizija R428-semantika (sistemski vs projektni dogodki) konsistentna
+- Incident med delom: next-server je bil OOM-ubiljen (vzporedno delo 3 subagentov); dev strežnik ponovno zagnan (port 3000 spet zdrav, health OK) — dev.log je bil pri tem pri drugem agentu skrčen
+- bun run lint: ČIST (0 errorjev, 0 opozoril); dev.log brez napak prevajanja
+
+Stage Summary:
+- Celoten komercialni tok deluje: stranka → kalkulator (osnutek) → ponudba (pošlji/sprejmi s RBAC ločitvijo quotes.approve) → signatura (podpis → zaklep posla, DEAL_LOCK) → račun (izdaja iz sprejete ponudbe) → plačila (R425 ločitev, samodejni PLACAN/DELNO_PLACAN)
+- Vsa vrata strogo po permissions-core katalogu; vsi errory v slovenščini z detail; uspešni odgovori { data } oblike; Next.js 16 Promise params vzorec
+- Podatkovni sloj NE spreminjen (zaščitena prisma shema); ustvarjeno 8 API datotek + 5 modulov (nadomeščeni šolsjke placeholder-ji)
+
+---
+Task ID: 4-b
+Agent: full-stack-developer (kontekst potekel pred poročilom; delo preveril main agent)
+Task: Moduli TEREN+ZAJEM — nalogi center, meritve, foto, nagib (API + UI)
+
+Work Log:
+- /api/measurements (GET seznam s filtri ?projectId&workOrderId&type, POST) + /api/measurements/[id] (GET, PATCH) — vrata measurements.read/write + writeAudit
+- nalogi.tsx (478 vrstic): osrednji center — filtri scope/status/iskanje, dialog s časovnico dogodkov, gumbi terenskega toka (nalog.transition), nov nalog
+- meritve.tsx (385 vrstic): seznam + dialog nova meritev (tip/lokacija/dolžina/višina/stebri/segmenti/ročnik/nagib, povezava projekt/nalog)
+- foto.tsx (305 vrstic): zajem prek capture input, pomanjšanje na canvas 900px/0.7, shranjevanje kot Measurement type=FOTO s dataUrl v params, galerija predogledov
+- nagib.tsx (259 vrstic): kalkulator atan2 + priporočila ALU-NAG-45 + SVG shema + shrani kot meritev NAGIB
+- Preverjeno (main): lint čist, API vrne 4 meritve, vsi moduli importabilni
+
+Stage Summary:
+- Terenski tok pokrit celotno: DANES (main) + center NALOGI + ZAJEM (meritve/foto/nagib)
+
+---
+Task ID: 4-c
+Agent: full-stack-developer (kontekst potekel pred poročilom; delo preveril main agent)
+Task: Moduli PISARNA — zaloga, katalog, CRM, proizvodnja, logistika, material-v5 (API + UI)
+
+Work Log:
+- /api/inventory (GET z lots, PATCH popravek) + /api/inventory/lots (GET, POST sprejem — procurement.receive, writeAudit STOCK_LOT_ADD) + /api/suppliers (GET, POST)
+- /api/catalog (GET/POST) + /api/catalog/[id] (PATCH) — vrata catalog.read/write
+- /api/crm (GET {leads, opportunities}, POST lead) + /api/crm/[id] (PATCH status/stage) — vrata crm.read/write
+- /api/production (GET/POST) + /api/production/[id] (PATCH statusi) — vrata production.read/manage
+- zaloga.tsx (243): tabela z rdečimi oznakami pod mejo, sprejem pošiljke, popravek +/-, zadnji losi
+- katalog.tsx (243): mreža profilov, filtri, urejanje cen, nov profil
+- crm.tsx (294): vodi s hitrimi statusi + pipeline stolpci priložnosti + skupna vrednost
+- proizvodnja.tsx (193): nalogi s prehodi statusov + nov nalog
+- logistika.tsx (194): razpored po dnevih iz /api/nalog + /api/production (brez lastnega API-ja)
+- material-v5.tsx (309): BOM iz ponudbe + preveri zalogo po ujemanju imen
+- orodjarina.tsx: ostala POŠTENA ŠKOLJKA (ni modela opreme v shemi — odkrito)
+- Preverjeno (main): lint čist, vsi API-ji vračajo podatke
+
+Stage Summary:
+- Celoten PISARNA blok deluje; orodjarina odkrito kot školjka (manjka model — dokumentirano)
+
+---
+Task ID: 5
+Agent: main (Z.ai Code)
+Task: Integracija + lint + browser verifikacija + popravki
+
+Work Log:
+- Lint celotnega projekta: čist (0 errorjev)
+- Popravek 1: danes.tsx je klical apiPatch na /api/nalog/[id]/transition, ki sprejema POST → 405; spremenjeno na apiPost (nalogi.tsx od 4-b je že imel pravilno)
+- Popravek 2: projekti.tsx detail dialog brez DialogTitle med nalaganjem (Radix a11y) → dodan sr-only naslov fallback
+- Agent-browser verifikacija (desktop 1280×800 + mobile 390×844):
+  - prijava: zaslon se izriše, demo gumbi za 5 vlog, prijava kot ADMIN OK
+  - ogrodje: vseh 5 sekcij + 29 zavihkov, sidebar + tabletke + spodnja navigacija (DANES prvi)
+  - DANES: terenski tok klik ZAJEM → N-2026-001 V_TEKU→V_ZAJEMU (POST 200), toast, reload OK
+  - Preglednica/Projekti/Računi/Zaloga/CRM/Varnost: vsi se izrišejo s podatki (RA-2026-001..004, pipeline 25.300 €, 68 revizijskih vnosov)
+  - projekt detail dialog OK; mobile bottom nav OK; dark mode OK
+  - noga: kratka vsebina → prilepljena dnu (footerBottom==viewH na 1600px), dolga vsebina → naravno porinjena
+  - konzola brez napak po popravkih; dev.log brez runtime napak
+
+Stage Summary:
+- Aplikacija deluje end-to-end v brskalniku; 2 popravljeni bugi (metoda prehoda, a11y naslov dialoga)
