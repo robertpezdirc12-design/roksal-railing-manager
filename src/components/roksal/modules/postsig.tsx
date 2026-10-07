@@ -5,9 +5,10 @@
 // in akciji "Izdaj račun" (invoices.issue) ter "Ustvari proizvodni nalog" (production.manage)
 // — obe vidni SAMO z ustrezno pravico. Brez lastnega API-ja: /api/quotes, /api/invoices,
 // /api/projects, /api/production (obstoječe poti; povezave po quoteId / projektni kodi).
+// R437: gumb "Odkleni" (deal.lock) → POST /api/deal-lock { quoteId, locked: false }.
 
 import { useMemo, useState } from 'react'
-import { CheckCircle2, CircleDashed, Factory, FileSignature, FilePlus2, Lock, PenLine, Receipt, XCircle } from 'lucide-react'
+import { CheckCircle2, CircleDashed, Factory, FileSignature, FilePlus2, Lock, LockOpen, PenLine, Receipt, XCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { useToast } from '@/hooks/use-toast'
@@ -82,6 +83,8 @@ export default function PostsigModule () {
 
   const canIssue = hasPerm(user?.perms, 'invoices.issue')
   const canManageProduction = hasPerm(user?.perms, 'production.manage')
+  // R437: odklep zaklenjenega posla (deal.lock)
+  const canUnlock = hasPerm(user?.perms, 'deal.lock')
 
   const reloadAll = async () => {
     await Promise.all([quotes.reload(), invoices.reload(), projects.reload(), production.reload()])
@@ -123,6 +126,18 @@ export default function PostsigModule () {
       await reloadAll()
     } catch (e) {
       toast({ title: 'Napaka', description: e instanceof Error ? e.message : undefined, variant: 'destructive' })
+    } finally { setBusyKey(null) }
+  }
+
+  /** R437: odklep posla — nazaj na SPREJET (zavrnjeno, če ima ponudba že račune). */
+  async function unlockDeal (quote: LockedQuote) {
+    setBusyKey(`unlock-${quote.id}`)
+    try {
+      await apiPost('/api/deal-lock', { quoteId: quote.id, locked: false })
+      toast({ title: `Posel ${quote.code} odklenjen.`, description: 'Ponudba je nazaj v statusu SPREJET.' })
+      await reloadAll()
+    } catch (e) {
+      toast({ title: 'Odklep ni uspel', description: e instanceof Error ? e.message : undefined, variant: 'destructive' })
     } finally { setBusyKey(null) }
   }
 
@@ -257,7 +272,7 @@ export default function PostsigModule () {
                   </div>
 
                   {/* akcije — samo z ustreznimi pravicami */}
-                  {showIssue || showProduction ? (
+                  {showIssue || showProduction || canUnlock ? (
                     <div className="mt-auto flex flex-wrap gap-2 border-t pt-3">
                       {showIssue ? (
                         <Button size="sm" className="min-h-11" disabled={busyKey === `inv-${qq.id}`} onClick={() => void issueInvoice(qq)}>
@@ -267,6 +282,16 @@ export default function PostsigModule () {
                       {showProduction ? (
                         <Button size="sm" variant="outline" className="min-h-11" disabled={busyKey === `prod-${qq.id}`} onClick={() => void createProduction(qq, project)}>
                           <Factory className="size-4" aria-hidden /> {busyKey === `prod-${qq.id}` ? 'Ustvarjam …' : 'Ustvari proizvodni nalog'}
+                        </Button>
+                      ) : null}
+                      {canUnlock ? (
+                        <Button
+                          size="sm" variant="outline" className="min-h-11"
+                          disabled={busyKey === `unlock-${qq.id}`}
+                          title={invoice ? 'Ponudba z izdanim računom se ne more odkleniti' : 'Odkleni posel — ponudba nazaj na SPREJET'}
+                          onClick={() => void unlockDeal(qq)}
+                        >
+                          <LockOpen className="size-4" aria-hidden /> {busyKey === `unlock-${qq.id}` ? 'Odklepanjem …' : 'Odkleni'}
                         </Button>
                       ) : null}
                     </div>

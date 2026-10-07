@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { rateLimited } from '@/lib/rate-limit'
 
 // /api/public/portal — JAVNI pogled portala stranke (route-map izvirnika: /p/[token])
 // Brez avtentikacije — dostop ureja neuraden žeton povezave (veljaven, ne preklican).
 // Payload je namerno VARNI podskupina: brez zneskov, internih opomb, dodelitev in revizije.
-// Šteje ogled (views, lastViewedAt) + osnovni tempomat na žeton (60 zahtev/min).
+// Šteje ogled (views, lastViewedAt) + tempomat na žeton (60 zahtev/min — skupni R437 lib).
 
 export const dynamic = 'force-dynamic'
 
@@ -23,24 +24,14 @@ const COMPANY = {
   web: 'www.roksal.si',
 }
 
-// tempomat: max 60 zahtev na žeton/minuto (lokalni pomnilnik)
-const hits = new Map<string, number[]>()
-function throttled (key: string): boolean {
-  const now = Date.now()
-  const window = (hits.get(key) ?? []).filter((t) => now - t < 60_000)
-  if (window.length >= 60) { hits.set(key, window); return true }
-  window.push(now)
-  hits.set(key, window)
-  if (hits.size > 500) hits.clear() // preprosto čiščenje
-  return false
-}
+// tempomat: skupni R437 lib (60 zahtev na žeton/minuto, lokalni pomnilnik)
 
 export async function GET (req: NextRequest) {
   const token = new URL(req.url).searchParams.get('token') ?? ''
   if (!token || token.length < 8 || token.length > 80) {
     return NextResponse.json({ error: 'Neveljavna povezava.' }, { status: 404 })
   }
-  if (throttled(token)) {
+  if (rateLimited(`portal:${token}`)) {
     return NextResponse.json({ error: 'Preveč zahtev — poskusite kasneje.' }, { status: 429 })
   }
 

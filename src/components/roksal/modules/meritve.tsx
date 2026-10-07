@@ -2,9 +2,10 @@
 
 // MERITVE — zajem meritev ograj (vrata measurements.read)
 // Seznam s filtrom po tipu + nova meritev (POST /api/measurements) + popravek (PATCH /api/measurements/[id])
+// R437: javna deljena povezava meritve (POST/DELETE /api/measurements/[id]/share → /api/public/measure)
 
 import { useMemo, useState } from 'react'
-import { Camera, History, Loader2, MapPin, Plus, Ruler, Save, Search, TrendingUp } from 'lucide-react'
+import { Camera, Copy, History, Link2, Loader2, MapPin, Plus, Ruler, Save, Search, TrendingUp, Unlink } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -18,7 +19,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { useToast } from '@/hooks/use-toast'
 import { useAppStore } from '@/lib/store'
 import { cn } from '@/lib/utils'
-import { apiPatch, apiPost, fmtDate, fmtDateTime, useApi } from '@/lib/api-client'
+import { apiDelete, apiPatch, apiPost, fmtDate, fmtDateTime, useApi } from '@/lib/api-client'
 import { EmptyState, ErrorBox, LoadingRows, PageHeader } from '@/components/roksal/ui-bits'
 import { hasPerm } from '@/lib/permissions-core'
 import { KameraMeritevDialog } from '@/components/roksal/modules/meritve-kamera'
@@ -29,6 +30,7 @@ interface MeasurementRow {
   posts: number | null; segments: number | null; handrail: boolean
   slopeDeg: number | null; params: string | null; note: string | null; createdAt: string
   source?: string // ROCNO | KAMERA (večtočkovne meritve na fotografiji)
+  shareToken?: string | null // R437: žeton javne povezave (null = ni deljeno)
   author: { name: string } | null
   project: { code: string; title: string } | null
   workOrder: { code: string; title: string } | null
@@ -208,6 +210,7 @@ export default function MeritveModule () {
             initial={editRow}
             onClose={() => setEditRow(null)}
             onSaved={async () => { setEditRow(null); await list.reload() }}
+            onRefresh={() => list.reload()}
           />
         ) : null}
       </Dialog>
@@ -223,16 +226,21 @@ interface FormState {
   note: string; projectId: string; workOrderId: string
 }
 
-function MeasurementForm ({ mode, open, initial, onClose, onSaved }: {
+function MeasurementForm ({ mode, open, initial, onClose, onSaved, onRefresh }: {
   mode: 'create' | 'edit'
   open: boolean
   initial?: MeasurementRow
   onClose: () => void
   onSaved: () => Promise<void>
+  onRefresh?: () => Promise<void> // R437: osvežitev seznama brez zapiranja (deljena povezava)
 }) {
   const user = useAppStore((s) => s.user)
   const { toast } = useToast()
   const [busy, setBusy] = useState(false)
+  // R437 — javna deljena povezava (žeton iz seznama; lokalno stanje po akcijah)
+  const canWrite = hasPerm(user?.perms, 'measurements.write')
+  const [shareToken, setShareToken] = useState<string | null>(initial?.shareToken ?? null)
+  const [shareBusy, setShareBusy] = useState(false)
   const [form, setForm] = useState<FormState>({
     type: initial?.type ?? 'OGRAJA',
     location: initial?.location ?? '',
@@ -291,6 +299,54 @@ function MeasurementForm ({ mode, open, initial, onClose, onSaved }: {
       toast({ title: 'Napaka pri shranjevanju meritve', description: e instanceof Error ? e.message : undefined, variant: 'destructive' })
     } finally {
       setBusy(false)
+    }
+  }
+
+  // ── R437: javna deljena povezava meritve ────────────────────────────
+
+  const shareUrl = () =>
+    typeof window !== 'undefined' && shareToken
+      ? `${window.location.origin}/api/public/measure?token=${shareToken}`
+      : ''
+
+  async function generateShare (): Promise<void> {
+    if (!initial) return
+    setShareBusy(true)
+    try {
+      const res = await apiPost<{ data: { token: string } }>(`/api/measurements/${initial.id}/share`)
+      setShareToken(res.data.token)
+      toast({ title: 'Javna povezava ustvarjena.', description: 'Kopirate jo z gumbom Obklonitev povezave.' })
+      await onRefresh?.()
+    } catch (e) {
+      toast({ title: 'Ustvarjanje povezave ni uspelo', description: e instanceof Error ? e.message : undefined, variant: 'destructive' })
+    } finally {
+      setShareBusy(false)
+    }
+  }
+
+  async function revokeShare (): Promise<void> {
+    if (!initial) return
+    setShareBusy(true)
+    try {
+      await apiDelete(`/api/measurements/${initial.id}/share`)
+      setShareToken(null)
+      toast({ title: 'Javna povezava preklicana.', description: 'Doslejšnja povezava ne velja več.' })
+      await onRefresh?.()
+    } catch (e) {
+      toast({ title: 'Preklic povezave ni uspel', description: e instanceof Error ? e.message : undefined, variant: 'destructive' })
+    } finally {
+      setShareBusy(false)
+    }
+  }
+
+  async function copyShare (): Promise<void> {
+    const url = shareUrl()
+    if (!url) return
+    try {
+      await navigator.clipboard.writeText(url)
+      toast({ title: 'Povezava kopirana.', description: 'Povezavo prilepite stranki (npr. v e-pošto).' })
+    } catch {
+      toast({ title: 'Kopiranje ni uspelo.', description: url, variant: 'destructive' })
     }
   }
 
@@ -414,6 +470,42 @@ function MeasurementForm ({ mode, open, initial, onClose, onSaved }: {
                   ))}
                 </ul>
               </ScrollArea>
+            )}
+          </div>
+        ) : null}
+
+        {/* R437: javna deljena povezava (measurements.write) — samo v načinu popravka */}
+        {mode === 'edit' && canWrite ? (
+          <div className="space-y-2 rounded-lg border p-2.5">
+            <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <Link2 className="size-3.5" aria-hidden /> Javna povezava
+            </div>
+            {shareToken ? (
+              <div className="space-y-2">
+                <p className="break-all rounded bg-secondary/60 px-2 py-1.5 font-mono text-[11px] text-muted-foreground" aria-label="URL javne povezave">
+                  {shareUrl()}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <Button size="sm" variant="outline" className="min-h-9" onClick={() => void copyShare()}>
+                    <Copy className="size-3.5" aria-hidden /> Kopiraj povezavo
+                  </Button>
+                  <Button size="sm" variant="outline" className="min-h-9 text-red-600 hover:text-red-700 dark:text-red-400" disabled={shareBusy} onClick={() => void revokeShare()}>
+                    {shareBusy ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <Unlink className="size-3.5" aria-hidden />}
+                    Prekliči povezavo
+                  </Button>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Povezava je javna (brez prijave) in prikazuje samo mere, lokacijo in projekt — brez internih podatkov.
+                </p>
+              </div>
+            ) : (
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-xs text-muted-foreground">Meritev ni javno deljena.</p>
+                <Button size="sm" variant="outline" className="min-h-9" disabled={shareBusy} onClick={() => void generateShare()}>
+                  {shareBusy ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <Link2 className="size-3.5" aria-hidden />}
+                  Ustvari povezavo
+                </Button>
+              </div>
             )}
           </div>
         ) : null}
