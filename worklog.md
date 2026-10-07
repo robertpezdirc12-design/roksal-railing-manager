@@ -479,3 +479,30 @@ Stage Summary:
 - VRZEL #1 (kozmetična): desktop sticky footer off-by-47 px (sidebar max-h ne všteva header+footer+padding) — noga vedno pod vsebino, a nikoli pripeta na dno viewporta na desktopu
 - VRZEL #2 (higiena): testni ostanki v bazi iz prejšnjih faz (10× R440S smoke proizvodnja, 5 ponudb brez stranke, 9× 0,01 € plačil, 26 meritev 1,00 m, N-2026-012 poskus, 183 sej) — priporočeno čiščenje + zagon seje-gc
 - Zunanje: Open-Meteo 429 (rate limit peskovnice) — obravnavano gracefullno
+
+---
+Task ID: 15 (main)
+Agent: main (Z.ai Code)
+Task: R440 — GitLab issue #4 (END-TO-END VALIDACIJA): 27 modulov, 130+ API in celoten poslovni tok
+
+Work Log:
+- GitLab API: prebran issue #4 v celoti (zahteve: matrika, 100 % znanih rezultatov, poslovni tok, RBAC backend+UI, DTO, audit, žetoni, report z vrzeli v issueje)
+- tests/build-e2e-matrix.py: generator matrike iz izvorne kode — regex parse export async function METHOD blokov, requirePermission (tudi ternary pogojne pravice) + getSessionUser + javne poti → docs/E2E-MATRIX.json: 127 endpointov v 84 datotekah (105 AUTH + 14 SESSION + 8 PUBLIC), vloge iz ROLE_PERMISSIONS, pričakovani ALLOW/DENY statusi
+- tests/r440.sh: DELEŽ A — celoten poslovni tok kot EN povezani scenarij (14 faz, R440 predpona): CRM vod→pretvorba→stranka+projekt, nalog+dodelitev+navodila, termin×2, teren (transition, foto, ročna meritev, railing-layout save, confirm s foto), verzije, ponudba→POSLAN→podpis→ZAKLENJEN, PDF, proizvodnja+QC OK/NOK, material-orders→POSLANO→PREJETO (loti), zaključek terena+projekta, račun+eSLOG+plačili+reconciliation, portal+javni GET, garancija+obisk, share+javna meritev, command/timeline/zgodovina/audit/dashboard/search — ob vsakem koraku revizije+dogodki+obvestila; DELEŽ B — varnost: 401 sweep, neveljavni žetoni, IDOR (tuji nalog/meritev/projekt/sync), RBAC meje (finance/uporabniki/revizija/rate-limit), DTO minimizacija (passwordHash/žetoni/e-pošte/authorId), odjava+preklic seje, preklic javnih žetonov, geslo — 154/154 ✓ s samočiščenjem
+- Razrešitev 17 začetnih spodletelih testov: 15 napak testa (V_ZAJEMU status, KOMENTAR/PREURČITEV dogodek, .data.segments/totalLengthCm, DEAL_LOCK revizija, eslog ?id=, NAKAZNICA, lengthCm, timeline entries PODPIS, search groups, sessions ?all=1, portal info@roksal.si je javni podatek podjetja) + 2 RESNI ugotovitvi (ročna meritev brez v1 → issue #9; vrstice brez itemId ne ustvarijo lotov → issue #9)
+- tests/r440-smoke.py: matrični smoke (vsak endpoint z dovoljeno vlogo, validacijske zavrnitve 400/404/409/422 = PASS_VALIDATION, NEVARNI klici SKIPPED_SAFE, weather PASS_EXTERNAL) + RBAC sweep GET×5 vlog (403 za monterja na tujem zapisu = pravilna zaščita obsega) → docs/E2E-RESULTS.json; čiščenje R4S podatkov vključno z brez-projekta zapisi (proizvodnja/QC/plačila 0,01/KAMERA potrditve/ponudbe po vrsticah)
+- Popravek matrike v 3 iteracijah: share→201, pretvorba→201, notifications/jobs→200 (dejanski statusi)
+- UI subagent (Task 14): 29/29 zavihkov PASS (admin), 0 konzolnih napak, interaktivni vzorci (podrobnost naloga, verzije meritve, 3D predogled, CRM, revizije, Obveščanje preklop), RBAC navigacija (monter 19/29, skladišče 12/29, injekcija tab=varnost → zavrnjena fail-closed), mobile 390 brez preliva
+- VRZEL najdena in POPRAVLJENA: desktop sticky footer — sidebar max-h calc(100vh-6rem) ni všteval glave(57)+noge(38)+paddingov(48) → stalnih 47px drsenja; popravek calc(100vh-9.375rem); brskalnik potrdil: kratka stran točno 800/800 z nogo na dnu, dolga naravno porine
+- Higiena podatkov: 10 R440S proizvodnih nalogov, 3 ponudbe, 9 plačil 0,01 €, 14+6 meritev, 1 nalog »poskus«, 178 odvečnih sej — vse počiščeno (5 sej ostane — aktivne)
+- docs/E2E-REPORT.md: končno poročilo (povzetek, metoda, 14 faz toka, matrika, RBAC, varnost, UI, mobile/footer, vrzeli→issueji)
+- GitLab: ustvarjena issue #8 (verzioniranje kataloga+pravil — edini PENDING iz R437) in #9 (verzija v1 ročne meritve + feedback o preskočenih lotih); issue #4 zaprt s komentarjem rezultatov
+- Odkrit nov issue #7 (ustvaril uporabnik 15:39 med fazo): ROKSAL Manager — preoblikovanje v celovit poslovni sistem (produktni model, BOM, paketi, skladiščne operacije, dostave, vloge, navigacija) — naslednja velika faza po R441
+- bun run lint: ČIST; commit 262f5c0 pushan na main (po rebase — remote je imel nove commite)
+
+Stage Summary:
+- Issue #4 ZAKLJUČEN: 154/154 poslovni tok + varnost, 127/127 API smoke (0 BROKEN), 285/285 RBAC, 29/29 UI modulov, mobile + sticky footer popravljen
+- Strojno berljivi artefakti: E2E-MATRIX.json (matrika iz kode), E2E-RESULTS.json (rezultati), E2E-REPORT.md (poročilo)
+- Celoten poslovni tok uspe brez ročnega prepisovanja; RBAC fail-closed backend+UI; DTO minimizacija in audit potrjena; javni žetoni delujejo in se prekličejo
+- Vrzeli pretvorjene v #8 + #9 (obe nizke resnosti)
+- Naslednja faza: R441 — issue #3 (DISASTER RECOVERY & SECURITY), nato issue #7 (celovit poslovni sistem)
