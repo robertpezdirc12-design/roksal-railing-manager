@@ -5,6 +5,7 @@
 // Vse spremembe zaloge gredo skozi StockMovement dnevnik (nemutabilen).
 // Transakcije so atomicne — rezervacija bodisi uspe za VSE vrstice, bodisi nič.
 
+import type { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 
 export const MOVEMENT_TYPES = ['PREVZEM', 'IZDAJA', 'VRACILO', 'INVENTURA'] as const
@@ -157,7 +158,11 @@ export async function createPickingFromBom (bomId: string, userId: string): Prom
   const picking = await db.pickingList.create({
     data: {
       code, bomId: bom.id, status: 'PRIPRAVLJENA', userId,
-      lines: { create: bom.lines.map((l) => ({ itemId: l.itemId, qtyNeeded: l.qty, note: l.note })) },
+      lines: {
+        create: bom.lines.map((l, i) => ({
+          itemId: l.itemId, qtyNeeded: l.qty, sortOrder: i, note: l.note,
+        })),
+      },
     },
   })
   return { ok: true, code: picking.code, id: picking.id }
@@ -194,7 +199,7 @@ export async function completePicking (pickingId: string, picks: { lineId: strin
     }
   }
 
-  const ops: Promise<unknown>[] = []
+  const ops: Prisma.PrismaPromise<unknown>[] = []
   let issued = 0
   for (const line of picking.lines) {
     const picked = pickMap.get(line.id) ?? line.qtyPicked

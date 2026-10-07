@@ -5,7 +5,7 @@
 // Vrata: inventory.read (pogled); sprejem = procurement.receive; popravek/rezervacija = inventory.write.
 
 import { useMemo, useState } from 'react'
-import { AlertTriangle, ArrowDownLeft, ArrowUpRight, Boxes, ClipboardCheck, ClipboardList, History, Layers, PackagePlus, PackageSearch, Plus, Search } from 'lucide-react'
+import { AlertTriangle, ArrowDownLeft, ArrowUpRight, Boxes, ClipboardCheck, ClipboardList, History, Layers, PackagePlus, PackageSearch, Plus, Search, Undo2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -54,6 +54,8 @@ interface PickingRow {
 
 interface SupplierRow { id: string; name: string; email: string | null; phone: string | null }
 
+interface ProjectOption { id: string; code: string; title: string }
+
 const MOVEMENT_LABELS: Record<string, string> = {
   PREVZEM: 'Prevzem', IZDAJA: 'Izdaja', VRACILO: 'Vračilo', INVENTURA: 'Inventura',
 }
@@ -87,12 +89,14 @@ function PregledTab () {
   const [q, setQ] = useState('')
   const [lowOnly, setLowOnly] = useState(false)
   const [receiveOpen, setReceiveOpen] = useState(false)
+  const [returnOpen, setReturnOpen] = useState(false)
   const [adjustItem, setAdjustItem] = useState<StockRow | null>(null)
 
   const stock = useApi<{ data: StockRow[] }>('/api/stock')
   const inventory = useApi<{ data: ItemRow[] }>('/api/inventory') // za sprejem (cene/losi)
   const lots = useApi<{ data: LotRow[] }>('/api/inventory/lots?limit=10')
   const suppliers = useApi<{ data: SupplierRow[] }>(receiveOpen ? '/api/suppliers' : null, [receiveOpen])
+  const projects = useApi<{ data: ProjectOption[] }>(returnOpen ? '/api/projects' : null, [returnOpen])
 
   const canReceive = hasPerm(user?.perms, 'procurement.receive')
   const canAdjust = hasPerm(user?.perms, 'inventory.write')
@@ -130,6 +134,11 @@ function PregledTab () {
         {canReceive ? (
           <Button size="sm" onClick={() => setReceiveOpen(true)}>
             <PackagePlus className="size-4" aria-hidden /> Sprejem pošiljke
+          </Button>
+        ) : null}
+        {canAdjust ? (
+          <Button size="sm" variant="outline" onClick={() => setReturnOpen(true)}>
+            <Undo2 className="size-4" aria-hidden /> Vračilo materiala
           </Button>
         ) : null}
       </div>
@@ -230,6 +239,16 @@ function PregledTab () {
           suppliersLoading={suppliers.loading}
           onClose={() => setReceiveOpen(false)}
           onDone={async () => { await Promise.all([stock.reload(), inventory.reload(), lots.reload()]) }}
+        />
+      </Dialog>
+
+      <Dialog open={returnOpen} onOpenChange={setReturnOpen}>
+        <ReturnDialog
+          items={stock.data?.data ?? []}
+          projects={projects.data?.data ?? []}
+          projectsLoading={projects.loading}
+          onClose={() => setReturnOpen(false)}
+          onDone={async () => { await Promise.all([stock.reload(), lots.reload()]) }}
         />
       </Dialog>
 
@@ -653,6 +672,101 @@ function NewSupplierDialog ({ onCreated, onClose }: { onCreated: (id: string) =>
       <DialogFooter>
         <Button variant="outline" onClick={onClose}>Prekliči</Button>
         <Button onClick={() => void submit()} disabled={busy}>{busy ? 'Dodajam …' : 'Dodaj'}</Button>
+      </DialogFooter>
+    </DialogContent>
+  )
+}
+
+// ─── vračilo materiala (R443: VRACILO gibanje) ──────────────────────────────
+
+function ReturnDialog ({ items, projects, projectsLoading, onClose, onDone }: {
+  items: StockRow[]
+  projects: ProjectOption[]
+  projectsLoading: boolean
+  onClose: () => void
+  onDone: () => Promise<void>
+}) {
+  const { toast } = useToast()
+  const [itemId, setItemId] = useState('none')
+  const [qty, setQty] = useState('')
+  const [projectId, setProjectId] = useState('none')
+  const [note, setNote] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const selected = items.find((it) => it.id === itemId)
+
+  async function submit () {
+    if (itemId === 'none') { toast({ title: 'Izberite artikel.', variant: 'destructive' }); return }
+    const q = Number(qty)
+    if (!Number.isFinite(q) || q <= 0) { toast({ title: 'Količina mora biti pozitivno število.', variant: 'destructive' }); return }
+    setBusy(true)
+    try {
+      const res = await apiPost<{ data: { sku: string; physical: number; unit: string } }>('/api/stock/returns', {
+        itemId, qty: q,
+        projectId: projectId === 'none' ? null : projectId,
+        note: note.trim() || null,
+      })
+      toast({
+        title: 'Vračilo zabeleženo.',
+        description: `${res.data.sku}: fizična zaloga je sedaj ${res.data.physical} ${res.data.unit} (gibanje VRACILO).`,
+      })
+      setQty(''); setNote(''); setProjectId('none')
+      await onDone()
+      onClose()
+    } catch (e) {
+      toast({ title: 'Napaka pri vračilu', description: e instanceof Error ? e.message : undefined, variant: 'destructive' })
+    } finally { setBusy(false) }
+  }
+
+  return (
+    <DialogContent>
+      <DialogHeader>
+        <DialogTitle className="flex items-center gap-2">
+          <Undo2 className="size-5 text-roksal-amber" aria-hidden /> Vračilo materiala
+        </DialogTitle>
+        <DialogDescription>
+          Neuporabljen material z montaže/terena se vrne v zalogo — poveča FIZIČNO zalogo (gibanje VRACILO).
+        </DialogDescription>
+      </DialogHeader>
+      <div className="space-y-3">
+        <div className="space-y-2">
+          <Label>Artikel</Label>
+          <Select value={itemId} onValueChange={setItemId}>
+            <SelectTrigger aria-label="Artikel vračila"><SelectValue placeholder="Izberite artikel" /></SelectTrigger>
+            <SelectContent className="max-h-72">
+              {items.map((it) => <SelectItem key={it.id} value={it.id}>{it.sku} — {it.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          {selected ? (
+            <p className="text-xs text-muted-foreground">
+              Trenutna fizična: {selected.physical} {selected.unit} · rezervirana {selected.reserved} · razpoložljiva {selected.available}
+            </p>
+          ) : null}
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-2">
+            <Label htmlFor="ret-qty">Količina</Label>
+            <Input id="ret-qty" type="number" min="0" step="any" value={qty} onChange={(e) => setQty(e.target.value)} placeholder="npr. 4.5" />
+          </div>
+          <div className="space-y-2">
+            <Label>Projekt (opcijsko)</Label>
+            <Select value={projectId} onValueChange={setProjectId}>
+              <SelectTrigger aria-label="Projekt vračila"><SelectValue placeholder={projectsLoading ? 'Nalagam …' : 'Brez projekta'} /></SelectTrigger>
+              <SelectContent className="max-h-72">
+                <SelectItem value="none">Brez projekta</SelectItem>
+                {projects.map((p) => <SelectItem key={p.id} value={p.id}>{p.code} — {p.title}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="ret-note">Opomba</Label>
+          <Input id="ret-note" value={note} onChange={(e) => setNote(e.target.value)} placeholder="npr. ostanek z montaže OG-2026-002" />
+        </div>
+      </div>
+      <DialogFooter>
+        <Button variant="outline" onClick={onClose}>Prekliči</Button>
+        <Button onClick={() => void submit()} disabled={busy}>{busy ? 'Zapisujem …' : 'Zapiši vračilo'}</Button>
       </DialogFooter>
     </DialogContent>
   )

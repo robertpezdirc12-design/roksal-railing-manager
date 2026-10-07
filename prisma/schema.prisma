@@ -862,5 +862,8 @@ model PickingLine {
   item          InventoryItem @relation("pickingLines", fields: [itemId], references: [id])
   qtyNeeded     Float // potrebno (iz vrstice kosovnice)
   qtyPicked     Float         @default(0) // dejansko pobrano
+  sortOrder     Int           @default(0) // vrstni red iz kosovnice (R443)
   note          String?
+
+  @@index([pickingListId, sortOrder])
 }

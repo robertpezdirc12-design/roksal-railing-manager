@@ -16,7 +16,7 @@ export async function GET (req: NextRequest, { params }: Params) {
     where: { id },
     include: {
       bom: { select: { code: true, qty: true, unit: true, product: { select: { sku: true, name: true } }, package: { select: { code: true, name: true, project: { select: { code: true, title: true } } } } } },
-      lines: { orderBy: { itemId: 'asc' }, include: { item: true } },
+      lines: { orderBy: { sortOrder: 'asc' }, include: { item: true } },
     },
   })
   if (!picking) return jsonError(404, 'Picking lista ne obstaja.')
