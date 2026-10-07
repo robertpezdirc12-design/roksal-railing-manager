@@ -65,6 +65,9 @@ export const SECTIONS: SectionDef[] = [
       { id: 'zaloga', label: 'Zaloga', gate: 'inventory.read', desc: 'Stanje zaloge in losi' },
       { id: 'katalog', label: 'Katalog', gate: 'catalog.read', desc: 'Profili in izdelki' },
       { id: 'logistika', label: 'Logistika', gate: 'production.manage', desc: 'Razpored in termini' },
+      // R445 (issue #7 §9): DOSTAVE — dostave, vozila, ekipe/podizvajalci.
+      // Ciljna IA §11 (sekcija OPERATIVA) pride s poznejšo restrukturacijo navigacije.
+      { id: 'dostave', label: 'Dostave', gate: 'projects.read', desc: 'Dostave, vozila, ekipe (R445)' },
       { id: 'proizvodnja', label: 'Proizvodnja', gate: 'production.read', desc: 'Proizvodni nalogi' },
       { id: 'galerija', label: 'Galerija', gate: 'gallery.read', desc: 'Galerija zaključenih del' },
       { id: 'varnost', label: 'Varnost', gate: 'audit.read', desc: 'Revizijski dnevnik (R428)' },

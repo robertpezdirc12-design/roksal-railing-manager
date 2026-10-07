@@ -55,3 +55,7 @@ server.log
 # database (sqlite — demo podatki se seedirajo z node prisma/seed.cjs)
 /db/
 agent-ctx/
+
+# orodni artefakti agenta (nikoli v repozitorij)
+/tool-results/
+/tmp-check/

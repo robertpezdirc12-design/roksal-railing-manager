@@ -6,11 +6,13 @@
 // R439 (issue #6): offline — predpomnjeni nalogi + pas Brez povezave + razdelek
 // Offline dejanja (vrsta: hitra meritev / opomba / status / zaključek — delujejo
 // tudi online, vrsta se takoj sinhronizira).
+// R445 (issue #7 §9): ekipa/podizvajalec na nalogu — prikaz v seznamu in podrobnosti,
+// dodelitev samo za pisarno (ADMIN/VODJA — strežnik: managesAssignments, revizija WO_CREW_ASSIGN).
 
 import { useEffect, useMemo, useState } from 'react'
 import {
   CalendarClock, Camera, CheckCheck, CheckCircle2, ClipboardList, History, Loader2, MapPin, MessageSquare,
-  Play, Plus, Ruler, Search, User, UserPlus, WifiOff,
+  Play, Plus, Ruler, Search, User, UserPlus, Users, WifiOff,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -23,7 +25,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { useToast } from '@/hooks/use-toast'
 import { useAppStore } from '@/lib/store'
 import { cn } from '@/lib/utils'
-import { apiPost, fmtDate, fmtDateTime, useApi } from '@/lib/api-client'
+import { apiPatch, apiPost, fmtDate, fmtDateTime, useApi } from '@/lib/api-client'
 import { EmptyState, ErrorBox, LoadingRows, PageHeader, StatusBadge } from '@/components/roksal/ui-bits'
 import { hasPerm } from '@/lib/permissions-core'
 import { cacheNalogi, getCachedNalogi, queueOp, syncNow, useOnline, type OfflineOpKind } from '@/lib/offline'
@@ -33,11 +35,13 @@ interface WorkOrderRow {
   scheduledFor: string | null; startedAt: string | null; completedAt: string | null; summary: string | null
   project: { code: string; title: string; address: string | null; customer: { name: string } | null } | null
   assignee: { name: string } | null
+  crew: { name: string; type: string } | null // R445: ekipa/podizvajalec na nalogu
   _count: { measurements: number; events: number }
 }
 
 interface WorkOrderDetail extends Omit<WorkOrderRow, 'assignee' | '_count'> {
   assignee: { id: string; name: string } | null
+  crew: { id: string; name: string; type: string } | null // R445: ekipa na nalogu (id za predizbiro)
   instructions: string | null
   projectId: string | null
   events: { id: string; type: string; note: string | null; createdAt: string; user: { name: string } | null }[]
@@ -259,6 +263,13 @@ export default function NalogiModule () {
                     ) : null}
                     <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
                       <span className="inline-flex items-center gap-1"><User className="size-3" aria-hidden />{wo.assignee?.name ?? 'Ni dodeljen'}</span>
+                      {wo.crew ? (
+                        <span className="inline-flex items-center gap-1">
+                          <Users className="size-3" aria-hidden />
+                          <span className={wo.crew.type === 'PODIZVAJALEC' ? 'font-semibold text-amber-600 dark:text-amber-400' : 'font-semibold'}>{wo.crew.name}</span>
+                          <span className="text-muted-foreground/70">({wo.crew.type === 'PODIZVAJALEC' ? 'podizvajalec' : 'interna'})</span>
+                        </span>
+                      ) : null}
                       <span className="inline-flex items-center gap-1"><ClipboardList className="size-3" aria-hidden />{fmtDate(wo.scheduledFor)}</span>
                       <span className="inline-flex items-center gap-1"><Ruler className="size-3" aria-hidden />{wo._count.measurements}</span>
                       <span className="inline-flex items-center gap-1"><MessageSquare className="size-3" aria-hidden />{wo._count.events}</span>
@@ -329,8 +340,10 @@ export default function NalogiModule () {
               detail={detail.data.data}
               canTransition={canTransition}
               canReschedule={hasPerm(user?.perms, 'nalog.write')}
+              canAssignCrew={user?.role === 'ADMIN' || user?.role === 'VODJA'}
               onTransition={transition}
               onRescheduled={async () => { await detail.reload() }}
+              onCrewChanged={async () => { await Promise.all([detail.reload(), list.reload()]) }}
             />
           ) : (!online && selectedRow) ? (
             /* R439: offline — degraded podrobnost iz predpomnjene vrstice (Offline dejanja delujejo) */
@@ -366,6 +379,7 @@ function rowToDetail (wo: WorkOrderRow): WorkOrderDetail {
   return {
     ...wo,
     assignee: wo.assignee ? { id: '', name: wo.assignee.name } : null,
+    crew: wo.crew ? { id: '', ...wo.crew } : null,
     instructions: null,
     projectId: null,
     events: [],
@@ -373,13 +387,15 @@ function rowToDetail (wo: WorkOrderRow): WorkOrderDetail {
   }
 }
 
-function NalogDetail ({ detail, offline = false, canTransition, canReschedule, onTransition, onRescheduled }: {
+function NalogDetail ({ detail, offline = false, canTransition, canReschedule, canAssignCrew = false, onTransition, onRescheduled, onCrewChanged }: {
   detail: WorkOrderDetail
   offline?: boolean
   canTransition: boolean
   canReschedule: boolean
+  canAssignCrew?: boolean // R445: pisarna (ADMIN/VODJA) dodeljuje ekipe — strežnik preverja managesAssignments
   onTransition: (wo: { id: string; code: string }, to: string, label: string, note: string) => Promise<void>
   onRescheduled: () => Promise<void>
+  onCrewChanged?: () => Promise<void>
 }) {
   const { toast } = useToast()
   const [note, setNote] = useState('')
@@ -388,6 +404,27 @@ function NalogDetail ({ detail, offline = false, canTransition, canReschedule, o
   // ── preurčitev termina (R433: POST /api/nalog/[id]/termin) ──
   const [terminDate, setTerminDate] = useState(detail.scheduledFor ? detail.scheduledFor.slice(0, 10) : '')
   const [terminBusy, setTerminBusy] = useState(false)
+
+  // ── R445: ekipa/podizvajalec na nalogu (dodelitev — samo pisarna, online) ──
+  const crews = useApi<{ data: { id: string; name: string; type: string; active: boolean }[] }>(
+    canAssignCrew && !offline ? '/api/crews' : null, [canAssignCrew, offline]
+  )
+  const [crewPick, setCrewPick] = useState('keep') // keep = brez spremembe; none = počisti
+  const [crewBusy, setCrewBusy] = useState(false)
+
+  async function assignCrew () {
+    if (crewPick === 'keep') return
+    setCrewBusy(true)
+    try {
+      await apiPatch(`/api/nalog/${detail.id}`, { crewId: crewPick === 'none' ? null : crewPick })
+      const name = crewPick === 'none' ? 'brez ekipe' : (crews.data?.data.find((c) => c.id === crewPick)?.name ?? 'ekipa')
+      toast({ title: 'Ekipa na nalogu posodobljena.', description: `${detail.code} — ${name}` })
+      setCrewPick('keep')
+      await (onCrewChanged ? onCrewChanged() : onRescheduled())
+    } catch (e) {
+      toast({ title: 'Dodelitev ekipe ni uspela', description: e instanceof Error ? e.message : undefined, variant: 'destructive' })
+    } finally { setCrewBusy(false) }
+  }
 
   async function reschedule () {
     if (!terminDate) { toast({ title: 'Izberi nov datum termina.', variant: 'destructive' }); return }
@@ -434,6 +471,18 @@ function NalogDetail ({ detail, offline = false, canTransition, canReschedule, o
       {/* osnovni podatki */}
       <dl className="grid grid-cols-2 gap-x-4 gap-y-2 rounded-xl border bg-secondary/30 p-3 text-sm sm:grid-cols-3">
         <div><dt className="text-xs text-muted-foreground">Izvajalec</dt><dd className="font-medium">{detail.assignee?.name ?? 'Ni dodeljen'}</dd></div>
+        <div>
+          <dt className="text-xs text-muted-foreground">Ekipa (R445)</dt>
+          <dd className="font-medium">
+            {detail.crew ? (
+              <span className="inline-flex flex-wrap items-center gap-1">
+                <Users className="size-3.5 shrink-0" aria-hidden />
+                <span className={detail.crew.type === 'PODIZVAJALEC' ? 'font-semibold text-amber-600 dark:text-amber-400' : 'font-semibold'}>{detail.crew.name}</span>
+                <span className="text-xs font-normal text-muted-foreground">({detail.crew.type === 'PODIZVAJALEC' ? 'podizvajalec' : 'interna'})</span>
+              </span>
+            ) : 'Ni dodeljena'}
+          </dd>
+        </div>
         <div><dt className="text-xs text-muted-foreground">Termin</dt><dd className="font-medium">{fmtDate(detail.scheduledFor)}</dd></div>
         <div><dt className="text-xs text-muted-foreground">Začetek</dt><dd className="font-medium">{fmtDateTime(detail.startedAt)}</dd></div>
         <div><dt className="text-xs text-muted-foreground">Zaključek</dt><dd className="font-medium">{fmtDateTime(detail.completedAt)}</dd></div>
@@ -495,6 +544,34 @@ function NalogDetail ({ detail, offline = false, canTransition, canReschedule, o
           <Button variant="outline" size="sm" className="h-9" disabled={terminBusy || !terminDate} onClick={() => void reschedule()}>
             {terminBusy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <CalendarClock className="size-4" aria-hidden />}
             Preurči
+          </Button>
+        </section>
+      ) : null}
+
+      {/* R445 (issue #7 §9): dodelitev ekipe/podizvajalca — samo pisarna, online */}
+      {!offline && canAssignCrew ? (
+        <section aria-label="Dodelitev ekipe" className="flex flex-wrap items-end gap-2">
+          <div className="grid min-w-0 flex-1 gap-1.5 sm:max-w-xs">
+            <Label htmlFor="crew-pick" className="text-xs text-muted-foreground">Ekipa / podizvajalec na nalogu</Label>
+            <Select value={crewPick} onValueChange={setCrewPick}>
+              <SelectTrigger id="crew-pick" className="h-9">
+                <SelectValue placeholder={detail.crew ? `Trenutno: ${detail.crew.name}` : 'Ni dodeljena'} />
+              </SelectTrigger>
+              <SelectContent className="max-h-72">
+                <SelectItem value="keep">{detail.crew ? `Obdrži: ${detail.crew.name}` : 'Brez spremembe'}</SelectItem>
+                <SelectItem value="none">Brez ekipe (počisti)</SelectItem>
+                {(crews.data?.data ?? []).map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.name} · {c.type === 'PODIZVAJALEC' ? 'podizvajalec' : 'interna'}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <ErrorBox error={crews.error} />
+          </div>
+          <Button variant="outline" size="sm" className="h-9" disabled={crewBusy || crewPick === 'keep'} onClick={() => void assignCrew()}>
+            {crewBusy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Users className="size-4" aria-hidden />}
+            Dodeli
           </Button>
         </section>
       ) : null}

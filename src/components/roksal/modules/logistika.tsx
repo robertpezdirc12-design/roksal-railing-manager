@@ -4,7 +4,7 @@
 // bere /api/nalog?scope=all in /api/production)
 
 import { useMemo } from 'react'
-import { CalendarClock, Factory, HardHat, Inbox } from 'lucide-react'
+import { CalendarClock, Factory, HardHat, Inbox, Users } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { fmtDateTime, useApi } from '@/lib/api-client'
@@ -15,6 +15,7 @@ interface NalogRow {
   id: string; code: string; title: string; status: string; scheduledFor: string | null
   assignee: { name: string } | null
   project: { code: string; title: string } | null
+  crew: { name: string; type: string } | null // R445: ekipa/podizvajalec na nalogu
 }
 
 interface ProductionRow {
@@ -31,6 +32,7 @@ interface ScheduleCard {
   who: string | null
   status: string
   overdue: boolean
+  crew: { name: string; type: string } | null // R445: ekipa na nalogu (prikaz pri terminu)
 }
 
 interface DayColumn {
@@ -67,6 +69,7 @@ export default function LogistikaModule () {
         key: `n-${n.id}`, kind: 'nalog', time: n.scheduledFor,
         code: n.code, title: n.title, who: n.assignee?.name ?? null,
         status: n.status, overdue: t !== null && t < today && n.status !== 'ZAKLJUCEN',
+        crew: n.crew ?? null,
       })
     }
     for (const p of prodRows) {
@@ -77,6 +80,7 @@ export default function LogistikaModule () {
         key: `p-${p.id}`, kind: 'proizvodnja', time: p.dueAt,
         code: p.code, title: p.title, who: p.project ? `${p.project.code}` : null,
         status: p.status, overdue: t !== null && t < today && p.status !== 'ODPOSLAN',
+        crew: null,
       })
     }
 
@@ -173,6 +177,12 @@ export default function LogistikaModule () {
                         <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground">
                           <span>{c.time ? fmtDateTime(c.time) : 'brez termina'}</span>
                           {c.who ? <span>· {c.who}</span> : null}
+                          {c.crew ? (
+                            <span className="inline-flex items-center gap-1">· <Users className="size-3" aria-hidden />
+                              <span className={c.crew.type === 'PODIZVAJALEC' ? 'font-semibold text-amber-600 dark:text-amber-400' : 'font-semibold'}>{c.crew.name}</span>
+                              <span className="text-muted-foreground/70">({c.crew.type === 'PODIZVAJALEC' ? 'podizvajalec' : 'interna'})</span>
+                            </span>
+                          ) : null}
                         </div>
                         <div className="pt-0.5"><StatusBadge status={c.status} /></div>
                       </CardContent>
@@ -188,6 +198,7 @@ export default function LogistikaModule () {
       <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
         <Inbox className="size-3.5" aria-hidden />
         Viri: delovni nalogi (scope=all) in proizvodni nalogi — razpored je samo za branje, urejanje poteka v modulih Nalogi in Proizvodnja.
+        Ekipe in podizvajalci se urejajo v modulu Dostave (R445), dostave pa tam dostavljajo material na termin.
       </p>
     </div>
   )

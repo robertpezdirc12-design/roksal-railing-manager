@@ -34,6 +34,7 @@ export async function GET (req: NextRequest) {
     include: {
       project: { select: { code: true, title: true, address: true, customer: { select: { name: true } } } },
       assignee: { select: { name: true } },
+      crew: { select: { name: true, type: true } }, // R445: ekipa/podizvajalec na nalogu
       _count: { select: { measurements: true, events: true } },
     },
     orderBy: [{ scheduledFor: 'asc' }, { code: 'asc' }],
