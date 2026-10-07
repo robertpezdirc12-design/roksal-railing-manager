@@ -1,0 +1,3705 @@
+{
+  "phase": "R440",
+  "issue": 4,
+  "base": "http://localhost:3000",
+  "smoke": {
+    "GET /api/aktivacija": {
+      "status": "PASS",
+      "http": 200,
+      "permission": "security.read",
+      "roles": [
+        "ADMIN"
+      ],
+      "note": ""
+    },
+    "POST /api/aktivacija": {
+      "status": "SKIPPED_SAFE",
+      "http": null,
+      "permission": "security.read",
+      "roles": [
+        "ADMIN"
+      ],
+      "note": "klic izpuščen (stranski učinek); logika preverjena v r440.sh"
+    },
+    "GET /api/audit": {
+      "status": "PASS",
+      "http": 200,
+      "permission": "audit.read",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "SKLADISCE"
+      ],
+      "note": ""
+    },
+    "POST /api/auth/login": {
+      "status": "PASS_VALIDATION",
+      "http": 400,
+      "permission": null,
+      "roles": [],
+      "note": "allow=200 dobil=400"
+    },
+    "POST /api/auth/logout": {
+      "status": "SKIPPED_SAFE",
+      "http": null,
+      "permission": "prijavljen (seja)",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "note": "klic izpuščen (stranski učinek); logika preverjena v r440.sh"
+    },
+    "POST /api/auth/password": {
+      "status": "PASS_VALIDATION",
+      "http": 400,
+      "permission": "prijavljen (seja)",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "note": "allow=200 dobil=400"
+    },
+    "GET /api/auth/session": {
+      "status": "PASS",
+      "http": 200,
+      "permission": "prijavljen (seja)",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "note": ""
+    },
+    "DELETE /api/auth/sessions/:id": {
+      "status": "SKIPPED_SAFE",
+      "http": null,
+      "permission": "prijavljen (seja)",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "note": "klic izpuščen (stranski učinek); logika preverjena v r440.sh"
+    },
+    "GET /api/auth/sessions": {
+      "status": "PASS",
+      "http": 200,
+      "permission": "prijavljen (seja)",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "note": ""
+    },
+    "PATCH /api/catalog/:id": {
+      "status": "PASS_VALIDATION",
+      "http": 400,
+      "permission": "catalog.write",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "SKLADISCE"
+      ],
+      "note": "allow=200 dobil=400"
+    },
+    "GET /api/catalog": {
+      "status": "PASS",
+      "http": 200,
+      "permission": "catalog.read",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "note": ""
+    },
+    "POST /api/catalog": {
+      "status": "PASS_VALIDATION",
+      "http": 400,
+      "permission": "catalog.write",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "SKLADISCE"
+      ],
+      "note": "allow=201 dobil=400"
+    },
+    "POST /api/crm/:id/pretvorba": {
+      "status": "PASS_VALIDATION",
+      "http": 409,
+      "permission": "crm.write",
+      "roles": [
+        "ADMIN",
+        "VODJA"
+      ],
+      "note": "allow=201 dobil=409"
+    },
+    "PATCH /api/crm/:id": {
+      "status": "PASS_VALIDATION",
+      "http": 400,
+      "permission": "crm.write",
+      "roles": [
+        "ADMIN",
+        "VODJA"
+      ],
+      "note": "allow=200 dobil=400"
+    },
+    "GET /api/crm": {
+      "status": "PASS",
+      "http": 200,
+      "permission": "crm.read",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER"
+      ],
+      "note": ""
+    },
+    "POST /api/crm": {
+      "status": "PASS",
+      "http": 201,
+      "permission": "crm.write",
+      "roles": [
+        "ADMIN",
+        "VODJA"
+      ],
+      "note": ""
+    },
+    "GET /api/customers/:id": {
+      "status": "PASS",
+      "http": 200,
+      "permission": "customers.read",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE"
+      ],
+      "note": ""
+    },
+    "PATCH /api/customers/:id": {
+      "status": "PASS_VALIDATION",
+      "http": 400,
+      "permission": "customers.write",
+      "roles": [
+        "ADMIN",
+        "VODJA"
+      ],
+      "note": "allow=200 dobil=400"
+    },
+    "GET /api/customers/dedup": {
+      "status": "PASS",
+      "http": 200,
+      "permission": "customers.write",
+      "roles": [
+        "ADMIN",
+        "VODJA"
+      ],
+      "note": ""
+    },
+    "POST /api/customers/dedup": {
+      "status": "PASS_VALIDATION",
+      "http": 400,
+      "permission": "customers.write",
+      "roles": [
+        "ADMIN",
+        "VODJA"
+      ],
+      "note": "allow=200 dobil=400"
+    },
+    "GET /api/customers": {
+      "status": "PASS",
+      "http": 200,
+      "permission": "customers.read",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE"
+      ],
+      "note": ""
+    },
+    "POST /api/customers": {
+      "status": "PASS",
+      "http": 201,
+      "permission": "customers.write",
+      "roles": [
+        "ADMIN",
+        "VODJA"
+      ],
+      "note": ""
+    },
+    "GET /api/dashboard": {
+      "status": "PASS",
+      "http": 200,
+      "permission": "projects.read",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "note": ""
+    },
+    "GET /api/deal-lock": {
+      "status": "PASS",
+      "http": 200,
+      "permission": "deal.lock",
+      "roles": [
+        "ADMIN",
+        "VODJA"
+      ],
+      "note": ""
+    },
+    "POST /api/deal-lock": {
+      "status": "PASS_VALIDATION",
+      "http": 404,
+      "permission": "deal.lock",
+      "roles": [
+        "ADMIN",
+        "VODJA"
+      ],
+      "note": "allow=201 dobil=404"
+    },
+    "GET /api/documents": {
+      "status": "PASS",
+      "http": 200,
+      "permission": "documents.read",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "note": ""
+    },
+    "GET /api/engineering-rules/:id": {
+      "status": "PASS",
+      "http": 200,
+      "permission": "projects.read",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "note": ""
+    },
+    "PATCH /api/engineering-rules/:id": {
+      "status": "PASS_VALIDATION",
+      "http": 400,
+      "permission": "production.manage",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "PROIZVODNJA"
+      ],
+      "note": "allow=200 dobil=400"
+    },
+    "DELETE /api/engineering-rules/:id": {
+      "status": "SKIPPED_SAFE",
+      "http": null,
+      "permission": "production.manage",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "PROIZVODNJA"
+      ],
+      "note": "klic izpuščen (stranski učinek); logika preverjena v r440.sh"
+    },
+    "GET /api/engineering-rules": {
+      "status": "PASS",
+      "http": 200,
+      "permission": "projects.read",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "note": ""
+    },
+    "POST /api/engineering-rules": {
+      "status": "PASS",
+      "http": 201,
+      "permission": "production.manage",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "PROIZVODNJA"
+      ],
+      "note": ""
+    },
+    "GET /api/equipment/:id": {
+      "status": "PASS",
+      "http": 200,
+      "permission": "equipment.read",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "PROIZVODNJA"
+      ],
+      "note": ""
+    },
+    "PATCH /api/equipment/:id": {
+      "status": "PASS_VALIDATION",
+      "http": 400,
+      "permission": "equipment.read",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "PROIZVODNJA"
+      ],
+      "note": "allow=200 dobil=400"
+    },
+    "GET /api/equipment/events": {
+      "status": "PASS",
+      "http": 200,
+      "permission": "equipment.read",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "PROIZVODNJA"
+      ],
+      "note": ""
+    },
+    "GET /api/equipment": {
+      "status": "PASS",
+      "http": 200,
+      "permission": "equipment.read",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "PROIZVODNJA"
+      ],
+      "note": ""
+    },
+    "POST /api/equipment": {
+      "status": "PASS_VALIDATION",
+      "http": 400,
+      "permission": "equipment.read",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "PROIZVODNJA"
+      ],
+      "note": "allow=201 dobil=400"
+    },
+    "GET /api/gallery": {
+      "status": "PASS",
+      "http": 200,
+      "permission": "gallery.read",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER"
+      ],
+      "note": ""
+    },
+    "GET /api/inventory/lots": {
+      "status": "PASS",
+      "http": 200,
+      "permission": "inventory.read",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "note": ""
+    },
+    "POST /api/inventory/lots": {
+      "status": "PASS_VALIDATION",
+      "http": 400,
+      "permission": "procurement.receive",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "SKLADISCE"
+      ],
+      "note": "allow=201 dobil=400"
+    },
+    "GET /api/inventory": {
+      "status": "PASS",
+      "http": 200,
+      "permission": "inventory.read",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "note": ""
+    },
+    "PATCH /api/inventory": {
+      "status": "PASS_VALIDATION",
+      "http": 400,
+      "permission": "inventory.write",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "SKLADISCE"
+      ],
+      "note": "allow=200 dobil=400"
+    },
+    "GET /api/invoices/:id": {
+      "status": "PASS",
+      "http": 200,
+      "permission": "invoices.read",
+      "roles": [
+        "ADMIN",
+        "VODJA"
+      ],
+      "note": ""
+    },
+    "PATCH /api/invoices/:id": {
+      "status": "PASS_VALIDATION",
+      "http": 400,
+      "permission": "invoices.issue",
+      "roles": [
+        "ADMIN",
+        "VODJA"
+      ],
+      "note": "allow=200 dobil=400"
+    },
+    "GET /api/invoices/eslog": {
+      "status": "PASS",
+      "http": 200,
+      "permission": "invoices.read",
+      "roles": [
+        "ADMIN",
+        "VODJA"
+      ],
+      "note": ""
+    },
+    "GET /api/invoices": {
+      "status": "PASS",
+      "http": 200,
+      "permission": "invoices.read",
+      "roles": [
+        "ADMIN",
+        "VODJA"
+      ],
+      "note": ""
+    },
+    "POST /api/invoices": {
+      "status": "PASS_VALIDATION",
+      "http": 400,
+      "permission": "invoices.issue",
+      "roles": [
+        "ADMIN",
+        "VODJA"
+      ],
+      "note": "allow=201 dobil=400"
+    },
+    "GET /api/jobs": {
+      "status": "PASS",
+      "http": 200,
+      "permission": "security.read",
+      "roles": [
+        "ADMIN"
+      ],
+      "note": ""
+    },
+    "POST /api/jobs": {
+      "status": "PASS",
+      "http": 200,
+      "permission": "security.read",
+      "roles": [
+        "ADMIN"
+      ],
+      "note": ""
+    },
+    "POST /api/jobs/run": {
+      "status": "PASS_VALIDATION",
+      "http": 400,
+      "permission": "security.read",
+      "roles": [
+        "ADMIN"
+      ],
+      "note": "allow=200 dobil=400"
+    },
+    "GET /api/material-orders": {
+      "status": "PASS",
+      "http": 200,
+      "permission": "inventory.read",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "note": ""
+    },
+    "POST /api/material-orders": {
+      "status": "PASS",
+      "http": 201,
+      "permission": "inventory.write + procurement.receive",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "SKLADISCE"
+      ],
+      "note": ""
+    },
+    "GET /api/material-prices": {
+      "status": "PASS",
+      "http": 200,
+      "permission": "inventory.read",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "note": ""
+    },
+    "POST /api/material-prices": {
+      "status": "PASS_VALIDATION",
+      "http": 404,
+      "permission": "price.override",
+      "roles": [
+        "ADMIN",
+        "VODJA"
+      ],
+      "note": "allow=201 dobil=404"
+    },
+    "POST /api/measure/photo": {
+      "status": "PASS",
+      "http": 201,
+      "permission": "measurements.write",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER"
+      ],
+      "note": ""
+    },
+    "POST /api/measurement/confirm": {
+      "status": "PASS",
+      "http": 201,
+      "permission": "measurements.write",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER"
+      ],
+      "note": ""
+    },
+    "POST /api/measurement/detect": {
+      "status": "PASS_VALIDATION",
+      "http": 400,
+      "permission": "measurements.write",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER"
+      ],
+      "note": "allow=200 dobil=400"
+    },
+    "GET /api/measurement/products": {
+      "status": "PASS",
+      "http": 200,
+      "permission": "measurements.read",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "PROIZVODNJA"
+      ],
+      "note": ""
+    },
+    "GET /api/measurements/:id": {
+      "status": "PASS",
+      "http": 200,
+      "permission": "measurements.read",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "PROIZVODNJA"
+      ],
+      "note": ""
+    },
+    "PATCH /api/measurements/:id": {
+      "status": "PASS_VALIDATION",
+      "http": 400,
+      "permission": "measurements.write",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER"
+      ],
+      "note": "allow=200 dobil=400"
+    },
+    "POST /api/measurements/:id/share": {
+      "status": "PASS",
+      "http": 201,
+      "permission": "measurements.write",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER"
+      ],
+      "note": ""
+    },
+    "DELETE /api/measurements/:id/share": {
+      "status": "SKIPPED_SAFE",
+      "http": null,
+      "permission": "measurements.write",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER"
+      ],
+      "note": "klic izpuščen (stranski učinek); logika preverjena v r440.sh"
+    },
+    "GET /api/measurements/:id/verzije": {
+      "status": "PASS",
+      "http": 200,
+      "permission": "measurements.read",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "PROIZVODNJA"
+      ],
+      "note": ""
+    },
+    "GET /api/measurements": {
+      "status": "PASS",
+      "http": 200,
+      "permission": "measurements.read",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "PROIZVODNJA"
+      ],
+      "note": ""
+    },
+    "POST /api/measurements": {
+      "status": "PASS",
+      "http": 201,
+      "permission": "measurements.write",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER"
+      ],
+      "note": ""
+    },
+    "GET /api/nalog/:id": {
+      "status": "PASS",
+      "http": 200,
+      "permission": "nalog.read",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "PROIZVODNJA"
+      ],
+      "note": ""
+    },
+    "PATCH /api/nalog/:id": {
+      "status": "PASS_VALIDATION",
+      "http": 400,
+      "permission": "nalog.write",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "PROIZVODNJA"
+      ],
+      "note": "allow=200 dobil=400"
+    },
+    "POST /api/nalog/:id/termin": {
+      "status": "PASS_VALIDATION",
+      "http": 400,
+      "permission": "nalog.write",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "PROIZVODNJA"
+      ],
+      "note": "allow=201 dobil=400"
+    },
+    "POST /api/nalog/:id/transition": {
+      "status": "PASS_VALIDATION",
+      "http": 400,
+      "permission": "nalog.transition",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER"
+      ],
+      "note": "allow=201 dobil=400"
+    },
+    "GET /api/nalog": {
+      "status": "PASS",
+      "http": 200,
+      "permission": "nalog.read",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "PROIZVODNJA"
+      ],
+      "note": ""
+    },
+    "POST /api/nalog": {
+      "status": "PASS",
+      "http": 201,
+      "permission": "nalog.write",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "PROIZVODNJA"
+      ],
+      "note": ""
+    },
+    "GET /api/nalog/zgodovina": {
+      "status": "PASS",
+      "http": 200,
+      "permission": "nalog.read",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "PROIZVODNJA"
+      ],
+      "note": ""
+    },
+    "GET /api/notifications/deliveries": {
+      "status": "PASS",
+      "http": 200,
+      "permission": "prijavljen (seja)",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "note": ""
+    },
+    "GET /api/notifications/prefs": {
+      "status": "PASS",
+      "http": 200,
+      "permission": "prijavljen (seja)",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "note": ""
+    },
+    "POST /api/notifications/prefs": {
+      "status": "PASS_VALIDATION",
+      "http": 400,
+      "permission": "prijavljen (seja)",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "note": "allow=200 dobil=400"
+    },
+    "POST /api/notifications/read": {
+      "status": "PASS",
+      "http": 200,
+      "permission": "prijavljen (seja)",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "note": ""
+    },
+    "GET /api/notifications": {
+      "status": "PASS",
+      "http": 200,
+      "permission": "prijavljen (seja)",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "note": ""
+    },
+    "POST /api/notifications": {
+      "status": "PASS",
+      "http": 200,
+      "permission": "prijavljen (seja)",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "note": ""
+    },
+    "GET /api/payments/:id": {
+      "status": "PASS",
+      "http": 200,
+      "permission": "payments.read",
+      "roles": [
+        "ADMIN",
+        "VODJA"
+      ],
+      "note": ""
+    },
+    "PATCH /api/payments/:id": {
+      "status": "PASS_VALIDATION",
+      "http": 400,
+      "permission": "payments.manage",
+      "roles": [
+        "ADMIN",
+        "VODJA"
+      ],
+      "note": "allow=200 dobil=400"
+    },
+    "DELETE /api/payments/:id": {
+      "status": "SKIPPED_SAFE",
+      "http": null,
+      "permission": "payments.manage",
+      "roles": [
+        "ADMIN",
+        "VODJA"
+      ],
+      "note": "klic izpuščen (stranski učinek); logika preverjena v r440.sh"
+    },
+    "POST /api/payments/reconciliation": {
+      "status": "PASS",
+      "http": 200,
+      "permission": "payments.manage + payments.read",
+      "roles": [
+        "ADMIN",
+        "VODJA"
+      ],
+      "note": ""
+    },
+    "GET /api/payments": {
+      "status": "PASS",
+      "http": 200,
+      "permission": "payments.read",
+      "roles": [
+        "ADMIN",
+        "VODJA"
+      ],
+      "note": ""
+    },
+    "POST /api/payments": {
+      "status": "PASS",
+      "http": 201,
+      "permission": "payments.manage",
+      "roles": [
+        "ADMIN",
+        "VODJA"
+      ],
+      "note": ""
+    },
+    "GET /api/pdf/:type/:id": {
+      "status": "PASS",
+      "http": 200,
+      "permission": "documents.generate",
+      "roles": [
+        "ADMIN",
+        "VODJA"
+      ],
+      "note": ""
+    },
+    "DELETE /api/portal/:id": {
+      "status": "SKIPPED_SAFE",
+      "http": null,
+      "permission": "projects.write",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER"
+      ],
+      "note": "klic izpuščen (stranski učinek); logika preverjena v r440.sh"
+    },
+    "GET /api/portal": {
+      "status": "PASS",
+      "http": 200,
+      "permission": "projects.read",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "note": ""
+    },
+    "POST /api/portal": {
+      "status": "PASS",
+      "http": 201,
+      "permission": "projects.write",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER"
+      ],
+      "note": ""
+    },
+    "PATCH /api/production/:id": {
+      "status": "PASS_VALIDATION",
+      "http": 400,
+      "permission": "production.manage",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "PROIZVODNJA"
+      ],
+      "note": "allow=200 dobil=400"
+    },
+    "GET /api/production": {
+      "status": "PASS",
+      "http": 200,
+      "permission": "production.read",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "PROIZVODNJA"
+      ],
+      "note": ""
+    },
+    "POST /api/production": {
+      "status": "PASS",
+      "http": 201,
+      "permission": "production.manage",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "PROIZVODNJA"
+      ],
+      "note": ""
+    },
+    "GET /api/projects/:id/command": {
+      "status": "PASS",
+      "http": 200,
+      "permission": "projects.read",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "note": ""
+    },
+    "GET /api/projects/:id": {
+      "status": "PASS",
+      "http": 200,
+      "permission": "projects.read",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "note": ""
+    },
+    "PATCH /api/projects/:id": {
+      "status": "PASS_VALIDATION",
+      "http": 400,
+      "permission": "projects.write",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER"
+      ],
+      "note": "allow=200 dobil=400"
+    },
+    "GET /api/projects/:id/timeline": {
+      "status": "PASS",
+      "http": 200,
+      "permission": "projects.read",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "note": ""
+    },
+    "GET /api/projects": {
+      "status": "PASS",
+      "http": 200,
+      "permission": "projects.read",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "note": ""
+    },
+    "POST /api/projects": {
+      "status": "PASS",
+      "http": 201,
+      "permission": "projects.write",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER"
+      ],
+      "note": ""
+    },
+    "GET /api/public/health": {
+      "status": "PASS",
+      "http": 200,
+      "permission": null,
+      "roles": [],
+      "note": ""
+    },
+    "GET /api/public/measure": {
+      "status": "PASS_VALIDATION",
+      "http": 404,
+      "permission": null,
+      "roles": [],
+      "note": "allow=200 dobil=404"
+    },
+    "GET /api/public/portal": {
+      "status": "PASS_VALIDATION",
+      "http": 404,
+      "permission": null,
+      "roles": [],
+      "note": "allow=200 dobil=404"
+    },
+    "GET /api/public/version": {
+      "status": "PASS",
+      "http": 200,
+      "permission": null,
+      "roles": [],
+      "note": ""
+    },
+    "GET /api/punch": {
+      "status": "PASS",
+      "http": 200,
+      "permission": "users.read",
+      "roles": [
+        "ADMIN",
+        "VODJA"
+      ],
+      "note": ""
+    },
+    "POST /api/punch": {
+      "status": "PASS_VALIDATION",
+      "http": 409,
+      "permission": "prijavljen (seja)",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "note": "allow=201 dobil=409"
+    },
+    "GET /api/qc": {
+      "status": "PASS",
+      "http": 200,
+      "permission": "production.read",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "PROIZVODNJA"
+      ],
+      "note": ""
+    },
+    "POST /api/qc": {
+      "status": "PASS",
+      "http": 201,
+      "permission": "production.manage",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "PROIZVODNJA"
+      ],
+      "note": ""
+    },
+    "GET /api/quotes/:id": {
+      "status": "PASS",
+      "http": 200,
+      "permission": "quotes.read",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER"
+      ],
+      "note": ""
+    },
+    "PATCH /api/quotes/:id": {
+      "status": "PASS_VALIDATION",
+      "http": 400,
+      "permission": "quotes.create + quotes.approve",
+      "roles": [
+        "ADMIN",
+        "VODJA"
+      ],
+      "note": "allow=200 dobil=400"
+    },
+    "POST /api/quotes/:id/sign": {
+      "status": "PASS_VALIDATION",
+      "http": 400,
+      "permission": "deal.lock",
+      "roles": [
+        "ADMIN",
+        "VODJA"
+      ],
+      "note": "allow=200 dobil=400"
+    },
+    "GET /api/quotes": {
+      "status": "PASS",
+      "http": 200,
+      "permission": "quotes.read",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER"
+      ],
+      "note": ""
+    },
+    "POST /api/quotes": {
+      "status": "PASS",
+      "http": 201,
+      "permission": "quotes.create",
+      "roles": [
+        "ADMIN",
+        "VODJA"
+      ],
+      "note": ""
+    },
+    "GET /api/railing-layout": {
+      "status": "PASS",
+      "http": 200,
+      "permission": "measurements.read",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "PROIZVODNJA"
+      ],
+      "note": ""
+    },
+    "POST /api/railing-layout": {
+      "status": "PASS",
+      "http": 201,
+      "permission": "measurements.write",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER"
+      ],
+      "note": ""
+    },
+    "GET /api": {
+      "status": "PASS",
+      "http": 200,
+      "permission": null,
+      "roles": [],
+      "note": ""
+    },
+    "GET /api/search": {
+      "status": "PASS",
+      "http": 200,
+      "permission": "projects.read + customers.read + quotes.read + invoices.read + nalog.read + inventory.read + users.read",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "note": ""
+    },
+    "POST /api/security/rate-limit": {
+      "status": "PASS",
+      "http": 200,
+      "permission": "security.read",
+      "roles": [
+        "ADMIN"
+      ],
+      "note": ""
+    },
+    "GET /api/setup": {
+      "status": "PASS",
+      "http": 200,
+      "permission": null,
+      "roles": [],
+      "note": ""
+    },
+    "POST /api/setup": {
+      "status": "SKIPPED_SAFE",
+      "http": null,
+      "permission": null,
+      "roles": [],
+      "note": "klic izpuščen (stranski učinek); logika preverjena v r440.sh"
+    },
+    "GET /api/suppliers": {
+      "status": "PASS",
+      "http": 200,
+      "permission": "inventory.read",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "note": ""
+    },
+    "POST /api/suppliers": {
+      "status": "PASS",
+      "http": 201,
+      "permission": "procurement.receive",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "SKLADISCE"
+      ],
+      "note": ""
+    },
+    "GET /api/surveys": {
+      "status": "PASS",
+      "http": 200,
+      "permission": "crm.read",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER"
+      ],
+      "note": ""
+    },
+    "POST /api/surveys": {
+      "status": "PASS",
+      "http": 201,
+      "permission": "crm.write",
+      "roles": [
+        "ADMIN",
+        "VODJA"
+      ],
+      "note": ""
+    },
+    "POST /api/sync": {
+      "status": "PASS",
+      "http": 200,
+      "permission": "prijavljen (seja)",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "note": ""
+    },
+    "GET /api/users": {
+      "status": "PASS",
+      "http": 200,
+      "permission": "users.read",
+      "roles": [
+        "ADMIN",
+        "VODJA"
+      ],
+      "note": ""
+    },
+    "PATCH /api/users": {
+      "status": "PASS_VALIDATION",
+      "http": 400,
+      "permission": "users.write",
+      "roles": [
+        "ADMIN",
+        "VODJA"
+      ],
+      "note": "allow=200 dobil=400"
+    },
+    "GET /api/version": {
+      "status": "PASS",
+      "http": 200,
+      "permission": "prijavljen (seja)",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "note": ""
+    },
+    "GET /api/warranty": {
+      "status": "PASS",
+      "http": 200,
+      "permission": "projects.read",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "note": ""
+    },
+    "POST /api/warranty": {
+      "status": "PASS_VALIDATION",
+      "http": 409,
+      "permission": "projects.write",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER"
+      ],
+      "note": "allow=201 dobil=409"
+    },
+    "GET /api/weather": {
+      "status": "PASS_EXTERNAL",
+      "http": 502,
+      "permission": "nalog.read",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "PROIZVODNJA"
+      ],
+      "note": "allow=200 dobil=502"
+    }
+  },
+  "rbac": [
+    {
+      "method": "GET",
+      "path": "/api/aktivacija",
+      "role": "ADMIN",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/aktivacija",
+      "role": "VODJA",
+      "http": 403,
+      "expected": "DENY",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/aktivacija",
+      "role": "MONTER",
+      "http": 403,
+      "expected": "DENY",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/aktivacija",
+      "role": "SKLADISCE",
+      "http": 403,
+      "expected": "DENY",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/aktivacija",
+      "role": "PROIZVODNJA",
+      "http": 403,
+      "expected": "DENY",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/audit",
+      "role": "ADMIN",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/audit",
+      "role": "VODJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/audit",
+      "role": "MONTER",
+      "http": 403,
+      "expected": "DENY",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/audit",
+      "role": "SKLADISCE",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/audit",
+      "role": "PROIZVODNJA",
+      "http": 403,
+      "expected": "DENY",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/session",
+      "role": "ADMIN",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/session",
+      "role": "VODJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/session",
+      "role": "MONTER",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/session",
+      "role": "SKLADISCE",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/session",
+      "role": "PROIZVODNJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/sessions",
+      "role": "ADMIN",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/sessions",
+      "role": "VODJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/sessions",
+      "role": "MONTER",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/sessions",
+      "role": "SKLADISCE",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/sessions",
+      "role": "PROIZVODNJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/catalog",
+      "role": "ADMIN",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/catalog",
+      "role": "VODJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/catalog",
+      "role": "MONTER",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/catalog",
+      "role": "SKLADISCE",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/catalog",
+      "role": "PROIZVODNJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/crm",
+      "role": "ADMIN",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/crm",
+      "role": "VODJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/crm",
+      "role": "MONTER",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/crm",
+      "role": "SKLADISCE",
+      "http": 403,
+      "expected": "DENY",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/crm",
+      "role": "PROIZVODNJA",
+      "http": 403,
+      "expected": "DENY",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/customers/:id",
+      "role": "ADMIN",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/customers/:id",
+      "role": "VODJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/customers/:id",
+      "role": "MONTER",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/customers/:id",
+      "role": "SKLADISCE",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/customers/:id",
+      "role": "PROIZVODNJA",
+      "http": 403,
+      "expected": "DENY",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/customers/dedup",
+      "role": "ADMIN",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/customers/dedup",
+      "role": "VODJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/customers/dedup",
+      "role": "MONTER",
+      "http": 403,
+      "expected": "DENY",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/customers/dedup",
+      "role": "SKLADISCE",
+      "http": 403,
+      "expected": "DENY",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/customers/dedup",
+      "role": "PROIZVODNJA",
+      "http": 403,
+      "expected": "DENY",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/customers",
+      "role": "ADMIN",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/customers",
+      "role": "VODJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/customers",
+      "role": "MONTER",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/customers",
+      "role": "SKLADISCE",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/customers",
+      "role": "PROIZVODNJA",
+      "http": 403,
+      "expected": "DENY",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/dashboard",
+      "role": "ADMIN",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/dashboard",
+      "role": "VODJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/dashboard",
+      "role": "MONTER",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/dashboard",
+      "role": "SKLADISCE",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/dashboard",
+      "role": "PROIZVODNJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/deal-lock",
+      "role": "ADMIN",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/deal-lock",
+      "role": "VODJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/deal-lock",
+      "role": "MONTER",
+      "http": 403,
+      "expected": "DENY",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/deal-lock",
+      "role": "SKLADISCE",
+      "http": 403,
+      "expected": "DENY",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/deal-lock",
+      "role": "PROIZVODNJA",
+      "http": 403,
+      "expected": "DENY",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/documents",
+      "role": "ADMIN",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/documents",
+      "role": "VODJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/documents",
+      "role": "MONTER",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/documents",
+      "role": "SKLADISCE",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/documents",
+      "role": "PROIZVODNJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/engineering-rules/:id",
+      "role": "ADMIN",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/engineering-rules/:id",
+      "role": "VODJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/engineering-rules/:id",
+      "role": "MONTER",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/engineering-rules/:id",
+      "role": "SKLADISCE",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/engineering-rules/:id",
+      "role": "PROIZVODNJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/engineering-rules",
+      "role": "ADMIN",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/engineering-rules",
+      "role": "VODJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/engineering-rules",
+      "role": "MONTER",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/engineering-rules",
+      "role": "SKLADISCE",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/engineering-rules",
+      "role": "PROIZVODNJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/equipment/:id",
+      "role": "ADMIN",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/equipment/:id",
+      "role": "VODJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/equipment/:id",
+      "role": "MONTER",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/equipment/:id",
+      "role": "SKLADISCE",
+      "http": 403,
+      "expected": "DENY",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/equipment/:id",
+      "role": "PROIZVODNJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/equipment/events",
+      "role": "ADMIN",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/equipment/events",
+      "role": "VODJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/equipment/events",
+      "role": "MONTER",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/equipment/events",
+      "role": "SKLADISCE",
+      "http": 403,
+      "expected": "DENY",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/equipment/events",
+      "role": "PROIZVODNJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/equipment",
+      "role": "ADMIN",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/equipment",
+      "role": "VODJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/equipment",
+      "role": "MONTER",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/equipment",
+      "role": "SKLADISCE",
+      "http": 403,
+      "expected": "DENY",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/equipment",
+      "role": "PROIZVODNJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/gallery",
+      "role": "ADMIN",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/gallery",
+      "role": "VODJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/gallery",
+      "role": "MONTER",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/gallery",
+      "role": "SKLADISCE",
+      "http": 403,
+      "expected": "DENY",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/gallery",
+      "role": "PROIZVODNJA",
+      "http": 403,
+      "expected": "DENY",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/inventory/lots",
+      "role": "ADMIN",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/inventory/lots",
+      "role": "VODJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/inventory/lots",
+      "role": "MONTER",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/inventory/lots",
+      "role": "SKLADISCE",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/inventory/lots",
+      "role": "PROIZVODNJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/inventory",
+      "role": "ADMIN",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/inventory",
+      "role": "VODJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/inventory",
+      "role": "MONTER",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/inventory",
+      "role": "SKLADISCE",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/inventory",
+      "role": "PROIZVODNJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/invoices/:id",
+      "role": "ADMIN",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/invoices/:id",
+      "role": "VODJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/invoices/:id",
+      "role": "MONTER",
+      "http": 403,
+      "expected": "DENY",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/invoices/:id",
+      "role": "SKLADISCE",
+      "http": 403,
+      "expected": "DENY",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/invoices/:id",
+      "role": "PROIZVODNJA",
+      "http": 403,
+      "expected": "DENY",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/invoices/eslog",
+      "role": "ADMIN",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/invoices/eslog",
+      "role": "VODJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/invoices/eslog",
+      "role": "MONTER",
+      "http": 403,
+      "expected": "DENY",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/invoices/eslog",
+      "role": "SKLADISCE",
+      "http": 403,
+      "expected": "DENY",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/invoices/eslog",
+      "role": "PROIZVODNJA",
+      "http": 403,
+      "expected": "DENY",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/invoices",
+      "role": "ADMIN",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/invoices",
+      "role": "VODJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/invoices",
+      "role": "MONTER",
+      "http": 403,
+      "expected": "DENY",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/invoices",
+      "role": "SKLADISCE",
+      "http": 403,
+      "expected": "DENY",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/invoices",
+      "role": "PROIZVODNJA",
+      "http": 403,
+      "expected": "DENY",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/jobs",
+      "role": "ADMIN",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/jobs",
+      "role": "VODJA",
+      "http": 403,
+      "expected": "DENY",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/jobs",
+      "role": "MONTER",
+      "http": 403,
+      "expected": "DENY",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/jobs",
+      "role": "SKLADISCE",
+      "http": 403,
+      "expected": "DENY",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/jobs",
+      "role": "PROIZVODNJA",
+      "http": 403,
+      "expected": "DENY",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/material-orders",
+      "role": "ADMIN",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/material-orders",
+      "role": "VODJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/material-orders",
+      "role": "MONTER",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/material-orders",
+      "role": "SKLADISCE",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/material-orders",
+      "role": "PROIZVODNJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/material-prices",
+      "role": "ADMIN",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/material-prices",
+      "role": "VODJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/material-prices",
+      "role": "MONTER",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/material-prices",
+      "role": "SKLADISCE",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/material-prices",
+      "role": "PROIZVODNJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/measurement/products",
+      "role": "ADMIN",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/measurement/products",
+      "role": "VODJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/measurement/products",
+      "role": "MONTER",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/measurement/products",
+      "role": "SKLADISCE",
+      "http": 403,
+      "expected": "DENY",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/measurement/products",
+      "role": "PROIZVODNJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/measurements/:id",
+      "role": "ADMIN",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/measurements/:id",
+      "role": "VODJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/measurements/:id",
+      "role": "MONTER",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/measurements/:id",
+      "role": "SKLADISCE",
+      "http": 403,
+      "expected": "DENY",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/measurements/:id",
+      "role": "PROIZVODNJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/measurements/:id/verzije",
+      "role": "ADMIN",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/measurements/:id/verzije",
+      "role": "VODJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/measurements/:id/verzije",
+      "role": "MONTER",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/measurements/:id/verzije",
+      "role": "SKLADISCE",
+      "http": 403,
+      "expected": "DENY",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/measurements/:id/verzije",
+      "role": "PROIZVODNJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/measurements",
+      "role": "ADMIN",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/measurements",
+      "role": "VODJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/measurements",
+      "role": "MONTER",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/measurements",
+      "role": "SKLADISCE",
+      "http": 403,
+      "expected": "DENY",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/measurements",
+      "role": "PROIZVODNJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/nalog/:id",
+      "role": "ADMIN",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/nalog/:id",
+      "role": "VODJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/nalog/:id",
+      "role": "MONTER",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/nalog/:id",
+      "role": "SKLADISCE",
+      "http": 403,
+      "expected": "DENY",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/nalog/:id",
+      "role": "PROIZVODNJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/nalog",
+      "role": "ADMIN",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/nalog",
+      "role": "VODJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/nalog",
+      "role": "MONTER",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/nalog",
+      "role": "SKLADISCE",
+      "http": 403,
+      "expected": "DENY",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/nalog",
+      "role": "PROIZVODNJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/nalog/zgodovina",
+      "role": "ADMIN",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/nalog/zgodovina",
+      "role": "VODJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/nalog/zgodovina",
+      "role": "MONTER",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/nalog/zgodovina",
+      "role": "SKLADISCE",
+      "http": 403,
+      "expected": "DENY",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/nalog/zgodovina",
+      "role": "PROIZVODNJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/notifications/deliveries",
+      "role": "ADMIN",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/notifications/deliveries",
+      "role": "VODJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/notifications/deliveries",
+      "role": "MONTER",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/notifications/deliveries",
+      "role": "SKLADISCE",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/notifications/deliveries",
+      "role": "PROIZVODNJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/notifications/prefs",
+      "role": "ADMIN",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/notifications/prefs",
+      "role": "VODJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/notifications/prefs",
+      "role": "MONTER",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/notifications/prefs",
+      "role": "SKLADISCE",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/notifications/prefs",
+      "role": "PROIZVODNJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/notifications",
+      "role": "ADMIN",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/notifications",
+      "role": "VODJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/notifications",
+      "role": "MONTER",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/notifications",
+      "role": "SKLADISCE",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/notifications",
+      "role": "PROIZVODNJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/payments/:id",
+      "role": "ADMIN",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/payments/:id",
+      "role": "VODJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/payments/:id",
+      "role": "MONTER",
+      "http": 403,
+      "expected": "DENY",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/payments/:id",
+      "role": "SKLADISCE",
+      "http": 403,
+      "expected": "DENY",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/payments/:id",
+      "role": "PROIZVODNJA",
+      "http": 403,
+      "expected": "DENY",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/payments",
+      "role": "ADMIN",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/payments",
+      "role": "VODJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/payments",
+      "role": "MONTER",
+      "http": 403,
+      "expected": "DENY",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/payments",
+      "role": "SKLADISCE",
+      "http": 403,
+      "expected": "DENY",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/payments",
+      "role": "PROIZVODNJA",
+      "http": 403,
+      "expected": "DENY",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/pdf/:type/:id",
+      "role": "ADMIN",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/pdf/:type/:id",
+      "role": "VODJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/pdf/:type/:id",
+      "role": "MONTER",
+      "http": 403,
+      "expected": "DENY",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/pdf/:type/:id",
+      "role": "SKLADISCE",
+      "http": 403,
+      "expected": "DENY",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/pdf/:type/:id",
+      "role": "PROIZVODNJA",
+      "http": 403,
+      "expected": "DENY",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/portal",
+      "role": "ADMIN",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/portal",
+      "role": "VODJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/portal",
+      "role": "MONTER",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/portal",
+      "role": "SKLADISCE",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/portal",
+      "role": "PROIZVODNJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/production",
+      "role": "ADMIN",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/production",
+      "role": "VODJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/production",
+      "role": "MONTER",
+      "http": 403,
+      "expected": "DENY",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/production",
+      "role": "SKLADISCE",
+      "http": 403,
+      "expected": "DENY",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/production",
+      "role": "PROIZVODNJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/:id/command",
+      "role": "ADMIN",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/:id/command",
+      "role": "VODJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/:id/command",
+      "role": "MONTER",
+      "http": 403,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/:id/command",
+      "role": "SKLADISCE",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/:id/command",
+      "role": "PROIZVODNJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/:id",
+      "role": "ADMIN",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/:id",
+      "role": "VODJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/:id",
+      "role": "MONTER",
+      "http": 403,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/:id",
+      "role": "SKLADISCE",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/:id",
+      "role": "PROIZVODNJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/:id/timeline",
+      "role": "ADMIN",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/:id/timeline",
+      "role": "VODJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/:id/timeline",
+      "role": "MONTER",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/:id/timeline",
+      "role": "SKLADISCE",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/:id/timeline",
+      "role": "PROIZVODNJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects",
+      "role": "ADMIN",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects",
+      "role": "VODJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects",
+      "role": "MONTER",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects",
+      "role": "SKLADISCE",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects",
+      "role": "PROIZVODNJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/punch",
+      "role": "ADMIN",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/punch",
+      "role": "VODJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/punch",
+      "role": "MONTER",
+      "http": 403,
+      "expected": "DENY",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/punch",
+      "role": "SKLADISCE",
+      "http": 403,
+      "expected": "DENY",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/punch",
+      "role": "PROIZVODNJA",
+      "http": 403,
+      "expected": "DENY",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/qc",
+      "role": "ADMIN",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/qc",
+      "role": "VODJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/qc",
+      "role": "MONTER",
+      "http": 403,
+      "expected": "DENY",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/qc",
+      "role": "SKLADISCE",
+      "http": 403,
+      "expected": "DENY",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/qc",
+      "role": "PROIZVODNJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/quotes/:id",
+      "role": "ADMIN",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/quotes/:id",
+      "role": "VODJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/quotes/:id",
+      "role": "MONTER",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/quotes/:id",
+      "role": "SKLADISCE",
+      "http": 403,
+      "expected": "DENY",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/quotes/:id",
+      "role": "PROIZVODNJA",
+      "http": 403,
+      "expected": "DENY",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/quotes",
+      "role": "ADMIN",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/quotes",
+      "role": "VODJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/quotes",
+      "role": "MONTER",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/quotes",
+      "role": "SKLADISCE",
+      "http": 403,
+      "expected": "DENY",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/quotes",
+      "role": "PROIZVODNJA",
+      "http": 403,
+      "expected": "DENY",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/railing-layout",
+      "role": "ADMIN",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/railing-layout",
+      "role": "VODJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/railing-layout",
+      "role": "MONTER",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/railing-layout",
+      "role": "SKLADISCE",
+      "http": 403,
+      "expected": "DENY",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/railing-layout",
+      "role": "PROIZVODNJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/search",
+      "role": "ADMIN",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/search",
+      "role": "VODJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/search",
+      "role": "MONTER",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/search",
+      "role": "SKLADISCE",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/search",
+      "role": "PROIZVODNJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/suppliers",
+      "role": "ADMIN",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/suppliers",
+      "role": "VODJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/suppliers",
+      "role": "MONTER",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/suppliers",
+      "role": "SKLADISCE",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/suppliers",
+      "role": "PROIZVODNJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/surveys",
+      "role": "ADMIN",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/surveys",
+      "role": "VODJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/surveys",
+      "role": "MONTER",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/surveys",
+      "role": "SKLADISCE",
+      "http": 403,
+      "expected": "DENY",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/surveys",
+      "role": "PROIZVODNJA",
+      "http": 403,
+      "expected": "DENY",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/users",
+      "role": "ADMIN",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/users",
+      "role": "VODJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/users",
+      "role": "MONTER",
+      "http": 403,
+      "expected": "DENY",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/users",
+      "role": "SKLADISCE",
+      "http": 403,
+      "expected": "DENY",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/users",
+      "role": "PROIZVODNJA",
+      "http": 403,
+      "expected": "DENY",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/version",
+      "role": "ADMIN",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/version",
+      "role": "VODJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/version",
+      "role": "MONTER",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/version",
+      "role": "SKLADISCE",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/version",
+      "role": "PROIZVODNJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/warranty",
+      "role": "ADMIN",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/warranty",
+      "role": "VODJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/warranty",
+      "role": "MONTER",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/warranty",
+      "role": "SKLADISCE",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/warranty",
+      "role": "PROIZVODNJA",
+      "http": 200,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/weather",
+      "role": "ADMIN",
+      "http": 502,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/weather",
+      "role": "VODJA",
+      "http": 502,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/weather",
+      "role": "MONTER",
+      "http": 502,
+      "expected": "ALLOW",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/weather",
+      "role": "SKLADISCE",
+      "http": 403,
+      "expected": "DENY",
+      "ok": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/weather",
+      "role": "PROIZVODNJA",
+      "http": 502,
+      "expected": "ALLOW",
+      "ok": true
+    }
+  ],
+  "summary": {
+    "endpoints": 127,
+    "smoke": {
+      "PASS": 84,
+      "SKIPPED_SAFE": 8,
+      "PASS_VALIDATION": 34,
+      "PASS_EXTERNAL": 1
+    },
+    "rbacChecks": 285,
+    "rbacFailures": 0
+  }
+}

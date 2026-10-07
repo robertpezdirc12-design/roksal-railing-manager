@@ -275,7 +275,7 @@ export function AppShell () {
       <div className="mx-auto flex w-full max-w-7xl flex-1 gap-6 px-3 pb-24 pt-4 sm:px-4 md:pb-8">
         {/* stranska vrstica — desktop */}
         <nav aria-label="Glavna navigacija" className="hidden w-60 shrink-0 md:block">
-          <div className="sticky top-20 max-h-[calc(100vh-6rem)] space-y-5 overflow-y-auto pr-1">
+          <div className="sticky top-20 max-h-[calc(100vh-9.375rem)] space-y-5 overflow-y-auto pr-1">
             {SECTIONS.map((sec) => {
               const tabs = sec.tabs.filter((t) => tabVisible(user.perms, t))
               if (tabs.length === 0) return null

@@ -452,3 +452,30 @@ Stage Summary:
 - 2 produkcijska hrošča odpravljena ob priložnosti: P2002 unique constraint pri generiranju kod (nalog/production/projects/pretvorba — lahko bi zrušil ustvarjanje naloga v produkciji po vsakem brisanju) in Radix Select ponastavitveni prikaz (nalogi/racuni/signatura)
 - tests/r439.sh: ✓ 74 / ✗ 0; lint ČIST; konzola ČISTA; mobile brez preliva
 - Naslednja faza: R440 — issue #4 (END-TO-END validacija 27 modulov + 130+ API), nato R441 — issue #3 (DR)
+
+---
+Task ID: 14
+Agent: browser-ui-validator
+Task: R440-f — UI validacija 29 zavihkov v brskalniku (GitLab issue #4)
+
+Work Log:
+- agent-browser (Chromium headless) proti http://localhost:3000; prijava admin/monter/skladisce prek obrazca (ne demo gumbov); tab preklop prek stranske vrstice (store persist v localStorage)
+- ADMIN: obiskani VSILI 29 zavihkov (danes, dashboard, projekti, stranke, ponudbe, racuni, nalogi, teren, meritve, foto, nagib, kalkulator, signatura, material-v5, orodjarina, viz, ar, crm, dokumenti, zaloga, katalog, logistika, proizvodnja, galerija, varnost, vodja-ekipa, pdf, postsig, profil) — za vsakegа preverjen izris, dejanski podatki (P-2026-001..009, N-2026-001..008, PON/RA kode, 10 strank, 12 profilov, zaloga/losi, orodjarina EV/OR, CRM pipeline) in konzola (clear → obisk → prever) — 0 errorjev/0 opozoril (samo Fast Refresh dev logi), 0 page errors
+- Interaktivni vzorci: nalogi detail N-2026-001 (vodnik terena 6 korakov, offline dejanja, ČASOVNICA DOGODKOV Dodeljen/Začetek dela, meritve 12,40 m); meritve urejanje (ZGODOVINA VERZIJ v1 »Potrjeno s kamero«, JAVNA POVEZAVA); projekti detail P-2026-001 (PONUDBE/RAČUNI/NALOGI/MERITVE/3D PREDOGLED z 7 SVG + yaw/pitch/GARANCIJA/PORTAL); CRM (3 vodi + 3 priložnosti, pipeline 25.300 €); varnost (sistemski revizijski dnevnik s Zapisi + seje + obvestila + vzdrževanje + licenca); profil Obveščanje (preklop EMAIL za WO_ASSIGNED → persist v bazi prek /api/notifications/prefs, povrnjeno nazaj); PDF (PON-2026-001 → Predogled → iframe embed)
+- RBAC MONTER (19/29 zavihkov): vidi Danes/Preglednica/Projekti/Stranke/Ponudbe/Nalogi/Teren/Meritve/Foto/Nagib/Orodjarina/Viz/AR/CRM/Dokumenti/Zaloga/Katalog/Galerija/Profil (skladno z 15 pravicami — crm.read/inventory.read/catalog.read/documents.read/gallery.read imajo read-only dostop); NE vidi Računi/Kalkulator/Signatura/Material V5/Logistika/Proizvodnja/Varnost/Vodja-ekipa/PDF/PostSig (10)
+- Fail-closed testi monter: URL ?tab=varnost BREZ učinka (aplikacija ne bere URL parametra, ostane na trenutnem zavihku); injekcija tab=varnost neposredno v persisted store (localStorage roksal-session) + reload → »Dostop zavrnjen — Ta zavihek zahteva pravico audit.read«, NI predvida podatkov; Danes/Nalogi monterja prikazujeta SAMO lastne naloge (Luka Novak; N-2026-007/Matej in N-2026-002/nedodeljen izpuščena, števci 8→6)
+- RBAC SKLADIŠČE (12/29): Preglednica/Projekti/Stranke/Nagib/Material V5/Viz/AR/Dokumenti/Zaloga/Katalog/Varnost/Profil — Zaloga+Katalog+Varnost vidni (audit.read, brez seznama sej — security.read manjka), CRM/Proizvodnja/Nalogi/Danes/Računi/Ponudbe skriti; BONUS: offline varnost R429 se je sprožila v živo (prijava drugega uporabnika na isti napravi → izbris IndexedDB vrste prejšnjega + toast)
+- Mobile 390×844 (nalogi/meritve/projekti): scrollWidth == clientWidth == 390 na vseh treh (brez horizontalnega preliva); spodnja navigacija 5 sekcij + tablist delujeta; noga naravno pod dolgo vsebino (Nalogi 2200 px, Projekti 2100 px), na kratki strani (Meritve) točno pripeta na dno viewporta (footerBottom == 844)
+- Sticky footer desktop: NAJDENA VRZEL — stranska vrstica max-h calc(100vh-6rem) ne upošteva headerja 57 + noge 38 + paddingov 48 (skupaj 143 px > 96 px) → na vsaki desktop strani je stalnih 47 px vertikalnega scrolla in noga ni pripeta na dno viewporta (1080 → footerBottom 1127; 1200 → 1247; vedno +47). Noga ne lebdi (vedno pod vsebino), a idealen sticky ni dosežen na desktopu; na mobilnem deluje pravilno. Predlog popravka: max-h ≈ calc(100vh-9rem)
+- Zunanja odvisnost: vreme (Open-Meteo) vrne HTTP 429 tudi ob neposrednem klicu iz peskovnice — UI prikaže gracefullno sporočilo »Vremenska storitev ni odgovorila.«, ni napaka aplikacije
+- Preverjanje higiene podatkov (read-only sqlite): 10 proizvodnih nalogov »R440S smoke proizvodnja«, 5 ponudb brez stranke (PON-2026-008..012, 3× 12,20 €), 9 plačil 0,01 € na RA-2026-002, 26 meritev brez lokacije (1,00 m iz sync/kamera testov), N-2026-012 »poskus«, 183 aktivnih sej — ostanki prejšnjih testnih faz (NIČ nisem spreminjal)
+- Manjše UI opažanja: »1 projektov/1 ponudb« (slovnična oblika množine pri 1), Vodja/ekipa opis pravi »38 pravic« števci pa »od 37«
+- Brskalnik zaprt; koda in baza NESPREMENJENA (samo preklop EMAIL preference izveden in povrnjen nazaj v izhodiščno stanje)
+
+Stage Summary:
+- 29/29 zavihkov PASS (vsebina + dejanski podatki); 0 konzolnih napak/opozoril; 0 page errors; vsi interaktivni vzorci uspešni (nalogi/meritve/projekti/CRM/varnost/profil/PDF)
+- RBAC: monter 19/29, skladišče 12/29 — vidni zavihki točno po permissions-core katalogu; URL parameter ne more odpreti skritega zavihka; injekcija stanja → Dostop zavrnjen (fail-closed potrjen); obseg podatkov monterja pravilen (samo lastni nalogi/projekti)
+- Mobile 390 px: brez horizontalnega preliva na nalogi/meritve/projekti, navigacija uporabna, noga pravilna (sticky na kratki, naravna na dolgi strani)
+- VRZEL #1 (kozmetična): desktop sticky footer off-by-47 px (sidebar max-h ne všteva header+footer+padding) — noga vedno pod vsebino, a nikoli pripeta na dno viewporta na desktopu
+- VRZEL #2 (higiena): testni ostanki v bazi iz prejšnjih faz (10× R440S smoke proizvodnja, 5 ponudb brez stranke, 9× 0,01 € plačil, 26 meritev 1,00 m, N-2026-012 poskus, 183 sej) — priporočeno čiščenje + zagon seje-gc
+- Zunanje: Open-Meteo 429 (rate limit peskovnice) — obravnavano gracefullno
