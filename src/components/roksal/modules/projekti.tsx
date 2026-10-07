@@ -3,7 +3,7 @@
 // PROJEKTI — seznam + podrobnost (vrata projects.read)
 
 import { useMemo, useState } from 'react'
-import { FolderKanban, HardHat, MapPin, Plus, Ruler, Search, FileText, Banknote } from 'lucide-react'
+import { FolderKanban, HardHat, History, MapPin, Plus, Ruler, Search, FileText, Banknote } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -12,7 +12,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useToast } from '@/hooks/use-toast'
 import { useAppStore } from '@/lib/store'
-import { apiPost, fmtDate, fmtEUR, useApi } from '@/lib/api-client'
+import { cn } from '@/lib/utils'
+import { apiPost, fmtDate, fmtDateTime, fmtEUR, useApi } from '@/lib/api-client'
 import { EmptyState, ErrorBox, LoadingRows, PageHeader, StatusBadge } from '@/components/roksal/ui-bits'
 import { hasPerm } from '@/lib/permissions-core'
 
@@ -112,8 +113,13 @@ export default function ProjektiModule () {
       {/* podrobnost */}
       <Dialog open={!!selected} onOpenChange={(o) => { if (!o) setSelected(null) }}>
         <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
-          {/* dostopnost: naslov tudi med nalaganjem/napako (Radix zahteva DialogTitle) */}
-          {detail.loading || !detail.data ? <DialogTitle className="sr-only">Projekt</DialogTitle> : null}
+          {/* dostopnost: naslov+opis tudi med nalaganjem/napako (Radix zahteva DialogTitle) */}
+          {detail.loading || !detail.data ? (
+            <>
+              <DialogTitle className="sr-only">Projekt</DialogTitle>
+              <DialogDescription className="sr-only">Podrobnosti projekta.</DialogDescription>
+            </>
+          ) : null}
           {detail.loading ? <LoadingRows rows={3} /> : detail.data ? (
             <ProjectDetailDialog detail={detail.data.data} />
           ) : <ErrorBox error={detail.error} />}
@@ -133,12 +139,19 @@ export default function ProjektiModule () {
 }
 
 function ProjectDetailDialog ({ detail }: { detail: ProjectDetail }) {
+  const [timelineOpen, setTimelineOpen] = useState(false)
   return (
     <>
       <DialogHeader>
         <div className="flex items-center gap-2">
           <span className="font-mono text-xs font-semibold text-roksal-amber">{detail.code}</span>
           <StatusBadge status={detail.status} />
+          <Button
+            variant="outline" size="sm" className="ml-auto h-7 gap-1.5 px-2 text-xs"
+            onClick={() => setTimelineOpen(true)}
+          >
+            <History className="size-3.5" aria-hidden /> Zgodovina
+          </Button>
         </div>
         <DialogTitle>{detail.title}</DialogTitle>
         <DialogDescription>
@@ -210,7 +223,67 @@ function ProjectDetailDialog ({ detail }: { detail: ProjectDetail }) {
           )}
         </section>
       </div>
+
+      {/* kronološka zgodovina projekta (R433: /api/projects/[id]/timeline) */}
+      <Dialog open={timelineOpen} onOpenChange={setTimelineOpen}>
+        <TimelineDialog projectId={detail.id} code={detail.code} />
+      </Dialog>
     </>
+  )
+}
+
+const TIMELINE_TYPE_STYLES: Record<string, string> = {
+  ODPERTJE: 'bg-roksal-ink text-primary-foreground',
+  PONUDBA: 'bg-secondary text-foreground',
+  PODPIS: 'bg-roksal-amber text-roksal-ink',
+  MERITEV: 'bg-secondary text-foreground',
+  NALOG: 'bg-secondary text-foreground',
+  DOGAJEK: 'bg-secondary/70 text-muted-foreground',
+  ZAKLJUCEK: 'bg-emerald-700 text-white',
+  RACUN: 'bg-secondary text-foreground',
+  PLACILO: 'bg-emerald-700 text-white',
+  PROIZVODNJA: 'bg-secondary text-foreground',
+}
+
+const TIMELINE_TYPE_LABELS: Record<string, string> = {
+  ODPERTJE: 'odpertje', PONUDBA: 'ponudba', PODPIS: 'podpis', MERITEV: 'meritev',
+  NALOG: 'nalog', DOGAJEK: 'dogodek', ZAKLJUCEK: 'zaključek', RACUN: 'račun',
+  PLACILO: 'plačilo', PROIZVODNJA: 'proizvodnja',
+}
+
+function TimelineDialog ({ projectId, code }: { projectId: string; code: string }) {
+  const tl = useApi<{ data: { entries: { at: string; type: string; label: string; detail: string; ref: string }[]; count: number } }>(`/api/projects/${projectId}/timeline`, [projectId])
+  return (
+    <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
+      <DialogHeader>
+        <DialogTitle>Zgodovina — {code}</DialogTitle>
+        <DialogDescription>Kronološki tok projekta: ponudbe, podpisi, teren, računi, plačila, proizvodnja.</DialogDescription>
+      </DialogHeader>
+      <ErrorBox error={tl.error} />
+      {tl.loading ? <LoadingRows rows={5} /> : !tl.error && (tl.data?.data.entries ?? []).length === 0 ? (
+        <EmptyState title="Ni dogodkov" desc="Zgodovina projekta je prazna." icon={History} />
+      ) : (
+        <ol className="relative space-y-3 border-l pl-5" aria-label="Kronologija projekta">
+          {(tl.data?.data.entries ?? []).map((e, i) => (
+            <li key={`${e.at}-${i}`} className="relative">
+              <span
+                className={cn('absolute -left-[27px] top-0.5 inline-flex rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide', TIMELINE_TYPE_STYLES[e.type] ?? 'bg-secondary text-foreground')}
+                aria-hidden
+              >
+                {TIMELINE_TYPE_LABELS[e.type] ?? e.type.toLowerCase()}
+              </span>
+              <div className="rounded-lg border p-2.5">
+                <div className="text-sm font-medium leading-snug">{e.label}</div>
+                <div className="mt-0.5 flex flex-wrap items-baseline justify-between gap-x-3">
+                  <span className="truncate text-xs text-muted-foreground">{e.detail}</span>
+                  <span className="shrink-0 text-[10px] text-muted-foreground/70">{fmtDateTime(e.at)}</span>
+                </div>
+              </div>
+            </li>
+          ))}
+        </ol>
+      )}
+    </DialogContent>
   )
 }
 

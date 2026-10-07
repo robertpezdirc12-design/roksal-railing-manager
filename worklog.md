@@ -254,3 +254,31 @@ Stage Summary:
   - main = recovery blueprint (rešeni artefakti, dokumentacija)
   - rekonstrukcija = FUNKCIONALNA aplikacija (R431–R432, 29/29 zavihkov, lint čist, brskalniško verificirano)
 - Preostalo (izven tega repa): odgovor GitHub Support na zahtevo za obnovitev izvirnika; rotacija preostalih skrivnosti (Neon, SESSION_SECRET, …) če še ni izvedena
+
+---
+Task ID: 7
+Agent: main (Z.ai Code)
+Task: R433 — dopolnitev po ROUTE-MAP (GitLab main blueprint): iskanje, seje, geslo, timeline, termin, version
+
+Work Log:
+- Analiza docs/ROUTE-MAP.md (130+ API rut izvirnika) proti rekonstrukciji → 6 manjkajočih zmožnosti
+- /api/search (GET): globalno iskanje po projektih/strankah/ponudbah/računih/nalogih/zalogi/uporabnikih — skupine z navigacijskimi podatki (sekcija/zavihek), obseg STROGO po pravicah (fail-closed: monter vidi samo svoj obseg)
+- app-shell: gumb Iskanje + Ctrl/Cmd+K → CommandDialog (cmdk) z živim iskanjem ≥2 znaka, klik zadetka navigira na zavihek; title/description prek props (a11y)
+- /api/auth/sessions (GET lastne; ?all=1 zahteva security.read — OŽIVLJENA pravica iz kataloga 38) + /api/auth/sessions/[id] (DELETE: lastna vedno, tuja samo security.read; revizija SESSION_REVOKE; žetoni se ne izdajajo)
+- varnost.tsx: nov sklop "Aktivne seje" (ADMIN): seznam z oznako trenutne, preklic z gumbom, max-h scroll
+- /api/auth/password (POST): zahteva trenutno geslo, min 8 znakov, različno od trenutnega; po uspehu prekliče VSE druge seje (ostane trenutna); revizija PASSWORD_CHANGE
+- profil.tsx: obrazec Sprememba gesla (3 polja, validacija, toast, avtorizacija current-password)
+- /api/projects/[id]/timeline (GET): kronološka združena zgodovina (odpertje, ponudbe, podpisi, meritve, nalogi+dogodki, zaključki, računi, plačila, proizvodnja)
+- projekti.tsx: gumb "Zgodovina" v detail dialogu → TimelineDialog (časovna os z značkami tipov, barve po tipu)
+- /api/nalog/[id]/termin (POST): preurčitev termina (nalog.write; ZAKLJUCEN → 409), dogodek PREURČITEV v časovnico + revizija WO_RESCHEDULE
+- nalogi.tsx: datumski izbirnik + gumb Preurči v detail dialogu (nalog.write, skrito za zaključene)
+- /api/version (GET, avtenticiran): app/build/branch/user
+- A11y popravki: nalogi+projekti detail dialog dobita sr-only DialogTitle+DialogDescription fallback med nalaganjem/napako (Radix)
+- Testi (curl): search RBAC (admin vidi uporabnike, monter ne; 401 brez žetona; <2 znaka = prazno), sessions (lastne 2, all=1 monter 403 / admin 7+; revoke tuje 200), password (napačno 401, kratko 400, uspešno 200 + 5 preklicanih sej, trenutna ohranjena, prijava z novim deluje, geslo povrnjeno), timeline (P-2026-004: 10 dogodkov, kronološko), termin (preurčitev 200, zaključen 409, povrnjeno), version OK
+- Brskalnik: Ctrl+K dialog z rezultati "kov" (4 zadetki), klik navigira na Stranke; varnost seje; profil geslo; projekti timeline (10 dogodkov v dialogu); nalogi preurči + ZAČNI DELO; konzola ČISTA (0 error/warn); mobile 390px: iskanje dosegljivo, noga naravno porinjena, brez preliva
+- bun run lint: ČIST (0 errorjev)
+
+Stage Summary:
+- R433 dopolnitev uspešna: 6 zmožnosti iz route-map izvirnika rekonstruiranih (search, sessions, password, timeline, termin, version)
+- security.read pravica (katalog 38) je zdaj dejansko uporabljena (upravljanje sej — ADMIN)
+- Rekonstrukcija pokriva: 29/29 zavihkov IA + globalno iskanje + varnostne funkcije izvirnika

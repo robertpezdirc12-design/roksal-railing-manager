@@ -6,7 +6,7 @@
 
 import { useMemo, useState } from 'react'
 import {
-  Camera, CheckCheck, CheckCircle2, ClipboardList, Loader2, MapPin, MessageSquare,
+  CalendarClock, Camera, CheckCheck, CheckCircle2, ClipboardList, Loader2, MapPin, MessageSquare,
   Play, Plus, Ruler, Search, User, UserPlus,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -210,11 +210,20 @@ export default function NalogiModule () {
       {/* podrobnost naloga */}
       <Dialog open={!!selected} onOpenChange={(o) => { if (!o) setSelected(null) }}>
         <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+          {/* dostopnost: naslov+opis tudi med nalaganjem/napako (Radix zahteva DialogTitle) */}
+          {detail.loading || !detail.data ? (
+            <>
+              <DialogTitle className="sr-only">Delovni nalog</DialogTitle>
+              <DialogDescription className="sr-only">Podrobnosti delovnega naloga.</DialogDescription>
+            </>
+          ) : null}
           {detail.loading ? <LoadingRows rows={3} /> : detail.data ? (
             <NalogDetail
               detail={detail.data.data}
               canTransition={canTransition}
+              canReschedule={hasPerm(user?.perms, 'nalog.write')}
               onTransition={transition}
+              onRescheduled={async () => { await detail.reload() }}
             />
           ) : <ErrorBox error={detail.error} />}
         </DialogContent>
@@ -235,13 +244,34 @@ export default function NalogiModule () {
 
 // ─── podrobnost: osnovni podatki + terenski tok + časovnica + meritve ───────
 
-function NalogDetail ({ detail, canTransition, onTransition }: {
+function NalogDetail ({ detail, canTransition, canReschedule, onTransition, onRescheduled }: {
   detail: WorkOrderDetail
   canTransition: boolean
+  canReschedule: boolean
   onTransition: (wo: { id: string; code: string }, to: string, label: string, note: string) => Promise<void>
+  onRescheduled: () => Promise<void>
 }) {
+  const { toast } = useToast()
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
+
+  // ── preurčitev termina (R433: POST /api/nalog/[id]/termin) ──
+  const [terminDate, setTerminDate] = useState(detail.scheduledFor ? detail.scheduledFor.slice(0, 10) : '')
+  const [terminBusy, setTerminBusy] = useState(false)
+
+  async function reschedule () {
+    if (!terminDate) { toast({ title: 'Izberi nov datum termina.', variant: 'destructive' }); return }
+    setTerminBusy(true)
+    try {
+      await apiPost(`/api/nalog/${detail.id}/termin`, { scheduledFor: `${terminDate}T08:00:00.000Z`, note: note.trim() || undefined })
+      toast({ title: 'Termin preurčen.', description: `${detail.code} → ${fmtDate(`${terminDate}T08:00:00.000Z`)}` })
+      await onRescheduled()
+    } catch (err) {
+      toast({ title: 'Preurčitev ni uspela.', description: err instanceof Error ? err.message : undefined, variant: 'destructive' })
+    } finally {
+      setTerminBusy(false)
+    }
+  }
 
   const actions = TRANSITIONS.filter((t) => t.from.includes(detail.status))
 
@@ -275,6 +305,23 @@ function NalogDetail ({ detail, canTransition, onTransition }: {
         <div className="col-span-2"><dt className="text-xs text-muted-foreground">Lokacija</dt><dd className="font-medium">{detail.project?.address ?? '—'}</dd></div>
         {detail.summary ? <div className="col-span-2 sm:col-span-3"><dt className="text-xs text-muted-foreground">Povzetek</dt><dd className="font-medium">{detail.summary}</dd></div> : null}
       </dl>
+
+      {/* preurčitev termina (R433) */}
+      {canReschedule && detail.status !== 'ZAKLJUCEN' ? (
+        <section aria-label="Preurčitev termina" className="flex flex-wrap items-end gap-2">
+          <div className="grid gap-1.5">
+            <Label htmlFor="termin-date" className="text-xs text-muted-foreground">Preurči termin</Label>
+            <Input
+              id="termin-date" type="date" value={terminDate}
+              onChange={(e) => setTerminDate(e.target.value)} className="h-9 w-44"
+            />
+          </div>
+          <Button variant="outline" size="sm" className="h-9" disabled={terminBusy || !terminDate} onClick={() => void reschedule()}>
+            {terminBusy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <CalendarClock className="size-4" aria-hidden />}
+            Preurči
+          </Button>
+        </section>
+      ) : null}
 
       {/* terenski tok */}
       {canTransition && actions.length > 0 ? (
