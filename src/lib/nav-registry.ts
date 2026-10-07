@@ -48,7 +48,10 @@ export const SECTIONS: SectionDef[] = [
       { id: 'meritve', label: 'Meritve', gate: 'measurements.read', desc: 'Merjenje ograj po terenu' },
       { id: 'foto', label: 'Foto', gate: 'measurements.write', desc: 'Foto zajem na terenu' },
       { id: 'nagib', label: 'Nagib', gate: 'projects.read', desc: 'Kalkulator nagibov stopnišč' },
-      { id: 'kalkulator', label: 'Kalkulator', gate: 'quotes.create', desc: 'Komercialni kalkulator ponudbe' },
+      // R447 (issue #7 §5): KONFIGURATOR — nadomešča stari Kalkulator (hardcoded
+      // poslovne cene — kršitev §15). Tok: produkt → izmera → izračun → paket/BOM/ponudba.
+      // Ciljna IA §11 pride v R448.
+      { id: 'konfigurator', label: 'Konfigurator', gate: 'quotes.create', desc: 'Konfigurator produktov po družinah (R447)' },
       { id: 'signatura', label: 'Signatura', gate: 'quotes.create', desc: 'Zajem podpisa stranke' },
       { id: 'material-v5', label: 'Kosovnice', gate: 'inventory.read', desc: 'BOM kosovnice z eksplicitnimi ID (R442)' },
       { id: 'orodjarina', label: 'Orodjarina', gate: 'equipment.read', desc: 'Merilna orodjarina' },

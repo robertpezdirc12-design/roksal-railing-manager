@@ -98,7 +98,7 @@ export default function PonudbeModule () {
 
       <ErrorBox error={list.error} />
       {list.loading ? <LoadingRows /> : !list.error && rows.length === 0 ? (
-        <EmptyState title="Ni ponudb" desc="Poskusite spremeniti filter ali ustvarite osnutek v modulu Kalkulator." icon={FileText} />
+        <EmptyState title="Ni ponudb" desc="Poskusite spremeniti filter ali ustvarite osnutek v modulu Konfigurator." icon={FileText} />
       ) : (
         <ul className="grid gap-3 md:grid-cols-2">
           {rows.map((qq) => (

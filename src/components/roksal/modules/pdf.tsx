@@ -212,7 +212,7 @@ export default function PdfModule () {
         <EmptyState
           title={`Ni ${type === 'quote' ? 'ponudb' : 'računov'}`}
           desc={type === 'quote'
-            ? 'Ustvarite ponudbo v modulu Ponudbe ali Kalkulator, nato jo izvozite tukaj.'
+            ? 'Ustvarite ponudbo v modulu Ponudbe ali Konfigurator, nato jo izvozite tukaj.'
             : 'Izdajte račun iz sprejete ponudbe v modulu Računi, nato ga izvozite tukaj.'}
           icon={FileText}
         />

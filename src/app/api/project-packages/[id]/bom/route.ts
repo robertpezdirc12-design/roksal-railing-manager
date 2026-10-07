@@ -73,6 +73,15 @@ export async function POST (req: NextRequest, { params }: Params) {
   })
 
   // kalkulacija se shrani na paket (marža ostane v pisarni — issue #7 §12)
+  // R447: strukturirane VHODE konfiguratorja (calcJson.inputs) ohranimo čez
+  // regeneracijo — izmera/segmenti so izvor količine in ne smejo biti izgubljeni.
+  let preservedInputs: unknown = null
+  if (pkg.calcJson) {
+    try {
+      const parsed = JSON.parse(pkg.calcJson) as { inputs?: unknown }
+      if (parsed && typeof parsed === 'object' && parsed.inputs) preservedInputs = parsed.inputs
+    } catch { /* starejše/prazne kalkulacije brez inputs — nič hudega */ }
+  }
   const calc = {
     generatedAt: new Date().toISOString(),
     qty: plan.qty, unit: plan.unit,
@@ -80,6 +89,7 @@ export async function POST (req: NextRequest, { params }: Params) {
     totalSale: plan.totalSale, margin: plan.margin, marginPct: plan.marginPct,
     priceSource: plan.priceSource,
     lines: plan.lines.length,
+    ...(preservedInputs ? { inputs: preservedInputs } : {}),
   }
   await db.projectPackage.update({
     where: { id: pkg.id },
