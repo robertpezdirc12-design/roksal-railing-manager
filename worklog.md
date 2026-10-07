@@ -220,3 +220,18 @@ Work Log:
 Stage Summary:
 - Rekonstrukcija ZAKLJUČENA: vseh 29 zavihkov IA deluje, lint čist, brskalniško verificirano
 - GitLab: markec-group/roksal-railing-manager, veja rekonstrukcija = funkcionalna koda; main = recovery artefakti (blueprint)
+
+---
+Task ID: 6-d
+Agent: main (Z.ai Code)
+Task: Push na GitLab — BLOKIRANO (žeton preklican)
+
+Work Log:
+- git remote origin nastavljen na gitlab.com/markec-group/roksal-railing-manager
+- git fetch: HTTP Basic Access denied; API preveritev: {"error":"invalid_token","error_description":"Token was revoked. You have to re-authorize from the user."}
+- Žeton glpat-QcFeV… (iz prejšnje seje) je bil PREKLICAN — posledica varnostne rotacije (priporočilo iz Taska 2 je uporabnik očitno izvedel)
+- Nov žeton ni na voljo nikjer v okolju; commita R432 (moduli) + R432 (čiščenje) sta pripravljena lokalno
+
+Stage Summary:
+- LOKALNO ZAKLJUČENO: rekonstrukcija R431–R432 popolna (29/29 zavihkov, lint čist, brskalniško verificirano)
+- PUSH ČAKA NA NOV ŽETON: uporabnik mora ustvariti nov GitLab personal access token (scope: api ali write_repository) in ga posredovati; nato: git push -u origin HEAD:rekonstrukcija
