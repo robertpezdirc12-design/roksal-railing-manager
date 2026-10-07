@@ -44,7 +44,10 @@ const eslintConfig = [...nextCoreWebVitals, ...nextTypescript, {
     "no-useless-escape": "off",
   },
 }, {
-  ignores: ["node_modules/**", ".next/**", "out/**", "build/**", "next-env.d.ts", "examples/**", "skills"]
+  ignores: ["node_modules/**", ".next/**", "out/**", "build/**", "next-env.d.ts", "examples/**", "skills/**", "assets/**", "prisma/*.cjs"]
+  // R437: assets/_next/static/chunks so MINIFICIRANI build artefakti rešeni iz izvirnika
+  // (recovery snapshot) — niso izvorna koda in ESLint jih ne sme preverjati (no-this-alias napake v minifikaciji).
+  // prisma/*.cjs: seed skripte uporabljajo CommonJS require (Prisma Client za Node brez bundlerja).
 }];
 
 export default eslintConfig;

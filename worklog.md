@@ -373,3 +373,28 @@ Stage Summary:
 - GitLab issue #1 v celoti implementiran: (1) napredne meritve s kamero (večtočkovne, koti, višine, stopnice, VLM zaznava, kalibracija/preverjanje, verzije, več meritev na fotografiji, ročni fallback ohranjen), (2) celoten workflow vod → projekt → nalog z navodili → dodelitev → teren (foto/meritve/statusi) → zaključek → zgodovina (kdo/kdaj/kaj), (3) pravice: monter fail-closed obseg na nalogih/meritvah/projektih, dodelitve samo ADMIN/VODJA, vse občutljive spremembe v reviziji, (4) 3D konfigurator (tip/geometrija iz meritev/materiali/barve/izračun/ponudba/predogled na projektu)
 - 8 novih API poti + 3 modelske razširitve + 6 UI modulov posodobljenih
 - Issue #1 zaprt z komentarjem o rezultatih na GitLabu
+
+---
+Task ID: 11 (11-a subagent + main)
+Agent: main (Z.ai Code) + full-stack-developer (API dopolnitve)
+Task: R437 — GitLab issue #2 (OBNOVA IZVORNE KODE): 15 manjkajočih rut route-mape + recovery report
+
+Work Log:
+- GitLab API: prebrani vsi odprti issue-ji #2–#6 (naslovi + popolni opisi); načrt 5 faz (R437–R441)
+- Subagent (11-a): 10 novih API rut — notifications/read, measurements/[id]/share + javni public/measure (shareToken na Measurementu), equipment/events, customers/dedup (GET skupine + POST varni merge), deal-lock (GET/POST zaklep-odklep, deal.lock pravica), payments/[id] (GET/PATCH/DELETE + recalc invoice.paid), payments/reconciliation (poročilo + fix=1), projects/[id]/command (konsolidirani ukaz), jobs/run (runner izluščen v lib/jobs.ts), security/rate-limit (list/clear, maskirani ključi, lib/rate-limit.ts)
+- Subagent UI: meritve.tsx (Javna povezava: ustvari/kopiraj/prekliči), racuni.tsx (urejanje/brisanje plačil v detail dialogu), postsig.tsx (gumb Odkleni)
+- Main: še 5 rut iz route-mape — material-prices (GET zgodovina + POST, price.override), material-orders (novo s pozicijami + statusi; PREJETO zahteva procurement.receive in ustvari StockLote → povezava nabava→zaloga), punch (prisotnost: upsert userId+day, PUNCH_IN/OUT reviziji, all=1 users.read), engineering-rules + [id] (pravila, upsert/patch/deaktivacija), surveys (povpraševanja + obdelava)
+- Prisma: novi modeli MaterialOrder/MaterialOrderLine, PunchEntry (@@unique userId+day), EngineeringRule, Survey; Measurement.shareToken; User.punchEntries — db:push aditivno
+- Seed (prisma/seed.cjs dopolnjen + seed-r437.cjs za obstoječo bazo): 6 inženirskih pravil, 2 naročili (prejeto/poslano), prisotnost, 3 ankete
+- Popravki med testiranjem: writeAudit ZAHTeva entity (PrismaClientValidationError 500 — dodan entity/entityId vseh 8 klicev novih rut), monter ima inventory.read/crm.read (popravljena testna pričakovanja), idempotentnost testov (naključen pretekli dan za punch, čiščenje test_pravilo), odstranjen vmesni povzetek v skripti
+- Infra težava rešena: procesi Bash seje umrejo po koncu ukaza → dev strežnik zaganjan z double-fork vzorcem `( setsid bash -c '…' & )` — preživi med ukazi
+- eslint.config.mjs: ignores za assets/** (minificirani recovery chunki) in prisma/*.cjs (CommonJS seed)
+- docs/RECOVERY-REPORT.md: popolna matrika 98 skupin poti (62 RESTORED / 22 REBUILT / 11 NOT_APPLICABLE / 3 PENDING, vsaka z razlogom), strani, cron, dodatne poti, testi, zero-loss odstopanja
+- Testi: tests/r437.sh razširjen na 119 testov — VSI USPEŠNI (RBAC: monter 403 na price.override/inventory.write/procurement.receive/users all=1/production.manage/crm.write; 200 kjer ima pravico); bun run lint ČIST
+- Brskalnik: javna povezava meritve (ustvari → URL s jm- žetonom → javni GET vrne varne mere brez authorId; preklic → 404), računi (Uredi/Izbriši plačilo v dialogu, recalc sporočilo), PostSig Odkleni; a11y popravki DialogDescription (napake/ nalaganje) → konzola ČISTA
+- dev.log: 7 starih PrismaClientValidationError (pred popravkom entity) — po popravku 0 novih napak
+
+Stage Summary:
+- Issue #2 (obnova izvorne kode) zaključen: 15 novih API rut (skupaj 81 route datotek), 5 novih modelov, recovery report s 100 % pokritostjo statusov
+- Preostale PENDING poti: sync (issue #6), catalog/versions + engineering-rules/versions (dokumentirano, nizka prioriteta)
+- Naslednje faze: R438 issue #5 (obvestila), R439 issue #6 (offline + /api/sync), R440 issue #4 (E2E validacija), R441 issue #3 (DR)

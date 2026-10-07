@@ -43,6 +43,8 @@ export async function GET (req: NextRequest) {
       author: { select: { name: true } },
       project: { select: { id: true, code: true, title: true } },
       workOrder: { select: { id: true, code: true, title: true } },
+      // R437: include vrača tudi skalar shareToken (javna povezava) — avtoriziranim
+      // uporabnikom ni skrivnost; javna povezava izdaja samo varen podsklop polj.
     },
     orderBy: { createdAt: 'desc' },
     take: 200,

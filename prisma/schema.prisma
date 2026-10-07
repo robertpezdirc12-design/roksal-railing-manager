@@ -34,6 +34,7 @@ model User {
   equipLogs    EquipmentCheckout[] @relation("equipmentUser")
   qcChecks     QcCheck[]       @relation("qcUser")
   jobRuns      JobRun[]
+  punchEntries PunchEntry[]    @relation("punchUser") // R437: prisotnost
 }
 
 model Session {
@@ -229,6 +230,8 @@ model Measurement {
   source      String      @default("ROCNO") // ROCNO | KAMERA (večtočkovne meritve na fotografiji)
   params      String? // JSON (profileId, barva, photoId, points, calibration, viz, konfigurator …)
   note        String?
+  // R437 (issue #2): javna deljena povezava meritve (žeton /m/[token] izvirnika → /api/public/measure?token=)
+  shareToken  String?     @unique
   createdAt   DateTime    @default(now())
 
   versions    MeasurementVersion[]
@@ -447,4 +450,74 @@ model JobRun {
   finishedAt DateTime
   userId     String? // null = sistemski/cron zagon
   user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+}
+
+// ─── Nabava materiala (R437: /api/material-orders iz route-mape izvirnika) ──
+
+model MaterialOrder {
+  id         String    @id @default(cuid())
+  code       String    @unique // npr. NAR-2026-001
+  supplierId String? // skalarno (enako kot MaterialPrice/StockLot)
+  status     String    @default("PRIPRAVA") // PRIPRAVA | POSLANO | PREJETO | PREKINJENO
+  note       String?
+  createdBy  String?
+  createdAt  DateTime  @default(now())
+  sentAt     DateTime?
+  receivedAt DateTime?
+
+  lines MaterialOrderLine[]
+}
+
+model MaterialOrderLine {
+  id        String  @id @default(cuid())
+  orderId   String
+  order     MaterialOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  itemId    String? // povezava na artikel (opcijsko)
+  itemName  String // denormalizirano ime (artikel lahko izgine)
+  qty       Float
+  unit      String  @default("m")
+  unitPrice Float   @default(0)
+}
+
+// ─── Prisotnost (R437: /api/punch iz route-mape izvirnika) ──────────────────
+
+model PunchEntry {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation("punchUser", fields: [userId], references: [id], onDelete: Cascade)
+  day       String // lokalni dan YYYY-MM-DD
+  inAt      DateTime?
+  outAt     DateTime?
+  note      String?
+  createdAt DateTime  @default(now())
+
+  @@unique([userId, day]) // ena prijava/odjava na dan
+}
+
+// ─── Inženirska pravila (R437: /api/engineering-rules iz route-mape) ────────
+
+model EngineeringRule {
+  id        String   @id @default(cuid())
+  key       String   @unique // npr. max_razdalja_stebrov
+  label     String // človeško berljivo ime
+  value     Float
+  unit      String   @default("cm")
+  note      String?
+  active    Boolean  @default(true)
+  updatedAt DateTime @updatedAt
+}
+
+// ─── Ankete / povpraševanja (R437: /api/surveys iz route-mape izvirnika) ────
+
+model Survey {
+  id        String   @id @default(cuid())
+  name      String // ime kontaktirane osebe
+  email     String?
+  phone     String?
+  type      String   @default("OGRAJA") // tip zahteve (OGRAJA | STOPNISCE | TERASA | DRUGO)
+  lengthCm  Float? // ocenjena dolžina
+  location  String?
+  message   String?
+  handled   Boolean  @default(false) // obdelano v pisarni
+  createdAt DateTime @default(now())
 }

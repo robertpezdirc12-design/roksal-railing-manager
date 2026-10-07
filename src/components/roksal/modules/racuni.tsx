@@ -3,9 +3,10 @@
 // RAČUNI + PLAČILA — R425 LOČITEV: računi (invoices.read/issue) in plačila (payments.read/manage)
 // so ločena sklopa. "Zapiši plačilo" je vidno samo z payments.manage.
 // R434: izvoz eSLOG XML (UBL 2.1) — gumb v podrobnosti računa.
+// R437: urejanje/brisanje posameznega plačila prek /api/payments/[id] (payments.manage).
 
 import { useMemo, useState } from 'react'
-import { Banknote, CalendarClock, FileCode2, FilePlus2, HandCoins, Receipt, Search, Wallet } from 'lucide-react'
+import { Banknote, CalendarClock, FileCode2, FilePlus2, HandCoins, Loader2, Pencil, Receipt, Search, Trash2, Wallet } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -15,7 +16,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useToast } from '@/hooks/use-toast'
 import { useAppStore } from '@/lib/store'
-import { apiPost, fmtDate, fmtEUR, useApi } from '@/lib/api-client'
+import { apiDelete, apiPatch, apiPost, fmtDate, fmtEUR, useApi } from '@/lib/api-client'
 import { EmptyState, ErrorBox, LoadingRows, PageHeader, StatusBadge } from '@/components/roksal/ui-bits'
 import { hasPerm } from '@/lib/permissions-core'
 
@@ -204,14 +205,19 @@ export default function RacuniModule () {
         <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
           {detail.loading ? (
             <>
-              <DialogHeader><DialogTitle className="sr-only">Nalaganje podrobnosti računa</DialogTitle></DialogHeader>
+              <DialogHeader><DialogTitle className="sr-only">Nalaganje podrobnosti računa</DialogTitle><DialogDescription className="sr-only">Podrobnosti računa se nalagajo.</DialogDescription></DialogHeader>
               <LoadingRows rows={3} />
             </>
           ) : detail.data ? (
-            <InvoiceDetailDialog detail={detail.data.data} canManagePayments={canManagePayments} onPay={() => setPayFor(detail.data!.data)} />
+            <InvoiceDetailDialog
+              detail={detail.data.data}
+              canManagePayments={canManagePayments}
+              onPay={() => setPayFor(detail.data!.data)}
+              onChanged={async () => { await Promise.all([list.reload(), detail.reload(), payments.reload()]) }}
+            />
           ) : (
             <>
-              <DialogHeader><DialogTitle>Napaka</DialogTitle></DialogHeader>
+              <DialogHeader><DialogTitle>Napaka</DialogTitle><DialogDescription className="sr-only">Podrobnosti računa ni bilo mogoče naložiti.</DialogDescription></DialogHeader>
               <ErrorBox error={detail.error} />
             </>
           )}
@@ -251,16 +257,24 @@ export default function RacuniModule () {
   )
 }
 
-function InvoiceDetailDialog ({ detail, canManagePayments, onPay }: {
+function InvoiceDetailDialog ({ detail, canManagePayments, onPay, onChanged }: {
   detail: InvoiceDetail
   canManagePayments: boolean
   onPay: () => void
+  /** R437: osvežitev po urejanju/brisanju plačila (seznam + detail + zadnja plačila) */
+  onChanged: () => Promise<void>
 }) {
   const { toast } = useToast()
   const token = useAppStore((s) => s.token)
   const [eslogBusy, setEslogBusy] = useState(false)
+  // R437 — urejanje/brisanje plačila
+  const [editPay, setEditPay] = useState<PaymentDetail | null>(null)
+  const [confirmDel, setConfirmDel] = useState<string | null>(null)
+  const [delBusy, setDelBusy] = useState(false)
   const open = Math.round((detail.total - detail.paid) * 100) / 100
   const payable = open > 0.005 && detail.status !== 'ZAPRT'
+  // zaprtemu računu plačil ne spreminjamo (backend: 400)
+  const locked = detail.status === 'ZAPRT'
 
   /** eSLOG XML (R434) — prenos prek blob (žeton v glavi). */
   async function exportEslog (): Promise<void> {
@@ -333,7 +347,8 @@ function InvoiceDetailDialog ({ detail, canManagePayments, onPay }: {
                   <TableHead className="pl-3">Datum</TableHead>
                   <TableHead>Način</TableHead>
                   <TableHead>Sklic</TableHead>
-                  <TableHead className="pr-3 text-right">Znesek</TableHead>
+                  <TableHead className="text-right">Znesek</TableHead>
+                  {canManagePayments ? <TableHead className="w-24 pr-3 text-right">Uredi</TableHead> : null}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -343,12 +358,37 @@ function InvoiceDetailDialog ({ detail, canManagePayments, onPay }: {
                     <TableCell>{METHODS.find((m) => m.value === p.method)?.label ?? p.method}</TableCell>
                     <TableCell className="max-w-32 truncate font-mono text-xs text-muted-foreground">{p.reference ?? '—'}</TableCell>
                     <TableCell className="pr-3 text-right font-medium tabular-nums">{fmtEUR(p.amount)}</TableCell>
+                    {canManagePayments ? (
+                      <TableCell className="pr-3 text-right">
+                        <div className="flex justify-end gap-1">
+                          <Button
+                            size="icon" variant="ghost" className="size-8" aria-label={`Uredi plačilo ${fmtEUR(p.amount)}`}
+                            disabled={locked} title={locked ? 'Zaprtemu računu plačil ni mogoče spreminjati' : 'Uredi plačilo'}
+                            onClick={() => { setConfirmDel(null); setEditPay(p) }}
+                          >
+                            <Pencil className="size-3.5" aria-hidden />
+                          </Button>
+                          <Button
+                            size="icon" variant="ghost"
+                            className={`size-8${confirmDel === p.id ? ' text-red-600 hover:text-red-700 dark:text-red-400' : ''}`}
+                            aria-label={confirmDel === p.id ? `Potrdi brisanje plačila ${fmtEUR(p.amount)}` : `Izbriši plačilo ${fmtEUR(p.amount)}`}
+                            disabled={locked || delBusy} title={locked ? 'Zaprtemu računu plačil ni mogoče brisati' : confirmDel === p.id ? 'Ponovni klik potrdi brisanje' : 'Izbriši plačilo'}
+                            onClick={() => { if (confirmDel === p.id) { void deletePayment(p.id) } else { setConfirmDel(p.id) } }}
+                          >
+                            {delBusy && confirmDel === p.id ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <Trash2 className="size-3.5" aria-hidden />}
+                          </Button>
+                        </div>
+                      </TableCell>
+                    ) : null}
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
           </div>
         )}
+        {canManagePayments && locked ? (
+          <p className="mt-1.5 text-xs text-muted-foreground">Račun je zaprt — plačil ni mogoče spreminjati.</p>
+        ) : null}
       </section>
 
       <DialogFooter className="gap-2 sm:gap-0">
@@ -361,8 +401,35 @@ function InvoiceDetailDialog ({ detail, canManagePayments, onPay }: {
           </Button>
         ) : null}
       </DialogFooter>
+
+      {/* R437: urejanje plačila */}
+      <Dialog open={!!editPay} onOpenChange={(o) => { if (!o) setEditPay(null) }}>
+        {editPay ? (
+          <EditPaymentDialog
+            payment={editPay}
+            invoiceCode={detail.code}
+            onClose={() => setEditPay(null)}
+            onSaved={async () => { setEditPay(null); await onChanged() }}
+          />
+        ) : null}
+      </Dialog>
     </>
   )
+
+  /** R437: brisanje plačila (dvoklikni potrditveni vzorec) + ponoven izračun računa. */
+  async function deletePayment (paymentId: string): Promise<void> {
+    setDelBusy(true)
+    try {
+      const res = await apiDelete<{ data: { recalc: { paid: number; status: string } } }>(`/api/payments/${paymentId}`)
+      setConfirmDel(null)
+      toast({ title: 'Plačilo izbrisano.', description: `Račun ${detail.code}: plačano ${fmtEUR(res.data.recalc.paid)} · status ${res.data.recalc.status}.` })
+      await onChanged()
+    } catch (e) {
+      toast({ title: 'Brisanje plačila ni uspelo', description: e instanceof Error ? e.message : undefined, variant: 'destructive' })
+    } finally {
+      setDelBusy(false)
+    }
+  }
 }
 
 function PaymentDialog ({ invoice, onClose, onSaved }: {
@@ -423,6 +490,79 @@ function PaymentDialog ({ invoice, onClose, onSaved }: {
       <DialogFooter>
         <Button variant="outline" onClick={onClose}>Prekliči</Button>
         <Button onClick={() => void submit()} disabled={busy}>{busy ? 'Zapisujem…' : 'Zapiši plačilo'}</Button>
+      </DialogFooter>
+    </DialogContent>
+  )
+}
+
+// R437: urejanje posameznega plačila (PATCH /api/payments/[id]) — znesek/način/sklic.
+function EditPaymentDialog ({ payment, invoiceCode, onClose, onSaved }: {
+  payment: PaymentDetail
+  invoiceCode: string
+  onClose: () => void
+  onSaved: () => Promise<void>
+}) {
+  const { toast } = useToast()
+  const [amount, setAmount] = useState(String(payment.amount))
+  const [method, setMethod] = useState(payment.method)
+  const [reference, setReference] = useState(payment.reference ?? '')
+  const [busy, setBusy] = useState(false)
+
+  async function submit () {
+    const value = Number(amount.replace(',', '.'))
+    if (!Number.isFinite(value) || value <= 0) { toast({ title: 'Znesek mora biti večji od 0.', variant: 'destructive' }); return }
+    setBusy(true)
+    try {
+      const res = await apiPatch<{ data: { recalc: { paid: number; status: string } } }>(`/api/payments/${payment.id}`, {
+        amount: value,
+        method,
+        reference: reference.trim() || null,
+      })
+      toast({
+        title: 'Plačilo popravljeno.',
+        description: `Račun ${invoiceCode}: plačano ${fmtEUR(res.data.recalc.paid)} · status ${res.data.recalc.status}.`,
+      })
+      await onSaved()
+    } catch (e) {
+      toast({ title: 'Popravek plačila ni uspel', description: e instanceof Error ? e.message : undefined, variant: 'destructive' })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <DialogContent>
+      <DialogHeader>
+        <DialogTitle>Uredi plačilo — {invoiceCode}</DialogTitle>
+        <DialogDescription>
+          Zapisano {fmtDate(payment.createdAt)}. Po shranitvi se plačano stanje računa ponovno prešteje.
+        </DialogDescription>
+      </DialogHeader>
+      <div className="space-y-3">
+        <div className="space-y-2">
+          <Label htmlFor="epay-amount">Znesek (€) *</Label>
+          <Input id="epay-amount" type="number" min="0.01" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} />
+        </div>
+        <div className="space-y-2">
+          <Label>Način plačila</Label>
+          <Select value={method} onValueChange={setMethod}>
+            <SelectTrigger aria-label="Način plačila"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {METHODS.map((m) => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="epay-ref">Sklic / referenca</Label>
+          <Input id="epay-ref" value={reference} onChange={(e) => setReference(e.target.value)} placeholder="npr. SI12 3456-7890" />
+        </div>
+      </div>
+      <DialogFooter>
+        <Button variant="outline" onClick={onClose}>Prekliči</Button>
+        <Button onClick={() => void submit()} disabled={busy}>
+          {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Pencil className="size-4" aria-hidden />}
+          Shrani popravek
+        </Button>
       </DialogFooter>
     </DialogContent>
   )
