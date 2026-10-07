@@ -7,6 +7,7 @@ import { BOM_STATUSES } from '@/lib/product-core'
 type Params = { params: Promise<{ id: string }> }
 
 // GET /api/bom/[id] — podrobnost kosovnice (inventory.read)
+// R443: vključi rezervirane količine po vrsticah (fizična/rezervirana/razpoložljiva)
 export async function GET (req: NextRequest, { params }: Params) {
   const auth = await requirePermission(req, 'inventory.read')
   if (auth instanceof NextResponse) return auth
@@ -19,10 +20,23 @@ export async function GET (req: NextRequest, { params }: Params) {
       variant: { select: { sku: true, name: true } },
       package: { select: { code: true, name: true, projectId: true, project: { select: { code: true, title: true } } } },
       lines: { orderBy: { sortOrder: 'asc' }, include: { item: true } },
+      reservations: { where: { status: 'AKTIVNA' }, select: { itemId: true, qty: true } },
+      pickings: { where: { status: { in: ['PRIPRAVLJENA', 'V_ZAKLJUCEVANJU'] } }, select: { id: true, code: true, status: true } },
     },
   })
   if (!bom) return jsonError(404, 'Kosovnica ne obstaja.')
-  return NextResponse.json({ data: bom })
+
+  // rezervirano po vrstici (Σ aktivnih rezervacij tega BOM za artikel)
+  const reservedByItem = new Map<string, number>()
+  for (const r of bom.reservations) {
+    reservedByItem.set(r.itemId, (reservedByItem.get(r.itemId) ?? 0) + r.qty)
+  }
+  const lines = bom.lines.map((l) => ({
+    ...l,
+    reserved: Math.round((reservedByItem.get(l.itemId) ?? 0) * 100) / 100,
+    available: Math.round((l.item.qty - l.qty) * 100) / 100, // fizična − potrebna (info)
+  }))
+  return NextResponse.json({ data: { ...bom, lines } })
 }
 
 // PATCH /api/bom/[id] — sprememba statusa (inventory.write → revizija)

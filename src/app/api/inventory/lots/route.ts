@@ -47,11 +47,17 @@ export async function POST (req: NextRequest) {
     if (!supplier) return jsonError(404, 'Dobavitelj ne obstaja.')
   }
 
-  // lot + povečanje količine artikla + evidenca cene v isti transakciji
+  // lot + povečanje količine artikla + evidenca cene + DNEVNIK GIBANJA (R443) v isti transakciji
   const [lot] = await db.$transaction([
     db.stockLot.create({ data: { itemId, qty, unitCost, supplierId } }),
     db.inventoryItem.update({ where: { id: itemId }, data: { qty: { increment: qty } } }),
     db.materialPrice.create({ data: { itemId, supplierId, price: unitCost } }),
+    db.stockMovement.create({
+      data: {
+        itemId, qty, type: 'PREVZEM', userId: auth.user.id,
+        refType: 'stockLot', note: `Sprejem pošiljke${supplierId ? ' (dobavitelj)' : ''}`,
+      },
+    }),
   ])
 
   await writeAudit({

@@ -35,6 +35,7 @@ model User {
   qcChecks     QcCheck[]       @relation("qcUser")
   jobRuns      JobRun[]
   punchEntries PunchEntry[]    @relation("punchUser") // R437: prisotnost
+  stockMovements StockMovement[] @relation("stockMovements") // R443: skladiščni dnevnik
 }
 
 model Session {
@@ -114,6 +115,7 @@ model Project {
   warranties       Warranty[]
   portalLinks      PortalLink[]
   packages         ProjectPackage[] // R442: več produktnih paketov na projekt
+  stockReservations StockReservation[] @relation("stockReservations") // R443: rezervacije materiala
 }
 
 model Quote {
@@ -284,6 +286,10 @@ model InventoryItem {
   bomTemplates ProductComponent[] @relation("inBomTemplates")
   bomLines     BomLine[]          @relation("inBomLines")
   priceRules   PriceRule[]        @relation("itemPriceRules")
+  // R443: skladiščni tok — gibanja, rezervacije, picking
+  movements    StockMovement[]    @relation("stockMovements")
+  reservations StockReservation[] @relation("stockReservations")
+  pickingLines PickingLine[]      @relation("pickingLines")
 }
 
 model StockLot {
@@ -707,6 +713,9 @@ model Bom {
   updatedAt DateTime         @updatedAt
 
   lines BomLine[]
+  // R443: skladiščni tok vezan na kosovnico
+  reservations StockReservation[] @relation("bomReservations")
+  pickings     PickingList[]      @relation("bomPickings")
 }
 
 model BomLine {
@@ -787,4 +796,71 @@ model ProjectPackage {
   updatedAt     DateTime        @updatedAt
 
   bom Bom?
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SKLADIŠČNI TOK (R443 — issue #7 §7, P1 INVENTORY CORE)
+// VEČNO LOČENO: FIZIČNA ZALOGA (InventoryItem.qty) ≠ REZERVIRANA (Σ aktivnih
+// rezervacij) ≠ RAZPOLOŽLJIVA (fizična − rezervirana).
+// StockMovement = nemutabilni dnevnik vseh gibanj (prevzem/izdaja/vračilo/inventura).
+// ═══════════════════════════════════════════════════════════════════════════
+
+model StockMovement {
+  id        String        @id @default(cuid())
+  itemId    String
+  item      InventoryItem @relation("stockMovements", fields: [itemId], references: [id])
+  qty       Float // + prevzem/vračilo; − izdaja/inventurni minus
+  type      String // PREVZEM | IZDAJA | VRACILO | INVENTURA
+  refType   String? // pickingList | materialOrder | rocni
+  refId     String?
+  userId    String?
+  user      User?         @relation("stockMovements", fields: [userId], references: [id], onDelete: SetNull)
+  note      String?
+  createdAt DateTime      @default(now())
+
+  @@index([itemId, createdAt])
+}
+
+model StockReservation {
+  id         String        @id @default(cuid())
+  itemId     String
+  item       InventoryItem @relation("stockReservations", fields: [itemId], references: [id])
+  qty        Float
+  status     String        @default("AKTIVNA") // AKTIVNA | PORABLJENA | PREKLICANA
+  projectId  String?
+  project    Project?      @relation("stockReservations", fields: [projectId], references: [id], onDelete: SetNull)
+  bomId      String?
+  bom        Bom?          @relation("bomReservations", fields: [bomId], references: [id], onDelete: SetNull)
+  userId     String?
+  note       String?
+  createdAt  DateTime      @default(now())
+  consumedAt DateTime?
+
+  @@index([itemId, status])
+}
+
+// Picking list — skladiščno zbiranje (picking) materiala za kosovnico
+model PickingList {
+  id        String   @id @default(cuid())
+  code      String   @unique // npr. PICK-2026-001
+  bomId     String?
+  bom       Bom?     @relation("bomPickings", fields: [bomId], references: [id], onDelete: SetNull)
+  status    String   @default("PRIPRAVLJENA") // PRIPRAVLJENA | V_ZAKLJUCEVANJU | ZAKLJUCENA | PREKLICANA
+  note      String?
+  userId    String? // skladiščnik, ki je pripravil
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lines PickingLine[]
+}
+
+model PickingLine {
+  id            String        @id @default(cuid())
+  pickingListId String
+  pickingList   PickingList   @relation(fields: [pickingListId], references: [id], onDelete: Cascade)
+  itemId        String
+  item          InventoryItem @relation("pickingLines", fields: [itemId], references: [id])
+  qtyNeeded     Float // potrebno (iz vrstice kosovnice)
+  qtyPicked     Float         @default(0) // dejansko pobrano
+  note          String?
 }

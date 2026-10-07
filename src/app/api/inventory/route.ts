@@ -59,11 +59,20 @@ export async function PATCH (req: NextRequest) {
   const newQty = Math.round((item.qty + delta) * 1000) / 1000
   if (newQty < 0) return jsonError(400, 'Popravek bi povzročil negativno količino.', `Trenutna količina je ${item.qty} ${item.unit}.`)
 
-  const updated = await db.inventoryItem.update({
-    where: { id },
-    data: { qty: newQty },
-    include: { lots: { orderBy: { deliveredAt: 'desc' }, take: 1 } },
-  })
+  // popravek + DNEVNIK GIBANJA (R443: INVENTURA) v isti transakciji
+  const [updated] = await db.$transaction([
+    db.inventoryItem.update({
+      where: { id },
+      data: { qty: newQty },
+      include: { lots: { orderBy: { deliveredAt: 'desc' }, take: 1 } },
+    }),
+    db.stockMovement.create({
+      data: {
+        itemId: id, qty: delta, type: 'INVENTURA', userId: auth.user.id,
+        refType: 'rocni', note: 'Ročni popravek količine',
+      },
+    }),
+  ])
 
   await writeAudit({
     userId: auth.user.id, action: 'INVENTORY_ADJUST', entity: 'inventoryItem', entityId: id,
