@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { jsonError, readsAllData, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
+import { FAMILY_CODES, type FamilyCode } from '@/lib/product-core'
 
 const TYPES = ['OGRAJA', 'BALUSTRADA', 'NAGIB', 'FOTO', 'OSTANEO']
 
@@ -92,6 +93,7 @@ export async function POST (req: NextRequest) {
   const measurement = await db.measurement.create({
     data: {
       type,
+      familyCode: typeof body.familyCode === 'string' && FAMILY_CODES.includes(body.familyCode as FamilyCode) ? body.familyCode : null, // R442: generalizacija meritev na produktno družino
       projectId: projectId ?? workOrder?.projectId ?? null,
       workOrderId,
       authorId: user.id,

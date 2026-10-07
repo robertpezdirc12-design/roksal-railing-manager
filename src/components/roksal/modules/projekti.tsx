@@ -6,18 +6,19 @@
 // R436: 3D predogled — zadnja shranjena konfiguracija iz zavihka Vizualizacija.
 
 import { useMemo, useState } from 'react'
-import { Box, CalendarCheck, Copy, ExternalLink, Eye, FolderKanban, HardHat, History, Link2, MapPin, Plus, Ruler, Search, FileText, Banknote, ShieldCheck } from 'lucide-react'
+import { Box, CalendarCheck, ClipboardList, Copy, ExternalLink, Eye, FolderKanban, HardHat, History, Layers, Link2, MapPin, Package, Plus, Ruler, Search, FileText, Banknote, ShieldCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useToast } from '@/hooks/use-toast'
 import { useAppStore } from '@/lib/store'
 import { cn } from '@/lib/utils'
-import { apiDelete, apiPost, fmtDate, fmtDateTime, fmtEUR, useApi } from '@/lib/api-client'
+import { apiDelete, apiPatch, apiPost, fmtDate, fmtDateTime, fmtEUR, useApi } from '@/lib/api-client'
 import { EmptyState, ErrorBox, LoadingRows, PageHeader, StatusBadge } from '@/components/roksal/ui-bits'
 import { hasPerm } from '@/lib/permissions-core'
 import { Railing3D, TIP_LABELS, parseKonfigurator, ralHex, ralLabel } from './viz-3d'
@@ -240,6 +241,8 @@ function ProjectDetailDialog ({ detail }: { detail: ProjectDetail }) {
         </section>
 
         <KonfigPreviewSection measurements={detail.measurements} />
+
+        <PackagesSection projectId={detail.id} projectCode={detail.code} measurements={detail.measurements} />
 
         <WarrantySection projectId={detail.id} projectStatus={detail.status} />
         <PortalSection projectId={detail.id} projectCode={detail.code} />
@@ -745,5 +748,365 @@ function WarrantySection ({ projectId, projectStatus }: { projectId: string; pro
         </div>
       ) : null}
     </section>
+  )
+}
+
+/** Paketi projekta (R442 — issue #7 §3): projekt = več produktnih paketov.
+ * Paket povezuje produkt, varianto, izmero, količino, status in (generirano) kosovnico. */
+
+interface PackageRow {
+  id: string; code: string; name: string; qty: number; unit: string
+  status: string; note: string | null; calcJson: string | null
+  createdAt: string
+  product: { sku: string; name: string; unit: string; family: { code: string; name: string } }
+  variant: { sku: string; name: string } | null
+  measurement: { id: string; type: string; familyCode: string | null } | null
+  bom: { id: string; code: string; status: string; lines: { id: string }[] } | null
+}
+
+interface PackageBomLine {
+  itemId: string; sku: string; name: string; unit: string
+  qty: number; note: string | null; covered: boolean; missing: number; stockQty: number
+}
+
+interface PackageCalc {
+  generatedAt: string; qty: number; unit: string
+  materialCost: number; montazaUnit: number; totalSale: number
+  margin: number; marginPct: number; priceSource: string; lines: number
+}
+
+const PACKAGE_STATUS_OPTIONS = [
+  'POVPRAŠEVANJE', 'IZMERA', 'KONFIGURACIJA', 'PONUDBA', 'POTRJENO',
+  'REZERVIRANO', 'V_IZDELAVI', 'DOSTAVLJENO', 'MONTIRANO', 'PREDANO',
+]
+
+function PackagesSection ({ projectId, projectCode, measurements }: {
+  projectId: string
+  projectCode: string
+  measurements: { id: string; type: string; location: string | null; createdAt: string }[]
+}) {
+  const user = useAppStore((s) => s.user)
+  const { toast } = useToast()
+  const packages = useApi<{ data: PackageRow[] }>(`/api/project-packages?projectId=${projectId}`, [projectId])
+  const [createOpen, setCreateOpen] = useState(false)
+  const [bomView, setBomView] = useState<PackageRow | null>(null)
+  const [busyId, setBusyId] = useState<string | null>(null)
+
+  const canManage = hasPerm(user?.perms, 'quotes.create')
+  const rows = packages.data?.data ?? []
+  const withBom = rows.filter((p) => p.bom).length
+
+  async function generateBom (pkg: PackageRow) {
+    setBusyId(pkg.id)
+    try {
+      const res = await apiPost<{ data: { bom: { code: string }; calc: PackageCalc } }>(`/api/project-packages/${pkg.id}/bom`, {})
+      toast({
+        title: 'Kosovnica generirana.',
+        description: `${res.data.bom.code} · ${res.data.calc.lines} vrstic · marža ${res.data.calc.marginPct} %`,
+      })
+      await packages.reload()
+    } catch (e) {
+      toast({ title: 'Generiranje ni uspelo', description: e instanceof Error ? e.message : undefined, variant: 'destructive' })
+    } finally { setBusyId(null) }
+  }
+
+  async function changeStatus (pkg: PackageRow, status: string) {
+    setBusyId(pkg.id)
+    try {
+      await apiPatch(`/api/project-packages/${pkg.id}`, { status })
+      toast({ title: 'Status paketa posodobljen.', description: `${pkg.code} → ${status}` })
+      await packages.reload()
+    } catch (e) {
+      toast({ title: 'Napaka', description: e instanceof Error ? e.message : undefined, variant: 'destructive' })
+    } finally { setBusyId(null) }
+  }
+
+  return (
+    <section aria-label="Produktni paketi projekta">
+      <div className="mb-1.5 flex items-center justify-between gap-2">
+        <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Produktni paketi</h3>
+        {canManage ? (
+          <Button size="sm" variant="outline" onClick={() => setCreateOpen(true)}>
+            <Plus className="size-4" aria-hidden /> Nov paket
+          </Button>
+        ) : null}
+      </div>
+      <ErrorBox error={packages.error} />
+      {packages.loading ? <LoadingRows rows={1} /> : !packages.error ? (
+        <div className="space-y-2 rounded-xl border p-3">
+          <p className="inline-flex items-center gap-2 text-sm">
+            <Layers className="size-4 text-roksal-amber" aria-hidden />
+            {rows.length > 0 ? `${rows.length} paketov · ${withBom} s kosovnico` : 'Ni paketov'}
+            <span className="text-xs text-muted-foreground">— vsak paket je ena rešitev (terasa, ograja, fasada …)</span>
+          </p>
+
+          {rows.length > 0 ? (
+            <ul className="space-y-2">
+              {rows.map((p) => (
+                <li key={p.id} className="rounded-lg border p-2.5">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-mono text-[11px] text-muted-foreground">{p.code}</span>
+                    <StatusBadge status={p.status} />
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium">{p.name}</span>
+                    <span className="shrink-0 text-sm font-bold">{p.qty} <span className="text-xs font-normal text-muted-foreground">{p.unit}</span></span>
+                  </div>
+                  <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+                    <span className="font-mono">{p.product.sku}</span>
+                    {p.variant ? <span>· {p.variant.name}</span> : null}
+                    {p.measurement ? <span>· izmera #{p.measurement.id.slice(-6)}</span> : null}
+                    {p.bom ? (
+                      <button
+                        className="inline-flex items-center gap-1 font-medium text-roksal-amber hover:underline"
+                        onClick={() => setBomView(p)}
+                      >
+                        <ClipboardList className="size-3" aria-hidden /> {p.bom.code} ({p.bom.lines.length})
+                      </button>
+                    ) : (
+                      <span className="inline-flex items-center gap-1"><ClipboardList className="size-3" aria-hidden /> brez kosovnice</span>
+                    )}
+                  </div>
+                  {p.note ? <p className="mt-1 text-xs text-muted-foreground">{p.note}</p> : null}
+                  {canManage ? (
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <Button size="sm" variant="outline" className="h-7 gap-1 px-2 text-xs" onClick={() => void generateBom(p)} disabled={busyId === p.id}>
+                        <ClipboardList className="size-3.5" aria-hidden /> {p.bom ? 'Ponovno generiraj BOM' : 'Generiraj BOM'}
+                      </Button>
+                      <Select value={p.status} onValueChange={(v) => void changeStatus(p, v)}>
+                        <SelectTrigger className="h-7 w-40 text-xs" aria-label={`Status paketa ${p.code}`}><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {PACKAGE_STATUS_OPTIONS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              {canManage ? 'Dodajte paket — npr. TERASA 36,4 m² + OGRAJA 18,6 m za isti projekt.' : 'Pakete ureja pisarna (quotes.create).'}
+            </p>
+          )}
+        </div>
+      ) : null}
+
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <NewPackageDialog
+          projectId={projectId}
+          projectCode={projectCode}
+          measurements={measurements}
+          onClose={() => setCreateOpen(false)}
+          onCreated={async () => { setCreateOpen(false); await packages.reload() }}
+        />
+      </Dialog>
+
+      <Dialog open={!!bomView} onOpenChange={(o) => { if (!o) setBomView(null) }}>
+        <PackageBomDialog pkg={bomView} />
+      </Dialog>
+    </section>
+  )
+}
+
+function NewPackageDialog ({ projectId, projectCode, measurements, onClose, onCreated }: {
+  projectId: string
+  projectCode: string
+  measurements: { id: string; type: string; location: string | null; createdAt: string }[]
+  onClose: () => void
+  onCreated: () => Promise<void>
+}) {
+  const { toast } = useToast()
+  const [family, setFamily] = useState('all')
+  const [productId, setProductId] = useState('none')
+  const [variantId, setVariantId] = useState('none')
+  const [qty, setQty] = useState('')
+  const [name, setName] = useState('')
+  const [note, setNote] = useState('')
+  const [measurementId, setMeasurementId] = useState('none')
+  const [busy, setBusy] = useState(false)
+
+  const families = useApi<{ data: { code: string; name: string }[] }>('/api/product-families')
+  const products = useApi<{ data: { id: string; sku: string; name: string; unit: string; family: { code: string; name: string }; variants: { id: string; name: string }[] }[] }>(
+    `/api/products?family=${family}`, [family]
+  )
+
+  const prodRows = products.data?.data ?? []
+  const selected = prodRows.find((p) => p.id === productId) ?? null
+
+  async function submit () {
+    if (productId === 'none') { toast({ title: 'Izberite izdelek.', variant: 'destructive' }); return }
+    const qv = Number(qty)
+    if (!Number.isFinite(qv) || qv <= 0) { toast({ title: 'Količina mora biti pozitivno število.', variant: 'destructive' }); return }
+    setBusy(true)
+    try {
+      await apiPost('/api/project-packages', {
+        projectId, productId,
+        variantId: variantId !== 'none' ? variantId : null,
+        qty: qv, name: name.trim() || undefined, note: note.trim() || undefined,
+        measurementId: measurementId !== 'none' ? measurementId : null,
+      })
+      toast({ title: 'Paket dodan.', description: `${projectCode} — ${selected?.name ?? ''}` })
+      await onCreated()
+    } catch (e) {
+      toast({ title: 'Napaka', description: e instanceof Error ? e.message : undefined, variant: 'destructive' })
+    } finally { setBusy(false) }
+  }
+
+  return (
+    <DialogContent className="sm:max-w-lg">
+      <DialogHeader>
+        <DialogTitle>Nov produktni paket</DialogTitle>
+        <DialogDescription>{projectCode} — ena rešitev na projektu (terasa, ograja, fasada …).</DialogDescription>
+      </DialogHeader>
+      <div className="space-y-3">
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-2">
+            <Label>Družina</Label>
+            <Select value={family} onValueChange={(v) => { setFamily(v); setProductId('none'); setVariantId('none') }}>
+              <SelectTrigger aria-label="Družina"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Vse družine</SelectItem>
+                {(families.data?.data ?? []).map((f) => <SelectItem key={f.code} value={f.code}>{f.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="npk-qty">Količina</Label>
+            <Input id="npk-qty" type="number" min="0" step="any" value={qty} onChange={(e) => setQty(e.target.value)} placeholder={selected ? `npr. 36.4 (${selected.unit})` : 'npr. 36.4'} />
+          </div>
+        </div>
+        <div className="space-y-2">
+          <Label>Izdelek</Label>
+          <Select value={productId} onValueChange={(v) => { setProductId(v); setVariantId('none') }}>
+            <SelectTrigger aria-label="Izdelek"><SelectValue placeholder="Izberite izdelek" /></SelectTrigger>
+            <SelectContent>
+              {prodRows.map((p) => <SelectItem key={p.id} value={p.id}>{p.sku} — {p.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        {selected && selected.variants.length > 0 ? (
+          <div className="space-y-2">
+            <Label>Varianta</Label>
+            <Select value={variantId} onValueChange={setVariantId}>
+              <SelectTrigger aria-label="Varianta"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">— osnovna —</SelectItem>
+                {selected.variants.map((v) => <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+        ) : null}
+        <div className="space-y-2">
+          <Label htmlFor="npk-name">Prikazno ime (neobvezno)</Label>
+          <Input id="npk-name" value={name} onChange={(e) => setName(e.target.value)} placeholder={selected ? `npr. ${selected.family.name} — ${selected.name}` : 'npr. Terasa — WPC Grafit'} />
+        </div>
+        {measurements.length > 0 ? (
+          <div className="space-y-2">
+            <Label>Veži na izmero (neobvezno)</Label>
+            <Select value={measurementId} onValueChange={setMeasurementId}>
+              <SelectTrigger aria-label="Izmera"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">— brez —</SelectItem>
+                {measurements.map((m) => (
+                  <SelectItem key={m.id} value={m.id}>{m.location ?? m.type} · {fmtDate(m.createdAt)}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        ) : null}
+        <div className="space-y-2">
+          <Label htmlFor="npk-note">Opomba (neobvezno)</Label>
+          <Input id="npk-note" value={note} onChange={(e) => setNote(e.target.value)} placeholder="npr. padec 1,5 % proti robu" />
+        </div>
+      </div>
+      <DialogFooter>
+        <Button variant="outline" onClick={onClose}>Prekliči</Button>
+        <Button onClick={() => void submit()} disabled={busy}>{busy ? 'Dodajam …' : 'Dodaj paket'}</Button>
+      </DialogFooter>
+    </DialogContent>
+  )
+}
+
+function PackageBomDialog ({ pkg }: { pkg: PackageRow | null }) {
+  const bom = useApi<{ data: { lines: { itemId: string; qty: number; unit: string; note: string | null; item: { sku: string; name: string; unit: string; qty: number } }[]; product: { sku: string; name: string }; qty: number; unit: string; code: string; status: string } }>(
+    pkg?.bom ? `/api/bom/${pkg.bom.id}` : null, [pkg?.bom?.id]
+  )
+  const d = bom.data?.data
+  const calcJson = pkg?.calcJson
+  const calc = useMemo<PackageCalc | null>(() => {
+    if (!calcJson) return null
+    try { return JSON.parse(calcJson) as PackageCalc } catch { return null }
+  }, [calcJson])
+
+  return (
+    <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+      <DialogHeader>
+        <DialogTitle className="flex flex-wrap items-center gap-2">
+          Kosovnica {pkg?.bom?.code ?? ''}
+          {pkg ? <StatusBadge status={pkg.bom?.status ?? 'OSNUTEK'} /> : null}
+        </DialogTitle>
+        <DialogDescription>
+          {pkg ? `${pkg.name} · ${pkg.qty} ${pkg.unit}` : ''}
+          {d ? ` — ${d.product.sku} × ${d.qty} ${d.unit}` : ''}
+        </DialogDescription>
+      </DialogHeader>
+      <ErrorBox error={bom.error} />
+      {bom.loading ? <LoadingRows rows={3} /> : d ? (
+        <div className="space-y-3">
+          {calc ? (
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <div className="rounded-lg border bg-secondary/30 p-2">
+                <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Material</div>
+                <div className="text-sm font-bold">{fmtEUR(calc.materialCost)}</div>
+              </div>
+              <div className="rounded-lg border bg-secondary/30 p-2">
+                <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Prodaja</div>
+                <div className="text-sm font-bold">{fmtEUR(calc.totalSale)}</div>
+              </div>
+              <div className="rounded-lg border bg-secondary/30 p-2">
+                <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Marža</div>
+                <div className="text-sm font-bold text-emerald-600 dark:text-emerald-400">{fmtEUR(calc.margin)} · {calc.marginPct} %</div>
+              </div>
+              <div className="rounded-lg border bg-secondary/30 p-2">
+                <div className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Vir cene</div>
+                <div className="truncate text-sm font-bold">{calc.priceSource}</div>
+              </div>
+            </div>
+          ) : null}
+          <div className="overflow-x-auto rounded-lg border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="pl-3">Artikel</TableHead>
+                  <TableHead className="text-right">Količina</TableHead>
+                  <TableHead className="pr-3">Zaloga</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {d.lines.map((l) => (
+                  <TableRow key={l.itemId}>
+                    <TableCell className="pl-3">
+                      <span className="font-mono text-xs text-muted-foreground">{l.item.sku}</span>
+                      <span className="ml-2 font-medium">{l.item.name}</span>
+                      {l.note ? <span className="block text-[11px] text-muted-foreground">{l.note}</span> : null}
+                    </TableCell>
+                    <TableCell className="text-right font-bold">{l.qty} <span className="text-xs font-normal text-muted-foreground">{l.unit}</span></TableCell>
+                    <TableCell className="pr-3">
+                      {l.item.qty >= l.qty ? (
+                        <Badge variant="secondary" className="border-transparent bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">pokrito</Badge>
+                      ) : (
+                        <Badge variant="secondary" className="border-transparent bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300">manjka {Math.round((l.qty - l.item.qty) * 100) / 100}</Badge>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Vrstice so vezane na artikle z eksplicitnimi ID — brez ujemanja imen (issue #7 §2).
+          </p>
+        </div>
+      ) : null}
+    </DialogContent>
   )
 }

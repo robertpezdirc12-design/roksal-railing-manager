@@ -569,3 +569,22 @@ Stage Summary:
 - Naslednja faza: issue #7 (ROKSAL Manager — preoblikovanje v celovit poslovni sistem), nato #8 (verzioniranje kataloga) in #9 (nedoslednosti iz E2E)
 - Dopolnitev (po zapisu zgoraj): hišni red off-site verzij v ops/backup.sh dobi || true (ob ohlapnem API odgovoru se uspešno naložena kopija vseeno šteje za uspešno — odkrito pri končni kopiji, kjer je pipeline brisanja ubil skripto po uspešnem nalaganju) → MR !3 (23e1214); končna kopija f771042e naložena čisto (14 kosov, 39 tabel, 1879 vrstic); issue #3 ZAPRT s komentarjem rezultatov (geslo namenso IZVEN issue-ja — prva različica komentarja z geslom je bila takoj izbrisana)
 - Končno stanje: 3 MR skozi zaščiteni main (!1 CI+skripte 87a3b6c, !2 zaključek f771042, !3 housekeeping 23e1214), vsi z zelenim CI; 6 off-site verzij na GitLabu; secret-audit ČIST; lint/tsc/dev.log ČISTI
+
+---
+Task ID: 17 (issue #7 — R442 P0 DATA CORE)
+Agent: main (Z.ai Code)
+Task: Analiza izhodišča za issue #7 (ROKSAL → celovit poslovni sistem) + razvrstitev OBDRŽI/RAZŠIRI/PREOBLIKUJ/ODSTRANI/MANJKA + implementacija P0 DATA CORE
+
+Work Log:
+- Prebrani odprti GitLab issue-ji: #7 (preoblikovanje v celovit poslovni sistem — P0 data core, P1 inventory/roles/delivery, P2 konfiguratorji/servis, P3 3D/AR), #8 (verzioniranje kataloga), #9 (E2E nedoslednosti)
+- Analiza: prisma/schema.prisma (38 modelov), nav-registry (29 zavihkov/5 sekcij), permissions-core (38 pravic, 5 vlog), 43 API map, moduli (32), ROUTE-MAP.md, seed vzorci (seed.cjs + seed-r437.cjs idempotentni dodatek)
+
+RAZVRSTITEV (issue #7 §"Ne predvidevaj"):
+- OBDRŽI: User/Session/RBAC fail-closed, Customer/Lead/Opportunity, Project, Quote/QuoteLine, Invoice/Payment, WorkOrder(+Event), Measurement(+Version — versioning!), InventoryItem/StockLot/Supplier/MaterialPrice, Equipment, ProductionOrder/QcCheck, Warranty(+Visit), NotificationEvent/Delivery/Pref, PortalLink, Setting, JobRun, SyncOp, Survey, PunchEntry, EngineeringRule, MaterialOrder
+- RAZŠIRI: Measurement + familyCode (generalizacija na 10 družin); Project + packages relacija; InventoryItem + relacije (BOM/ceniki; P1: movements/reservations)
+- PREOBLIKUJ: Profile (railing-specific) → ProductFamily/Product/ProductVariant/ProductComponent kot NOVI vir resnice; Profile ostane kot LEGACY za stari railing konfigurator (viz/kalkulator) — dokumentirano; Material V5 fuzzy matching (ROOTS besede!) → zamenjan z eksplicitnim BOM (issue izrecno prepoveduje fuzzy)
+- ODSTRANI: fuzzy ROOTS logika iz material-v5 (razlog: izrecna prepoved v issue #7 §2/§15)
+- MANJKA: ProductFamily/Product/ProductVariant/ProductComponent, Bom/BomLine, PriceList/PriceRule, ProjectPackage (P0); StockLocation/Movement/Reservation/PickingList, Delivery/DeliveryItem/Vehicle, ekipe/podizvajalci (P1); Claim/ServiceCase/ServiceVisit, QuoteRevision (P2)
+
+Stage Summary:
+- Analiza zaključena; implementacija P0 DATA CORE se začne: shema → seed → lib (BOM generacija + cene z eksplicitnimi ID povezavami) → API rute (RBAC + audit) → UI (katalog po družinah, paketi v projektih, kosovnice)

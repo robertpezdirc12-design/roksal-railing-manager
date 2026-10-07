@@ -50,7 +50,7 @@ export const SECTIONS: SectionDef[] = [
       { id: 'nagib', label: 'Nagib', gate: 'projects.read', desc: 'Kalkulator nagibov stopnišč' },
       { id: 'kalkulator', label: 'Kalkulator', gate: 'quotes.create', desc: 'Komercialni kalkulator ponudbe' },
       { id: 'signatura', label: 'Signatura', gate: 'quotes.create', desc: 'Zajem podpisa stranke' },
-      { id: 'material-v5', label: 'Material V5', gate: 'inventory.write', desc: 'BOM / nabava materiala' },
+      { id: 'material-v5', label: 'Kosovnice', gate: 'inventory.read', desc: 'BOM kosovnice z eksplicitnimi ID (R442)' },
       { id: 'orodjarina', label: 'Orodjarina', gate: 'equipment.read', desc: 'Merilna orodjarina' },
       { id: 'viz', label: 'Vizualizacija', gate: 'projects.read', desc: '3D vizualizacije ograj' },
       { id: 'ar', label: 'AR', gate: 'projects.read', desc: 'Dopolnjena resničnost na terenu' },
