@@ -1,6 +1,6 @@
-# Roksal Railing Manager — REKONSTRUKCIJA (R431)
+# Roksal Railing Manager — REKONSTRUKCIJA (R431–R432)
 
-> **Datum:** 6. 10. 2026 · **Veja:** `rekonstrukcija`
+> **Datum:** 6.–7. 10. 2026 · **Veja:** `rekonstrukcija`
 > Ta veja vsebuje **funkcionalno rekonstrukcijo** aplikacije, zgrajeno iz blueprinta na veji `main`
 > (rešeni artefakti z Vercela po izbrisu GitHub vira).
 
@@ -20,24 +20,26 @@
 | **Terenski tok** | NAPROGRAMIRAN → V_TEKU (ZAČNI DELO) → V_ZAJEMU (ZAJEM) → V_PREVERI (PREVERI) → ZAKLJUCEN (ZAKLJUČI TEREN) — VERBATIM R429 §7 |
 | **Revizija** | sistemski (globalni) + per-projekt pregled, `readsAllProjects` obseg — po R428 |
 | **Plačila** | ločena od računov (`payments.read`/`payments.manage`) — po R425 |
+| **Orodjarina** | modela `Equipment`/`EquipmentCheckout` — izposoja/vrnitev/servis, rok umeritve — R432 |
+| **PDF izvoz** | lasten mini generator (`pdf-mini.ts`, PDF 1.4 + Helvetica/WinAnsi, šumniki) — R432 |
 
 ## Delujoči moduli
 
 - **DANES** — operativni vhod, današnji nalogi, terenski tok z akcijami
 - **PROJEKTI** — preglednica (KPI), projekti (+ustvari/detail), stranke, ponudbe (sprejem), računi + plačila, teren
-- **ZAJEM** — nalogi center (časovnica dogodkov), meritve, foto zajem (canvas), nagib kalkulator, kalkulator ponudbe, signatura (podpis → zaklep posla)
-- **PISARNA** — CRM (vodi + pipeline), zaloga (losi, sprejem), katalog profilov, proizvodnja, logistika (razpored), Material V5 (BOM)
+- **ZAJEM** — nalogi center (časovnica dogodkov), meritve, foto zajem (canvas), nagib kalkulator, kalkulator ponudbe, signatura (podpis → zaklep posla), **vizualizacija** (parametrična SVG risba: tloris + stranski pogled, izvoz SVG), **AR** (kamera + vlečni overlay ograje, zajem → FOTO meritev; pošten demo brez kamere)
+- **PISARNA** — CRM (vodi + pipeline), **dokumenti** (poenoten arhiv ponudb + računov), zaloga (losi, sprejem), katalog profilov, proizvodnja, logistika (razpored), Material V5 (BOM), **orodjarina** (izposoja, umeritve), **galerija** zaključenih del (FOTO na ZAKLJUCEN/ARHIV projektih), varnost (revizija R428), **PDF** (predogled/prenos ponudb in računov), **PostSig** (kokpit zaklenjenih poslov: račun + proizvodnja po podpisu)
 - **PROFIL** — profil, dovoljenja po vlogi, tema, odjava
 - **Varnost** — revizijski dnevnik (R428)
 
-**Poštene šolsjke** (načrtovane, še ne implementirane): orodjarina, vizualizacija, AR, dokumenti, galerija, PDF, PostSig.
+Vseh 29 zavihkov IA je implementiranih (R432) — ni več placeholder šolsjk.
 
 ## Zagon
 
 ```bash
 bun install
 bun run db:push        # ustvari SQLite bazo (prisma/schema.prisma)
-node prisma/seed.cjs   # demo podatki (uporabniki, stranke, projekti, zaloga, profili)
+bunx node prisma/seed.cjs   # demo podatki (uporabniki, stranke, projekti, zaloga, profili, orodjarina, galerija)
 bun run dev            # http://localhost:3000
 ```
 

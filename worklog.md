@@ -146,3 +146,77 @@ Work Log:
 
 Stage Summary:
 - Aplikacija deluje end-to-end v brskalniku; 2 popravljeni bugi (metoda prehoda, a11y naslov dialoga)
+
+---
+Task ID: 6-prep
+Agent: main (Z.ai Code)
+Task: Nadaljevanje obnove — priprava podatkovnega sloja za zadnjih 7 modulov
+
+Work Log:
+- Prisma shema: dodana modela Equipment (code/name/category/serialNumber/status/holderId/location/calibrationDue/note) in EquipmentCheckout (equipmentId/userId/outAt/inAt/note) + relaciji na User (equipmentHolder, equipmentUser); db:push uspešen
+- Seed: PON-2026-004 (ZAKLENJEN) dobi signature/signedBy/signedAt (SVG data URL) — podlaga za postsig; dodana orodjarina: 8 orodij (OR-001 daljinomer NA_VOLJO, OR-002 vodovaga IZPOSOJENO monter, OR-003 kotnik, OR-004 kolut s POTEKLO umeritvijo, OR-005 vrtalnik IZPOSOJENO, OR-006 brusilka V_SERVISU, EV-001 detektor, OR-007 libela POKVARJENO) + 5 izposoj (2 odprti, 3 zaprti)
+- Seed: galerija — 3 FOTO meritve na zaključenih/arhiviranih projektih (P-2026-004 Kovač ×2, P-2026-008 Pri Lipi) s params.photo SVG data URL (enaka oblika kot foto modul)
+- Seed pognan uspešno; dev server teče na :3000 (ne zaganjati novih instanc!)
+
+Stage Summary:
+- Podatkovna podlaga za 6-a (orodjarina/dokumenti/galerija/postsig) in 6-b (pdf/viz/ar) pripravljena
+- SPORAZUM velja naprej: schema/seed/permissions-core/nav-registry/module-view/app-shell/ui-bits/api-client/store so ZAŠČITENI; subagenti pišejo SAMO svoje module + svoje API poti
+- Equipment mutacije RBAC: izposoja/vrnitev = equipment.read (self-service), administrativno (novo/servis/pokvarjeno) = equipment.read + vloga ADMIN/VODJA (katalog 38 pravic se NE razširja)
+
+---
+Task ID: 6-a
+Agent: full-stack-developer
+Task: Zadnji štirje moduli — orodjarina, dokumenti, galerija, postsig (API + UI)
+
+Work Log:
+- Orodjarina: /api/equipment (GET z holderjem + odprto izposojo + ?q=; POST novo orodje — equipment.read + vloga ADMIN/VODJA, unikatna koda 409, revizija EQUIP_CREATE) + /api/equipment/[id] (GET zgodovina izposoj; PATCH checkout/return/service/broken/repair — checkout samopostrežen, return imetnik ali ADMIN/VODJA, administrativno samo ADMIN/VODJA; service/broken iz izposojenega samodejno zapreta izposojo; revizije EQUIP_CHECKOUT/EQUIP_RETURN/EQUIP_STATUS; Next 16 await params)
+- Modul orodjarina.tsx: StatCard statistika (Na voljo/Izposojeno/V servisu/Pokvarjeno), iskanje + filter statusa, kartice z rokom umeritve (rdeče "Umeritev potekla", oranžno pod 14 dni), gumbi po perms+vlogi, dialogi zgodovina/izposoja/servis/novo orodje
+- Dokumenti: /api/documents (poenoten arhiv PONUDBA+RACUN desc po createdAt, filtri ?q=&type=&status=, documents.read) + modul z vrsta badge, status badge, "Podpisano dd.mm.llll", dialogi podrobnosti (ponudba: pozicije+podpis slika+izdani računi iz /api/quotes/[id]; račun: plačila iz /api/invoices/[id])
+- Galerija: /api/gallery (FOTO meritve na ZAKLJUCEN/ARHIV projektih, ?projectId=, photo iz params JSON, gallery.read) + modul z responsive gridom 1/2/3, lightbox dialogom, filtrom po projektu
+- PostSig (brez novega API-ja): kokpit iz obstoječih poti (quotes?status=ZAKLENJEN, invoices, projects, production), statusni trak Podpisano → Račun → Proizvodnja, akciji Izdaj račun (invoices.issue) / Ustvari proizvodni nalog (production.manage) — vidni samo s pravico in če entiteta še ne obstaja, toast + reload
+- Incident 1: PON-2026-004 v bazi BREZ podpisa — seed.cjs definira signedBy/signature v quoteDefs, a jih db.quote.create ne prenese; DB usklajena z namenom seeda prek enkratne idempotentne skripte scripts/patch-pon-signature.cjs (seed je zaščiten). Če se seed kdaj ponovno poganja, pognati skripto potem!
+- Incident 2: dev server je imel v globalThis zastarel PrismaClient (zagnan pred regeneracijo ob dodanem modelu Equipment) → /api/equipment 500 db.equipment undefined; rešeno s čistim restartom (dvojni fork → PPID 1, enako kot originalni strežnik iz start.sh); server zdrav, health OK
+- Mobile overflow popravek: grid kartice v orodjarina/galerija/postsig so dobile min-w-0 (truncate vsebina je razširila dokument na 491px pri 390px širini)
+- Po testih povrnil demo stanje (OR-002/OR-005 spet izposojena monterju; testni orodji/nalog odstranjeni oziroma ponovno ustvarjeni prek UI)
+- Testi: curl RBAC (401 brez žetona; SKLADISCE 403 equipment/gallery; MONTER 403 POST/service, 200 read/checkout; duplikat kode 409; ponovna izposoja 409; tuja vrnitev 403; repair na zdravem 409; neznana akcija 400; documents type=faktura 400) + agent-browser (desktop+mobile: vsi 4 moduli se izrišejo, MONTER brez admin gumbov 4×Izposoji/2×Vrni, PostSig skrit monterju, Ustvari proizvodni nalog klik → 201 + toast, 0 konzolnih napak, 0 napak v dev.log, brez horizontalnega overflowa)
+- bun run lint: ČIST (0 errorjev, 0 opozoril); tsc --noEmit brez napak v mojih datotekah
+
+Stage Summary:
+- Vseh 29 zavihkov sedaj ima polne module (od 22 polnih + 7 šolsjk do 26 + 4 novo polni; ostali 3 — viz/ar/pdf — so nalogа 6-b)
+- Komercialni tok zaključen do konca: podpis → PostSig kokpit → račun/plačilo + proizvodni nalog; orodjarina samopostrežna z revizijo vsake spremembe
+- Odstopanja dokumentirana v agent-ctx/6-a-full-stack-developer.md (popravek podpisa PON-2026-004, restart dev serverja, min-w-0 popravki)
+
+---
+Task ID: 6-b
+Agent: full-stack-developer (kontekst potekel pred poročilom; delo v celoti preveril main agent)
+Task: Moduli PDF izvoz, vizualizacija, AR
+
+Work Log:
+- src/lib/pdf-mini.ts — lasten minimalen PDF 1.4 generator (Helvetica/Helvetica-Bold, WinAnsiEncoding, šumniki č/š/ž; text/line/rect builder, flip koordinat)
+- /api/pdf/[type]/[id] (GET) — type=quote|invoice, vrata documents.generate, revizija DOC_GENERATE; Content-Type application/pdf + Content-Disposition inline
+- pdf.tsx — izbira vrste+dokumenta, predogled v iframe (blob URL), Prenesi/Odpri v zavihku, revokacija object URL
+- viz.tsx — parametrična SVG risba (tloris + stranski pogled, realno merilo, dimenzije), izbira profila iz kataloga, nalaganje iz meritve, izvoz SVG, shrani kot meritev
+- ar.tsx — getUserMedia environment kamera + vlečni SVG overlay (velikost/prosojnost sliderji), zajem canvas → JPEG 0.7 → POST /api/measurements (FOTO, params.ar), pošten demo ozadje brez kamere, čiščenje streamov
+- Preveril (main): lint čist; PDF 200 (4163 B quote / 4229 B invoice), %PDF-1.4 glava, xref tabela veljavna (python validacija), MONTER 403; iframe predogled v brskalniku; VLM potrditev izrisa; AR tok: vklop kamere → demo fallback → zajem → FOTO meritev v bazi (JPEG)
+
+Stage Summary:
+- PDF izvoz, vizualizacija in AR delujejo; zadnji placeholder moduli zamenjani
+
+---
+Task ID: 6-c
+Agent: main (Z.ai Code)
+Task: Integracija + verifikacija + seed popravki + push na GitLab
+
+Work Log:
+- Popravek seeda: db.quote.create zdaj prenaša signature/signedAt/signedBy (prej izpuščeno — 6-a je moral robno popravljati bazo); scripts/patch-pon-signature.cjs odstranjen (vzrok odpravljen pri viru)
+- Odstranjen neuporabljen placeholder.tsx (vseh 29 zavihkov implementiranih)
+- README-REKONSTRUKCIJA.md posodobljen (R431–R432, vsi moduli, orodjarina/PDF v tabeli rekonstrukcije)
+- Ponovni seed (čisti demo stanje, vključno s podpisom PON-2026-004)
+- Brskalniška verifikacija (desktop 1280×800 + mobile 390×844): vsi 7 novih modulov se izriše s podatki; PDF tok (izbera PON-2026-004 → Predogled → iframe z blob PDF + Prenesi); AR tok (demo fallback + zajem v bazo); viz SVG (8 elementov, velik viewBox 860×720); noga mobile: footerBottom==844 pri kratki vsebini, naravno porinjena pri dolgi; brez horizontalnega preliva; konzola in dev.log brez napak
+- VLM vizualna potrditev: PDF (črkovna glava ROKSAL v iframe), vizualizacija (parametri + tehnična risba), mobile PostSig (berljivo, brez prekrivanj)
+- Skrivnosti: worklog vsebuje le okrnjene predpone žetonov (varno); .env vsebuje samo lokalno pot SQLite
+- Git: core.fileMode false (čist diff), commit R432, čiščenje peskovniškega ogrodja iz sledenja, push veje rekonstrukcija na GitLab
+
+Stage Summary:
+- Rekonstrukcija ZAKLJUČENA: vseh 29 zavihkov IA deluje, lint čist, brskalniško verificirano
+- GitLab: markec-group/roksal-railing-manager, veja rekonstrukcija = funkcionalna koda; main = recovery artefakti (blueprint)
