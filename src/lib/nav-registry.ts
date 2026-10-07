@@ -68,6 +68,10 @@ export const SECTIONS: SectionDef[] = [
       // R445 (issue #7 §9): DOSTAVE — dostave, vozila, ekipe/podizvajalci.
       // Ciljna IA §11 (sekcija OPERATIVA) pride s poznejšo restrukturacijo navigacije.
       { id: 'dostave', label: 'Dostave', gate: 'projects.read', desc: 'Dostave, vozila, ekipe (R445)' },
+      // R446 (issue #7 §10): SERVIS — garancije, reklamacije, servisni primeri.
+      // Monter vidi SAMO zavihek Servis (svoji primeri) — modul sama skrije ostala zavihka.
+      // Ciljna IA §11 pride v R448 — zavihek je ZA ZDAJ v sekciji pisarne.
+      { id: 'servis', label: 'Servis', gate: 'projects.read', desc: 'Garancije, reklamacije, servis (R446)' },
       { id: 'proizvodnja', label: 'Proizvodnja', gate: 'production.read', desc: 'Proizvodni nalogi' },
       { id: 'galerija', label: 'Galerija', gate: 'gallery.read', desc: 'Galerija zaključenih del' },
       { id: 'varnost', label: 'Varnost', gate: 'audit.read', desc: 'Revizijski dnevnik (R428)' },

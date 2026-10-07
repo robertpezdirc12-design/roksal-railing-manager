@@ -39,6 +39,8 @@ model User {
   checklistDone InstallationChecklist[] @relation("checklistDone") // R444: odkljukane točke
   materialUsage InstallationMaterialUsage[] @relation("usageUser") // R444: poraba na terenu
   drivenDeliveries Delivery[] @relation("drivenDeliveries") // R445: dostave, kjer je voznik
+  serviceVisits   ServiceVisit[] @relation("serviceVisits") // R446: servisni obiski tehnika
+  decidedCases    ServiceCase[] @relation("decidedCases") // R446: servisni primeri, ki jih je odločil
 }
 
 model Session {
@@ -66,6 +68,7 @@ model Customer {
   projects Project[]
   quotes   Quote[]
   leads    Lead[]
+  claims   Claim[] // R446: reklamacije stranke (issue #7 §10)
 }
 
 model Lead {
@@ -120,6 +123,8 @@ model Project {
   packages         ProjectPackage[] // R442: več produktnih paketov na projekt
   stockReservations StockReservation[] @relation("stockReservations") // R443: rezervacije materiala
   deliveries       Delivery[] // R445: dostave projekta (issue #7 §9)
+  claims           Claim[] // R446: reklamacije vezane na projekt (issue #7 §10)
+  serviceCases     ServiceCase[] // R446: servisni primeri projekta
 }
 
 model Quote {
@@ -409,6 +414,8 @@ model Warranty {
   createdAt DateTime        @default(now())
 
   visits WarrantyVisit[]
+  claims Claim[] // R446: reklamacije pod to garancijo (issue #7 §10)
+  serviceCases ServiceCase[] // R446: servisni primeri, ki jih garancija pokriva
 }
 
 model WarrantyVisit {
@@ -419,6 +426,92 @@ model WarrantyVisit {
   note       String?
   userId     String?
   createdAt  DateTime  @default(now())
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SERVIS — GARANCIJE / REKLAMACIJE / SERVIS (R446 — issue #7 §10, P2 SERVIS)
+// Tok: STRANKA → REKLAMACIJA (Claim) → PREVERITEV → ODLOČITEV → SERVIS
+//      (ServiceCase + ServiceVisit) → ZAKLJUČEK.
+// Obstoječi Warranty/WarrantyVisit ostaja NEPOŠKODOVAN — zgolj razširjen z
+// relacijami na reklamacije in servisne primerе (aditivno, brez sprememb tokov).
+// Eksplicitne ID povezave (customerId/projectId/packageId/warrantyId/claimId),
+// BREZ fuzzy matchinga; PostgreSQL-kompatibilno (skalarni tipi brez seznamov).
+// ═══════════════════════════════════════════════════════════════════════════
+
+// REKLAMACIJA stranke (issue #7 §10) — vstopna točka servisa.
+// Vezana na stranko + projekt (obvezno), paket in garancijo (opcijsko).
+model Claim {
+  id             String   @id @default(cuid())
+  code           String   @unique // REK-2026-001
+  customerId     String
+  customer       Customer @relation(fields: [customerId], references: [id])
+  projectId      String
+  project        Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  packageId      String? // kateri del projekta (paketa) se reklamacija tiče
+  package        ProjectPackage? @relation(fields: [packageId], references: [id], onDelete: SetNull)
+  warrantyId     String? // garancija, pod katero reklamacija spada (če obstaja)
+  warranty       Warranty? @relation(fields: [warrantyId], references: [id], onDelete: SetNull)
+  title          String
+  desc           String // opis težave stranke
+  channel        String   @default("TELEFON") // TELEFON | EMAIL | PORTAL | OSEBNO
+  status         String   @default("NOVA") // NOVA | V_OBRAVNAVI | ZAKLJUCENA | ZAVRNJENA
+  reportedBy     String? // ime prijavitelja, če ni uporabnik (npr. "Petra Horvat")
+  resolutionNote String? // zaključna opomba pisarne
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  serviceCase   ServiceCase? // 1:1 — reklamacija vodi do (največ enega) servisnega primera
+
+  @@index([customerId])
+  @@index([projectId])
+  @@index([status])
+}
+
+// SERVISNI PRIMER (issue #7 §10) — preveritev, odločitev, servis, zaključek.
+// status: PREVERITEV → ODOBRENA | ZAVRNJENA; ODOBRENA → V_SERVISU | ZAKLJUCEN;
+//         V_SERVISU → ZAKLJUCEN. decision: UTEMELJENA | DELNO_UTEMELJENA | NEUTEMELJENA.
+model ServiceCase {
+  id            String    @id @default(cuid())
+  code          String    @unique // SRV-2026-001
+  claimId       String?   @unique // iz reklamacije (1:1)
+  claim         Claim?    @relation(fields: [claimId], references: [id], onDelete: SetNull)
+  projectId     String
+  project       Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  warrantyId    String? // določa, ali garancija pokriva servis
+  warranty      Warranty? @relation(fields: [warrantyId], references: [id], onDelete: SetNull)
+  title         String
+  desc          String
+  status        String    @default("PREVERITEV") // PREVERITEV | ODOBRENA | V_SERVISU | ZAKLJUCEN | ZAVRNJENA
+  decision      String? // UTEMELJENA | DELNO_UTEMELJENA | NEUTEMELJENA
+  decisionNote  String?
+  decidedById   String?
+  decidedBy     User?     @relation("decidedCases", fields: [decidedById], references: [id])
+  decidedAt     DateTime?
+  resolutionNote String?
+  billable      Boolean   @default(false) // zaračunano stranki, če garancija ne pokriva
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  visits ServiceVisit[]
+
+  @@index([projectId])
+  @@index([status])
+  @@index([claimId])
+}
+
+// SERVISNI OBISK (issue #7 §10) — tehnikov obisk na terenu z urami dela.
+model ServiceVisit {
+  id        String      @id @default(cuid())
+  caseId    String
+  case      ServiceCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  date      DateTime    @default(now())
+  userId    String // tehnik, ki je izvedel obisk
+  user      User        @relation("serviceVisits", fields: [userId], references: [id])
+  note      String
+  hours     Float? // ur dela
+  createdAt DateTime    @default(now())
+
+  @@index([caseId, date])
 }
 
 // ─── Revizija & obvestila ───────────────────────────────────────────────────
@@ -812,6 +905,7 @@ model ProjectPackage {
   updatedAt     DateTime        @updatedAt
 
   bom Bom?
+  claims Claim[] // R446: reklamacije, ki se tičejo tega paketa (issue #7 §10)
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
