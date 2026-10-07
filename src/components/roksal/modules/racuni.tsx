@@ -2,9 +2,10 @@
 
 // RAČUNI + PLAČILA — R425 LOČITEV: računi (invoices.read/issue) in plačila (payments.read/manage)
 // so ločena sklopa. "Zapiši plačilo" je vidno samo z payments.manage.
+// R434: izvoz eSLOG XML (UBL 2.1) — gumb v podrobnosti računa.
 
 import { useMemo, useState } from 'react'
-import { Banknote, CalendarClock, FilePlus2, HandCoins, Receipt, Search, Wallet } from 'lucide-react'
+import { Banknote, CalendarClock, FileCode2, FilePlus2, HandCoins, Receipt, Search, Wallet } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -255,8 +256,40 @@ function InvoiceDetailDialog ({ detail, canManagePayments, onPay }: {
   canManagePayments: boolean
   onPay: () => void
 }) {
+  const { toast } = useToast()
+  const token = useAppStore((s) => s.token)
+  const [eslogBusy, setEslogBusy] = useState(false)
   const open = Math.round((detail.total - detail.paid) * 100) / 100
   const payable = open > 0.005 && detail.status !== 'ZAPRT'
+
+  /** eSLOG XML (R434) — prenos prek blob (žeton v glavi). */
+  async function exportEslog (): Promise<void> {
+    if (!token) return
+    setEslogBusy(true)
+    try {
+      const res = await fetch(`/api/invoices/eslog?id=${detail.id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error((data as { error?: string }).error ?? `Napaka strežnika (${res.status}).`)
+      }
+      const xml = await res.text()
+      const url = URL.createObjectURL(new Blob([xml], { type: 'application/xml' }))
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${detail.code}-eslog.xml`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+      toast({ title: 'eSLOG XML izvožen.', description: `${detail.code} — UBL 2.1 e-račun prenešen.` })
+    } catch (e) {
+      toast({ title: 'Izvoz eSLOG ni uspel.', description: e instanceof Error ? e.message : undefined, variant: 'destructive' })
+    } finally {
+      setEslogBusy(false)
+    }
+  }
 
   return (
     <>
@@ -318,13 +351,16 @@ function InvoiceDetailDialog ({ detail, canManagePayments, onPay }: {
         )}
       </section>
 
-      {canManagePayments ? (
-        <DialogFooter>
+      <DialogFooter className="gap-2 sm:gap-0">
+        <Button variant="outline" onClick={() => void exportEslog()} disabled={eslogBusy}>
+          <FileCode2 className="size-4" aria-hidden /> {eslogBusy ? 'Pripravljam …' : 'eSLOG XML'}
+        </Button>
+        {canManagePayments ? (
           <Button disabled={!payable} onClick={onPay}>
             <Wallet className="size-4" aria-hidden /> Zapiši plačilo
           </Button>
-        </DialogFooter>
-      ) : null}
+        ) : null}
+      </DialogFooter>
     </>
   )
 }

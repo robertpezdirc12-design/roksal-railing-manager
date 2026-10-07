@@ -6,7 +6,7 @@
 
 import { useMemo, useState } from 'react'
 import {
-  CalendarClock, Camera, CheckCheck, CheckCircle2, ClipboardList, Loader2, MapPin, MessageSquare,
+  CalendarClock, Camera, CheckCheck, CheckCircle2, ClipboardList, History, Loader2, MapPin, MessageSquare,
   Play, Plus, Ruler, Search, User, UserPlus,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -39,6 +39,12 @@ interface WorkOrderDetail extends Omit<WorkOrderRow, 'assignee' | '_count'> {
     id: string; type: string; location: string | null; lengthCm: number | null
     heightCm: number | null; posts: number | null; slopeDeg: number | null; note: string | null; createdAt: string
   }[]
+}
+
+interface HistoryRow {
+  id: string; type: string; note: string | null; createdAt: string
+  user: { name: string } | null
+  workOrder: { code: string; status: string; project: { code: string; customer: { name: string } | null } | null }
 }
 
 const SCOPES = [
@@ -97,12 +103,14 @@ export default function NalogiModule () {
   const [q, setQ] = useState('')
   const [selected, setSelected] = useState<string | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
+  const [historyOpen, setHistoryOpen] = useState(false)
 
   const list = useApi<{ data: WorkOrderRow[] }>(
     `/api/nalog?scope=${scope}${status !== 'all' ? `&status=${status}` : ''}`,
     [scope, status]
   )
   const detail = useApi<{ data: WorkOrderDetail }>(selected ? `/api/nalog/${selected}` : null, [selected])
+  const history = useApi<{ data: HistoryRow[] }>(historyOpen ? '/api/nalog/zgodovina?take=30' : null, [historyOpen])
 
   const canWrite = hasPerm(user?.perms, 'nalog.write')
   const canTransition = hasPerm(user?.perms, 'nalog.transition')
@@ -140,10 +148,19 @@ export default function NalogiModule () {
         title="Nalogi"
         desc="Osrednji center delovnih nalogov — terenski tok, časovnica, meritve"
         actions={canWrite ? (
-          <Button size="sm" onClick={() => setCreateOpen(true)}>
-            <Plus className="size-4" aria-hidden /> Nov nalog
+          <div className="flex flex-wrap items-center gap-2">
+            <Button size="sm" variant="outline" onClick={() => setHistoryOpen((o) => !o)} aria-expanded={historyOpen}>
+              <History className="size-4" aria-hidden /> Zgodovina
+            </Button>
+            <Button size="sm" onClick={() => setCreateOpen(true)}>
+              <Plus className="size-4" aria-hidden /> Nov nalog
+            </Button>
+          </div>
+        ) : (
+          <Button size="sm" variant="outline" onClick={() => setHistoryOpen((o) => !o)} aria-expanded={historyOpen}>
+            <History className="size-4" aria-hidden /> Zgodovina
           </Button>
-        ) : null}
+        )}
       />
 
       {/* filtri: scope + status + iskanje */}
@@ -206,6 +223,49 @@ export default function NalogiModule () {
           ))}
         </ul>
       )}
+
+      {/* globalna zgodovina dogodkov — R434 (/api/nalog/zgodovina) */}
+      {historyOpen ? (
+        <section aria-label="Zgodovina dogodkov vseh nalogov">
+          <h3 className="mb-1.5 text-xs font-bold uppercase tracking-widest text-muted-foreground">
+            Zgodovina dogodkov {user?.role === 'MONTER' ? '(moji nalogi)' : '(vsi nalogi)'}
+          </h3>
+          <ErrorBox error={history.error} />
+          {history.loading ? <LoadingRows rows={3} /> : !history.error && (history.data?.data ?? []).length === 0 ? (
+            <p className="text-sm text-muted-foreground">Ni dogodkov.</p>
+          ) : !history.error ? (
+            <Card>
+              <CardContent className="max-h-96 overflow-y-auto p-0">
+                <ul className="divide-y">
+                  {(history.data?.data ?? []).map((ev) => {
+                    const meta = EVENT_META[ev.type] ?? { label: ev.type, icon: MessageSquare, cls: 'bg-secondary text-secondary-foreground' }
+                    const Icon = meta.icon
+                    return (
+                      <li key={ev.id} className="flex items-start gap-3 p-3">
+                        <span className={cn('mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full', meta.cls)}>
+                          <Icon className="size-3.5" aria-hidden />
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm">
+                            <span className="font-mono text-xs font-semibold text-roksal-amber">{ev.workOrder.code}</span>
+                            <span className="font-medium">{meta.label}</span>
+                          </div>
+                          <div className="mt-0.5 text-xs text-muted-foreground">
+                            {ev.note ?? '—'} · {ev.user?.name ?? 'sistem'} · {fmtDateTime(ev.createdAt)}
+                          </div>
+                          <div className="mt-0.5 text-[11px] text-muted-foreground">
+                            {ev.workOrder.project ? `${ev.workOrder.project.code} · ${ev.workOrder.project.customer?.name ?? '—'}` : 'Brez projekta'}
+                          </div>
+                        </div>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </CardContent>
+            </Card>
+          ) : null}
+        </section>
+      ) : null}
 
       {/* podrobnost naloga */}
       <Dialog open={!!selected} onOpenChange={(o) => { if (!o) setSelected(null) }}>

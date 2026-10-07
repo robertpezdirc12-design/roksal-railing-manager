@@ -282,3 +282,33 @@ Stage Summary:
 - R433 dopolnitev uspešna: 6 zmožnosti iz route-map izvirnika rekonstruiranih (search, sessions, password, timeline, termin, version)
 - security.read pravica (katalog 38) je zdaj dejansko uporabljena (upravljanje sej — ADMIN)
 - Rekonstrukcija pokriva: 29/29 zavihkov IA + globalno iskanje + varnostne funkcije izvirnika
+
+---
+Task ID: 8
+Agent: main (Z.ai Code)
+Task: R434 — dopolnitev po ROUTE-MAP (drugi val): eSLOG, zgodovina nalogov, vreme, QC, garancija
+
+Work Log:
+- Analiza ROUTE-MAP.md (GitLab main, 130+ rut) proti rekonstrukciji → 5 zmožnosti z UI vrednostjo znotraj obstoječe IA (29 zavihkov)
+- Prisma: novi modeli QcCheck (kontrolne točke proizvodnih nalogov, rezultat OK/NOK/NA/V_TEKU), Warranty (startsAt/months/status) in WarrantyVisit (datum, opis) — db:push brez izgube podatkov (aditivno)
+- Seed: 6 QC kontrol (PR-2026-001/002, vključno NOK na robni obdelavi), 2 garanciji (P-2026-004 Kovač velja do 2028, P-2026-008 Pri Lipi potekla), 3 obiski (1 prihodnji), dodaten nalog N-2026-007 (vodja) z dogodkom za demonstracijo obsega
+- /api/invoices/eslog (GET, invoices.read): eSLOG XML po UBL 2.1 (Invoice, cbc/cac NS) — ponudnik/stranka, DDV 22 %, plačilna sredstva, pozicije iz ponudbe, sklic SI12 (modul 97); Content-Disposition attachment; revizija ESLOG_EXPORT
+- /api/nalog/zgodovina (GET, nalog.read): globalni dnevnik WorkOrderEvent z zapisi nalog/projekt/stranka/uporabnik; MONTER vidi samo dogodke svojih nalogov (obseg), take=1..200
+- /api/weather (GET, nalog.read): Open-Meteo (brez API ključa) — 4-dnevna napoved, WMO kode v slovenščino, montažniScore 0–100 (dež/ure padavin/veter/zmrzal/žega), 9 slovenskih mest + lat/lon; timeout 8 s z jasno napako 502/503
+- /api/qc (GET production.read, POST production.manage): kontrole po nalogu (+vse), validacija rezultata; revizija QC_CHECK
+- /api/warranty (GET projects.read, POST projects.write): izračun endsAt/valid/nextVisit; POST dve varianti — nova garancija (samo ZAKLJUCEN/ARHIV, brez duplikata) ali nov obisk; reviziji WARRANTY_CREATE/WARRANTY_VISIT
+- UI racuni: gumb "eSLOG XML" v detail dialogu — fetch z žetonom → blob → prenos (enak vzorec kot PDF), toast
+- UI nalogi: gumb "Zgodovina" v glavi → razdelek z globalnim dnevnikom (ločeno nalaganje, ikone/barve po tipu dogodka, max-h scroll)
+- UI danes: vremenski pas nad nalogi — 4 kartice (tmin/tmax, padavine, veter, ocena primernosti barvno), danes označen, sr-only opis za branke
+- UI proizvodnja: klik naloga → dialog "Kontrola kakovosti" — seznam kontrol z badge-i, NOK povzetek, obrazec za novo kontrolo (production.manage)
+- UI projekti: WarrantySection v detail dialogu — stanje/veljavnost, naslednji obisk, zgodovina obiskov, oddaja garancije (12–60 m) za zaključene, zapis obiska
+- Popravek: eSLOG IdentificationCode undefined → SUPPLIER.country; a11y sr-only naslov+opis fallback v QC dialogu (Radix opozorilo ob zapiranju)
+- Testi (curl): eSLOG 200 z veljavnim XML (SI12 2026001 39), zgodovina obseg (admin 6 / monter 5 — vodja dogodek skrit), vreme živi podatki (Ljubljana 4 dni), QC POST 201 + monter 403, warranty GET valid/nextVisit + POST obisk 201
+- Brskalnik (agent-browser, admin): vreme se izriše (danes Megla primerno / čet nevihta neprimerno), zgodovina feed (dogodki+uporabniki+projekti), eSLOG klik → toast + revizija RA-2026-002, QC dialog + dodajanje kontrole skozi obrazec, garancija P-2026-004 (velja, naslednji obisk 06. 12. 2026) + zapis obiska; testni vrstici počiščeni
+- Mobile 390px: vreme 2-stolpčna mreža (179 px kartice), brez horizontalnega preliva, noga naravno potisnjena; VLM vizualna potrditev mobile + desktop (brez prekrivanj)
+- bun run lint: ČIST; konzola brskalnika: ČISTA (0 error/warn po a11y popravku)
+
+Stage Summary:
+- R434 zaključen: 5 zmožnosti iz route-map izvirnika rekonstruiranih (eSLOG XML, zgodovina nalogov, vreme, QC, garancija)
+- Rekonstrukcja zdaj pokriva: 29/29 zavihkov IA + iskanje/seje/geslo/timeline/termin/version (R433) + eSLOG/zgodovina/vreme/QC/garancija (R434)
+- Preostalo iz route-map (infra/strani izven omejitve ene route): /setup, /aktivacija, /portal, /m, /p strani, cron jobs (viz/gc, jobs/run), Vercel Blob proxy — izven obsega peskovnice (enovita ruta /)

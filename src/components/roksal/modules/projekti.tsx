@@ -1,9 +1,10 @@
 'use client'
 
 // PROJEKTI — seznam + podrobnost (vrata projects.read)
+// R434: garancija projekta — sklop v podrobnosti (/api/warranty, obiski).
 
 import { useMemo, useState } from 'react'
-import { FolderKanban, HardHat, History, MapPin, Plus, Ruler, Search, FileText, Banknote } from 'lucide-react'
+import { CalendarCheck, FolderKanban, HardHat, History, MapPin, Plus, Ruler, Search, FileText, Banknote, ShieldCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -30,6 +31,13 @@ interface ProjectDetail extends ProjectRow {
   workOrders: { id: string; code: string; title: string; status: string; scheduledFor: string | null; assignee: { name: string } | null }[]
   measurements: { id: string; type: string; location: string | null; lengthCm: number | null; createdAt: string }[]
   invoices: { id: string; code: string; status: string; total: number; paid: number }[]
+}
+
+interface WarrantyRow {
+  id: string; startsAt: string; months: number; status: string; note: string | null; endsAt: string
+  valid: boolean
+  nextVisit: { id: string; date: string; note: string | null } | null
+  visits: { id: string; date: string; note: string | null }[]
 }
 
 const STATUSES = [
@@ -222,6 +230,8 @@ function ProjectDetailDialog ({ detail }: { detail: ProjectDetail }) {
             </ul>
           )}
         </section>
+
+        <WarrantySection projectId={detail.id} projectStatus={detail.status} />
       </div>
 
       {/* kronološka zgodovina projekta (R433: /api/projects/[id]/timeline) */}
@@ -349,5 +359,116 @@ function CreateProjectDialog ({ customers, onClose, onCreated }: {
         <Button onClick={() => void submit()} disabled={busy}>{busy ? 'Ustvarjam…' : 'Ustvari'}</Button>
       </DialogFooter>
     </DialogContent>
+  )
+}
+
+/** Garancija projekta (R434) — stanje, obiski, oddaja garancije. */
+function WarrantySection ({ projectId, projectStatus }: { projectId: string; projectStatus: string }) {
+  const user = useAppStore((s) => s.user)
+  const { toast } = useToast()
+  const warranty = useApi<{ data: WarrantyRow[] }>(`/api/warranty?projectId=${projectId}`, [projectId])
+  const [months, setMonths] = useState('24')
+  const [visitNote, setVisitNote] = useState('')
+  const [visitDate, setVisitDate] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const canWrite = hasPerm(user?.perms, 'projects.write')
+  const w = warranty.data?.data?.[0] ?? null
+  const closed = projectStatus === 'ZAKLJUCEN' || projectStatus === 'ARHIV'
+
+  async function createWarranty () {
+    setBusy(true)
+    try {
+      await apiPost('/api/warranty', { projectId, months: Number(months) })
+      toast({ title: 'Garancija oddana.', description: `${months} mesecev od danes.` })
+      await warranty.reload()
+    } catch (e) {
+      toast({ title: 'Napaka', description: e instanceof Error ? e.message : undefined, variant: 'destructive' })
+    } finally { setBusy(false) }
+  }
+
+  async function addVisit () {
+    if (!w) return
+    if (!visitNote.trim()) { toast({ title: 'Opis obiska je obvezen.', variant: 'destructive' }); return }
+    setBusy(true)
+    try {
+      await apiPost('/api/warranty', { warrantyId: w.id, visitNote, visitDate: visitDate || undefined })
+      toast({ title: 'Obisk zabeležen.' })
+      setVisitNote(''); setVisitDate('')
+      await warranty.reload()
+    } catch (e) {
+      toast({ title: 'Napaka', description: e instanceof Error ? e.message : undefined, variant: 'destructive' })
+    } finally { setBusy(false) }
+  }
+
+  return (
+    <section aria-label="Garancija">
+      <h3 className="mb-1.5 text-xs font-bold uppercase tracking-widest text-muted-foreground">Garancija</h3>
+      <ErrorBox error={warranty.error} />
+      {warranty.loading ? <LoadingRows rows={1} /> : !warranty.error && !w ? (
+        closed ? (
+          canWrite ? (
+            <div className="space-y-2 rounded-xl border border-dashed p-3">
+              <p className="text-sm text-muted-foreground">Projekt je zaključen — garancija še ni oddana.</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <Select value={months} onValueChange={setMonths}>
+                  <SelectTrigger className="w-32" aria-label="Trajanje garancije"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {['12', '24', '36', '60'].map((m) => <SelectItem key={m} value={m}>{m} mesecev</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <Button size="sm" onClick={() => void createWarranty()} disabled={busy}>
+                  <ShieldCheck className="size-4" aria-hidden /> Oddaj garancijo
+                </Button>
+              </div>
+            </div>
+          ) : <p className="text-sm text-muted-foreground">Garancija ni oddana (zahteva pravico projects.write).</p>
+        ) : <p className="text-sm text-muted-foreground">Garancija se odda po zaključku projekta.</p>
+      ) : !warranty.error && w ? (
+        <div className="space-y-2 rounded-xl border p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="inline-flex items-center gap-2 text-sm font-semibold">
+              <ShieldCheck className={cn('size-4', w.valid ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground')} aria-hidden />
+              {w.valid ? 'Garancija velja' : 'Garancija je potekla'}
+            </span>
+            <span className="font-mono text-xs text-muted-foreground">
+              {fmtDate(w.startsAt)} → {fmtDate(w.endsAt)} ({w.months} m)
+            </span>
+          </div>
+          {w.note ? <p className="text-xs text-muted-foreground">{w.note}</p> : null}
+          {w.nextVisit ? (
+            <p className="inline-flex items-center gap-1.5 text-xs font-medium text-roksal-amber">
+              <CalendarCheck className="size-3.5" aria-hidden /> Naslednji obisk: {fmtDate(w.nextVisit.date)}
+              {w.nextVisit.note ? ` — ${w.nextVisit.note}` : ''}
+            </p>
+          ) : null}
+          {w.visits.length > 0 ? (
+            <ul className="max-h-40 space-y-1 overflow-y-auto">
+              {w.visits.map((v) => (
+                <li key={v.id} className="flex items-start justify-between gap-2 text-xs">
+                  <span className="min-w-0"><span className="font-mono text-muted-foreground">{fmtDate(v.date)}</span> {v.note}</span>
+                </li>
+              ))}
+            </ul>
+          ) : <p className="text-xs text-muted-foreground">Ni zabeleženih obiskov.</p>}
+          {canWrite ? (
+            <div className="flex flex-wrap items-center gap-2 border-t pt-2">
+              <Input
+                type="date" value={visitDate} onChange={(e) => setVisitDate(e.target.value)}
+                className="w-36" aria-label="Datum obiska"
+              />
+              <Input
+                value={visitNote} onChange={(e) => setVisitNote(e.target.value)}
+                placeholder="Opis obiska / pregleda" className="min-w-0 flex-1" aria-label="Opis obiska"
+                onKeyDown={(e) => { if (e.key === 'Enter') void addVisit() }}
+              />
+              <Button size="sm" variant="outline" onClick={() => void addVisit()} disabled={busy}>
+                <CalendarCheck className="size-4" aria-hidden /> Zapiši obisk
+              </Button>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </section>
   )
 }

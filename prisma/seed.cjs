@@ -122,14 +122,16 @@ async function main () {
     db.workOrder.create({ data: { code: 'N-2026-003', projectId: projects[1].id, title: 'Dostava stekla — Horvat', status: 'NAPROGRAMIRAN', assigneeId: monter.id, scheduledFor: tom } }),
     db.workOrder.create({ data: { code: 'N-2026-004', projectId: projects[5].id, title: 'Predmontaža stopnišča', status: 'V_PREVERI', assigneeId: monter.id, scheduledFor: today } }),
     db.workOrder.create({ data: { code: 'N-2026-005', projectId: projects[0].id, title: 'Montaža ograje — Novak, 2. dan', status: 'NAPROGRAMIRAN', assigneeId: monter.id, scheduledFor: tom } }),
-    db.workOrder.create({ data: { code: 'N-2026-006', projectId: projects[3].id, title: 'Zaključna kontrola — Kovač', status: 'ZAKLJUCEN', assigneeId: monter.id, scheduledFor: new Date(Date.now() - 86400000 * 6), completedAt: new Date(Date.now() - 86400000 * 6), summary: 'Vse v redu, oddano.' } })
+    db.workOrder.create({ data: { code: 'N-2026-006', projectId: projects[3].id, title: 'Zaključna kontrola — Kovač', status: 'ZAKLJUCEN', assigneeId: monter.id, scheduledFor: new Date(Date.now() - 86400000 * 6), completedAt: new Date(Date.now() - 86400000 * 6), summary: 'Vse v redu, oddano.' } }),
+    db.workOrder.create({ data: { code: 'N-2026-007', projectId: projects[2].id, title: 'Kontrolni pregled balkonov — Zvezda', status: 'NAPROGRAMIRAN', assigneeId: vodja.id, scheduledFor: new Date(Date.now() + 86400000 * 3) } })
   ])
   await db.workOrderEvent.createMany({ data: [
     { workOrderId: wos[0].id, userId: monter.id, type: 'DODELJEN', note: 'Dodeljeno monterju Luki' },
     { workOrderId: wos[0].id, userId: monter.id, type: 'ZACETEK', note: 'ZAČNI DELO — Na terenu' },
     { workOrderId: wos[1].id, userId: monter.id, type: 'ZACETEK', note: 'ZAČNI DELO' },
     { workOrderId: wos[1].id, userId: monter.id, type: 'ZAJEM', note: 'ZAJEM — merjenje igrišča' },
-    { workOrderId: wos[5].id, userId: monter.id, type: 'ZAKLJUCEK', note: 'ZAKLJUČI TEREN' }
+    { workOrderId: wos[5].id, userId: monter.id, type: 'ZAKLJUCEK', note: 'ZAKLJUČI TEREN' },
+    { workOrderId: wos[6].id, userId: vodja.id, type: 'KOMENTAR', note: 'Dogovor z naročnikom — pregled vseh 48 balkonov pred naročilom materiala' }
   ] })
 
   console.log('[seed] naseljujem meritve …')
@@ -205,6 +207,26 @@ async function main () {
     { code: 'PR-2026-002', projectId: projects[1].id, title: 'Rez stekla — Horvat', status: 'DOKONCAN', dueAt: new Date(Date.now() - 86400000) },
     { code: 'PR-2026-003', projectId: projects[5].id, title: 'Zvar stopniščnega okvirja — Zajc', status: 'NAVRTEN', dueAt: new Date(Date.now() + 86400000 * 5) }
   ] })
+  const prods = await db.productionOrder.findMany({ orderBy: { code: 'asc' } })
+
+  console.log('[seed] naseljujem kontrolo kakovosti (R434) …')
+  await db.qcCheck.createMany({ data: [
+    { productionOrderId: prods[0].id, item: 'Vertikalnost stebričev (±0,5°)', result: 'OK', userId: proizvodnja.id, note: 'Izmerjeno na 3 mestih' },
+    { productionOrderId: prods[0].id, item: 'Zvarni šivi — vizualna kontrola', result: 'OK', userId: proizvodnja.id },
+    { productionOrderId: prods[0].id, item: 'Praškarski premaz — debelina sloja', result: 'V_TEKU', userId: proizvodnja.id, note: 'Čaka na sušenje 2. sloja' },
+    { productionOrderId: prods[1].id, item: 'Dimenzije stekla po nalogu', result: 'OK', userId: proizvodnja.id },
+    { productionOrderId: prods[1].id, item: 'Robni obdelava — poliranje', result: 'NOK', userId: proizvodnja.id, note: 'Odstopanje na 2. robu — potrebna ponovna obdelava' },
+    { productionOrderId: prods[1].id, item: 'Zaščitna folija nameščena', result: 'OK', userId: proizvodnja.id }
+  ] })
+
+  console.log('[seed] naseljujem garancije (R434) …')
+  const gar1 = await db.warranty.create({ data: { projectId: projects[3].id, startsAt: new Date(Date.now() - 86400000 * 120), months: 24, status: 'AKTIVNA', note: 'Kovana ograja + nadstrešek — standardna garancija' } })
+  const gar2 = await db.warranty.create({ data: { projectId: projects[7].id, startsAt: new Date(Date.now() - 86400000 * 800), months: 24, status: 'AKTIVNA', note: 'Vrtna ograja — garancija na premaz' } })
+  await db.warrantyVisit.createMany({ data: [
+    { warrantyId: gar1.id, date: new Date(Date.now() - 86400000 * 60), note: 'Redni letni pregled — brez pripomb', userId: vodja.id },
+    { warrantyId: gar1.id, date: new Date(Date.now() + 86400000 * 60), note: 'Naročen pregled tesnila na nadstrešku (kontrola)', userId: vodja.id },
+    { warrantyId: gar2.id, date: new Date(Date.now() - 86400000 * 200), note: 'Reklamacija — popravek premaza na 1 stebru', userId: monter.id }
+  ] })
 
   console.log('[seed] naseljujem orodjarino …')
   const eq = await Promise.all([
@@ -240,6 +262,8 @@ async function main () {
     { userId: monter.id, action: 'WO_TRANSITION', entity: 'workOrder', entityId: wos[0].id, projectId: projects[0].id, detail: JSON.stringify({ from: 'NAPROGRAMIRAN', to: 'V_TEKU' }) },
     { userId: skladisce.id, action: 'STOCK_LOT_ADD', entity: 'inventoryItem', entityId: items[0].id, detail: JSON.stringify({ qty: 12, unitCost: 54 }) },
     { userId: proizvodnja.id, action: 'PRODUCTION_STATUS', entity: 'productionOrder', detail: JSON.stringify({ code: 'PR-2026-002', to: 'DOKONCAN' }) },
+    { userId: proizvodnja.id, action: 'QC_CHECK', entity: 'productionOrder', entityId: prods[1].id, projectId: projects[1].id, detail: JSON.stringify({ item: 'Robni obdelava — poliranje', result: 'NOK' }) },
+    { userId: vodja.id, action: 'WARRANTY_VISIT', entity: 'warranty', entityId: gar1.id, projectId: projects[3].id, detail: JSON.stringify({ note: 'Redni letni pregled' }) },
     { userId: admin.id, action: 'PAYMENT_RECORD', entity: 'invoice', entityId: invoices[0].id, projectId: projects[0].id, detail: JSON.stringify({ amount: quotes[0].total }) }
   ] })
   await db.notification.createMany({ data: [
