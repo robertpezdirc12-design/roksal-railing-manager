@@ -1,0 +1,105 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { db } from '@/lib/db'
+import { jsonError, requirePermission } from '@/lib/auth'
+import { hasPerm } from '@/lib/permissions-core'
+
+// /api/search — globalno iskanje po entitetah (route-map: GET/POST /api/search)
+// Obseg rezultatov strogo po pravicah prijavljenega uporabnika (fail-closed).
+// Vrača skupine: projekti, stranke, ponudbe, računi, nalogi, zaloga, uporabniki — z navigacijskimi podatki.
+
+type Hit = {
+  id: string
+  label: string
+  sub: string
+  section: string
+  tab: string
+  kind: string
+}
+
+export async function GET (req: NextRequest) {
+  const auth = await requirePermission(req, 'projects.read')
+  if (auth instanceof NextResponse) return auth
+  const { perms } = auth
+
+  const q = (new URL(req.url).searchParams.get('q') ?? '').trim()
+  if (q.length < 2) return NextResponse.json({ data: { groups: [] as { kind: string; label: string; hits: Hit[] }[], q } })
+
+  const groups: { kind: string; label: string; hits: Hit[] }[] = []
+
+  const projects = await db.project.findMany({
+    where: { OR: [{ title: { contains: q } }, { code: { contains: q } }, { address: { contains: q } }] },
+    select: { id: true, code: true, title: true, status: true }, take: 5,
+  })
+  if (projects.length) groups.push({
+    kind: 'projekt', label: 'Projekti',
+    hits: projects.map((p) => ({ id: p.id, label: `${p.code} — ${p.title}`, sub: p.status, section: 'projekti', tab: 'projekti', kind: 'projekt' })),
+  })
+
+  if (hasPerm(perms, 'customers.read')) {
+    const customers = await db.customer.findMany({
+      where: { OR: [{ name: { contains: q } }, { email: { contains: q } }, { city: { contains: q } }] },
+      select: { id: true, name: true, city: true }, take: 5,
+    })
+    if (customers.length) groups.push({
+      kind: 'stranka', label: 'Stranke',
+      hits: customers.map((c) => ({ id: c.id, label: c.name, sub: c.city ?? '—', section: 'projekti', tab: 'stranke', kind: 'stranka' })),
+    })
+  }
+
+  if (hasPerm(perms, 'quotes.read')) {
+    const quotes = await db.quote.findMany({
+      where: { OR: [{ code: { contains: q } }, { note: { contains: q } }] },
+      select: { id: true, code: true, status: true, total: true, customer: { select: { name: true } } }, take: 5,
+    })
+    if (quotes.length) groups.push({
+      kind: 'ponudba', label: 'Ponudbe',
+      hits: quotes.map((x) => ({ id: x.id, label: x.code, sub: `${x.customer?.name ?? '—'} · ${(x.total ?? 0).toLocaleString('sl-SI', { style: 'currency', currency: 'EUR' })}`, section: 'projekti', tab: 'ponudbe', kind: 'ponudba' })),
+    })
+  }
+
+  if (hasPerm(perms, 'invoices.read')) {
+    const invoices = await db.invoice.findMany({
+      where: { code: { contains: q } },
+      select: { id: true, code: true, status: true, total: true, project: { select: { customer: { select: { name: true } } } } }, take: 5,
+    })
+    if (invoices.length) groups.push({
+      kind: 'racun', label: 'Računi',
+      hits: invoices.map((x) => ({ id: x.id, label: x.code, sub: `${x.project?.customer?.name ?? '—'} · ${(x.total ?? 0).toLocaleString('sl-SI', { style: 'currency', currency: 'EUR' })}`, section: 'projekti', tab: 'racuni', kind: 'racun' })),
+    })
+  }
+
+  if (hasPerm(perms, 'nalog.read')) {
+    const wos = await db.workOrder.findMany({
+      where: { OR: [{ code: { contains: q } }, { title: { contains: q } }] },
+      select: { id: true, code: true, title: true, status: true }, take: 5,
+    })
+    if (wos.length) groups.push({
+      kind: 'nalog', label: 'Delovni nalogi',
+      hits: wos.map((w) => ({ id: w.id, label: `${w.code} — ${w.title}`, sub: w.status, section: 'projekti', tab: 'nalogi', kind: 'nalog' })),
+    })
+  }
+
+  if (hasPerm(perms, 'inventory.read')) {
+    const items = await db.inventoryItem.findMany({
+      where: { OR: [{ name: { contains: q } }, { sku: { contains: q } }] },
+      select: { id: true, sku: true, name: true, qty: true, unit: true }, take: 5,
+    })
+    if (items.length) groups.push({
+      kind: 'zaloga', label: 'Zaloga',
+      hits: items.map((i) => ({ id: i.id, label: i.name, sub: `${i.sku} · ${i.qty} ${i.unit}`, section: 'pisarna', tab: 'zaloga', kind: 'zaloga' })),
+    })
+  }
+
+  if (hasPerm(perms, 'users.read')) {
+    const users = await db.user.findMany({
+      where: { OR: [{ name: { contains: q } }, { email: { contains: q } }] },
+      select: { id: true, name: true, email: true, role: true }, take: 5,
+    })
+    if (users.length) groups.push({
+      kind: 'uporabnik', label: 'Uporabniki',
+      hits: users.map((u) => ({ id: u.id, label: u.name, sub: `${u.email} · ${u.role}`, section: 'pisarna', tab: 'vodja-ekipa', kind: 'uporabnik' })),
+    })
+  }
+
+  return NextResponse.json({ data: { groups, q } })
+}

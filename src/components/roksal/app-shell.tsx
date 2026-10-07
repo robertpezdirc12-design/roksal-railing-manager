@@ -2,9 +2,11 @@
 
 // App ogrodje — IA po R429: DANES | PROJEKTI | ZAJEM | PISARNA | PROFIL
 // Desktop: stranska vrstica z zavihki. Mobile: spodnja navigacija (danes PRVI, R429) + tabletke zavihkov.
+// R433: globalno iskanje (Ctrl+K / gumb povečevala) — /api/search, obseg po pravicah.
 
+import { useCallback, useEffect, useState } from 'react'
 import { useTheme } from 'next-themes'
-import { Bell, LogOut, Moon, Sun, Ruler } from 'lucide-react'
+import { Bell, LogOut, Moon, Search, Sun, Ruler } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -13,20 +15,60 @@ import {
   DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import {
+  CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
+} from '@/components/ui/command'
 import { cn } from '@/lib/utils'
 import { useAppStore } from '@/lib/store'
 import { ROLE_LABELS, type Role } from '@/lib/permissions-core'
 import { SECTIONS, tabVisible } from '@/lib/nav-registry'
-import { apiPost, fmtDateTime, useApi } from '@/lib/api-client'
+import { apiGet, apiPost, fmtDateTime, useApi } from '@/lib/api-client'
 import { RoksalLogo } from '@/components/roksal/logo'
 import { ModuleView } from '@/components/roksal/module-view'
 
 interface NotificationRow { id: string; title: string; body: string; read: boolean; createdAt: string }
 
+interface SearchHit { id: string; label: string; sub: string; section: string; tab: string; kind: string }
+interface SearchGroup { kind: string; label: string; hits: SearchHit[] }
+
 export function AppShell () {
   const { user, section, tab, setSection, setTab, clearAuth } = useAppStore()
   const { theme, setTheme } = useTheme()
   const notif = useApi<{ data: NotificationRow[]; unread: number }>('/api/notifications')
+
+  // ── globalno iskanje (R433) ──
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [searchQ, setSearchQ] = useState('')
+  const [searchHits, setSearchHits] = useState<SearchGroup[]>([])
+  const [searching, setSearching] = useState(false)
+
+  useEffect(() => {
+    function onKey (e: KeyboardEvent) {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        setSearchOpen((o) => !o)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
+  const runSearch = useCallback((q: string) => {
+    setSearchQ(q)
+    if (q.trim().length < 2) { setSearchHits([]); return }
+    setSearching(true)
+    const url = `/api/search?q=${encodeURIComponent(q.trim())}`
+    apiGet<{ data: { groups: SearchGroup[] } }>(url)
+      .then((r) => setSearchHits(r.data.groups))
+      .catch(() => setSearchHits([]))
+      .finally(() => setSearching(false))
+  }, [])
+
+  function goToHit (hit: SearchHit) {
+    setSearchOpen(false)
+    setSection(hit.section)
+    setTab(hit.tab)
+  }
 
   if (!user) return null
 
@@ -76,6 +118,16 @@ export function AppShell () {
           </div>
 
           <div className="flex items-center gap-1.5">
+            <Button
+              variant="ghost" onClick={() => setSearchOpen(true)}
+              className="h-9 gap-2 rounded-full px-3 text-muted-foreground"
+              aria-label="Globalno iskanje (Ctrl+K)"
+            >
+              <Search className="size-4" aria-hidden />
+              <span className="hidden text-xs sm:inline">Iskanje</span>
+              <kbd className="ml-1 hidden rounded border bg-secondary px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground lg:inline">Ctrl K</kbd>
+            </Button>
+
             <Popover onOpenChange={openNotifications}>
               <PopoverTrigger asChild>
                 <Button variant="ghost" size="icon" className="relative" aria-label="Obvestila">
@@ -151,6 +203,37 @@ export function AppShell () {
           </div>
         </div>
       </header>
+
+      {/* globalno iskanje (R433) */}
+      <CommandDialog
+        open={searchOpen} onOpenChange={setSearchOpen}
+        title="Globalno iskanje" description="Išči po projektih, strankah, ponudbah, računih, nalogih in zalogi."
+      >
+        <CommandInput value={searchQ} onValueChange={runSearch} placeholder="Išči projekte, stranke, ponudbe, račune, naloge …" />
+        <CommandList>
+          {searching ? (
+            <div className="p-4 text-center text-sm text-muted-foreground">Iščem …</div>
+          ) : searchQ.trim().length < 2 ? (
+            <div className="p-4 text-center text-sm text-muted-foreground">Vnesi vsaj 2 znaka.</div>
+          ) : searchHits.length === 0 ? (
+            <CommandEmpty>Ni zadetkov za „{searchQ}“.</CommandEmpty>
+          ) : (
+            searchHits.map((g) => (
+              <CommandGroup key={g.kind} heading={g.label}>
+                {g.hits.map((h) => (
+                  <CommandItem key={`${h.kind}-${h.id}`} value={`${h.label} ${h.sub}`} onSelect={() => goToHit(h)}>
+                    <Search className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium">{h.label}</span>
+                      <span className="block truncate text-xs text-muted-foreground">{h.sub}</span>
+                    </span>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            ))
+          )}
+        </CommandList>
+      </CommandDialog>
 
       {/* telo */}
       <div className="mx-auto flex w-full max-w-7xl flex-1 gap-6 px-3 pb-24 pt-4 sm:px-4 md:pb-8">
