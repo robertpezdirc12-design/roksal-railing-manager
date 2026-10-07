@@ -157,8 +157,11 @@ t "direktni push: NOBODY" 0 "$(echo "$PROT" | jq -r '.push_access_levels[0].acce
 t "force push prepovedan" false "$(echo "$PROT" | jq -r '.allow_force_push')"
 for i in 1 2 3 4 5; do PROJ=$(curl -s --max-time 30 "$GAPI" -H "PRIVATE-TOKEN: $GTOKEN"); [ -n "$PROJ" ] && ! echo "$PROJ" | head -c 30 | grep -q '^<' && break; sleep 5; done
 t "merge zahteva zelen CI" true "$(echo "$PROJ" | jq -r '.only_allow_merge_if_pipeline_succeeds')"
+# prazen poskusni commit (lokalni main je lahko sinhron — treba je nekaj pushati)
+git -C $ROOT commit --allow-empty -q -m "r441-test: preverba zaščite main (ne bo pushan)"
 PUSH_TEST=$(git -C $ROOT push origin main 2>&1 || true)
 contains "direktni push na main ZAVRNJEN" "$PUSH_TEST" 'pre-receive hook declined'
+git -C $ROOT reset -q --soft HEAD~1 # povrni (delovne spremembe ostanejo)
 
 # ── 8. CI pipeline ──────────────────────────────────────────────────────────
 echo "── 8. CI"
@@ -176,7 +179,7 @@ contains "MR !1 obstaja (r441-dr → main)" "$(echo "$MRS" | jq -r '.[] | select
 echo "── 10. UI vir"
 req "$TOKEN" GET "$BASE/api/jobs"
 contains "definitions vsebujejo varnostna-kopija" "$BODY" 'varnostna-kopija'
-contains "zadnji zagon prikazan" "$BODY" 'zadnji'
+contains "zadnji zagon prikazan (last polje)" "$BODY" '"last":'
 
 # ── 11. drill poročilo (če je bil drill izveden) ────────────────────────────
 echo "── 11. drill"

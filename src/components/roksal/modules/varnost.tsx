@@ -239,6 +239,9 @@ function MaintenanceCard () {
                     <code className="rounded bg-secondary px-1 font-mono text-[10px] text-muted-foreground">{d.job}</code>
                   </div>
                   <p className="mt-0.5 text-xs text-muted-foreground">{d.desc}</p>
+                  <p className="text-[11px] text-muted-foreground/80">
+                    <Timer className="mr-1 inline size-3 align-[-2px]" aria-hidden /> {d.cron}
+                  </p>
                   {d.last ? (
                     <p className="mt-0.5 inline-flex flex-wrap items-center gap-x-2 text-[11px] text-muted-foreground">
                       <Timer className="size-3" aria-hidden />

@@ -506,3 +506,64 @@ Stage Summary:
 - Celoten poslovni tok uspe brez ročnega prepisovanja; RBAC fail-closed backend+UI; DTO minimizacija in audit potrjena; javni žetoni delujejo in se prekličejo
 - Vrzeli pretvorjene v #8 + #9 (obe nizke resnosti)
 - Naslednja faza: R441 — issue #3 (DISASTER RECOVERY & SECURITY), nato issue #7 (celovit poslovni sistem)
+---
+Task ID: 16-b
+Agent: browser-ui-validator
+Task: R441 — UI verifikacija varnostnih kopij v brskalniku
+
+Work Log:
+- Brskalnik (agent-browser) odprt na http://localhost:3000; prijava kot ADMIN prek obrazca (admin@roksal.si / Admin123!, ne demo gumbi) — aplikacija se naloži na »Danes«
+- Zavihek Varnost (stranska vrstica, Pisarna) odprt: stranska vrstica vsebuje gumb Varnost, vsebina se izriše brez napak
+- Razdelek »Varnostne kopije« (nova kartica, ikona lucide-database-backup v naslovu — potrjeno z DOM seznamom ikon): opis »Šifrirana kopija (AES-256) celotnega sistema — baza + repozitorij — z off-site hrambo na GitLabu. Cilj RTO ≤ 30 min · RPO ≤ 24 h. Postopek obnove: docs/RECOVERY.md.«
+- Vrednosti zadnje kopije: 07. 10., 17:40 · 73 s · 1744 KB · 39 tabel / 1871 vrstic — smiselne (~1700 KB / 39 / ~1800 po pričakovanjih); API detail JSON: velikost_kb 1744, tabel 39, vrstic 1871, kosov_off_site 14, sifrirano true, off_site true, trajanje_s 73, sha256 + datoteka .rkb
+- Tri značke potrjene z DOM razredi: »uspešna« (bg-emerald-600 = zelena), »šifrirana AES-256« (bg-roksal-amber = rumena/roksal), »off-site (14 kosov)« (bg-emerald-600 = zelena, vsebuje ikono lucide-cloud-upload)
+- Besedilo o hrambi: »Hramba: lokalno (zadnjih 5) + off-site na GitLabu (paketni register, zadnjih 10 verzij). Geslo za dešifriranje NI v repozitoriju — glej docs/SECRETS.md.« ✓
+- Razdelek »Vzdrževanje«: NOVO opravilo »Varnostna kopija« (koda varnostna-kopija) z opisom »Šifrirana kopija (baza + cel repozitorij) z off-site nalaganjem na GitLab — recovery v docs/RECOVERY.md.« in zadnjim zagonom »07. 10., 17:40 · 1 zapisov · Robert Pezdirc · uspešno« ✓
+- VRZEL: cron »vsak dan 04:00 (issue #3)« SE NE PRIKAZUJE v UI — /api/jobs ga vrača (definitions[].cron), a MaintenanceCard (src/components/roksal/modules/varnost.tsx) polja cron ne izriše (JobDef ga ima, JSX ga ne uporabi); isto velja za vsa ostala opravila (npr. »vsak dan 03:00 (izvirnik)« pri seje-gc)
+- Gumb Zaženi pri varnostna-kopija obstaja in je omogočen (disabled=false); gumba NISEM kliknil ( trajanje ~73 s, stanje že obstaja)
+- Ostali razdelki delujejo: Aktivne seje (16 sej + gumbi za preklic), Licenca (Neaktivna (demo) + aktivacijska forma), Dnevnik obvestil (50 dostav, tabela s statusi poslano/izpuščeno, prikriti naslovi j***@test.si), revizijski dnevnik (vnosi na dnu strani: MEASUREMENT_CREATE, Izvoz eSLOG, MATERIAL_ORDER_STATUS …)
+- Health endpoint http://localhost:3000/api/health: {"status":"ok","db":{"ok":true,"check":"ok"},"app":{"name":"Roksal Railing Manager","version":"0.2.1"},"uptimeSec":14447,"latencyMs":1,"checkedAt":"2026-10-07T17:46:25.916Z"} — status ok ✓; regex scan (token|password|secret|Bearer|hash|admin123|monter123|glpat) = 0 zadetkov, noben žeton/geslo ni izpostavljen; dostopen brez avtentikacije (javni namen)
+- RBAC: odjava prek uporabniškega menija (menuitem Odjava), prijava kot monter@roksal.si / Monter123! prek obrazca — zavihek Varnost NI viden (preverjeno po vseh gumbih v nav in celotni strani: hasVarnostAnywhere=false); monter nima security.read (localStorage perms), vidi 19 zavihkov (konzistentno s prejšnjo RBAC fazo)
+- Mobile 390x844 (admin, Varnost): documentElement.scrollWidth == clientWidth == 390 (tudi body) po celotnem skrolu (višina strani ~30.000 px) — NI horizontalnega preliva; široka vsebina (pas zavihkov, tabela obvestil) je zadržana v overflow-x-auto scrollabilnih vsebnikih (standardni vzorec); kartica Varnostne kopije + off-site (14 kosov) vidna tudi na mobilnem
+- Konzola na VSEH obiskanih straneh (prijava, Danes, Varnost, /api/health, monter domov, Nalogi): 0 napak, 0 opozoril, 0 page errors — samo [HMR] connected + React DevTools info (dovoljena dev/Fast Refresh sporočila)
+- Regresija Nalogi (desktop): seznam nalogov se izriše (N-2026-008 Naprogramiran, N-2026-006 Zaključen, N-2026-001 V teku …) s filtri, iskanjem, gumbom Nov nalog ✓
+- Screenshots: /tmp/r441-backup-card2.png (kartica varnostnih kopij), /tmp/r441-mobile-varnost.png (mobilni 390 px), /tmp/r441-nalogi-desktop.png; brskalnik zaprt; koda in baza NESPREMENJENA (samo preverjanje, read-only)
+
+Stage Summary:
+- 8/8 zahtevanih točk PASS: prijava admin, kartica Varnostne kopije (vrednosti/znacke/ikone/hramba/RTO-RPO), novo opravilo v Vzdrževanju, ostali razdelki, gumb Zaženi omogočen (neklikan), health JSON brez skrivnosti, RBAC monter brez Varnost, mobile 390 brez preliva, Nalogi regresija
+- Konzola čista na vseh straneh (0 napak/opozoril/page errors)
+- VRZEL #1 (kozmetična, edina): cron razpored opravil (»vsak dan 04:00 (issue #3)« za varnostna-kopija) API vrača, UI pa ne izriše — MaintenanceCard ne uporablja JobDef.cron; predlagan popravek: izris d.cron v vrstici opravila (npr. kot majhen mono text poleg kode)
+- Manjše opažanje (predhodno znano): »1 zapisov« — slovnična oblika pri številu 1 (dvojina); 16 aktivnih sej v seznamu (higiena, že zabeležena v prejšnji fazi)
+
+---
+Task ID: 16
+Agent: main (Z.ai Code)
+Task: R441 — GitLab issue #3: DISASTER RECOVERY & SECURITY (GitLab kot kanonični vir + šifrirane off-site kopije + CI + recovery drill)
+
+Work Log:
+- GitLab API: prebran issue #3 v celoti (kanonični vir, backup kode/Neon/Blob, skrivnosti, CI/CD recovery, drill z RTO/RPO)
+- .gitlab-ci.yml (verify): bun install --frozen-lockfile → ESLint → tsc --noEmit (nov tsconfig.ci.json — ozko src/, izvzeti examples/skills) → prisma validate + db push v prazno bazo → ops/secret-audit.sh → bash -n; izvedba na GitLab shared runners (pipeline res teče!); dva popravka po padlih pipeline-ih: DATABASE_URL tudi za validate (P1012) + apt-get install git (slika oven/bun:1 NIMA git-a — checkout opravi runner helper; audit zdaj trdo zahteva git, izhod 3)
+- 10 tipovnih napak popravljenih (writeAudit detail JSON.stringify → objekt × 9, sessions.data null)
+- Odstranjen .github/workflows/sync.yml (ostareli GitHub↔GitLab most iz rekonstrukcije — točno tveganje iz issue-ja)
+- Zaščita repozitorija (GitLab API): main push_access_level=0 (NOBODY — direktni push zavrnjen, preverjeno z živim push testom), merge samo Maintainers, allow_force_push=false; only_allow_merge_if_pipeline_succeeds=true; protected tags v* (Maintainers)
+- ops/lib.sh: skrivnosti IZKLJUČNO iz okolja/.env.recovery (gitignored; žeton zaledno iz remote URL); .env.recovery ustvarjen (ROKSAL_BACKUP_PASSPHRASE=RKSL-… 32 znakov + GITLAB_TOKEN), chmod 600
+- ops/secret-audit.sh: 4 koraki — higiena .gitignore (check-ignore), občutljiva imena sledenih datotek, vzorci žetonov/ključev v delovni kopiji (git grep -e) in CELI zgodovini (git log -p); negativni test (lažni glpat- žeton) uspešno zaznan; 0 zadetkov na 38 commitih
+- ops/backup.sh: ena šifrirana .rkb (AES-256-CBC, PBKDF2 200k, geslo samo prek env — nikoli v ukazni vrstici) = tar{ git bundle --all (cel repozitorij), SQLite online backup (python3 backup API — varen med delovanjem), export/*.json (39 tabel), manifest.json (SHA-256 vseh komponent, prstni odtis sheme, števci, git SHA) }; off-site GitLab generic packages (roksal-backup); Cloudflare blokada IP peskovnice glede na velikost zahteve (~600 KB) → KOSI PO 128 KiB + do 6 poskusov z naraščajočo pavzo + stranski manifest za sestavljanje; housekeeping lokalno 5 / off-site 10 verzij
+- ops/restore.sh: --list-remote / --verify / --target-dir; api_get z upornimi ponovitvami (prazen odgovor ALI Cloudflare HTML blok stran); sestavljanje kosov + preverba sha256 proti stranskemu manifestu, dešifriranje, kontrolne vsote, git clone iz bundle + fsck + HEAD ujemanje, prstni odtis sheme + števci vrstic vseh tabel; napačno geslo → trdo zavrnjeno
+- ops/export-db.py: strojno berljiv JSON export vseh tabel (samo stdlib — deluje iz obnovljene kopije brez namestitve)
+- ops/drill.sh: celoten recovery drill — izguba (ROKSAL_BACKUP_DIR na prazno → IZKLJUČNO off-site pot) → prenos/dešifriranje/preverba/obnova → bun install + tsc → zagon next dev na :3100 z obnovljeno bazo → poll /api/health → prijava + GET /api/projects; poročilo docs/RECOVERY-DRILL-*.md
+- /api/health: javni deploy-check (200 ok / 503 degraded; status, db.ok, verzija, uptime, latenca; brez občutljivih podatkov); /api/public/health route-mape ostaja
+- src/lib/backup.ts + job varnostna-kopija v jobs.ts ( JOB_DEFS + runJob; JobRun dnevnik + revizija MAINTENANCE_RUN; detail: datoteka, okrnjen sha256, velikost, sifrirano, off_site, kosov, tabel, vrstic, trajanje)
+- varnost.tsx: nova kartica Varnostne kopije (zadnja kopija iz jobs API: čas/trajanje/KB/tabele-vrstice, značke uspešna/šifrirana AES-256/off-site z oblakom, opomba, hramba + docs/SECRETS.md); + cron razpored izrisan v Vzdrževanju (vrzel iz UI verifikacije)
+- docs/RECOVERY.md (runbook: cilji RTO/RPO, kaj je vir resnice, kopije/upravljanje, CI/CD + rollback + rezervni deploy, cel postopek obnovitve, incident checklist, redni rituali, preslikava na produkcijo Neon/Blob); docs/SECRETS.md (inventar 7 poverilnic BREZ vrednosti, vrstni red rotacije ob incidentu, najmanjše pravice, znane demo poverilnice); docs/BLOB-INVENTORY.md (vsak trajen podatek: lokacija/kopija/obnova, versioning, ponovna vezava Blob na produkcijo)
+- MR KROTAK v praksi (sandbox avtomatizacija preklaplja veje → delo na lokalnem main, push SAMO prek veje): r441-dr → MR !1 → zelen pipeline (success) → merge 87a3b6c → tag v1.0.0 + GitLab Release; ena force-push popravila zgodovine (lastni lažni testni žeton v tests/r441.sh je sprožil audit — sestavljen ob izvajanju, zgodovina očiščena pred merge)
+- tests/r441.sh 57/57 ✓: health (200+polja+brez skrivnosti+public ostaja), audit (čisto + negativni test + ponovna čistost + ignore), RBAC (monter 403/brez 401/neznano 400), job izvedba (200+JobRun+revizija+detail sifrirano/off-site BREZ celotnega sha256+.rkb Salted glava+last-backup off-site), restore --verify (kontrolne vsote+fsck+števci+napačno geslo), off-site paketi (verzije+kosi+manifest), zaščita (push=0+force=false+MR-pogoj+ZIV push zavrnjen), CI sleden + .github izrezan, MR, jobs API, drill poročila, regresija 5 rut
+- Recovery drill IZVEDEN: RTO 65.2 s (cilj ≤ 1800 s — IZPOLNJEN), RPO 208 s (cilj ≤ 86400 s — IZPOLNJEN), faze: prenos+dešifriranje+preverba 45.5 s, odvisnosti 5.0 s (topel predpomnilnik), tipi 11.3 s, zagon 2.8 s, prijava+poslovni test 0.4 s; obnovljen HEAD 21f9765; 9 projektov dostopnih; vrata 3100 počiščena (0 procesov)
+- UI verifikacija (subagent 16-b): Varnostne kopije kartica (vrednosti smiselne, 3 značke), Vzdrževanje z novim opravilom, /api/health čist, RBAC monter brez Varnost, mobile 390 brez preliva, konzola 0 napak; vrzela cron → POPRAVLJENA
+- bun run lint ČIST; tsc --noEmit ČIST; dev.log brez novih napak; testni ostanki: 16 aktivnih sej (demo okolje, znano)
+
+Stage Summary:
+- Issue #3 ZAKLJUČEN v celoti: GitLab je dejanski kanonični vir (main zaščitena — direktni push zavrnjen za vse, MR obvezen z zelenim CI, zavarovani tagi v* + Release v1.0.0), preverjena šifrirana off-site kopija (AES-256 + PBKDF2, geslo izven repozitorija, GitLab package registry z zadnjimi 10 verzijami), strojno berljiv export baze, periodičen restore test (drill: RTO 65 s / RPO 3.5 min, OBA cilja izpolnjena), skrivnosti izven repozitorija (audit čist — delovna kopija + 38 commitov zgodovine, CI vratar), CI/CD recovery (health check 200/503 + rollback postopek dokumentiran), nobena obnova ne zahteva GitHub računa
+- Odkrita in rešena okoljska ovira: Cloudflare verjetnostno blokira IP peskovnice glede na velikost zahteve → kosi 128 KiB + do 6 poskusov (velja za backup upload in vse GitLab API klice — api_get uporen)
+- 4 nove ops skripte + export-db.py + health ruta + backup job + UI kartica + 3 dokumenti + testna suita 57/57
+- Naslednja faza: issue #7 (ROKSAL Manager — preoblikovanje v celovit poslovni sistem), nato #8 (verzioniranje kataloga) in #9 (nedoslednosti iz E2E)
