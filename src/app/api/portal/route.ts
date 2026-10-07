@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto'
 import { db } from '@/lib/db'
 import { jsonError, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
+import { emitEvent } from '@/lib/notify'
 
 // /api/portal — povezave portala stranke (route-map izvirnika: /portal + /p/[token])
 // GET  (projects.read): ?projectId=… → povezave projekta (+ status veljavnosti)
@@ -49,7 +50,10 @@ export async function POST (req: NextRequest) {
   const projectId = typeof body?.projectId === 'string' ? body.projectId : ''
   if (!projectId) return jsonError(400, 'Manjka projekt.')
 
-  const project = await db.project.findUnique({ where: { id: projectId }, select: { id: true, code: true } })
+  const project = await db.project.findUnique({
+    where: { id: projectId },
+    select: { id: true, code: true, customer: { select: { name: true, email: true } } },
+  })
   if (!project) return jsonError(404, 'Projekt ne obstaja.')
 
   const days = Number(body?.days)
@@ -66,6 +70,18 @@ export async function POST (req: NextRequest) {
   await writeAudit({
     userId: user.id, action: 'PORTAL_CREATE', entity: 'portalLink', entityId: link.id, projectId,
     detail: JSON.stringify({ project: project.code, days: d }),
+  })
+
+  // R438 (issue #5): objava portala → statusno obvestilo stranki (EMAIL).
+  // Pozor: žetona NE vključimo v telo obvestila (varnost — povezavo posreduje pisarna).
+  await emitEvent({
+    type: 'PORTAL_PUBLISHED',
+    key: `portal-published:${link.id}`,
+    title: `Objavljen portal projekta ${project.code}`,
+    body: `Objavljen portal projekta ${project.code} — sledite poteku del na povezavi, ki vam jo je posredovala pisarna.`,
+    projectId,
+    customerEmail: project.customer?.email ?? null,
+    customerName: project.customer?.name ?? null,
   })
 
   return NextResponse.json({ data: link }, { status: 201 })

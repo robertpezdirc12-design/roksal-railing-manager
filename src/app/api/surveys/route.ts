@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { jsonError, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
+import { emitEvent } from '@/lib/notify'
 
 const TYPES = ['OGRAJA', 'STOPNISCE', 'TERASA', 'DRUGO']
 
@@ -74,6 +75,15 @@ export async function POST (req: NextRequest) {
     entity: 'survey',
     entityId: survey.id,
     detail: { name, type },
+  })
+
+  // R438 (issue #5): novo povpraševanje → obvestilo pisarni (OFFICE)
+  await emitEvent({
+    type: 'SURVEY_NEW',
+    key: `survey-new:${survey.id}`,
+    title: 'Novo povpraševanje',
+    body: `Novo povpraševanje: ${name} (${type}${location ? `, ${location}` : ''}${lengthCm ? `, ~${Math.round(lengthCm)} cm` : ''})`,
+    audience: 'OFFICE',
   })
   return NextResponse.json({ data: survey }, { status: 201 })
 }

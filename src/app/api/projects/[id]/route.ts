@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { jsonError, readsAllData, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
+import { emitEvent } from '@/lib/notify'
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -68,5 +69,21 @@ export async function PATCH (req: NextRequest, { params }: Params) {
     userId: auth.user.id, action: 'PROJECT_UPDATE', entity: 'project', entityId: id, projectId: id,
     detail: patch as Record<string, unknown>,
   })
+
+  // R438 (issue #5): sprememba statusa → statusno obvestilo stranki (zunanji kanal EMAIL)
+  if (typeof patch.status === 'string' && patch.status !== existing.status) {
+    const customer = updated.customerId
+      ? await db.customer.findUnique({ where: { id: updated.customerId }, select: { name: true, email: true } })
+      : null
+    await emitEvent({
+      type: 'PROJECT_STATUS',
+      key: `project-status:${id}:${existing.status}:${patch.status}:${Date.now()}`,
+      title: `Status projekta ${existing.code}`,
+      body: `Status projekta ${existing.code} je spremenjen: ${existing.status} → ${patch.status}`,
+      projectId: id,
+      customerEmail: customer?.email ?? null,
+      customerName: customer?.name ?? null,
+    })
+  }
   return NextResponse.json({ data: updated })
 }

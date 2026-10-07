@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { jsonError, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
+import { emitEvent } from '@/lib/notify'
 
 const METHODS = ['NAKAZNICA', 'GOTOVINA', 'KARTICA']
 
@@ -79,6 +80,16 @@ export async function POST (req: NextRequest) {
   await writeAudit({
     userId: auth.user.id, action: 'PAYMENT_RECORD', entity: 'payment', entityId: payment.id, projectId: invoice.projectId,
     detail: { amount: payment.amount, method, reference: payment.reference, invoiceCode: invoice.code, paid, status },
+  })
+
+  // R438 (issue #5): prejeto plačilo → obvestilo pisarni (OFFICE, znesek v body)
+  await emitEvent({
+    type: 'PAYMENT_RECEIVED',
+    key: `payment-received:${payment.id}`,
+    title: 'Prejeto plačilo',
+    body: `Plačilo ${payment.amount.toFixed(2)} € (${method}) na račun ${invoice.code} — status: ${status}`,
+    projectId: invoice.projectId,
+    audience: 'OFFICE',
   })
   return NextResponse.json({ data: { payment, invoice: updated } }, { status: 201 })
 }

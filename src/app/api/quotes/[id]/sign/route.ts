@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { jsonError, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
+import { emitEvent } from '@/lib/notify'
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -47,6 +48,16 @@ export async function POST (req: NextRequest, { params }: Params) {
   await writeAudit({
     userId: auth.user.id, action: 'DEAL_LOCK', entity: 'quote', entityId: id, projectId: quote.projectId,
     detail: { code: quote.code, signedBy, total: quote.total }, // podpis NE gre v revizijo (velikost)
+  })
+
+  // R438 (issue #5): podpis ponudbe → obvestilo pisarni (OFFICE, IN_APP)
+  await emitEvent({
+    type: 'QUOTE_SIGNED',
+    key: `quote-signed:${id}`,
+    title: 'Podpis ponudbe',
+    body: `Ponudba ${quote.code} je podpisana (${signedBy}) — znesek ${quote.total.toFixed(2)} €, posel zaklenjen`,
+    projectId: quote.projectId,
+    audience: 'OFFICE',
   })
   return NextResponse.json({ data: updated })
 }

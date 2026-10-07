@@ -398,3 +398,28 @@ Stage Summary:
 - Issue #2 (obnova izvorne kode) zaključen: 15 novih API rut (skupaj 81 route datotek), 5 novih modelov, recovery report s 100 % pokritostjo statusov
 - Preostale PENDING poti: sync (issue #6), catalog/versions + engineering-rules/versions (dokumentirano, nizka prioriteta)
 - Naslednje faze: R438 issue #5 (obvestila), R439 issue #6 (offline + /api/sync), R440 issue #4 (E2E validacija), R441 issue #3 (DR)
+
+---
+Task ID: 12
+Agent: full-stack-developer
+Task: R438 — issue #5 obvestila: event→delivery model, kanali adapter, prefs, retry, UI
+
+Work Log:
+- Analiza issue #5 + obstoječe kode: Notification model + /api/notifications (zvonec app-shell ostaja), writeAudit (entity obvezen), job runner lib/jobs.ts, katalog pravic (security.read = ADMIN)
+- Prisma: novi modeli NotificationEvent (key @unique dedup, type, payload JSON), NotificationDelivery (channel, userId?, prikrit recipient, status SENT/FAILED/SKIPPED, attempts, @@unique([eventId, channel, userId])), NotificationPref (@@unique([userId, event, channel]), '*') — db:push aditivno brez izgube podatkov
+- lib/notify-events.ts (client-safe): 11 tipov dogodkov + slovenski nazivi + kanali
+- lib/notify.ts (jedro): emitEvent — ognjevaren (cel try/catch, poslovni tok NIKOLI ne prekine), dedup po key, OFFICE (aktivni ADMIN/VODJA) + eksplicitni userIds, uporabniki IN_APP (prefs) + EMAIL (prefs, privzeto IZKLOPLJEN → SKIPPED 'izklopljeno v nastavitvah'), stranka EMAIL (log adapter, recipient maskiran j***@domena) + SMS/WHATSAPP SKIPPED 'kanal ni konfiguriran'; sendDelivery (IN_APP → obstoječi Notification; EMAIL → console.log adapter, v komentarju SMTP zamenljivost); retryPending (PENDING/FAILED, attempts<3); maskEmail; fmtTermin
+- Dogodki v rutah (ognjevarti klici, odgovori nespremenjeni): POST nalog (WO_ASSIGNED z assigneeId), NOV PATCH /api/nalog/[id] (assigneeId sprememba → WO_ASSIGNED, instructions → WO_INSTRUCTIONS; dodelitev samo ADMIN/VODJA; status/termin ostajata na namenskih rutah), termin (WO_TERMIN monter+stranka), transition ZAKLJUCEN (WO_COMPLETED OFFICE+stranka, key wo-completed:<id> idempotentno), projects PATCH status (PROJECT_STATUS stranka), measurement/confirm (MEASUREMENT_CONFIRMED stranka), quotes/sign (QUOTE_SIGNED OFFICE), payments (PAYMENT_RECEIVED OFFICE z zneskom), portal (PORTAL_PUBLISHED stranka, žetona NI v telesu), qc NOK (QC_NOK OFFICE), surveys nova (SURVEY_NEW OFFICE)
+- API: GET/POST /api/notifications/prefs (lastne + matrika privzetih vrednosti; upsert SAMO lastne — tuji userId ignoriran; validacija kanalov/tipov); GET /api/notifications/deliveries (lastne; ?all=1 security.read z imeni; ?status=, ?take≤200; recipient vedno prikrit); jobs.ts nov job obvestila-retry (retryPending 50, JobRun dnevnik)
+- UI profil.tsx: razdelek 'Obveščanje' — tabela dogodek × IN_APP/EMAIL Switch (optimistični toast + povratek), SMS onemogočen 'ni konfiguriran'
+- UI varnost.tsx: sklop 'Dnevnik obvestil' (ADMIN: security.read+audit.read) — zadnjih 50 dostav (čas, tip, kanal badge, prikriti prejemnik, status badge poslano/spodletelo/izpuščeno, poskusi, razlog), filter statusa, gumb 'Ponovi spodletele' (POST /api/jobs + toast + reload), max-h-96 scroll
+- Popravki: zastareli Prisma Client po db:push → restart dev (kot R435); deliveries include user → skalarna poizvedba imen (model nima relacije)
+- Testi tests/r438.sh (84 preverjanj): emit WO_ASSIGNED, dedup (PATCH isti assignee → 0 novih), prefs izklop/omogočitev (SKIPPED sled), stranka EMAIL maskirano (brez celega naslova) + SMS 'kanal ni konfiguriran', WO_COMPLETED po terenskem toku (OFFICE admin+vodja + stranka), RBAC dostav (monter lastne/vodja 403/brez prijave 401), validacija prefs (kanal/tip/tuji userId), job retry (admin 200/monter 403), regresija (nalog/notifications/audit 200), vsi ostali dogodki (PROJECT_STATUS/PORTAL_PUBLISHED brez žetona/SURVEY_NEW/QC_NOK/PAYMENT_RECEIVED/MEASUREMENT_CONFIRMED), čistitev testnih podatkov
+- Ročni test retry: FAILED dostava → obvestila-retry → SENT (attempts 1) + IN_APP obvestilo
+- Brskalnik: Obveščanje preklopi + shrani (pref v bazi), Dnevnik obvestil 27 dostav s prikritimi naslovi, Ponovi spodletele toast, konzola ČISTA, mobile 390px brez horizontalnega preliva
+- bun run lint: ČIST; dev.log: 0 novih napak (3 ⨯ so pred popravkom zastarelega clienta)
+
+Stage Summary:
+- Issue #5 zaključen: enoten event → notification model (11 tipov dogodkov × 4 kanali), en poslovni dogodek = en vir resnice, monter obveščen o dodelitvi brez ročnega posredovanja, stranka prejema statusna obvestja po EMAIL (maskiran naslov, log adapter — SMTP zamenljiv), vsaka dostava ima status in sled, retry varen pred podvajanjem (key + unique + attempts<3), izklop obvestila ne prekine poslovnega toka (SKIPPED z razlogom)
+- 2 novi API poti + 1 nov job + NOV PATCH /api/nalog/[id] + 3 novi modeli + 2 UI razdelka
+- tests/r438.sh: ✓ 84 / ✗ 0

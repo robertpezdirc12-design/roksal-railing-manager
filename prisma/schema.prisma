@@ -415,6 +415,49 @@ model Notification {
   createdAt DateTime @default(now())
 }
 
+// ─── Obvestila in komunikacija (R438: issue #5 — event → notification model) ─
+// En poslovni dogodek (NotificationEvent) = en vir resnice; več kanalov
+// (NotificationDelivery) porabi isti event. Retry je varen pred podvajanjem (key + unique).
+
+model NotificationEvent {
+  id        String   @id @default(cuid())
+  key       String   @unique // dedup: npr. "wo-assign:<nalogId>:<assigneeId>"
+  type      String // WO_ASSIGNED | WO_TERMIN | … (NOTIFICATION_EVENT_TYPES v notify-events.ts)
+  payload   String // JSON { title, body, customerEmail?, customerName? }
+  projectId String?
+  createdAt DateTime @default(now())
+
+  deliveries NotificationDelivery[]
+}
+
+model NotificationDelivery {
+  id        String    @id @default(cuid())
+  eventId   String
+  event     NotificationEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  channel   String // IN_APP | EMAIL | SMS | WHATSAPP
+  userId    String? // prejemnik-app uporabnik (IN_APP)
+  recipient String? // prikriti zunanji naslov (e-pošta/telefon — NIKOLI celoten)
+  status    String    @default("PENDING") // PENDING | SENT | FAILED | SKIPPED
+  attempts  Int       @default(0)
+  error     String?
+  createdAt DateTime  @default(now())
+  sentAt    DateTime?
+
+  @@unique([eventId, channel, userId]) // dedup dostave (userId null za zunanje)
+  @@index([status, attempts])
+}
+
+// Nastavitve obveščanja po uporabniku (R438): event '*' = vsi dogodki.
+model NotificationPref {
+  id      String  @id @default(cuid())
+  userId  String
+  event   String // tip dogodka (ali * = vse)
+  channel String // IN_APP | EMAIL | SMS
+  enabled Boolean @default(true)
+
+  @@unique([userId, event, channel])
+}
+
 // ─── Portal stranke (R435: /p/[token] izvirnika → javni API + predogled) ────
 
 model PortalLink {
