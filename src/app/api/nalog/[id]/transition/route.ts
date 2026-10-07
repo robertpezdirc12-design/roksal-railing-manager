@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { jsonError, readsAllData, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
+import { emitEvent } from '@/lib/notify'
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -33,7 +34,13 @@ export async function POST (req: NextRequest, { params }: Params) {
   const to = typeof body?.to === 'string' ? body.to : ''
   const note = typeof body?.note === 'string' ? body.note : null
 
-  const order = await db.workOrder.findUnique({ where: { id }, include: { project: { select: { id: true, code: true } }, assignee: { select: { id: true } } } })
+  const order = await db.workOrder.findUnique({
+    where: { id },
+    include: {
+      project: { select: { id: true, code: true, customer: { select: { name: true, email: true } } } },
+      assignee: { select: { id: true } },
+    },
+  })
   if (!order) return jsonError(404, 'Nalog ne obstaja.')
   // obseg (issue #1): monter lahko prestavlja SAMO svoj nalog
   if (!readsAllData(auth.user) && order.assignee?.id !== auth.user.id) {
@@ -71,5 +78,20 @@ export async function POST (req: NextRequest, { params }: Params) {
     projectId: order.project?.id ?? null,
     detail: { from: order.status, to: step.next, label: step.label, code: order.code },
   })
+
+  // R438 (issue #5): zaključek terena → pisarna (OFFICE) + stranka (EMAIL) —
+  // dedup po ključu wo-completed:<id> (ponovni zaključek istega naloga ni mogoč).
+  if (step.next === 'ZAKLJUCEN') {
+    await emitEvent({
+      type: 'WO_COMPLETED',
+      key: `wo-completed:${id}`,
+      title: 'Zaključek terena',
+      body: `Nalog ${order.code} je zaključen${order.project ? ` (projekt ${order.project.code})` : ''}${note ? ` — ${note.slice(0, 160)}` : ''}`,
+      projectId: order.project?.id ?? null,
+      audience: 'OFFICE',
+      customerEmail: order.project?.customer?.email ?? null,
+      customerName: order.project?.customer?.name ?? null,
+    })
+  }
   return NextResponse.json({ data: updated })
 }

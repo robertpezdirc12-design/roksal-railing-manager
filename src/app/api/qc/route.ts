@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { jsonError, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
+import { emitEvent } from '@/lib/notify'
 
 // /api/qc — kontrola kakovosti proizvodnih nalogov (route-map: GET/POST /api/qc)
 // GET  (production.read): ?productionOrderId=… → kontrole naloga (+ osnovni podatki naloga)
@@ -60,6 +61,18 @@ export async function POST (req: NextRequest) {
     userId: user.id, action: 'QC_CHECK', entity: 'productionOrder', entityId: order.id, projectId: order.projectId,
     detail: JSON.stringify({ code: order.code, item, result }),
   })
+
+  // R438 (issue #5): neustrezna kontrola (NOK) → obvestilo pisarni (OFFICE)
+  if (result === 'NOK') {
+    await emitEvent({
+      type: 'QC_NOK',
+      key: `qc-nok:${check.id}`,
+      title: 'QC neustrezno',
+      body: `Kontrola NOK na ${order.code}: ${item}${body?.note ? ` — ${String(body.note).slice(0, 160)}` : ''}`,
+      projectId: order.projectId,
+      audience: 'OFFICE',
+    })
+  }
 
   return NextResponse.json({ data: check }, { status: 201 })
 }

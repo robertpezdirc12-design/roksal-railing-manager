@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { jsonError, readsAllData, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
+import { emitEvent, fmtTermin } from '@/lib/notify'
 
 // /api/nalog/[id]/termin — preurčitev delovnega naloga (route-map: POST /api/nalog/[id]/termin)
 // Vrata: nalog.write. Dogodek KOMENTAR (tip TERMIN) v časovnico naloga + revizija WO_RESCHEDULE.
@@ -19,7 +20,13 @@ export async function POST (req: NextRequest, { params }: Params) {
   const when = new Date(body.scheduledFor)
   if (Number.isNaN(when.getTime())) return jsonError(400, 'Neveljaven datum termina.')
 
-  const order = await db.workOrder.findUnique({ where: { id }, select: { id: true, code: true, scheduledFor: true, status: true, projectId: true, assigneeId: true } })
+  const order = await db.workOrder.findUnique({
+    where: { id },
+    select: {
+      id: true, code: true, title: true, scheduledFor: true, status: true, projectId: true, assigneeId: true,
+      project: { select: { id: true, code: true, customer: { select: { name: true, email: true } } } },
+    },
+  })
   if (!order) return jsonError(404, 'Nalog ne obstaja.')
   // obseg (issue #1): monter preuriči samo svoj nalog
   if (!readsAllData(user) && order.assigneeId !== user.id) {
@@ -38,6 +45,23 @@ export async function POST (req: NextRequest, { params }: Params) {
   await writeAudit({
     userId: user.id, action: 'WO_RESCHEDULE', entity: 'workOrder', entityId: id, projectId: order.projectId,
     detail: { code: order.code, from: from?.toISOString() ?? null, to: when.toISOString() },
+  })
+
+  // R438 (issue #5): monter + stranka dobita obvestilo o spremembi termina —
+  // en dogodek (WO_TERMIN), več kanalov (IN_APP za monterja, EMAIL za stranko).
+  await emitEvent({
+    type: 'WO_TERMIN',
+    key: `wo-termin:${id}:${when.toISOString()}`,
+    title: 'Sprememba termina',
+    body: [
+      `${order.code} — ${order.title}`,
+      `nov termin: ${fmtTermin(when)}`,
+      from ? `prej: ${fmtTermin(from)}` : null,
+    ].filter(Boolean).join(' · '),
+    projectId: order.projectId,
+    customerEmail: order.project?.customer?.email ?? null,
+    customerName: order.project?.customer?.name ?? null,
+    userIds: order.assigneeId ? [order.assigneeId] : [],
   })
 
   return NextResponse.json({ data: { id, scheduledFor: when.toISOString() } })

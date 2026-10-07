@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { jsonError, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
+import { emitEvent } from '@/lib/notify'
 
 const TYPES = ['OGRAJA', 'BALUSTRADA', 'NAGIB', 'OSTANEO']
 
@@ -131,5 +132,24 @@ export async function POST (req: NextRequest) {
     projectId,
     detail: { photoId, type, lengthCm, heightCm, slopeDeg, workOrderId: workOrderId ?? null, location: measurement.location },
   })
+
+  // R438 (issue #5): potrjena meritev → statusno obvestilo stranki (EMAIL, maskiran naslov)
+  if (projectId) {
+    const customer = await db.project.findUnique({
+      where: { id: projectId },
+      select: { customer: { select: { name: true, email: true } } },
+    }).then((p) => p?.customer ?? null)
+    if (customer?.email) {
+      await emitEvent({
+        type: 'MEASUREMENT_CONFIRMED',
+        key: `measurement-confirmed:${measurement.id}`,
+        title: 'Meritev potrjena',
+        body: `Meritev potrjena — ${measurement.location ?? customer.name ?? 'teren'} (${type.toLowerCase()}, ${Math.round(lengthCm)} cm)`,
+        projectId,
+        customerEmail: customer.email,
+        customerName: customer.name,
+      })
+    }
+  }
   return NextResponse.json({ data: measurement }, { status: 201 })
 }

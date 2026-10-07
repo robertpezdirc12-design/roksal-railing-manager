@@ -2,19 +2,22 @@
 
 // VARNOST — revizijski dnevnik (R428) + upravljanje sej (R433: security.read)
 // R435: vzdrževalna opravila (cron izvirnika) + licenca/aktivacija.
+// R438 (issue #5): Dnevnik obvestil — sled dostav (kanal/prejemnik/status/poskusi) + retry.
 
 import { useState } from 'react'
-import { BadgeCheck, KeyRound, LogIn, Play, ScrollText, Timer, Trash2, Wrench } from 'lucide-react'
+import { BadgeCheck, BellRing, KeyRound, LogIn, Play, RefreshCw, ScrollText, Timer, Trash2, Wrench } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useToast } from '@/hooks/use-toast'
 import { useAppStore } from '@/lib/store'
 import { apiDelete, apiPost, fmtDateTime, useApi } from '@/lib/api-client'
 import { EmptyState, ErrorBox, LoadingRows, PageHeader } from '@/components/roksal/ui-bits'
 import { READS_ALL_PROJECTS, hasPerm } from '@/lib/permissions-core'
+import { notificationEventLabel } from '@/lib/notify-events'
 
 interface AuditRow {
   id: string; action: string; entity: string; entityId: string | null; projectId: string | null
@@ -32,6 +35,7 @@ const ACTION_LABELS: Record<string, string> = {
   USER_ROLE_CHANGE: 'Sprememba vloge', USER_ACTIVATE: 'Aktivacija', USER_DEACTIVATE: 'Deaktivacija',
   QUOTE_ISSUE: 'Izdaja ponudbe', PAYMENT_RECORD: 'Zapis plačila',
   WO_TRANSITION: 'Prehod naloga', WO_RESCHEDULE: 'Preurčitev naloga', PROJECT_UPDATE: 'Posodobitev projekta',
+  WO_UPDATE: 'Posodobitev naloga',
   STOCK_LOT_ADD: 'Sprejem zaloge', PRODUCTION_STATUS: 'Status proizvodnje',
   PASSWORD_CHANGE: 'Sprememba gesla', SESSION_REVOKE: 'Preklic seje', DOC_GENERATE: 'Izvoz PDF',
   EQUIP_CHECKOUT: 'Izposoja orodja', EQUIP_RETURN: 'Vrnitev orodja',
@@ -78,6 +82,9 @@ export default function VarnostModule () {
     }
   }
 
+  // ── dnevnik obvestil (R438: security.read + audit.read —.ADMIN) ──
+  const canDeliveryLog = hasPerm(user?.perms, 'security.read') && hasPerm(user?.perms, 'audit.read')
+
   return (
     <div className="space-y-4">
       <PageHeader title="Varnost — revizijski dnevnik" desc="Kdo je kdaj kaj naredil (R428: sistemski + per-projekt obseg)." />
@@ -121,6 +128,7 @@ export default function VarnostModule () {
 
       {canSessions ? <MaintenanceCard /> : null}
       {canSessions ? <LicenceCard /> : null}
+      {canDeliveryLog ? <DeliveryLogCard /> : null}
 
       <div className="flex flex-wrap items-center gap-2">
         {canSystem ? (
@@ -255,7 +263,6 @@ function MaintenanceCard () {
 }
 
 // ── Licenca (R435: /aktivacija izvirnika) ───────────────────────────────────
-
 interface LicenceState {
   status: string; key: string | null; activatedAt: string | null; activatedBy: string | null
 }
@@ -318,6 +325,134 @@ function LicenceCard () {
                 {busy ? 'Preverjam…' : 'Aktiviraj'}
               </Button>
             </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+// ── Dnevnik obvestil (R438, issue #5) ────────────────────────────────────────
+// Sled dostav: kanal badge, prikriti prejemnik, status (SENT/FAILED/SKIPPED),
+// št. poskusov + gumb za ponovitev spodletelih (job obvestila-retry).
+
+interface DeliveryRow {
+  id: string
+  channel: string
+  recipient: string | null
+  status: string
+  attempts: number
+  error: string | null
+  createdAt: string
+  sentAt: string | null
+  event: { id: string; type: string; key: string; title: string; body: string; createdAt: string }
+  user?: { name: string } | null
+}
+
+function DeliveryStatusBadge ({ status }: { status: string }) {
+  if (status === 'SENT') return <Badge className="border-transparent bg-emerald-700 text-white">poslano</Badge>
+  if (status === 'FAILED') return <Badge className="border-transparent bg-red-700 text-white">spodletelo</Badge>
+  if (status === 'SKIPPED') return <Badge variant="secondary">izpuščeno</Badge>
+  return <Badge className="border-transparent bg-roksal-amber text-roksal-ink">čaka</Badge>
+}
+
+function ChannelBadge ({ channel }: { channel: string }) {
+  if (channel === 'IN_APP') return <Badge variant="outline" className="font-mono text-[10px]">IN_APP</Badge>
+  if (channel === 'EMAIL') return <Badge variant="outline" className="font-mono text-[10px] text-roksal-amber">EMAIL</Badge>
+  return <Badge variant="outline" className="font-mono text-[10px] text-muted-foreground">{channel}</Badge>
+}
+
+function DeliveryLogCard () {
+  const { toast } = useToast()
+  const [statusFilter, setStatusFilter] = useState<string>('all')
+  const log = useApi<{ data: DeliveryRow[] }>(
+    `/api/notifications/deliveries?all=1&take=50${statusFilter !== 'all' ? `&status=${statusFilter}` : ''}`,
+    [statusFilter],
+  )
+  const [retrying, setRetrying] = useState(false)
+
+  async function retryFailed () {
+    setRetrying(true)
+    try {
+      const res = await apiPost<{ data: { job: string; affected: number; durationMs: number } }>('/api/jobs', { job: 'obvestila-retry' })
+      toast({
+        title: 'Ponovitev obvestil zaključena.',
+        description: `Obdelanih dostav: ${res.data.affected} · ${res.data.durationMs} ms.`,
+      })
+      await log.reload()
+    } catch (e) {
+      toast({ title: 'Ponovitev ni uspela.', description: e instanceof Error ? e.message : undefined, variant: 'destructive' })
+    } finally {
+      setRetrying(false)
+    }
+  }
+
+  const rows = log.data?.data ?? []
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <BellRing className="size-4 text-roksal-amber" aria-hidden /> Dnevnik obvestil ({rows.length})
+        </CardTitle>
+        <CardDescription>
+          Vsaka dostava ima status in sled: poslano / spodletelo / izpuščeno (izklopljeno ali kanal ni konfiguriran). Zunanji naslovi so prikriti.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-40" aria-label="Filter statusa dostave"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Vsi statusi</SelectItem>
+              <SelectItem value="SENT">Poslano</SelectItem>
+              <SelectItem value="FAILED">Spodletelo</SelectItem>
+              <SelectItem value="SKIPPED">Izpuščeno</SelectItem>
+              <SelectItem value="PENDING">Čaka</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button size="sm" variant="outline" className="gap-1.5" onClick={() => void retryFailed()} disabled={retrying}>
+            <RefreshCw className="size-3.5" aria-hidden /> {retrying ? 'Ponavljam…' : 'Ponovi spodletele'}
+          </Button>
+        </div>
+
+        {log.loading ? <LoadingRows rows={3} /> : log.error ? <ErrorBox error={log.error} /> : rows.length === 0 ? (
+          <EmptyState title="Ni dostav" desc="Obvestila še niso bila poslana." icon={BellRing} />
+        ) : (
+          <div className="max-h-96 overflow-y-auto pr-1">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="min-w-32">Dogodek</TableHead>
+                  <TableHead>Kanal</TableHead>
+                  <TableHead className="min-w-28">Prejemnik</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="text-right">Poskusi</TableHead>
+                  <TableHead className="min-w-28 text-right">Čas</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {rows.map((d) => (
+                  <TableRow key={d.id}>
+                    <TableCell className="py-2">
+                      <div className="text-sm font-medium">{notificationEventLabel(d.event.type)}</div>
+                      <div className="truncate text-xs text-muted-foreground" title={d.event.title}>{d.event.title}</div>
+                    </TableCell>
+                    <TableCell className="py-2"><ChannelBadge channel={d.channel} /></TableCell>
+                    <TableCell className="py-2 font-mono text-xs">
+                      {d.recipient ?? (d.user?.name ?? '—')}
+                      {d.recipient && d.user ? <span className="block text-[10px] text-muted-foreground">{d.user.name}</span> : null}
+                    </TableCell>
+                    <TableCell className="py-2">
+                      <DeliveryStatusBadge status={d.status} />
+                      {d.error ? <div className="mt-0.5 text-[10px] text-muted-foreground" title={d.error}>{d.error}</div> : null}
+                    </TableCell>
+                    <TableCell className="py-2 text-right text-sm tabular-nums">{d.attempts}</TableCell>
+                    <TableCell className="py-2 text-right text-xs text-muted-foreground">{fmtDateTime(d.sentAt ?? d.createdAt)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           </div>
         )}
       </CardContent>

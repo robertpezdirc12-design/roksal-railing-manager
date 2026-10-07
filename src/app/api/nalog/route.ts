@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { jsonError, managesAssignments, readsAllData, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
+import { emitEvent, fmtTermin } from '@/lib/notify'
 
 // GET /api/nalog?scope=today|open|mine|all — MONTER vedno vidi SAMO svoje naloge (issue #1)
 export async function GET (req: NextRequest) {
@@ -101,5 +102,23 @@ export async function POST (req: NextRequest) {
     projectId,
     detail: { code, title, assigneeId: wantsAssignee ? body.assigneeId : null, hasInstructions: !!instructions },
   })
+
+  // R438 (issue #5): monter dobi obvestilo o dodelitvi BREZ ročnega posredovanja —
+  // emitEvent je ognjevaren (try/catch znotraj), poslovni tok se nadaljuje neodvisno.
+  if (wantsAssignee) {
+    await emitEvent({
+      type: 'WO_ASSIGNED',
+      key: `wo-assign:${order.id}:${body.assigneeId}:${Date.now()}`,
+      title: 'Nov nalog dodeljen',
+      body: [
+        `${code} — ${title}`,
+        projectId ? `projekt ${order.project?.code ?? ''}` : null,
+        order.scheduledFor ? `termin: ${fmtTermin(order.scheduledFor)}` : null,
+        instructions ? `navodila: ${instructions.slice(0, 160)}` : null,
+      ].filter(Boolean).join(' · '),
+      projectId,
+      userIds: [body.assigneeId as string],
+    })
+  }
   return NextResponse.json({ data: order }, { status: 201 })
 }
