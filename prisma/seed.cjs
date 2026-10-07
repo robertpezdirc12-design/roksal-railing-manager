@@ -30,6 +30,9 @@ function fotoSvg (label, post, accent, posts, handrail) {
 async function main () {
   console.log('[seed] brišem obstoječe podatke …')
   await db.notification.deleteMany()
+  await db.jobRun.deleteMany()
+  await db.setting.deleteMany()
+  await db.portalLink.deleteMany()
   await db.auditLog.deleteMany()
   await db.materialPrice.deleteMany()
   await db.stockLot.deleteMany()
@@ -76,15 +79,16 @@ async function main () {
   ])
 
   console.log('[seed] naseljujem projekte …')
+  const D = (days) => new Date(Date.now() - 86400000 * days)
   const projects = await Promise.all([
-    db.project.create({ data: { code: 'P-2026-001', title: 'Ograja terasa — Novak', status: 'TEREN', customerId: cs[0].id, address: 'Trg svobode 12, Ljubljana', note: 'Alu ograja, antracit RAL 7016' } }),
-    db.project.create({ data: { code: 'P-2026-002', title: 'Balustrada — Horvat', status: 'AKTIVNI', customerId: cs[1].id, address: 'Vrtna ulica 4, Kranj', note: 'Steklena balustrada z leseno oporo' } }),
-    db.project.create({ data: { code: 'P-2026-003', title: 'Hotel Zvezda — balkoni', status: 'NACRT', customerId: cs[2].id, address: 'Obala 8, Portorož', note: '48 balkonov, inox' } }),
-    db.project.create({ data: { code: 'P-2026-004', title: 'Nadstrešek + ograja — Kovač', status: 'ZAKLJUCEN', customerId: cs[3].id, address: 'Gozdarska 22, Celje' } }),
-    db.project.create({ data: { code: 'P-2026-005', title: 'Vrtec Sonček — igrala ograja', status: 'TEREN', customerId: cs[4].id, address: 'Ulica bratov Janša 3, Maribor', note: 'Varnostna ograja okoli igrišča' } }),
-    db.project.create({ data: { code: 'P-2026-006', title: 'Stanovanjska hiša Zajc — stopnišče', status: 'AKTIVNI', customerId: cs[5].id, address: 'Kettejeva 17, Nova Gorica' } }),
-    db.project.create({ data: { code: 'P-2026-007', title: 'SD Rožna dolina — skupne površine', status: 'NACRT', customerId: cs[6].id, address: 'Rožna dolina 18, Ljubljana' } }),
-    db.project.create({ data: { code: 'P-2026-008', title: 'Gostilna Pri Lipi — vrt', status: 'ARHIV', customerId: cs[7].id, address: 'Lipa 5, Novo mesto' } })
+    db.project.create({ data: { code: 'P-2026-001', title: 'Ograja terasa — Novak', status: 'TEREN', customerId: cs[0].id, address: 'Trg svobode 12, Ljubljana', note: 'Alu ograja, antracit RAL 7016', createdAt: D(45) } }),
+    db.project.create({ data: { code: 'P-2026-002', title: 'Balustrada — Horvat', status: 'AKTIVNI', customerId: cs[1].id, address: 'Vrtna ulica 4, Kranj', note: 'Steklena balustrada z leseno oporo', createdAt: D(40) } }),
+    db.project.create({ data: { code: 'P-2026-003', title: 'Hotel Zvezda — balkoni', status: 'NACRT', customerId: cs[2].id, address: 'Obala 8, Portorož', note: '48 balkonov, inox', createdAt: D(30) } }),
+    db.project.create({ data: { code: 'P-2026-004', title: 'Nadstrešek + ograja — Kovač', status: 'ZAKLJUCEN', customerId: cs[3].id, address: 'Gozdarska 22, Celje', createdAt: D(120) } }),
+    db.project.create({ data: { code: 'P-2026-005', title: 'Vrtec Sonček — igrala ograja', status: 'TEREN', customerId: cs[4].id, address: 'Ulica bratov Janša 3, Maribor', note: 'Varnostna ograja okoli igrišča', createdAt: D(60) } }),
+    db.project.create({ data: { code: 'P-2026-006', title: 'Stanovanjska hiša Zajc — stopnišče', status: 'AKTIVNI', customerId: cs[5].id, address: 'Kettejeva 17, Nova Gorica', createdAt: D(20) } }),
+    db.project.create({ data: { code: 'P-2026-007', title: 'SD Rožna dolina — skupne površine', status: 'NACRT', customerId: cs[6].id, address: 'Rožna dolina 18, Ljubljana', createdAt: D(14) } }),
+    db.project.create({ data: { code: 'P-2026-008', title: 'Gostilna Pri Lipi — vrt', status: 'ARHIV', customerId: cs[7].id, address: 'Lipa 5, Novo mesto', createdAt: D(900) } })
   ])
 
   console.log('[seed] naseljujem ponudbe …')
@@ -92,7 +96,7 @@ async function main () {
     { code: 'PON-2026-001', projectId: projects[0].id, customerId: cs[0].id, status: 'SPREJET', lines: [['Alu ograja L-profil, antracit', 24, 89], ['Stebri 80×80 mm', 13, 45], ['Montaža', 24, 35]] },
     { code: 'PON-2026-002', projectId: projects[1].id, customerId: cs[1].id, status: 'POSLAN', lines: [['Steklena balustrada 10 mm', 12, 145], ['Lesena opora (termo jesen)', 12, 68], ['Montaža', 12, 40]] },
     { code: 'PON-2026-003', projectId: projects[2].id, customerId: cs[2].id, status: 'OSNUTEK', lines: [['Inox balkonska ograja V2A', 380, 120], ['Montaža', 380, 25]] },
-    { code: 'PON-2026-004', projectId: projects[3].id, customerId: cs[3].id, status: 'ZAKLENJEN', signedBy: 'Janez Kovač', signedAt: new Date(Date.now() - 86400000 * 5), signature: sigDataUrl(), lines: [['Kovana ograja po meri', 18, 160], ['Nadstrešek polikarbonat', 12, 95], ['Montaža', 18, 45]] },
+    { code: 'PON-2026-004', projectId: projects[3].id, customerId: cs[3].id, status: 'ZAKLENJEN', signedBy: 'Janez Kovač', signedAt: D(80), signature: sigDataUrl(), lines: [['Kovana ograja po meri', 18, 160], ['Nadstrešek polikarbonat', 12, 95], ['Montaža', 18, 45]] },
     { code: 'PON-2026-005', projectId: projects[4].id, customerId: cs[4].id, status: 'POSLAN', lines: [['Varnostna ograja igrišče', 65, 72], ['Vrata s samozapiranjem', 2, 320]] }
   ]
   const quotes = []
@@ -220,10 +224,10 @@ async function main () {
   ] })
 
   console.log('[seed] naseljujem garancije (R434) …')
-  const gar1 = await db.warranty.create({ data: { projectId: projects[3].id, startsAt: new Date(Date.now() - 86400000 * 120), months: 24, status: 'AKTIVNA', note: 'Kovana ograja + nadstrešek — standardna garancija' } })
+  const gar1 = await db.warranty.create({ data: { projectId: projects[3].id, startsAt: D(6), months: 24, status: 'AKTIVNA', note: 'Kovana ograja + nadstrešek — standardna garancija' } })
   const gar2 = await db.warranty.create({ data: { projectId: projects[7].id, startsAt: new Date(Date.now() - 86400000 * 800), months: 24, status: 'AKTIVNA', note: 'Vrtna ograja — garancija na premaz' } })
   await db.warrantyVisit.createMany({ data: [
-    { warrantyId: gar1.id, date: new Date(Date.now() - 86400000 * 60), note: 'Redni letni pregled — brez pripomb', userId: vodja.id },
+    { warrantyId: gar1.id, date: D(2), note: 'Pregled po predaji — brez pripomb', userId: vodja.id },
     { warrantyId: gar1.id, date: new Date(Date.now() + 86400000 * 60), note: 'Naročen pregled tesnila na nadstrešku (kontrola)', userId: vodja.id },
     { warrantyId: gar2.id, date: new Date(Date.now() - 86400000 * 200), note: 'Reklamacija — popravek premaza na 1 stebru', userId: monter.id }
   ] })
@@ -252,6 +256,18 @@ async function main () {
     { projectId: projects[3].id, authorId: monter.id, type: 'FOTO', location: 'Ograja — vhod, Kovač', note: 'Zaključeno delo: kovana ograja + nadstrešek', params: JSON.stringify({ photo: fotoSvg('Kovana ograja — vhod', '#2b3a4e', '#c9a227', 9, true) }) },
     { projectId: projects[3].id, authorId: monter.id, type: 'FOTO', location: 'Nadstrešek — dvorišče, Kovač', note: 'Polikarbonatna plošča, odvod na desno', params: JSON.stringify({ photo: fotoSvg('Nadstrešek — dvorišče', '#37475e', '#9fb4cc', 0, false) }) },
     { projectId: projects[7].id, authorId: vodja.id, type: 'FOTO', location: 'Vrtna ograja — Pri Lipi', note: 'Zaključeno + predano stranki', params: JSON.stringify({ photo: fotoSvg('Vrtna ograja — Pri Lipi', '#4a5a48', '#d9c9a3', 11, false) }) }
+  ] })
+
+  console.log('[seed] naseljujem portal stranke (R435) …')
+  await db.portalLink.createMany({ data: [
+    { token: 'pt-kovac-2026-demo', projectId: projects[3].id, note: 'Poslano na e-pošto po predaji dela', views: 7, lastViewedAt: new Date(Date.now() - 86400000 * 2), expiresAt: new Date(Date.now() + 86400000 * 60) },
+    { token: 'pt-horvat-2026-staro', projectId: projects[1].id, note: 'Zamenjano z novo povezavo', views: 3, expiresAt: new Date(Date.now() - 86400000 * 45), revokedAt: new Date(Date.now() - 86400000 * 40) }
+  ] })
+
+  console.log('[seed] naseljujem vzdrževalna opravila (R435) …')
+  await db.jobRun.createMany({ data: [
+    { job: 'seje-gc', ok: true, affected: 2, detail: JSON.stringify({ note: 'cron (izvirnik) — potekle seje' }), startedAt: new Date(Date.now() - 86400000 * 1.2), finishedAt: new Date(Date.now() - 86400000 * 1.2 + 400) },
+    { job: 'obvestila-gc', ok: true, affected: 0, detail: JSON.stringify({ note: 'cron (izvirnik) — prebrana obvestila > 30 dni' }), startedAt: new Date(Date.now() - 86400000 * 1.2), finishedAt: new Date(Date.now() - 86400000 * 1.2 + 120) }
   ] })
 
   console.log('[seed] naseljujem revizijo in obvestila …')

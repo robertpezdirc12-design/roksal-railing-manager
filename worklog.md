@@ -312,3 +312,33 @@ Stage Summary:
 - R434 zaključen: 5 zmožnosti iz route-map izvirnika rekonstruiranih (eSLOG XML, zgodovina nalogov, vreme, QC, garancija)
 - Rekonstrukcja zdaj pokriva: 29/29 zavihkov IA + iskanje/seje/geslo/timeline/termin/version (R433) + eSLOG/zgodovina/vreme/QC/garancija (R434)
 - Preostalo iz route-map (infra/strani izven omejitve ene route): /setup, /aktivacija, /portal, /m, /p strani, cron jobs (viz/gc, jobs/run), Vercel Blob proxy — izven obsega peskovnice (enovita ruta /)
+
+---
+Task ID: 9
+Agent: main (Z.ai Code)
+Task: R435 — dopolnitev po ROUTE-MAP (tretji val): portal stranke, vzdrževanje (cron), namestitev/aktivacija
+
+Work Log:
+- Analiza preostanka route-mapa (worklog R434: /portal, /p/[token], /setup, /aktivacija, cron jobs) → prilagoditev omejitvi ene rutne aplikacije: javni API + predogled v aplikaciji
+- Prisma: novi modeli PortalLink (token/veljavnost/preklic/ogledi), Setting (ključ-vrednost za licenco), JobRun (dnevnik zagonov opravil) — db:push aditivno brez izgube podatkov
+- Seed: portal povezavi (aktivna za P-2026-004 Kovač 7 ogledov, preklicana za P-2026-002), 2 cron zagona; KOHERENTNE ZGODOVINSKE DATUME projektov (createdAt 14–900 dni nazaj), podpis PON-2026-004 D(80), garancija Kovač od D(6) z obiskom po predaji — javna časovnica zdaj logična (odprtje → podpis → montaža)
+- /api/portal (GET projects.read ?projectId; POST projects.write { projectId, days≤365, note } — žeton pt-UUID, rok privzeto 90 dni; revizija PORTAL_CREATE)
+- /api/portal/[id] (DELETE projects.write — preklic revokedAt, idempotenten; revizija PORTAL_REVOKE)
+- /api/public/portal (JAVNI, brez avtentikacije): ?token= → varni payload (status z javno oznako, naslov, časovnica samo zunanjih mejnikov: odprtje/podpis/začetek-konec montaže, garancija, FOTO zaključenih del, kontakt podjetja) — BREZ zneskov, internih opomb, dodelitev in revizije; štetje ogledov + lastViewedAt; 404 za neveljavno/preklicano/poteklo; tempomat 60 zahtev/min na žeton
+- /api/jobs (GET/POST security.read): definicije seje-gc (potekle seje), portal-gc (preklicane/potekle > 30 dni), obvestila-gc (prebrana > 30 dni); POST zagon z dnevnikom JobRun + revizijo MAINTENANCE_RUN; napake se zabeležijo (ok: false)
+- /api/setup (GET javno { needed } ko 0 uporabnikov; POST javno SAMO dokler ni uporabnikov → prvi ADMIN + seja; validacija ime/e-pošta/geslo ≥ 8; revizija SETUP_COMPLETE)
+- /api/aktivacija (GET/POST security.read): ključ RS-XXXXX-XXXXX-XXXXX s kontrolno vsoto mod 97 (vsota (i+1)·kodaZnaka prvih 15 znakov); shranjeno v Setting (upsert — SQLite ne podpira skipDuplicates, popravljeno); maskirani ključ v odgovoru; revizija ACTIVATION
+- UI projekti: PortalSection v detail dialogu — seznam povezav (badge velja/preklicana/potekla, ogledi, rok, opomba), nova povezava, kopiranje URL, preklic; PortalPreviewDialog — natanko javni pogled stranke (mornar-grajen hero, potek dela z ikonami, garancija, galerija, kontakt)
+- UI varnost: MaintenanceCard (3 opravila, zadnji zagon s podatki, gumb Zaženi, toast z affected/duration) + LicenceCard (badge Neaktivna/Aktivna, maskirani ključ, obrazec za aktivacijo); nove oznake revizije tudi za R434/R435 akcije
+- UI prijava: mode setup (GET /api/setup ob mountu) — obrazec za prvega administratorja z avtodopolnitvijo in opozorilom enkratnosti
+- Napaka odkrita v brskalniku: PortalPreviewDialog je dostopal view.data.project namesto view.data.data (useApi ovije odgovor) → Runtime TypeError → popravljeno; Prisma Client v tekočem strežniku je bil zastarel po db:push → restart dev
+- Testi (curl): setup (needed:false/5 uporabnikov; POST 403 ko obstajajo), portal GET/POST/DELETE, javni portal (200 veljavna z varnim payloadom brez zneskov; 404 napačen/preklican/brez žetona; ogledi 7→8), jobs (GET definicije+zadnji; POST seje-gc/portal-gc 200; neznano 400; monter 403), aktivacija (GET NEAKTIVNA; napačen ključ 422; veljaven → AKTIVNA z maskiranim ključem; ponovna aktivacija upsert OK; monter 403)
+- Test setup toka (celovito, z varnostno kopijo baze): izbris uporabnikov → GET needed:true → brskalnik prikaže obrazec Začetna namestitev → ustvarjen Testni Administrator, samodejna prijava, revizija SETUP_COMPLETE → baza povrnjena iz kopije, strežnik ponovno zagnan, demo stanje obnovljeno (licenca ponastavljena v NEAKTIVNA)
+- Brskalnik (agent-browser, admin): prijava, Projekti → P-2026-004 → PORTAL STRANKE (1 aktivna povezava, 9 ogledov) → Predogled (POTEK DELA: odprtje 09.06 → podpis 19.07 → montaža 01.10; Garancija velja do 01.10.2028; ZAKLJUČENA DELA 2 fotografiji; kontakt Roksal — BREZ €), Varnost → Vzdrževanje (zagon seje-gc: zadnji zagon osvežen, 0 zapisov, izvajal Robert Pezdirc) + Licenca (aktivacija z RS-YZKZ2-MNUPY-Y0D84 → Aktivna badge), konzola ČISTA (0 error/warn)
+- Mobile 390px: brez horizontalnega preliva (scrollW == clientW == 390), noga naravno potisnjena pod vsebino
+- bun run lint: ČIST (0 errorjev, 0 opozoril)
+
+Stage Summary:
+- R435 zaključen: zadnje dokumentirane zmožnosti route-mapa izvirnika rekonstruirane znotraj omejitve ene rutne aplikacije (portal stranke, cron vzdrževanje, setup, aktivacija)
+- Route-map pokritost: 29/29 zavihkov IA + R433 (iskanje/seje/geslo/timeline/termin/version) + R434 (eSLOG/zgodovina/vreme/QC/garancija) + R435 (portal/jobs/setup/aktivacija) — infrastruktura izven peskovnice (Vercel Blob proxy) ostaja izven obsega
+- Demo ključ za aktivacijo dokumentiran v README-REKONSTRUKCIJA.md: RS-YZKZ2-MNUPY-Y0D84

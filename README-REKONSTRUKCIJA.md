@@ -1,4 +1,4 @@
-# Roksal Railing Manager — REKONSTRUKCIJA (R431–R434)
+# Roksal Railing Manager — REKONSTRUKCIJA (R431–R435)
 
 > **Datum:** 6.–7. 10. 2026 · **Veja:** `rekonstrukcija`
 > Ta veja vsebuje **funkcionalno rekonstrukcijo** aplikacije, zgrajeno iz blueprinta na veji `main`
@@ -30,15 +30,18 @@
 | **Vreme** | napoved Open-Meteo (brez ključa) z oceno primernosti za montažo — R434 |
 | **Kontrola kakovosti** | model `QcCheck` — kontrolne točke proizvodnih nalogov — R434 |
 | **Garancija** | modela `Warranty`/`WarrantyVisit` — veljavnost, obiski, oddaja po zaključku — R434 |
+| **Portal stranke** | model `PortalLink` — javni varni pogled statusa (`/api/public/portal?token=`), predogled v aplikaciji, preklic, štetje ogledov — R435 |
+| **Vzdrževanje** | model `JobRun` — cron opravila izvirnika (seje-gc, portal-gc, obvestila-gc) z ročnim zagonom in dnevnikom — R435 |
+| **Namestitev & licenca** | prvi admin, ko ni uporabnikov (`/api/setup`) + aktivacija ključa z kontrolno vsoto mod 97 (`/api/aktivacija`) — R435 |
 
 ## Delujoči moduli
 
 - **DANES** — operativni vhod, današnji nalogi, terenski tok z akcijami, **vreme za teren** (4-dnevna napoved z oceno primernosti — R434)
-- **PROJEKTI** — preglednica (KPI), projekti (+ustvari/detail, **garancija z obiski** — R434), stranke, ponudbe (sprejem), računi + plačila (**eSLOG XML izvoz** — R434), nalogi (**globalna zgodovina dogodkov** — R434), teren
+- **PROJEKTI** — preglednica (KPI), projekti (+ustvari/detail, **garancija z obiski** — R434, **portal stranke s predogledom** — R435), stranke, ponudbe (sprejem), računi + plačila (**eSLOG XML izvoz** — R434), nalogi (**globalna zgodovina dogodkov** — R434), teren
 - **ZAJEM** — nalogi center (časovnica dogodkov), meritve, foto zajem (canvas), nagib kalkulator, kalkulator ponudbe, signatura (podpis → zaklep posla), **vizualizacija** (parametrična SVG risba: tloris + stranski pogled, izvoz SVG), **AR** (kamera + vlečni overlay ograje, zajem → FOTO meritev; pošten demo brez kamere)
-- **PISARNA** — CRM (vodi + pipeline), **dokumenti** (poenoten arhiv ponudb + računov), zaloga (losi, sprejem), katalog profilov, proizvodnja (**kontrola kakovosti** — R434), logistika (razpored), Material V5 (BOM), **orodjarina** (izposoja, umeritve), **galerija** zaključenih del (FOTO na ZAKLJUCEN/ARHIV projektih), varnost (revizija R428 + aktivne seje), **PDF** (predogled/prenos ponudb in računov), **PostSig** (kokpit zaklenjenih poslov: račun + proizvodnja po podpisu)
+- **PISARNA** — CRM (vodi + pipeline), **dokumenti** (poenoten arhiv ponudb + računov), zaloga (losi, sprejem), katalog profilov, proizvodnja (**kontrola kakovosti** — R434), logistika (razpored), Material V5 (BOM), **orodjarina** (izposoja, umeritve), **galerija** zaključenih del (FOTO na ZAKLJUCEN/ARHIV projektih), varnost (revizija R428 + aktivne seje R433 + **vzdrževanje in licenca** — R435), **PDF** (predogled/prenos ponudb in računov), **PostSig** (kokpit zaklenjenih poslov: račun + proizvodnja po podpisu)
 - **PROFIL** — profil (sprememba gesla — R433), dovoljenja po vlogi, tema, odjava
-- **Varnost** — revizijski dnevnik (R428)
+- **Prijava** — običajna prijava + **začetna namestitev**, če v sistemu ni uporabnikov (R435)
 
 Vseh 29 zavihkov IA je implementiranih (R432) — ni več placeholder šolsjk.
 
@@ -60,6 +63,13 @@ bun run dev            # http://localhost:3000
 | Monter | `monter@roksal.si` | `Monter123!` |
 | Skladišče | `skladisce@roksal.si` | `Skladisce123!` |
 | Proizvodnja | `proizvodnja@roksal.si` | `Proizvodnja123!` |
+
+### Demo dodatki (R435)
+
+- **Portal stranke:** projekti → P-2026-004 (Kovač) → podrobnost → sklop *Portal stranke* → **Predogled** (javni pogled, ki ga vidi stranka).
+- **Vzdrževanje:** Pisarna → Varnost → *Vzdrževanje* (ADMIN) — zagon seje-gc / portal-gc / obvestila-gc.
+- **Licenca:** Pisarna → Varnost → *Licenca* — demo aktivacijski ključ: `RS-YZKZ2-MNUPY-Y0D84`.
+- **Začetna namestitev:** prikaže se le, če v bazi ni nobenega uporabnika (izprazni tabelo `User` ali počisti bazo).
 
 ## Tehnologija
 

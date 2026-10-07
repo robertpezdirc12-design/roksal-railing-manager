@@ -32,6 +32,7 @@ model User {
   equipHeld    Equipment[]     @relation("equipmentHolder")
   equipLogs    EquipmentCheckout[] @relation("equipmentUser")
   qcChecks     QcCheck[]       @relation("qcUser")
+  jobRuns      JobRun[]
 }
 
 model Session {
@@ -109,6 +110,7 @@ model Project {
   invoices         Invoice[]
   productionOrders ProductionOrder[]
   warranties       Warranty[]
+  portalLinks      PortalLink[]
 }
 
 model Quote {
@@ -388,4 +390,41 @@ model Notification {
   body      String
   read      Boolean  @default(false)
   createdAt DateTime @default(now())
+}
+
+// ─── Portal stranke (R435: /p/[token] izvirnika → javni API + predogled) ────
+
+model PortalLink {
+  id           String    @id @default(cuid())
+  token        String    @unique // neuraden žeton URL /api/public/portal?token=…
+  projectId    String
+  project      Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  note         String? // interne opombe (npr. "poslano na e-pošto")
+  views        Int       @default(0)
+  lastViewedAt DateTime?
+  createdAt    DateTime  @default(now())
+  expiresAt    DateTime
+  revokedAt    DateTime?
+}
+
+// ─── Nastavitve sistema (R435: licenca/aktivacija, setup) ───────────────────
+
+model Setting {
+  key       String   @id // npr. "licence.key", "licence.status"
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+// ─── Vzdrževalna opravila (R435: cron jobs izvirnika → ročni zagon + dnevnik) ─
+
+model JobRun {
+  id         String   @id @default(cuid())
+  job        String // seje-gc | portal-gc | obvestila-gc
+  ok         Boolean
+  affected   Int      @default(0)
+  detail     String? // JSON
+  startedAt  DateTime
+  finishedAt DateTime
+  userId     String? // null = sistemski/cron zagon
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
 }
