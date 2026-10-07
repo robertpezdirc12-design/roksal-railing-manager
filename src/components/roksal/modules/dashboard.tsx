@@ -1,37 +1,189 @@
 'use client'
 
-// PREGLEDNICA — KPI portfelja (vrata projects.read)
+// PREGLEDNICA / DIREKTOR COCKPIT — KPI portfelja (vrata projects.read; R444).
+// Denarni sklopi (terjatve, zastarevanje, marže, vrednost zaloge) se prikažejo
+// SAMO, če jih API vrne — ta jih izpusti brez invoices.read (ADMIN/VODJA).
+// Prodajni lijak samo za vloge s crm.read.
 
-import { FolderKanban, HardHat, AlertTriangle, TrendingUp, PackageX, Banknote } from 'lucide-react'
+import {
+  AlertTriangle, Banknote, CalendarDays, FolderKanban, HardHat, PackageX, TrendingUp, Warehouse,
+} from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { fmtEUR, useApi } from '@/lib/api-client'
 import { ErrorBox, LoadingRows, PageHeader, StatCard, StatusBadge } from '@/components/roksal/ui-bits'
 import { useAppStore } from '@/lib/store'
+import { fmtDate } from '@/lib/api-client'
+import { cn } from '@/lib/utils'
 
 interface DashData {
   projects: { total: number; byStatus: Record<string, number>; active: number }
   workOrders: { total: number; open: number; today: number; byStatus: Record<string, number> }
-  invoices: { outstanding: number; overdueCount: number; overdueSum: number }
   lowStock: { id: string; name: string; qty: number; reorderAt: number; unit: string }[]
-  pipeline: { value: number; count: number }
+  finance: {
+    invoices: { outstanding: number; overdueCount: number; overdueSum: number }
+    aging: { d0_30: number; d30_60: number; d60plus: number }
+    marginsTop: { projectId: string; code: string; title: string; margin: number; marginPct: number; totalSale: number }[]
+  } | null
+  operations: {
+    overdue: { count: number; list: { id: string; code: string; title: string; scheduledFor: string; status: string; assignee: string | null }[] }
+    capacity: { days: { date: string; count: number }[]; byAssignee: { name: string; count: number }[] }
+    stockValue: { total: number; items: number }
+  } | null
+  pipeline: { value: number; count: number } | null
 }
+
+const DAY_SHORT = ['ned', 'pon', 'tor', 'sre', 'čet', 'pet', 'sob']
 
 export default function DashboardModule () {
   const user = useAppStore((s) => s.user)
   const { data, loading, error } = useApi<{ data: DashData }>('/api/dashboard')
 
+  const fin = data?.data.finance ?? null
+  const ops = data?.data.operations ?? null
+  const pipeline = data?.data.pipeline ?? null
+
   return (
     <div className="space-y-5">
-      <PageHeader title="Preglednica" desc={`Dobrodošli nazaj, ${user?.name ?? ''} — stanje portfelja na en pogled.`} />
+      <PageHeader
+        title="Preglednica"
+        desc={fin
+          ? `Direktorski kokpit — ${user?.name ?? ''}, celoten posel na en pogled.`
+          : `Dobrodošli nazaj, ${user?.name ?? ''} — stanje portfelja na en pogled.`}
+      />
       <ErrorBox error={error} />
       {loading ? <LoadingRows rows={3} /> : data ? (
         <>
+          {/* osnovni KPI (projects.read) + pogojni denarni (invoices.read / crm.read) */}
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             <StatCard label="Projekti" value={data.data.projects.total} hint={`${data.data.projects.active} aktivnih`} icon={FolderKanban} />
             <StatCard label="Nalogi odprti" value={data.data.workOrders.open} hint={`${data.data.workOrders.today} danes`} icon={HardHat} tone="amber" />
-            <StatCard label="Neplačano" value={fmtEUR(data.data.invoices.outstanding)} hint={`${data.data.invoices.overdueCount} zapadlih — ${fmtEUR(data.data.invoices.overdueSum)}`} icon={Banknote} tone={data.data.invoices.overdueCount > 0 ? 'red' : 'green'} />
-            <StatCard label="Prodajni lijak" value={fmtEUR(data.data.pipeline.value)} hint={`${data.data.pipeline.count} priložnosti`} icon={TrendingUp} />
+            {fin ? (
+              <StatCard label="Neplačano" value={fmtEUR(fin.invoices.outstanding)} hint={`${fin.invoices.overdueCount} zapadlih — ${fmtEUR(fin.invoices.overdueSum)}`} icon={Banknote} tone={fin.invoices.overdueCount > 0 ? 'red' : 'green'} />
+            ) : null}
+            {pipeline ? (
+              <StatCard label="Prodajni lijak" value={fmtEUR(pipeline.value)} hint={`${pipeline.count} priložnosti`} icon={TrendingUp} />
+            ) : null}
           </div>
+
+          {/* ─── direktorski kokpit (SAMO invoices.read — API drugače vrne null) ─── */}
+          {fin ? (
+            <>
+              <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                <StatCard label="Terjatve 0–30 dni" value={fmtEUR(fin.aging.d0_30)} icon={Banknote} tone="amber" />
+                <StatCard label="Terjatve 30–60 dni" value={fmtEUR(fin.aging.d30_60)} icon={Banknote} tone="amber" />
+                <StatCard label="Terjatve 60+ dni" value={fmtEUR(fin.aging.d60plus)} icon={Banknote} tone={fin.aging.d60plus > 0 ? 'red' : 'green'} />
+                {ops ? (
+                  <StatCard label="Vrednost zaloge" value={fmtEUR(ops.stockValue.total)} hint={`${ops.stockValue.items} artiklov po povprečju lotov`} icon={Warehouse} />
+                ) : null}
+              </div>
+
+              <div className="grid gap-4 lg:grid-cols-2">
+                {/* marže po projektih — top 5 iz kalkulacij paketov */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <TrendingUp className="size-4 text-roksal-green" aria-hidden /> Marže po projektih (top 5)
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {fin.marginsTop.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">Ni kalkuliranih paketov — generirajte kosovnice pri paketih projektov.</p>
+                    ) : (
+                      <ul className="space-y-2">
+                        {fin.marginsTop.map((m) => (
+                          <li key={m.projectId} className="flex items-center justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="truncate text-sm font-medium">{m.code} — {m.title}</div>
+                              <div className="text-xs text-muted-foreground">prodaja {fmtEUR(m.totalSale)}</div>
+                            </div>
+                            <div className="shrink-0 text-right">
+                              <div className={cn('font-bold', m.margin >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400')}>
+                                {fmtEUR(m.margin)}
+                              </div>
+                              <div className="text-xs text-muted-foreground">{m.marginPct.toFixed(1)} %</div>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* zamude — nalogi s terminom v preteklosti */}
+                {ops ? (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2 text-base">
+                        <AlertTriangle className="size-4 text-roksal-amber" aria-hidden /> Zamude nalogov
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {ops.overdue.count === 0 ? (
+                        <p className="text-sm text-muted-foreground">Ni zamud — vsi nalogi po roku.</p>
+                      ) : (
+                        <>
+                          <p className="mb-2 text-sm font-semibold text-red-600 dark:text-red-400">{ops.overdue.count} nalogov z pretečenim terminom</p>
+                          <ul className="max-h-48 space-y-1.5 overflow-y-auto pr-1">
+                            {ops.overdue.list.map((w) => (
+                              <li key={w.id} className="flex items-center justify-between gap-2 text-sm">
+                                <div className="min-w-0">
+                                  <span className="font-mono text-xs font-semibold text-roksal-amber">{w.code}</span>
+                                  <span className="ml-2 truncate">{w.title}</span>
+                                  <span className="block text-xs text-muted-foreground">{w.assignee ?? 'nedodeljen'}</span>
+                                </div>
+                                <span className="shrink-0 text-xs font-semibold text-red-600 dark:text-red-400">{fmtDate(w.scheduledFor)}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </>
+                      )}
+                    </CardContent>
+                  </Card>
+                ) : null}
+              </div>
+
+              {/* kapaciteta — nalogi naslednjih 7 dni po dnevih + izvajalcih */}
+              {ops ? (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <CalendarDays className="size-4 text-roksal-amber" aria-hidden /> Kapaciteta — naslednjih 7 dni
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="flex items-end justify-between gap-2" role="img" aria-label="Število nalogov po dnevih za naslednjih 7 dni">
+                      {ops.capacity.days.map((d) => {
+                        const max = Math.max(...ops.capacity.days.map((x) => x.count), 1)
+                        const dt = new Date(d.date)
+                        return (
+                          <div key={d.date} className="flex flex-1 flex-col items-center gap-1">
+                            <span className="text-xs font-bold">{d.count}</span>
+                            <div
+                              className={cn('w-full rounded-t-md', d.count > 0 ? 'bg-roksal-amber' : 'bg-secondary')}
+                              style={{ height: `${Math.max((d.count / max) * 56, 4)}px` }}
+                            />
+                            <span className="text-[10px] uppercase text-muted-foreground">{DAY_SHORT[dt.getDay()]}</span>
+                            <span className="text-[10px] text-muted-foreground">{dt.getDate()}.{dt.getMonth() + 1}.</span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                    {ops.capacity.byAssignee.length > 0 ? (
+                      <div className="flex flex-wrap gap-2">
+                        {ops.capacity.byAssignee.map((a) => (
+                          <span key={a.name} className="rounded-full border bg-secondary/50 px-3 py-1 text-xs font-medium">
+                            {a.name}: <span className="font-bold">{a.count}</span>
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">V naslednjih 7 dneh ni razporejenih nalogov.</p>
+                    )}
+                  </CardContent>
+                </Card>
+              ) : null}
+            </>
+          ) : null}
 
           <div className="grid gap-4 lg:grid-cols-2">
             <Card>
@@ -69,11 +221,11 @@ export default function DashboardModule () {
               {data.data.lowStock.length === 0 ? (
                 <p className="text-sm text-muted-foreground">Vsa zaloga je nad mejo naročila.</p>
               ) : (
-                <ul className="space-y-1.5">
+                <ul className="max-h-72 space-y-1.5 overflow-y-auto pr-1">
                   {data.data.lowStock.map((i) => (
                     <li key={i.id} className="flex items-center justify-between gap-2 text-sm">
                       <span className="flex items-center gap-2">
-                        <PackageX className="size-4 text-muted-foreground" aria-hidden /> {i.name}
+                        <PackageX className="size-4 shrink-0 text-muted-foreground" aria-hidden /> {i.name}
                       </span>
                       <span className="font-mono text-red-600 dark:text-red-400">{i.qty} / {i.reorderAt} {i.unit}</span>
                     </li>

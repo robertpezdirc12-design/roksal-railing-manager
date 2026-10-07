@@ -10,7 +10,8 @@ export async function GET (req: NextRequest) {
   if (auth instanceof NextResponse) return auth
 
   const orders = await db.productionOrder.findMany({
-    include: { project: { select: { code: true, title: true } } },
+    // R444: projectId je potreben za prikaz kosovnic projekta (Priprava materiala)
+    include: { project: { select: { id: true, code: true, title: true } } },
     orderBy: [{ dueAt: 'asc' }, { code: 'asc' }],
   })
   // SQLite: NULL roki se pri ASC zvrstijo na začetek → na konec
