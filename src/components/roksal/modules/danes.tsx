@@ -20,13 +20,12 @@
 
 import { useState } from 'react'
 import {
-  CalendarCheck, Camera, CheckCircle2, CheckCheck, ChevronDown, ChevronRight, Circle,
+  CalendarCheck, Camera, Check, CheckCircle2, CheckCheck, ChevronDown, ChevronRight, Circle,
   ClipboardList, CloudRain, CloudSnow, Cloudy, HardHat, Loader2, MapPin, Package,
   Play, Plus, Ruler, Sun, Thermometer, TriangleAlert, Umbrella, Wind,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Progress } from '@/components/ui/progress'
@@ -583,7 +582,19 @@ function ChecklistSection ({ woId, rows, loading, error, done, canWrite, onReloa
                 {busy === row.id ? (
                   <Loader2 className="size-5 shrink-0 animate-spin text-muted-foreground" aria-hidden />
                 ) : (
-                  <Checkbox checked={row.done} aria-hidden tabIndex={-1} className="pointer-events-none size-5" />
+                  // R445: čisto VIZUALNI kvadratek (span) — zunanji <button role="checkbox"> že
+                  // nosi interakcijo; gnezdjen <button> znotraj <button> (Radix Checkbox) je
+                  // NEVELJAVEN HTML in sproža hidratacijsko napako (popravek R444 ostanka).
+                  <span
+                    aria-hidden
+                    className={cn(
+                      'flex size-5 shrink-0 items-center justify-center rounded-[4px] border border-input shadow-xs transition-shadow outline-none',
+                      'dark:bg-input/30',
+                      row.done ? 'bg-primary text-primary-foreground' : 'bg-transparent',
+                    )}
+                  >
+                    {row.done ? <Check className="size-3.5" aria-hidden /> : null}
+                  </span>
                 )}
                 <span className={cn('flex-1 text-sm leading-snug', row.done && 'line-through decoration-muted-foreground/60')}>
                   {row.label}

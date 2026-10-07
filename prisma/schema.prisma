@@ -38,6 +38,7 @@ model User {
   stockMovements StockMovement[] @relation("stockMovements") // R443: skladiščni dnevnik
   checklistDone InstallationChecklist[] @relation("checklistDone") // R444: odkljukane točke
   materialUsage InstallationMaterialUsage[] @relation("usageUser") // R444: poraba na terenu
+  drivenDeliveries Delivery[] @relation("drivenDeliveries") // R445: dostave, kjer je voznik
 }
 
 model Session {
@@ -118,6 +119,7 @@ model Project {
   portalLinks      PortalLink[]
   packages         ProjectPackage[] // R442: več produktnih paketov na projekt
   stockReservations StockReservation[] @relation("stockReservations") // R443: rezervacije materiala
+  deliveries       Delivery[] // R445: dostave projekta (issue #7 §9)
 }
 
 model Quote {
@@ -204,6 +206,11 @@ model WorkOrder {
   // R444 (issue #7 §8 MONTER): kontrolni seznam + poraba materiala na terenu
   checklist    InstallationChecklist[]
   materialUsage InstallationMaterialUsage[]
+  // R445 (issue #7 §9 DELIVERY + INSTALLATION): ekipa/podizvajalec na nalogu — ADITIVNO,
+  // obstoječi tokovi nalogov (transition/termin/dodelitev) ostanejo nedotaknjeni
+  crewId       String?
+  crew         Crew?     @relation("crewWorkOrders", fields: [crewId], references: [id], onDelete: SetNull)
+  deliveries   Delivery[]
 }
 
 model WorkOrderEvent {
@@ -297,6 +304,8 @@ model InventoryItem {
   pickingLines PickingLine[]      @relation("pickingLines")
   // R444: poraba materiala na terenu (MOJ DAN)
   usageItems   InstallationMaterialUsage[] @relation("usageItems")
+  // R445: vrstice dostav (EKSPlicitna vezava, če vrstica izvira iz pickinga)
+  deliveryItems DeliveryItem[] @relation("deliveryItems")
 }
 
 model StockLot {
@@ -859,6 +868,7 @@ model PickingList {
   updatedAt DateTime @updatedAt
 
   lines PickingLine[]
+  deliveries Delivery[] // R445: dostave, ki so nastale iz te picking liste
 }
 
 model PickingLine {
@@ -912,4 +922,92 @@ model InstallationMaterialUsage {
   createdAt   DateTime          @default(now())
 
   @@index([workOrderId])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// DOSTAVA + MONTAŽA (R445 — issue #7 §9, P1 DELIVERY + INSTALLATION)
+// Vozila, dostave s tokom NAČRTOVANO → PRIPRAVLJENO → NATOVARJENO → NA_POTI →
+// DOSTAVLJENO (+ PREKLICANA), ekipe/podizvajalci z regijo, tipi del,
+// razpoložljivostjo, ceno, kakovostjo in zgodovino/reklamacijami.
+// Dostava je vezana na: projekt, picking listo (skladišče/rezervacija),
+// montažni termin (delovni nalog), vozilo in voznika (odgovorno osebo).
+// ═══════════════════════════════════════════════════════════════════════════
+
+// VOZILO za dostavo (issue #7 §9)
+model Vehicle {
+  id           String   @id @default(cuid())
+  plate        String   @unique // registrska oznaka
+  name         String // npr. "Fiat Ducato — odprt"
+  capacityNote String? // opis nosilnosti/prostora
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  deliveries Delivery[]
+}
+
+// DOSTAVA — tok NAČRTOVANO → PRIPRAVLJENO → NATOVARJENO → NA_POTI → DOSTAVLJENO (issue #7 §9)
+model Delivery {
+  id            String   @id @default(cuid())
+  code          String   @unique // DEL-2026-001
+  status        String   @default("NACRTOVANO") // NACRTOVANO | PRIPRAVLJENO | NATOVARJENO | NA_POTI | DOSTAVLJENO | PREKLICANA
+  projectId     String?
+  project       Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  pickingListId String? // vezava na skladišče (picking)
+  pickingList   PickingList? @relation(fields: [pickingListId], references: [id], onDelete: SetNull)
+  workOrderId   String? // montažni termin (delovni nalog)
+  workOrder     WorkOrder? @relation(fields: [workOrderId], references: [id], onDelete: SetNull)
+  vehicleId     String?
+  vehicle       Vehicle? @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+  driverId      String? // odgovorna oseba / voznik
+  driver        User?    @relation("drivenDeliveries", fields: [driverId], references: [id], onDelete: SetNull)
+  plannedAt     DateTime? // načrtovani čas dostave
+  loadedAt      DateTime? // NATOVARJENO
+  departedAt    DateTime? // NA_POTI
+  deliveredAt   DateTime? // DOSTAVLJENO
+  address       String?
+  recipientNote String? // prevzemnik / podpis na mestu
+  note          String?
+  createdBy     String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  items DeliveryItem[]
+  @@index([status, plannedAt])
+}
+
+// Vrstica dostave — EKSPlicitna ID povezava na artikel, če izvira iz pickinga
+// (NI fuzzy matchinga); description je prikazno ime (SKU + ime artikla).
+model DeliveryItem {
+  id          String    @id @default(cuid())
+  deliveryId  String
+  delivery    Delivery  @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+  itemId      String? // EKSPlicitna vezava na artikel, če je iz pickinga (ni fuzzy!)
+  item        InventoryItem? @relation("deliveryItems", fields: [itemId], references: [id], onDelete: SetNull)
+  description String // prikazno ime vrstice
+  qty         Float
+  unit        String
+  note        String?
+
+  @@index([deliveryId])
+}
+
+// EKIPA / PODIZVAJALEC (issue #7 §9: interne monterje, ekipe in podizvajalce
+// z regijo, tipi del, razpoložljivostjo, ceno, kakovostjo, zgodovino in reklamacijami)
+model Crew {
+  id           String   @id @default(cuid())
+  name         String
+  type         String   @default("INTERNA") // INTERNA | PODIZVAJALEC
+  region       String? // npr. "Gorenjska"
+  contactName  String?
+  contactPhone String?
+  contactEmail String?
+  workTypes    String? // tipi del: "terase, ograje, fasade"
+  availabilityNote String? // razpoložljivost
+  priceNote    String? // dogovorjena cena/referenca
+  rating       Int? // kakovost 1–5
+  active       Boolean  @default(true)
+  note         String? // zgodovina, reklamacije — opombe
+  createdAt    DateTime @default(now())
+
+  workOrders WorkOrder[] @relation("crewWorkOrders")
 }

@@ -16,6 +16,7 @@ export async function GET (req: NextRequest, { params }: Params) {
     include: {
       project: { select: { id: true, code: true, title: true, address: true, customer: { select: { name: true } } } },
       assignee: { select: { id: true, name: true } },
+      crew: { select: { id: true, name: true, type: true } }, // R445: ekipa na nalogu
       events: { include: { user: { select: { name: true } } }, orderBy: { createdAt: 'asc' } },
       measurements: { orderBy: { createdAt: 'desc' } },
     },
@@ -29,7 +30,8 @@ export async function GET (req: NextRequest, { params }: Params) {
 }
 
 // PATCH /api/nalog/[id] — urejanje naloga (R438, route-map izvirnika):
-// title, instructions, projectId, summary; assigneeId (samo ADMIN/VODJA).
+// title, instructions, projectId, summary; assigneeId (samo ADMIN/VODJA);
+// crewId (R445: ekipa/podizvajalec — issue #7 §9; null počisti, sicer mora obstajati).
 // Status gre IZKLJUČNO prek /transition, termin prek /termin (časovnica + revizija).
 // Ob spremembi dodelitve → obvestilo WO_ASSIGNED (monter, brez ročnega posredovanja);
 // ob spremembi navodil → WO_INSTRUCTIONS (monter). Oba emitEvent klica sta ognjevarna.
@@ -40,7 +42,7 @@ export async function PATCH (req: NextRequest, { params }: Params) {
   const { id } = await params
 
   const body = await req.json().catch(() => null) as {
-    title?: unknown; instructions?: unknown; projectId?: unknown; summary?: unknown; assigneeId?: unknown
+    title?: unknown; instructions?: unknown; projectId?: unknown; summary?: unknown; assigneeId?: unknown; crewId?: unknown
   } | null
 
   const order = await db.workOrder.findUnique({
@@ -85,12 +87,31 @@ export async function PATCH (req: NextRequest, { params }: Params) {
     }
   }
 
+  // ekipa/podizvajalec (R445, issue #7 §9): null počisti, sicer mora ekipa obstajati in biti aktivna.
+  // VRATA: managesAssignments (ADMIN/VODJA) — enako kot assigneeId; monter sicer ima
+  // nalog.write za svoj nalog, a dodeljevanje ekip/podizvajalcev je delo pisarne (fail-closed).
+  let crewChanged = false
+  if (body?.crewId !== undefined) {
+    if (!managesAssignments(user)) {
+      return jsonError(403, 'Dodelitve ekip upravlja samo pisarna.', 'Spreminjanje crewId je dovoljeno roli ADMIN in VODJA.')
+    }
+    const newCrewId = typeof body.crewId === 'string' && body.crewId ? body.crewId : null
+    if (newCrewId) {
+      const crew = await db.crew.findUnique({ where: { id: newCrewId }, select: { id: true, active: true, name: true } })
+      if (!crew || !crew.active) return jsonError(400, 'Izbrana ekipa ne obstaja ali ni aktivna.')
+    }
+    if (newCrewId !== order.crewId) {
+      crewChanged = true
+      patch.crewId = newCrewId
+    }
+  }
+
   if (Object.keys(patch).length === 0) return jsonError(400, 'Ni sprememb za izvedbo.')
 
   const updated = await db.workOrder.update({
     where: { id },
     data: patch,
-    include: { project: { select: { code: true } }, assignee: { select: { name: true } } },
+    include: { project: { select: { code: true } }, assignee: { select: { name: true } }, crew: { select: { name: true, type: true } } },
   })
 
   const instructionsChanged = 'instructions' in patch && patch.instructions !== order.instructions
@@ -106,6 +127,14 @@ export async function PATCH (req: NextRequest, { params }: Params) {
     userId: user.id, action: 'WO_UPDATE', entity: 'workOrder', entityId: id, projectId: updated.projectId ?? order.projectId,
     detail: { code: order.code, polja: Object.keys(patch) },
   })
+
+  // R445 (issue #7 §9): sprememba ekipe na nalogu — lastna revizija WO_CREW_ASSIGN
+  if (crewChanged) {
+    await writeAudit({
+      userId: user.id, action: 'WO_CREW_ASSIGN', entity: 'workOrder', entityId: id, projectId: updated.projectId ?? order.projectId,
+      detail: { code: order.code, crewId: patch.crewId ?? null, prej: order.crewId ?? null, ekipa: updated.crew?.name ?? null },
+    })
+  }
 
   // R438 (issue #5): obvestili — ognjevarti klici, ki ne motita odgovora ruta
   if (assigneeChanged && patch.assigneeId) {

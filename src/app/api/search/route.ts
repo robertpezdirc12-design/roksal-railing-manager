@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { jsonError, requirePermission } from '@/lib/auth'
+import { jsonError, readsAllData, requirePermission } from '@/lib/auth'
 import { hasPerm } from '@/lib/permissions-core'
 
 // /api/search — globalno iskanje po entitetah (route-map: GET/POST /api/search)
 // Obseg rezultatov strogo po pravicah prijavljenega uporabnika (fail-closed).
-// Vrača skupine: projekti, stranke, ponudbe, računi, nalogi, zaloga, uporabniki — z navigacijskimi podatki.
+// Vrača skupine: projekti, stranke, ponudbe, računi, nalogi, dostave, zaloga, izdelki, uporabniki — z navigacijskimi podatki.
 
 type Hit = {
   id: string
@@ -76,6 +76,28 @@ export async function GET (req: NextRequest) {
     if (wos.length) groups.push({
       kind: 'nalog', label: 'Delovni nalogi',
       hits: wos.map((w) => ({ id: w.id, label: `${w.code} — ${w.title}`, sub: w.status, section: 'projekti', tab: 'nalogi', kind: 'nalog' })),
+    })
+  }
+
+  // R445 (issue #7 §9): dostave — obseg spoštuje enak obseg kot /api/deliveries:
+  // uporabnik z omejenim branjem (monter) vidi SAMO dostave, kjer je voznik ALI
+  // so vezane na nalog, dodeljen njemu (fail-closed).
+  {
+    const base = { OR: [{ code: { contains: q } }, { address: { contains: q } }, { note: { contains: q } }] }
+    const where = readsAllData(auth.user)
+      ? base
+      : { AND: [base, { OR: [{ driverId: auth.user.id }, { workOrder: { assigneeId: auth.user.id } }] }] }
+    const deliveries = await db.delivery.findMany({
+      where,
+      select: { id: true, code: true, status: true, project: { select: { code: true } } }, take: 5,
+    })
+    if (deliveries.length) groups.push({
+      kind: 'dostava', label: 'Dostave',
+      hits: deliveries.map((d) => ({
+        id: d.id, label: d.code,
+        sub: `${d.project?.code ?? 'brez projekta'} · ${d.status}`,
+        section: 'pisarna', tab: 'dostave', kind: 'dostava',
+      })),
     })
   }
 

@@ -686,3 +686,7 @@ Stage Summary:
 - R444 ROLE EXPERIENCES ZAKLJUČEN: MONTER dobi pravi MOJ DAN (7-fazni tok, checklist, poraba materiala zvezana na skladiščno jedro, težave, povzetek predaje — vse mobile-first z auditiranimi mutacijami), DIREKTOR dobi kokpit (marže, terjatve z zastarevanjem, zamude, kapaciteta, vrednost zaloge) z ZAPRTA RBAC vrzeljo (denarni podatki niti prek API-ja ne zapustijo strežnika brez invoices.read), PROIZVODNJA dobi pripravo materiala (kosovnice projekta, informativno)
 - 3 nove API rute + 2 nova modela + 3 preoblikovani UI moduli; obstoječi tokovi (nalog/transition/termin, stock-core, picking, vračila) NEPOŠKODOVANI — samo dodatki
 - Sledi R445 (DELIVERY + INSTALLATION: dostava, planiranje montaže, podizvajalci), nato navigacija §11, P2 (konfiguratorji, garancije/reklamacije/servis) in issue #8/#9
+- Dopolnitev (GitLab izid, nadzorni agent): R444 neodvisno preverjeno (tsc/lint čisto; RBAC dashboard: monter/proizvodnja finance=null + brez invoices ključa; obseg nalogov 7/8 vseh — samo dodeljeni; checklist/material/events na tujem 403; statusni tip prek events 400; brskalnik: MOJ DAN stepper/checklist/poraba, kokpit z maržami/zamudami/kapaciteto, priprava materiala v QC, mobile 390/390) → MR !7 ci zelen → združen (ecdda62) → tag v1.3.0 → komentar na issue #7 (note 3973488803)
+
+Stage Summary (dopolnitev):
+- R444 ROLE EXPERIENCES: MR !7 združen, tag v1.3.0, issue #7 obveščen — faza ZAKLJUČENA
