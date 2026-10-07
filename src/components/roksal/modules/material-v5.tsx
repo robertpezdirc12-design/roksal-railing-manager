@@ -3,24 +3,28 @@
 // KOSOVNICE (BOM) — R442 (issue #7 §2): seznam generiranih kosovnic z EKSPlicitnimi
 // ID povezavami na artikle. Nadomešča stari "Material V5" fuzzy matching (ROOTS
 // besede), ki ga issue #7 §2/§15 izrecno prepoveduje kot vir resnice.
-// Vrata: inventory.read (pogled) / inventory.write (status).
+// R443: skladiščni tok — rezervacija / sprostitev / picking lista iz kosovnice.
+// Vrata: inventory.read (pogled) / inventory.write (status, rezervacija, picking).
 
 import { useState } from 'react'
-import { ClipboardList, Eye, PackageSearch, ShieldCheck } from 'lucide-react'
+import { ClipboardList, Eye, Lock, LockOpen, PackageSearch, ShieldCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useToast } from '@/hooks/use-toast'
 import { useAppStore } from '@/lib/store'
-import { apiPatch, fmtDate, useApi } from '@/lib/api-client'
+import { apiPatch, apiPost, fmtDate, useApi } from '@/lib/api-client'
 import { EmptyState, ErrorBox, LoadingRows, PageHeader, StatusBadge } from '@/components/roksal/ui-bits'
 import { hasPerm } from '@/lib/permissions-core'
 
 interface BomLineRow {
   itemId: string; qty: number; unit: string; note: string | null
+  reserved: number // rezervirano ZA TA BOM
+  reservedGlobal: number // rezervirano globalno (vse aktivne rezervacije)
+  available: number // fizična − globalno rezervirana
   item: { sku: string; name: string; unit: string; qty: number }
 }
 
@@ -31,9 +35,12 @@ interface BomRow {
   variant: { sku: string; name: string } | null
   package: { code: string; name: string; project: { code: string; title: string } } | null
   lines: BomLineRow[]
+  pickings?: { id: string; code: string; status: string }[]
 }
 
 const BOM_STATUS_OPTIONS = ['OSNUTEK', 'POTRJEN', 'REZERVIRAN', 'PORABLJEN', 'PREKLICAN']
+// ročno nastavljivi statusi (REZERVIRAN/PORABLJEN nastaneta samo prek skladiščnega toka)
+const BOM_MANUAL_STATUSES = ['OSNUTEK', 'POTRJEN', 'PREKLICAN']
 
 export default function KosovniceModule () {
   const user = useAppStore((s) => s.user)
@@ -128,22 +135,68 @@ function BomDetailDialog ({ bom, loading, canWrite, onChanged }: {
   onChanged: () => Promise<void>
 }) {
   const { toast } = useToast()
-  const [busy, setBusy] = useState(false)
+  const [busy, setBusy] = useState<string | null>(null)
+
+  const activePicking = bom?.pickings?.[0] ?? null
+  const reservable = bom && (bom.status === 'OSNUTEK' || bom.status === 'POTRJEN' || bom.status === 'PREKLICAN')
+  const releasable = bom && bom.status === 'REZERVIRAN'
 
   async function changeStatus (status: string) {
     if (!bom) return
-    setBusy(true)
+    setBusy('status')
     try {
       await apiPatch(`/api/bom/${bom.id}`, { status })
       toast({ title: 'Status kosovnice posodobljen.', description: `${bom.code} → ${status}` })
       await onChanged()
     } catch (e) {
       toast({ title: 'Napaka', description: e instanceof Error ? e.message : undefined, variant: 'destructive' })
-    } finally { setBusy(false) }
+    } finally { setBusy(null) }
+  }
+
+  async function reserve () {
+    if (!bom) return
+    setBusy('reserve')
+    try {
+      const res = await apiPost<{ data: { reserved: number } }>(`/api/bom/${bom.id}/reserve`)
+      toast({
+        title: 'Material rezerviran.',
+        description: `${bom.code}: ${res.data.reserved} vrstic — razpoložljiva zaloga je zmanjšana, fizična nespremenjena.`,
+      })
+      await onChanged()
+    } catch (e) {
+      toast({ title: 'Rezervacija ni uspela', description: e instanceof Error ? e.message : undefined, variant: 'destructive' })
+    } finally { setBusy(null) }
+  }
+
+  async function release () {
+    if (!bom) return
+    setBusy('release')
+    try {
+      const res = await apiPost<{ data: { released: number } }>(`/api/bom/${bom.id}/release`)
+      toast({ title: 'Rezervacije sproščene.', description: `${bom.code}: ${res.data.released} rezervacij preklicanih — material je spet razpoložljiv.` })
+      await onChanged()
+    } catch (e) {
+      toast({ title: 'Sprostitev ni uspela', description: e instanceof Error ? e.message : undefined, variant: 'destructive' })
+    } finally { setBusy(null) }
+  }
+
+  async function createPicking () {
+    if (!bom) return
+    setBusy('picking')
+    try {
+      const res = await apiPost<{ data: { code: string } }>('/api/picking', { bomId: bom.id })
+      toast({
+        title: 'Picking lista ustvarjena.',
+        description: `${res.data.code} — poiščete jo pod Zaloga → Picking; zaključek izda material in porabi rezervacije.`,
+      })
+      await onChanged()
+    } catch (e) {
+      toast({ title: 'Ustvarjanje pickinga ni uspelo', description: e instanceof Error ? e.message : undefined, variant: 'destructive' })
+    } finally { setBusy(null) }
   }
 
   return (
-    <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+    <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-3xl">
       <DialogHeader>
         <DialogTitle className="flex flex-wrap items-center gap-2">
           <PackageSearch className="size-5 text-roksal-amber" aria-hidden />
@@ -164,54 +217,101 @@ function BomDetailDialog ({ bom, loading, canWrite, onChanged }: {
         <>
           {bom.note ? <p className="text-sm text-muted-foreground">{bom.note}</p> : null}
 
+          {activePicking ? (
+            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-roksal-amber/40 bg-roksal-amber/10 p-3 text-sm">
+              <ClipboardList className="size-4 text-roksal-amber" aria-hidden />
+              <span className="font-semibold">Aktivna picking lista {activePicking.code}</span>
+              <StatusBadge status={activePicking.status} />
+              <span className="text-xs text-muted-foreground">— zaključek izdaje najdete pod Zaloga → Picking.</span>
+            </div>
+          ) : null}
+
           <div className="overflow-x-auto rounded-lg border">
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead className="pl-3">Artikel</TableHead>
                   <TableHead className="text-right">Potrebno</TableHead>
-                  <TableHead className="text-right">Zaloga</TableHead>
+                  <TableHead className="text-right">Fizična</TableHead>
+                  <TableHead className="text-right">Rezervirana</TableHead>
+                  <TableHead className="text-right">Razpoložljiva</TableHead>
                   <TableHead className="pr-3">Stanje</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {bom.lines.map((l) => (
-                  <TableRow key={l.itemId}>
-                    <TableCell className="pl-3">
-                      <span className="font-mono text-xs text-muted-foreground">{l.item.sku}</span>
-                      <span className="ml-2 font-medium">{l.item.name}</span>
-                      {l.note ? <span className="block text-[11px] text-muted-foreground">{l.note}</span> : null}
-                    </TableCell>
-                    <TableCell className="text-right font-bold">{l.qty} <span className="text-xs font-normal text-muted-foreground">{l.unit}</span></TableCell>
-                    <TableCell className="text-right text-muted-foreground">{l.item.qty} {l.item.unit}</TableCell>
-                    <TableCell className="pr-3">
-                      {l.item.qty >= l.qty ? (
-                        <Badge variant="secondary" className="border-transparent bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">pokrito</Badge>
-                      ) : (
-                        <Badge variant="secondary" className="border-transparent bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300">manjka {Math.round((l.qty - l.item.qty) * 100) / 100}</Badge>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {bom.lines.map((l) => {
+                  const reservedHere = l.reserved >= l.qty - 1e-9
+                  const covered = l.available >= l.qty - 1e-9
+                  return (
+                    <TableRow key={l.itemId}>
+                      <TableCell className="pl-3">
+                        <span className="font-mono text-xs text-muted-foreground">{l.item.sku}</span>
+                        <span className="ml-2 font-medium">{l.item.name}</span>
+                        {l.note ? <span className="block text-[11px] text-muted-foreground">{l.note}</span> : null}
+                      </TableCell>
+                      <TableCell className="text-right font-bold">{l.qty} <span className="text-xs font-normal text-muted-foreground">{l.unit}</span></TableCell>
+                      <TableCell className="text-right text-muted-foreground">{l.item.qty}</TableCell>
+                      <TableCell className="text-right text-muted-foreground">
+                        {l.reservedGlobal > 0 ? (
+                          <>
+                            {l.reservedGlobal}
+                            {l.reserved > 0 ? <span className="block text-[11px] text-roksal-amber">ta BOM: {l.reserved}</span> : null}
+                          </>
+                        ) : '0'}
+                      </TableCell>
+                      <TableCell className={`text-right font-semibold ${covered ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}>{l.available}</TableCell>
+                      <TableCell className="pr-3">
+                        {reservedHere ? (
+                          <Badge variant="secondary" className="border-transparent bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300"><Lock className="mr-1 size-3" aria-hidden />rezervirano</Badge>
+                        ) : covered ? (
+                          <Badge variant="secondary" className="border-transparent bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"><ShieldCheck className="mr-1 size-3" aria-hidden />se da rezervirati</Badge>
+                        ) : (
+                          <Badge variant="secondary" className="border-transparent bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300">manjka {Math.round((l.qty - l.available) * 100) / 100}</Badge>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
               </TableBody>
             </Table>
           </div>
 
           {canWrite ? (
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-xs text-muted-foreground">Status:</span>
-              <Select value={bom.status} onValueChange={(v) => void changeStatus(v)} disabled={busy}>
-                <SelectTrigger className="w-40" aria-label="Status kosovnice"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {BOM_STATUS_OPTIONS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                </SelectContent>
-              </Select>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs text-muted-foreground">Status:</span>
+                <Select value={BOM_MANUAL_STATUSES.includes(bom.status) ? bom.status : 'POTRJEN'} onValueChange={(v) => void changeStatus(v)} disabled={busy !== null}>
+                  <SelectTrigger className="w-40" aria-label="Status kosovnice"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {BOM_MANUAL_STATUSES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {reservable ? (
+                  <Button size="sm" onClick={() => void reserve()} disabled={busy !== null}>
+                    <Lock className="size-4" aria-hidden /> {busy === 'reserve' ? 'Rezerviram …' : 'Rezerviraj material'}
+                  </Button>
+                ) : null}
+                {releasable ? (
+                  <>
+                    <Button size="sm" variant="outline" onClick={() => void release()} disabled={busy !== null}>
+                      <LockOpen className="size-4" aria-hidden /> {busy === 'release' ? 'Sproščam …' : 'Sprosti rezervacije'}
+                    </Button>
+                    {!activePicking ? (
+                      <Button size="sm" onClick={() => void createPicking()} disabled={busy !== null}>
+                        <ClipboardList className="size-4" aria-hidden /> {busy === 'picking' ? 'Ustvarjam …' : 'Ustvari picking listo'}
+                      </Button>
+                    ) : null}
+                  </>
+                ) : null}
+              </div>
             </div>
           ) : null}
 
           <p className="text-xs text-muted-foreground">
-            Rezervacije zaloge po paketih sledijo v fazi INVENTORY CORE (issue #7 P1) —
-            trenutno prikazujemo fizično zalogo artiklov.
+            Rezervacija zmanjša RAZPOLOŽLJIVO zalogo (fizična ostane); zaključek picking liste izda material
+            (fizična −) in porabi rezervacije. Invarianta: fizična ≠ rezervirana ≠ razpoložljiva (issue #7 §7).
           </p>
         </>
       )}

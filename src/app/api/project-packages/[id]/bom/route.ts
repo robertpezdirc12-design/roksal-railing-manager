@@ -33,8 +33,23 @@ export async function POST (req: NextRequest, { params }: Params) {
     return jsonError(400, 'Izdelek nima definiranih komponent (BOM predloga je prazna).', 'Dodajte komponente v katalogu.')
   }
 
-  // obstoječa kosovnica istega paketa se nadomesti (zgodovina ostane v reviziji)
+  // obstoječa kosovnica istega paketa se nadomesti (zgodovina ostaja v reviziji)
+  // R443: NADOMEŠČANJE JE PREPUŠČENO SAMO "čistim" kosovnicam — če ima aktivne
+  // rezervacije, povezane picking liste ali je material že poraban, bi izbris
+  // prelomil invarianto FIZIČNA ≠ REZERVIRANA ≠ RAZPOLOŽLJIVA (osirotele
+  // rezervacije z bomId=null bi za vedno držale zalogo).
   if (pkg.bom) {
+    const activeRes = await db.stockReservation.count({ where: { bomId: pkg.bom.id, status: 'AKTIVNA' } })
+    if (activeRes > 0) {
+      return jsonError(409, `Kosovnica ${pkg.bom.code} ima ${activeRes} aktivnih rezervacij — najprej jih sprostite (Zaloga → Kosovnice → Sprosti).`)
+    }
+    const pickingCount = await db.pickingList.count({ where: { bomId: pkg.bom.id } })
+    if (pickingCount > 0) {
+      return jsonError(409, `Kosovnica ${pkg.bom.code} ima ${pickingCount} povezanih picking list — nadomeščanje ni mogoče (izgubila bi se zgodovina izdaje).`)
+    }
+    if (pkg.bom.status === 'REZERVIRAN' || pkg.bom.status === 'PORABLJEN') {
+      return jsonError(409, `Kosovnica ${pkg.bom.code} je ${pkg.bom.status.toLowerCase()} — nadomeščanje ni mogoče. Ustvarite nov paket za ponovno konfiguracijo.`)
+    }
     await db.bomLine.deleteMany({ where: { bomId: pkg.bom.id } })
     await db.bom.delete({ where: { id: pkg.bom.id } })
   }
