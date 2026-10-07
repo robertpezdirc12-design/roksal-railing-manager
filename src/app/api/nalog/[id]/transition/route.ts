@@ -6,7 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { jsonError, requirePermission } from '@/lib/auth'
+import { jsonError, readsAllData, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
 
 type Params = { params: Promise<{ id: string }> }
@@ -33,8 +33,12 @@ export async function POST (req: NextRequest, { params }: Params) {
   const to = typeof body?.to === 'string' ? body.to : ''
   const note = typeof body?.note === 'string' ? body.note : null
 
-  const order = await db.workOrder.findUnique({ where: { id }, include: { project: { select: { id: true, code: true } } } })
+  const order = await db.workOrder.findUnique({ where: { id }, include: { project: { select: { id: true, code: true } }, assignee: { select: { id: true } } } })
   if (!order) return jsonError(404, 'Nalog ne obstaja.')
+  // obseg (issue #1): monter lahko prestavlja SAMO svoj nalog
+  if (!readsAllData(auth.user) && order.assignee?.id !== auth.user.id) {
+    return jsonError(403, 'Nalog ni dodeljen vam.', 'Terenski tok izvajate na svojih nalogih.')
+  }
 
   const allowed = FLOW[order.status] ?? []
   const step = allowed.find((s) => s.next === to)

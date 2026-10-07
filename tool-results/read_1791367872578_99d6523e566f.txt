@@ -1,0 +1,686 @@
+     1→'use client'
+     2→
+     3→// PROJEKTI — seznam + podrobnost (vrata projects.read)
+     4→// R434: garancija projekta — sklop v podrobnosti (/api/warranty, obiski).
+     5→// R435: portal stranke — povezave + predogled javnega pogleda (/api/portal, /api/public/portal).
+     6→
+     7→import { useMemo, useState } from 'react'
+     8→import { CalendarCheck, Copy, ExternalLink, Eye, FolderKanban, HardHat, History, Link2, MapPin, Plus, Ruler, Search, FileText, Banknote, ShieldCheck } from 'lucide-react'
+     9→import { Button } from '@/components/ui/button'
+    10→import { Badge } from '@/components/ui/badge'
+    11→import { Card, CardContent } from '@/components/ui/card'
+    12→import { Input } from '@/components/ui/input'
+    13→import { Label } from '@/components/ui/label'
+    14→import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+    15→import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+    16→import { useToast } from '@/hooks/use-toast'
+    17→import { useAppStore } from '@/lib/store'
+    18→import { cn } from '@/lib/utils'
+    19→import { apiDelete, apiPost, fmtDate, fmtDateTime, fmtEUR, useApi } from '@/lib/api-client'
+    20→import { EmptyState, ErrorBox, LoadingRows, PageHeader, StatusBadge } from '@/components/roksal/ui-bits'
+    21→import { hasPerm } from '@/lib/permissions-core'
+    22→
+    23→interface ProjectRow {
+    24→  id: string; code: string; title: string; status: string; address: string | null; createdAt: string
+    25→  customer: { name: string; city: string | null } | null
+    26→  _count: { workOrders: number; quotes: number; measurements: number }
+    27→}
+    28→
+    29→interface ProjectDetail extends ProjectRow {
+    30→  note: string | null
+    31→  customer: { name: string; city: string | null; email: string | null; phone: string | null } | null
+    32→  quotes: { id: string; code: string; status: string; total: number }[]
+    33→  workOrders: { id: string; code: string; title: string; status: string; scheduledFor: string | null; assignee: { name: string } | null }[]
+    34→  measurements: { id: string; type: string; location: string | null; lengthCm: number | null; createdAt: string }[]
+    35→  invoices: { id: string; code: string; status: string; total: number; paid: number }[]
+    36→}
+    37→
+    38→interface WarrantyRow {
+    39→  id: string; startsAt: string; months: number; status: string; note: string | null; endsAt: string
+    40→  valid: boolean
+    41→  nextVisit: { id: string; date: string; note: string | null } | null
+    42→  visits: { id: string; date: string; note: string | null }[]
+    43→}
+    44→
+    45→const STATUSES = [
+    46→  { value: 'NACRT', label: 'Načrt' },
+    47→  { value: 'AKTIVNI', label: 'Aktivni' },
+    48→  { value: 'TEREN', label: 'Na terenu' },
+    49→  { value: 'ZAKLJUCEN', label: 'Zaključen' },
+    50→  { value: 'ARHIV', label: 'Arhiv' },
+    51→]
+    52→
+    53→export default function ProjektiModule () {
+    54→  const user = useAppStore((s) => s.user)
+    55→  const [q, setQ] = useState('')
+    56→  const [status, setStatus] = useState<string>('all')
+    57→  const [selected, setSelected] = useState<string | null>(null)
+    58→  const [createOpen, setCreateOpen] = useState(false)
+    59→
+    60→  const list = useApi<{ data: ProjectRow[] }>(
+    61→    `/api/projects?q=${encodeURIComponent(q)}${status !== 'all' ? `&status=${status}` : ''}`,
+    62→    [q, status]
+    63→  )
+    64→  const detail = useApi<{ data: ProjectDetail }>(selected ? `/api/projects/${selected}` : null, [selected])
+    65→  const customers = useApi<{ data: { id: string; name: string }[] }>(createOpen ? '/api/customers?limit=200' : null, [createOpen])
+    66→
+    67→  const canWrite = hasPerm(user?.perms, 'projects.write')
+    68→  const rows = useMemo(() => list.data?.data ?? [], [list.data])
+    69→
+    70→  return (
+    71→    <div className="space-y-4">
+    72→      <PageHeader
+    73→        title="Projekti" desc="Vsi projekti z statusi"
+    74→        actions={canWrite ? <Button size="sm" onClick={() => setCreateOpen(true)}><Plus className="size-4" aria-hidden /> Nov projekt</Button> : null}
+    75→      />
+    76→
+    77→      <div className="flex flex-wrap gap-2">
+    78→        <div className="relative min-w-0 flex-1">
+    79→          <Search className="absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+    80→          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Išči po naslovu, kodi, stranki …" className="pl-8" aria-label="Iskanje projektov" />
+    81→        </div>
+    82→        <Select value={status} onValueChange={setStatus}>
+    83→          <SelectTrigger className="w-36" aria-label="Filter statusa"><SelectValue /></SelectTrigger>
+    84→          <SelectContent>
+    85→            <SelectItem value="all">Vsi statusi</SelectItem>
+    86→            {STATUSES.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
+    87→          </SelectContent>
+    88→        </Select>
+    89→      </div>
+    90→
+    91→      <ErrorBox error={list.error} />
+    92→      {list.loading ? <LoadingRows /> : !list.error && rows.length === 0 ? (
+    93→        <EmptyState title="Ni projektov" desc="Poskusite spremeniti filter ali iskalni niz." icon={FolderKanban} />
+    94→      ) : (
+    95→        <ul className="grid gap-3 md:grid-cols-2">
+    96→          {rows.map((p) => (
+    97→            <li key={p.id}>
+    98→              <button type="button" className="w-full text-left" onClick={() => setSelected(p.id)} aria-label={`Odpri projekt ${p.code}`}>
+    99→                <Card className="transition hover:border-roksal-amber/60 hover:shadow-sm">
+   100→                  <CardContent className="p-4">
+   101→                    <div className="flex items-center justify-between gap-2">
+   102→                      <span className="font-mono text-xs font-semibold text-roksal-amber">{p.code}</span>
+   103→                      <StatusBadge status={p.status} />
+   104→                    </div>
+   105→                    <div className="mt-1.5 font-semibold leading-snug">{p.title}</div>
+   106→                    <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+   107→                      <span>{p.customer?.name ?? 'Brez stranke'}</span>
+   108→                      {p.address ? <span className="inline-flex items-center gap-1"><MapPin className="size-3" aria-hidden />{p.address}</span> : null}
+   109→                    </div>
+   110→                    <div className="mt-2 flex gap-3 text-[11px] text-muted-foreground">
+   111→                      <span className="inline-flex items-center gap-1"><HardHat className="size-3" aria-hidden />{p._count.workOrders}</span>
+   112→                      <span className="inline-flex items-center gap-1"><FileText className="size-3" aria-hidden />{p._count.quotes}</span>
+   113→                      <span className="inline-flex items-center gap-1"><Ruler className="size-3" aria-hidden />{p._count.measurements}</span>
+   114→                    </div>
+   115→                  </CardContent>
+   116→                </Card>
+   117→              </button>
+   118→            </li>
+   119→          ))}
+   120→        </ul>
+   121→      )}
+   122→
+   123→      {/* podrobnost */}
+   124→      <Dialog open={!!selected} onOpenChange={(o) => { if (!o) setSelected(null) }}>
+   125→        <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+   126→          {/* dostopnost: naslov+opis tudi med nalaganjem/napako (Radix zahteva DialogTitle) */}
+   127→          {detail.loading || !detail.data ? (
+   128→            <>
+   129→              <DialogTitle className="sr-only">Projekt</DialogTitle>
+   130→              <DialogDescription className="sr-only">Podrobnosti projekta.</DialogDescription>
+   131→            </>
+   132→          ) : null}
+   133→          {detail.loading ? <LoadingRows rows={3} /> : detail.data ? (
+   134→            <ProjectDetailDialog detail={detail.data.data} />
+   135→          ) : <ErrorBox error={detail.error} />}
+   136→        </DialogContent>
+   137→      </Dialog>
+   138→
+   139→      {/* nov projekt */}
+   140→      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+   141→        <CreateProjectDialog
+   142→          customers={customers.data?.data ?? []}
+   143→          onClose={() => setCreateOpen(false)}
+   144→          onCreated={async () => { setCreateOpen(false); await list.reload() }}
+   145→        />
+   146→      </Dialog>
+   147→    </div>
+   148→  )
+   149→}
+   150→
+   151→function ProjectDetailDialog ({ detail }: { detail: ProjectDetail }) {
+   152→  const [timelineOpen, setTimelineOpen] = useState(false)
+   153→  return (
+   154→    <>
+   155→      <DialogHeader>
+   156→        <div className="flex items-center gap-2">
+   157→          <span className="font-mono text-xs font-semibold text-roksal-amber">{detail.code}</span>
+   158→          <StatusBadge status={detail.status} />
+   159→          <Button
+   160→            variant="outline" size="sm" className="ml-auto h-7 gap-1.5 px-2 text-xs"
+   161→            onClick={() => setTimelineOpen(true)}
+   162→          >
+   163→            <History className="size-3.5" aria-hidden /> Zgodovina
+   164→          </Button>
+   165→        </div>
+   166→        <DialogTitle>{detail.title}</DialogTitle>
+   167→        <DialogDescription>
+   168→          {detail.customer?.name ?? 'Brez stranke'}
+   169→          {detail.address ? ` · ${detail.address}` : ''} · ustvarjeno {fmtDate(detail.createdAt)}
+   170→        </DialogDescription>
+   171→      </DialogHeader>
+   172→
+   173→      {detail.note ? <p className="rounded-lg bg-secondary/60 p-3 text-sm">{detail.note}</p> : null}
+   174→
+   175→      <div className="space-y-4">
+   176→        <section aria-label="Ponudbe">
+   177→          <h3 className="mb-1.5 text-xs font-bold uppercase tracking-widest text-muted-foreground">Ponudbe</h3>
+   178→          {detail.quotes.length === 0 ? <p className="text-sm text-muted-foreground">Ni ponudb.</p> : (
+   179→            <ul className="space-y-1">
+   180→              {detail.quotes.map((qq) => (
+   181→                <li key={qq.id} className="flex items-center justify-between gap-2 rounded-lg border p-2 text-sm">
+   182→                  <span className="font-mono text-xs">{qq.code}</span>
+   183→                  <StatusBadge status={qq.status} />
+   184→                  <span className="font-semibold">{fmtEUR(qq.total)}</span>
+   185→                </li>
+   186→              ))}
+   187→            </ul>
+   188→          )}
+   189→        </section>
+   190→
+   191→        <section aria-label="Računi">
+   192→          <h3 className="mb-1.5 text-xs font-bold uppercase tracking-widest text-muted-foreground">Računi</h3>
+   193→          {detail.invoices.length === 0 ? <p className="text-sm text-muted-foreground">Ni računov.</p> : (
+   194→            <ul className="space-y-1">
+   195→              {detail.invoices.map((iv) => (
+   196→                <li key={iv.id} className="flex items-center justify-between gap-2 rounded-lg border p-2 text-sm">
+   197→                  <span className="inline-flex items-center gap-2 font-mono text-xs"><Banknote className="size-3.5" aria-hidden />{iv.code}</span>
+   198→                  <StatusBadge status={iv.status} />
+   199→                  <span className="font-semibold">{fmtEUR(iv.total)} <span className="text-xs font-normal text-muted-foreground">(plačano {fmtEUR(iv.paid)})</span></span>
+   200→                </li>
+   201→              ))}
+   202→            </ul>
+   203→          )}
+   204→        </section>
+   205→
+   206→        <section aria-label="Nalogi">
+   207→          <h3 className="mb-1.5 text-xs font-bold uppercase tracking-widest text-muted-foreground">Nalogi</h3>
+   208→          {detail.workOrders.length === 0 ? <p className="text-sm text-muted-foreground">Ni nalogov.</p> : (
+   209→            <ul className="space-y-1">
+   210→              {detail.workOrders.map((w) => (
+   211→                <li key={w.id} className="flex items-center justify-between gap-2 rounded-lg border p-2 text-sm">
+   212→                  <span className="min-w-0 truncate"><span className="font-mono text-xs">{w.code}</span> {w.title}</span>
+   213→                  <StatusBadge status={w.status} />
+   214→                </li>
+   215→              ))}
+   216→            </ul>
+   217→          )}
+   218→        </section>
+   219→
+   220→        <section aria-label="Meritve">
+   221→          <h3 className="mb-1.5 text-xs font-bold uppercase tracking-widest text-muted-foreground">Meritve</h3>
+   222→          {detail.measurements.length === 0 ? <p className="text-sm text-muted-foreground">Ni meritev.</p> : (
+   223→            <ul className="space-y-1">
+   224→              {detail.measurements.map((m) => (
+   225→                <li key={m.id} className="flex items-center justify-between gap-2 rounded-lg border p-2 text-sm">
+   226→                  <span className="min-w-0 truncate">{m.location ?? m.type}</span>
+   227→                  <span className="shrink-0 font-mono text-xs text-muted-foreground">
+   228→                    {m.lengthCm ? `${(m.lengthCm / 100).toFixed(2)} m` : '—'} · {fmtDate(m.createdAt)}
+   229→                  </span>
+   230→                </li>
+   231→              ))}
+   232→            </ul>
+   233→          )}
+   234→        </section>
+   235→
+   236→        <WarrantySection projectId={detail.id} projectStatus={detail.status} />
+   237→        <PortalSection projectId={detail.id} projectCode={detail.code} />
+   238→      </div>
+   239→
+   240→      {/* kronološka zgodovina projekta (R433: /api/projects/[id]/timeline) */}
+   241→      <Dialog open={timelineOpen} onOpenChange={setTimelineOpen}>
+   242→        <TimelineDialog projectId={detail.id} code={detail.code} />
+   243→      </Dialog>
+   244→    </>
+   245→  )
+   246→}
+   247→
+   248→const TIMELINE_TYPE_STYLES: Record<string, string> = {
+   249→  ODPERTJE: 'bg-roksal-ink text-primary-foreground',
+   250→  PONUDBA: 'bg-secondary text-foreground',
+   251→  PODPIS: 'bg-roksal-amber text-roksal-ink',
+   252→  MERITEV: 'bg-secondary text-foreground',
+   253→  NALOG: 'bg-secondary text-foreground',
+   254→  DOGAJEK: 'bg-secondary/70 text-muted-foreground',
+   255→  ZAKLJUCEK: 'bg-emerald-700 text-white',
+   256→  RACUN: 'bg-secondary text-foreground',
+   257→  PLACILO: 'bg-emerald-700 text-white',
+   258→  PROIZVODNJA: 'bg-secondary text-foreground',
+   259→}
+   260→
+   261→const TIMELINE_TYPE_LABELS: Record<string, string> = {
+   262→  ODPERTJE: 'odpertje', PONUDBA: 'ponudba', PODPIS: 'podpis', MERITEV: 'meritev',
+   263→  NALOG: 'nalog', DOGAJEK: 'dogodek', ZAKLJUCEK: 'zaključek', RACUN: 'račun',
+   264→  PLACILO: 'plačilo', PROIZVODNJA: 'proizvodnja',
+   265→}
+   266→
+   267→function TimelineDialog ({ projectId, code }: { projectId: string; code: string }) {
+   268→  const tl = useApi<{ data: { entries: { at: string; type: string; label: string; detail: string; ref: string }[]; count: number } }>(`/api/projects/${projectId}/timeline`, [projectId])
+   269→  return (
+   270→    <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
+   271→      <DialogHeader>
+   272→        <DialogTitle>Zgodovina — {code}</DialogTitle>
+   273→        <DialogDescription>Kronološki tok projekta: ponudbe, podpisi, teren, računi, plačila, proizvodnja.</DialogDescription>
+   274→      </DialogHeader>
+   275→      <ErrorBox error={tl.error} />
+   276→      {tl.loading ? <LoadingRows rows={5} /> : !tl.error && (tl.data?.data.entries ?? []).length === 0 ? (
+   277→        <EmptyState title="Ni dogodkov" desc="Zgodovina projekta je prazna." icon={History} />
+   278→      ) : (
+   279→        <ol className="relative space-y-3 border-l pl-5" aria-label="Kronologija projekta">
+   280→          {(tl.data?.data.entries ?? []).map((e, i) => (
+   281→            <li key={`${e.at}-${i}`} className="relative">
+   282→              <span
+   283→                className={cn('absolute -left-[27px] top-0.5 inline-flex rounded-full px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide', TIMELINE_TYPE_STYLES[e.type] ?? 'bg-secondary text-foreground')}
+   284→                aria-hidden
+   285→              >
+   286→                {TIMELINE_TYPE_LABELS[e.type] ?? e.type.toLowerCase()}
+   287→              </span>
+   288→              <div className="rounded-lg border p-2.5">
+   289→                <div className="text-sm font-medium leading-snug">{e.label}</div>
+   290→                <div className="mt-0.5 flex flex-wrap items-baseline justify-between gap-x-3">
+   291→                  <span className="truncate text-xs text-muted-foreground">{e.detail}</span>
+   292→                  <span className="shrink-0 text-[10px] text-muted-foreground/70">{fmtDateTime(e.at)}</span>
+   293→                </div>
+   294→              </div>
+   295→            </li>
+   296→          ))}
+   297→        </ol>
+   298→      )}
+   299→    </DialogContent>
+   300→  )
+   301→}
+   302→
+   303→function CreateProjectDialog ({ customers, onClose, onCreated }: {
+   304→  customers: { id: string; name: string }[]
+   305→  onClose: () => void
+   306→  onCreated: () => Promise<void>
+   307→}) {
+   308→  const { toast } = useToast()
+   309→  const [title, setTitle] = useState('')
+   310→  const [customerId, setCustomerId] = useState('none')
+   311→  const [address, setAddress] = useState('')
+   312→  const [status, setStatusS] = useState('NACRT')
+   313→  const [busy, setBusy] = useState(false)
+   314→
+   315→  async function submit () {
+   316→    if (!title.trim()) { toast({ title: 'Naslov je obvezen.', variant: 'destructive' }); return }
+   317→    setBusy(true)
+   318→    try {
+   319→      await apiPost('/api/projects', { title, customerId: customerId === 'none' ? null : customerId, address, status })
+   320→      toast({ title: 'Projekt ustvarjen.' })
+   321→      await onCreated()
+   322→    } catch (e) {
+   323→      toast({ title: 'Napaka', description: e instanceof Error ? e.message : undefined, variant: 'destructive' })
+   324→    } finally { setBusy(false) }
+   325→  }
+   326→
+   327→  return (
+   328→    <DialogContent>
+   329→      <DialogHeader>
+   330→        <DialogTitle>Nov projekt</DialogTitle>
+   331→        <DialogDescription>Osnovni podatki — kodo določi sistem.</DialogDescription>
+   332→      </DialogHeader>
+   333→      <div className="space-y-3">
+   334→        <div className="space-y-2">
+   335→          <Label htmlFor="np-title">Naslov</Label>
+   336→          <Input id="np-title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="npr. Ograja terasa — Novak" />
+   337→        </div>
+   338→        <div className="space-y-2">
+   339→          <Label>Stranka</Label>
+   340→          <Select value={customerId} onValueChange={setCustomerId}>
+   341→            <SelectTrigger aria-label="Stranka"><SelectValue /></SelectTrigger>
+   342→            <SelectContent>
+   343→              <SelectItem value="none">Brez stranke</SelectItem>
+   344→              {customers.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+   345→            </SelectContent>
+   346→          </Select>
+   347→        </div>
+   348→        <div className="space-y-2">
+   349→          <Label htmlFor="np-addr">Naslov objekta</Label>
+   350→          <Input id="np-addr" value={address} onChange={(e) => setAddress(e.target.value)} placeholder="Ulica, kraj" />
+   351→        </div>
+   352→        <div className="space-y-2">
+   353→          <Label>Status</Label>
+   354→          <Select value={status} onValueChange={setStatusS}>
+   355→            <SelectTrigger aria-label="Status"><SelectValue /></SelectTrigger>
+   356→            <SelectContent>{STATUSES.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}</SelectContent>
+   357→          </Select>
+   358→        </div>
+   359→      </div>
+   360→      <DialogFooter>
+   361→        <Button variant="outline" onClick={onClose}>Prekliči</Button>
+   362→        <Button onClick={() => void submit()} disabled={busy}>{busy ? 'Ustvarjam…' : 'Ustvari'}</Button>
+   363→      </DialogFooter>
+   364→    </DialogContent>
+   365→  )
+   366→}
+   367→
+   368→/** Portal stranke (R435) — povezave za javni pogled statusa + predogled. */
+   369→interface PortalLinkRow {
+   370→  id: string; token: string; note: string | null; views: number
+   371→  lastViewedAt: string | null; createdAt: string; expiresAt: string; revokedAt: string | null; active: boolean
+   372→}
+   373→
+   374→function PortalSection ({ projectId, projectCode }: { projectId: string; projectCode: string }) {
+   375→  const user = useAppStore((s) => s.user)
+   376→  const { toast } = useToast()
+   377→  const links = useApi<{ data: PortalLinkRow[] }>(`/api/portal?projectId=${projectId}`, [projectId])
+   378→  const [preview, setPreview] = useState<string | null>(null)
+   379→  const [busy, setBusy] = useState(false)
+   380→
+   381→  const canWrite = hasPerm(user?.perms, 'projects.write')
+   382→  const rows = links.data?.data ?? []
+   383→  const activeCount = rows.filter((l) => l.active).length
+   384→
+   385→  async function createLink () {
+   386→    setBusy(true)
+   387→    try {
+   388→      await apiPost('/api/portal', { projectId, days: 90 })
+   389→      toast({ title: 'Povezava ustvarjena.', description: 'Velja 90 dni — kopirajte jo stranki.' })
+   390→      await links.reload()
+   391→    } catch (e) {
+   392→      toast({ title: 'Napaka', description: e instanceof Error ? e.message : undefined, variant: 'destructive' })
+   393→    } finally { setBusy(false) }
+   394→  }
+   395→
+   396→  async function revoke (id: string) {
+   397→    setBusy(true)
+   398→    try {
+   399→      await apiDelete(`/api/portal/${id}`)
+   400→      toast({ title: 'Povezava preklicana.', description: 'Javni dostop takoj preneha.' })
+   401→      await links.reload()
+   402→    } catch (e) {
+   403→      toast({ title: 'Napaka', description: e instanceof Error ? e.message : undefined, variant: 'destructive' })
+   404→    } finally { setBusy(false) }
+   405→  }
+   406→
+   407→  async function copyUrl (token: string) {
+   408→    const url = `${location.origin}/api/public/portal?token=${token}`
+   409→    try {
+   410→      await navigator.clipboard.writeText(url)
+   411→      toast({ title: 'URL kopiran.', description: 'Varni javni pogled — brez internih podatkov.' })
+   412→    } catch {
+   413→      toast({ title: 'Kopiranje ni uspelo.', description: url, variant: 'destructive' })
+   414→    }
+   415→  }
+   416→
+   417→  return (
+   418→    <section aria-label="Portal stranke">
+   419→      <h3 className="mb-1.5 text-xs font-bold uppercase tracking-widest text-muted-foreground">Portal stranke</h3>
+   420→      <ErrorBox error={links.error} />
+   421→      {links.loading ? <LoadingRows rows={1} /> : !links.error ? (
+   422→        <div className="space-y-2 rounded-xl border p-3">
+   423→          <div className="flex flex-wrap items-center justify-between gap-2">
+   424→            <p className="inline-flex items-center gap-2 text-sm">
+   425→              <Link2 className="size-4 text-roksal-amber" aria-hidden />
+   426→              {activeCount > 0 ? `${activeCount} aktivna povezava` : 'Ni aktivnih povezav'}
+   427→              <span className="text-xs text-muted-foreground">— stranka vidi status, montažo in garancijo</span>
+   428→            </p>
+   429→            {canWrite ? (
+   430→              <Button size="sm" variant="outline" onClick={() => void createLink()} disabled={busy}>
+   431→                <Plus className="size-4" aria-hidden /> Nova povezava
+   432→              </Button>
+   433→            ) : null}
+   434→          </div>
+   435→
+   436→          {rows.length === 0 ? (
+   437→            <p className="text-xs text-muted-foreground">
+   438→              {canWrite ? 'Ustvarite povezavo in jo pošljite stranki (e-pošta/SMS).' : 'Upravljanje zahteva pravico projects.write.'}
+   439→            </p>
+   440→          ) : (
+   441→            <ul className="space-y-1.5">
+   442→              {rows.map((l) => (
+   443→                <li key={l.id} className="rounded-lg border p-2">
+   444→                  <div className="flex flex-wrap items-center gap-2">
+   445→                    <code className="min-w-0 truncate font-mono text-[11px] text-muted-foreground">…{l.token.slice(-10)}</code>
+   446→                    {l.active ? (
+   447→                      <Badge className="border-transparent bg-emerald-700 text-white">velja</Badge>
+   448→                    ) : (
+   449→                      <Badge variant="secondary">{l.revokedAt ? 'preklicana' : 'potekla'}</Badge>
+   450→                    )}
+   451→                    <span className="ml-auto inline-flex items-center gap-3 text-[11px] text-muted-foreground">
+   452→                      <span className="inline-flex items-center gap-1"><Eye className="size-3" aria-hidden />{l.views}</span>
+   453→                      <span>do {fmtDate(l.expiresAt)}</span>
+   454→                    </span>
+   455→                  </div>
+   456→                  {l.note ? <p className="mt-1 truncate text-xs text-muted-foreground">{l.note}</p> : null}
+   457→                  <div className="mt-1.5 flex flex-wrap gap-1.5">
+   458→                    <Button size="sm" variant="ghost" className="h-7 gap-1 px-2 text-xs" onClick={() => setPreview(l.token)} disabled={!l.active}>
+   459→                      <ExternalLink className="size-3.5" aria-hidden /> Predogled
+   460→                    </Button>
+   461→                    <Button size="sm" variant="ghost" className="h-7 gap-1 px-2 text-xs" onClick={() => void copyUrl(l.token)}>
+   462→                      <Copy className="size-3.5" aria-hidden /> Kopiraj URL
+   463→                    </Button>
+   464→                    {canWrite && l.active ? (
+   465→                      <Button
+   466→                        size="sm" variant="ghost" className="h-7 gap-1 px-2 text-xs text-destructive hover:text-destructive"
+   467→                        onClick={() => void revoke(l.id)} disabled={busy}
+   468→                      >
+   469→                        Prekliči
+   470→                      </Button>
+   471→                    ) : null}
+   472→                  </div>
+   473→                </li>
+   474→              ))}
+   475→            </ul>
+   476→          )}
+   477→        </div>
+   478→      ) : null}
+   479→
+   480→      {/* predogled javnega pogleda — natanko to, kar vidi stranka */}
+   481→      <Dialog open={!!preview} onOpenChange={(o) => { if (!o) setPreview(null) }}>
+   482→        <PortalPreviewDialog token={preview} code={projectCode} />
+   483→      </Dialog>
+   484→    </section>
+   485→  )
+   486→}
+   487→
+   488→interface PortalPublicData {
+   489→  project: { code: string; title: string; statusLabel: string; address: string | null }
+   490→  customer: { name: string | null }
+   491→  timeline: { at: string; type: string; label: string }[]
+   492→  warranty: { endsAt: string; valid: boolean } | null
+   493→  photos: { location: string; photo: string; at: string }[]
+   494→  company: { name: string; phone: string; email: string; web: string }
+   495→  link: { expiresAt: string }
+   496→}
+   497→
+   498→const PORTAL_TYPE_ICON: Record<string, string> = {
+   499→  ODPERTJE: '📂', PODPIS: '✍️', MONTAZA: '🔧', ZAKLJUCEK: '✅',
+   500→}
+   501→
+   502→function PortalPreviewDialog ({ token, code }: { token: string | null; code: string }) {
+   503→  // javni endpoint — enak odgovor kot pri stranki (fetch brez avtorizacije je pravilen)
+   504→  const view = useApi<{ data: PortalPublicData }>(token ? `/api/public/portal?token=${token}` : null, [token])
+   505→  const d = view.data?.data
+   506→
+   507→  return (
+   508→    <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
+   509→      <DialogHeader>
+   510→        <DialogTitle>Predogled portala — {code}</DialogTitle>
+   511→        <DialogDescription>Javni pogled, ki ga vidi stranka (brez zneskov in internih podatkov).</DialogDescription>
+   512→      </DialogHeader>
+   513→      <ErrorBox error={view.error} />
+   514→      {view.loading ? <LoadingRows rows={4} /> : d ? (
+   515→        <div className="space-y-4">
+   516→          <div className="rounded-xl bg-gradient-to-br from-[#1d2b3e] to-[#2a3f5f] p-4 text-primary-foreground">
+   517→            <div className="flex items-center justify-between gap-2">
+   518→              <span className="font-mono text-xs opacity-80">{d.project.code}</span>
+   519→              <span className="rounded-full bg-roksal-amber px-2 py-0.5 text-[11px] font-bold text-roksal-ink">{d.project.statusLabel}</span>
+   520→            </div>
+   521→            <h4 className="mt-1.5 text-lg font-bold leading-snug">{d.project.title}</h4>
+   522→            {d.project.address ? <p className="mt-0.5 inline-flex items-center gap-1 text-xs opacity-90"><MapPin className="size-3" aria-hidden />{d.project.address}</p> : null}
+   523→            {d.customer.name ? <p className="mt-0.5 text-xs opacity-75">{d.customer.name}</p> : null}
+   524→          </div>
+   525→
+   526→          <section aria-label="Zgodovina za stranko">
+   527→            <h5 className="mb-2 text-xs font-bold uppercase tracking-widest text-muted-foreground">Potek dela</h5>
+   528→            <ol className="relative space-y-2 border-l pl-5">
+   529→              {d.timeline.map((e, i) => (
+   530→                <li key={`${e.at}-${i}`} className="relative">
+   531→                  <span className="absolute -left-[23px] top-1 size-2.5 rounded-full bg-roksal-amber" aria-hidden />
+   532→                  <div className="flex items-baseline justify-between gap-2 text-sm">
+   533→                    <span>{PORTAL_TYPE_ICON[e.type] ?? '•'} {e.label}</span>
+   534→                    <span className="shrink-0 text-[10px] text-muted-foreground">{fmtDate(e.at)}</span>
+   535→                  </div>
+   536→                </li>
+   537→              ))}
+   538→            </ol>
+   539→          </section>
+   540→
+   541→          {d.warranty ? (
+   542→            <section aria-label="Garancija za stranko" className="rounded-lg border p-3">
+   543→              <div className="flex items-center gap-2 text-sm font-semibold">
+   544→                <ShieldCheck className={cn('size-4', d.warranty.valid ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground')} aria-hidden />
+   545→                {d.warranty.valid ? 'Garancija velja' : 'Garancija je potekla'}
+   546→              </div>
+   547→              <p className="mt-0.5 text-xs text-muted-foreground">Veljavnost do {fmtDate(d.warranty.endsAt)}.</p>
+   548→            </section>
+   549→          ) : null}
+   550→
+   551→          {d.photos.length > 0 ? (
+   552→            <section aria-label="Fotografije del">
+   553→              <h5 className="mb-2 text-xs font-bold uppercase tracking-widest text-muted-foreground">Zaključena dela</h5>
+   554→              <ul className="grid grid-cols-2 gap-2">
+   555→                {d.photos.map((p, i) => (
+   556→                  <li key={`${p.at}-${i}`} className="overflow-hidden rounded-lg border">
+   557→                    {/* stranki namenjena demonstracijska slika zaključenega dela (SVG) */}
+   558→                    <img src={p.photo} alt={p.location} className="aspect-video w-full object-cover" />
+   559→                    <p className="truncate px-2 py-1 text-[11px] text-muted-foreground">{p.location}</p>
+   560→                  </li>
+   561→                ))}
+   562→              </ul>
+   563→            </section>
+   564→          ) : null}
+   565→
+   566→          <footer className="rounded-lg bg-secondary/60 p-3 text-xs text-muted-foreground">
+   567→            <span className="font-semibold text-foreground">{d.company.name}</span> · {d.company.phone} · {d.company.email} · {d.company.web}
+   568→            <p className="mt-1 text-[10px] opacity-70">Povezava velja do {fmtDate(d.link.expiresAt)}.</p>
+   569→          </footer>
+   570→        </div>
+   571→      ) : null}
+   572→    </DialogContent>
+   573→  )
+   574→}
+   575→
+   576→/** Garancija projekta (R434) — stanje, obiski, oddaja garancije. */
+   577→function WarrantySection ({ projectId, projectStatus }: { projectId: string; projectStatus: string }) {
+   578→  const user = useAppStore((s) => s.user)
+   579→  const { toast } = useToast()
+   580→  const warranty = useApi<{ data: WarrantyRow[] }>(`/api/warranty?projectId=${projectId}`, [projectId])
+   581→  const [months, setMonths] = useState('24')
+   582→  const [visitNote, setVisitNote] = useState('')
+   583→  const [visitDate, setVisitDate] = useState('')
+   584→  const [busy, setBusy] = useState(false)
+   585→
+   586→  const canWrite = hasPerm(user?.perms, 'projects.write')
+   587→  const w = warranty.data?.data?.[0] ?? null
+   588→  const closed = projectStatus === 'ZAKLJUCEN' || projectStatus === 'ARHIV'
+   589→
+   590→  async function createWarranty () {
+   591→    setBusy(true)
+   592→    try {
+   593→      await apiPost('/api/warranty', { projectId, months: Number(months) })
+   594→      toast({ title: 'Garancija oddana.', description: `${months} mesecev od danes.` })
+   595→      await warranty.reload()
+   596→    } catch (e) {
+   597→      toast({ title: 'Napaka', description: e instanceof Error ? e.message : undefined, variant: 'destructive' })
+   598→    } finally { setBusy(false) }
+   599→  }
+   600→
+   601→  async function addVisit () {
+   602→    if (!w) return
+   603→    if (!visitNote.trim()) { toast({ title: 'Opis obiska je obvezen.', variant: 'destructive' }); return }
+   604→    setBusy(true)
+   605→    try {
+   606→      await apiPost('/api/warranty', { warrantyId: w.id, visitNote, visitDate: visitDate || undefined })
+   607→      toast({ title: 'Obisk zabeležen.' })
+   608→      setVisitNote(''); setVisitDate('')
+   609→      await warranty.reload()
+   610→    } catch (e) {
+   611→      toast({ title: 'Napaka', description: e instanceof Error ? e.message : undefined, variant: 'destructive' })
+   612→    } finally { setBusy(false) }
+   613→  }
+   614→
+   615→  return (
+   616→    <section aria-label="Garancija">
+   617→      <h3 className="mb-1.5 text-xs font-bold uppercase tracking-widest text-muted-foreground">Garancija</h3>
+   618→      <ErrorBox error={warranty.error} />
+   619→      {warranty.loading ? <LoadingRows rows={1} /> : !warranty.error && !w ? (
+   620→        closed ? (
+   621→          canWrite ? (
+   622→            <div className="space-y-2 rounded-xl border border-dashed p-3">
+   623→              <p className="text-sm text-muted-foreground">Projekt je zaključen — garancija še ni oddana.</p>
+   624→              <div className="flex flex-wrap items-center gap-2">
+   625→                <Select value={months} onValueChange={setMonths}>
+   626→                  <SelectTrigger className="w-32" aria-label="Trajanje garancije"><SelectValue /></SelectTrigger>
+   627→                  <SelectContent>
+   628→                    {['12', '24', '36', '60'].map((m) => <SelectItem key={m} value={m}>{m} mesecev</SelectItem>)}
+   629→                  </SelectContent>
+   630→                </Select>
+   631→                <Button size="sm" onClick={() => void createWarranty()} disabled={busy}>
+   632→                  <ShieldCheck className="size-4" aria-hidden /> Oddaj garancijo
+   633→                </Button>
+   634→              </div>
+   635→            </div>
+   636→          ) : <p className="text-sm text-muted-foreground">Garancija ni oddana (zahteva pravico projects.write).</p>
+   637→        ) : <p className="text-sm text-muted-foreground">Garancija se odda po zaključku projekta.</p>
+   638→      ) : !warranty.error && w ? (
+   639→        <div className="space-y-2 rounded-xl border p-3">
+   640→          <div className="flex flex-wrap items-center justify-between gap-2">
+   641→            <span className="inline-flex items-center gap-2 text-sm font-semibold">
+   642→              <ShieldCheck className={cn('size-4', w.valid ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground')} aria-hidden />
+   643→              {w.valid ? 'Garancija velja' : 'Garancija je potekla'}
+   644→            </span>
+   645→            <span className="font-mono text-xs text-muted-foreground">
+   646→              {fmtDate(w.startsAt)} → {fmtDate(w.endsAt)} ({w.months} m)
+   647→            </span>
+   648→          </div>
+   649→          {w.note ? <p className="text-xs text-muted-foreground">{w.note}</p> : null}
+   650→          {w.nextVisit ? (
+   651→            <p className="inline-flex items-center gap-1.5 text-xs font-medium text-roksal-amber">
+   652→              <CalendarCheck className="size-3.5" aria-hidden /> Naslednji obisk: {fmtDate(w.nextVisit.date)}
+   653→              {w.nextVisit.note ? ` — ${w.nextVisit.note}` : ''}
+   654→            </p>
+   655→          ) : null}
+   656→          {w.visits.length > 0 ? (
+   657→            <ul className="max-h-40 space-y-1 overflow-y-auto">
+   658→              {w.visits.map((v) => (
+   659→                <li key={v.id} className="flex items-start justify-between gap-2 text-xs">
+   660→                  <span className="min-w-0"><span className="font-mono text-muted-foreground">{fmtDate(v.date)}</span> {v.note}</span>
+   661→                </li>
+   662→              ))}
+   663→            </ul>
+   664→          ) : <p className="text-xs text-muted-foreground">Ni zabeleženih obiskov.</p>}
+   665→          {canWrite ? (
+   666→            <div className="flex flex-wrap items-center gap-2 border-t pt-2">
+   667→              <Input
+   668→                type="date" value={visitDate} onChange={(e) => setVisitDate(e.target.value)}
+   669→                className="w-36" aria-label="Datum obiska"
+   670→              />
+   671→              <Input
+   672→                value={visitNote} onChange={(e) => setVisitNote(e.target.value)}
+   673→                placeholder="Opis obiska / pregleda" className="min-w-0 flex-1" aria-label="Opis obiska"
+   674→                onKeyDown={(e) => { if (e.key === 'Enter') void addVisit() }}
+   675→              />
+   676→              <Button size="sm" variant="outline" onClick={() => void addVisit()} disabled={busy}>
+   677→                <CalendarCheck className="size-4" aria-hidden /> Zapiši obisk
+   678→              </Button>
+   679→            </div>
+   680→          ) : null}
+   681→        </div>
+   682→      ) : null}
+   683→    </section>
+   684→  )
+   685→}
+   686→

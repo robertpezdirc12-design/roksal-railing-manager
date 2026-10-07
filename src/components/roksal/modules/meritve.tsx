@@ -4,12 +4,13 @@
 // Seznam s filtrom po tipu + nova meritev (POST /api/measurements) + popravek (PATCH /api/measurements/[id])
 
 import { useMemo, useState } from 'react'
-import { Loader2, MapPin, Plus, Ruler, Save, Search, TrendingUp } from 'lucide-react'
+import { Camera, History, Loader2, MapPin, Plus, Ruler, Save, Search, TrendingUp } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -17,18 +18,26 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { useToast } from '@/hooks/use-toast'
 import { useAppStore } from '@/lib/store'
 import { cn } from '@/lib/utils'
-import { apiPatch, apiPost, fmtDate, useApi } from '@/lib/api-client'
+import { apiPatch, apiPost, fmtDate, fmtDateTime, useApi } from '@/lib/api-client'
 import { EmptyState, ErrorBox, LoadingRows, PageHeader } from '@/components/roksal/ui-bits'
 import { hasPerm } from '@/lib/permissions-core'
+import { KameraMeritevDialog } from '@/components/roksal/modules/meritve-kamera'
 
 interface MeasurementRow {
   id: string; type: string; location: string | null
   lengthCm: number | null; heightCm: number | null
   posts: number | null; segments: number | null; handrail: boolean
   slopeDeg: number | null; params: string | null; note: string | null; createdAt: string
+  source?: string // ROCNO | KAMERA (večtočkovne meritve na fotografiji)
   author: { name: string } | null
   project: { code: string; title: string } | null
   workOrder: { code: string; title: string } | null
+}
+
+interface VersionRow {
+  id: string; version: number; data: string
+  note: string | null; createdAt: string
+  user: { name: string } | null
 }
 
 interface ProjectOption { id: string; code: string; title: string }
@@ -70,6 +79,7 @@ export default function MeritveModule () {
   const [type, setType] = useState('all')
   const [q, setQ] = useState('')
   const [createOpen, setCreateOpen] = useState(false)
+  const [kameraOpen, setKameraOpen] = useState(false)
   const [editRow, setEditRow] = useState<MeasurementRow | null>(null)
 
   const list = useApi<{ data: MeasurementRow[] }>(
@@ -97,9 +107,14 @@ export default function MeritveModule () {
         title="Meritve"
         desc="Merjenje ograj po terenu — dolžine, stebri, nagibi"
         actions={canWrite ? (
-          <Button size="sm" onClick={() => setCreateOpen(true)}>
-            <Plus className="size-4" aria-hidden /> Nova meritev
-          </Button>
+          <>
+            <Button size="sm" variant="outline" onClick={() => setKameraOpen(true)}>
+              <Camera className="size-4" aria-hidden /> Meritve s kamero
+            </Button>
+            <Button size="sm" onClick={() => setCreateOpen(true)}>
+              <Plus className="size-4" aria-hidden /> Nova meritev
+            </Button>
+          </>
         ) : null}
       />
 
@@ -131,6 +146,11 @@ export default function MeritveModule () {
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <TypeBadge type={m.type} />
+                        {m.source === 'KAMERA' ? (
+                          <Badge variant="secondary" className="border-transparent bg-violet-100 px-1.5 py-0 text-[10px] font-medium text-violet-800 dark:bg-violet-950 dark:text-violet-300">
+                            KAMERA
+                          </Badge>
+                        ) : null}
                         <span className="truncate font-semibold">{m.location ?? 'Brez lokacije'}</span>
                       </div>
                       <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
@@ -161,6 +181,13 @@ export default function MeritveModule () {
           ))}
         </div>
       )}
+
+      {/* napredne meritve s kamero (večtočkovne na fotografiji) */}
+      <KameraMeritevDialog
+        open={kameraOpen}
+        onClose={() => setKameraOpen(false)}
+        onSaved={() => { void list.reload() }}
+      />
 
       {/* nova meritev */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
@@ -224,6 +251,11 @@ function MeasurementForm ({ mode, open, initial, onClose, onSaved }: {
   // izbirnike povezav naložimo šele ob odprtju obrazca za nov vnos
   const projects = useApi<{ data: ProjectOption[] }>(open && mode === 'create' ? '/api/projects' : null, [open, mode])
   const orders = useApi<{ data: WorkOrderOption[] }>(open && mode === 'create' ? '/api/nalog?scope=all' : null, [open, mode])
+  // zgodovina verzij — samo v načinu popravka (issue #1)
+  const verzije = useApi<{ data: VersionRow[] }>(
+    open && mode === 'edit' && initial ? `/api/measurements/${initial.id}/verzije` : null,
+    [open, mode, initial?.id]
+  )
 
   async function submit () {
     if (!form.location.trim() && !form.note.trim() && form.type !== 'FOTO') {
@@ -357,6 +389,32 @@ function MeasurementForm ({ mode, open, initial, onClose, onSaved }: {
               </Select>
               <ErrorBox error={orders.error} />
             </div>
+          </div>
+        ) : null}
+
+        {mode === 'edit' ? (
+          <div className="space-y-2">
+            <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <History className="size-3.5" aria-hidden /> Zgodovina verzij
+            </div>
+            <ErrorBox error={verzije.error} />
+            {verzije.loading ? <LoadingRows rows={2} /> : !verzije.error && (verzije.data?.data ?? []).length === 0 ? (
+              <p className="text-xs text-muted-foreground">Ni še shranjenih verzij.</p>
+            ) : (
+              <ScrollArea className="max-h-48 rounded-lg border">
+                <ul className="divide-y text-xs">
+                  {(verzije.data?.data ?? []).map((v) => (
+                    <li key={v.id} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 px-3 py-2">
+                      <Badge variant="secondary" className="border-transparent bg-secondary font-mono">v{v.version}</Badge>
+                      <span className="font-medium">{v.note ?? 'brez opombe'}</span>
+                      <span className="ml-auto text-muted-foreground">
+                        {v.user?.name ?? '—'} · {fmtDateTime(v.createdAt)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </ScrollArea>
+            )}
           </div>
         ) : null}
 

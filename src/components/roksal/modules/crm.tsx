@@ -3,7 +3,7 @@
 // CRM — vodi in priložnosti s pipelineom (vrata crm.read; spremembe = crm.write)
 
 import { useMemo, useState } from 'react'
-import { ArrowRight, ChevronsRight, Mail, Phone, Plus, Target, TrendingUp, UserRound, XCircle } from 'lucide-react'
+import { ArrowRight, ChevronsRight, FolderPlus, Mail, Phone, Plus, Target, TrendingUp, UserRound, XCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -60,6 +60,24 @@ export default function CrmModule () {
       await crm.reload()
     } catch (e) {
       toast({ title: 'Napaka', description: e instanceof Error ? e.message : undefined, variant: 'destructive' })
+    }
+  }
+
+  /** Pretvorba voda v projekt (issue #1: korak 1–2 workflowa). */
+  async function convertLead (id: string, name: string) {
+    const title = window.prompt('Naslov novega projekta:', `Ograja — ${name}`)
+    if (title === null) return
+    try {
+      const res = await apiPost<{ data: { project: { code: string; title: string } } }>(`/api/crm/${id}/pretvorba`, {
+        title: title.trim() || undefined,
+      })
+      toast({
+        title: 'Vod pretvorjen v projekt.',
+        description: `${res.data.project.code} — ${res.data.project.title} (stranka ustvarjena/povezana).`,
+      })
+      await crm.reload()
+    } catch (e) {
+      toast({ title: 'Pretvorba ni uspela', description: e instanceof Error ? e.message : undefined, variant: 'destructive' })
     }
   }
 
@@ -132,6 +150,12 @@ export default function CrmModule () {
                                   <StatusBadgeInline status={next} />
                                 </Button>
                               ) : null}
+                              <Button
+                                size="sm" variant="outline" className="border-roksal-amber/50 text-roksal-amber hover:bg-amber-50 hover:text-roksal-amber dark:hover:bg-amber-950/30"
+                                onClick={() => void convertLead(l.id, l.name)} aria-label={`Pretvori vod ${l.name} v projekt`}
+                              >
+                                <FolderPlus className="size-3.5" aria-hidden /> V projekt
+                              </Button>
                               <Button
                                 size="sm" variant="ghost" className="text-red-600 hover:text-red-700 dark:text-red-400"
                                 onClick={() => void patchLead(l.id, 'IZGUBLJEN')} aria-label={`Označi ${l.name} kot izgubljen`}

@@ -1,0 +1,578 @@
+     1→   851→              <div className="space-y-2">
+     2→   852→                <Label>Nalog</Label>
+     3→   853→                <Select value={workOrderId} onValueChange={setWorkOrderId}>
+     4→   854→                  <SelectTrigger aria-label="Povezava na delovni nalog"><SelectValue /></SelectTrigger>
+     5→   855→                  <SelectContent className="max-h-48">
+     6→   856→                    <SelectItem value="none">Brez naloga</SelectItem>
+     7→   857→                    {(orders.data?.data ?? []).map((w) => (
+     8→   858→                      <SelectItem key={w.id} value={w.id}>{w.code} — {w.title}</SelectItem>
+     9→   859→                    ))}
+    10→   860→                  </SelectContent>
+    11→   861→                </Select>
+    12→   862→                <ErrorBox error={orders.error} />
+    13→   863→              </div>
+    14→   864→              <div className="space-y-2">
+    15→   865→                <Label htmlFor="mk-location">Lokacija</Label>
+    16→   866→                <Input
+    17→   867→                  id="mk-location"
+    18→   868→                  value={location}
+    19→   869→                  onChange={(e) => setLocation(e.target.value)}
+    20→   870→                  placeholder="npr. Terasa — sever"
+    21→   871→                />
+    22→   872→              </div>
+    23→   873→            </div>
+    24→   874→
+    25→   875→            <Button
+    26→   876→              type="button"
+    27→   877→              className="w-full"
+    28→   878→              onClick={() => void proceedToPoints()}
+    29→   879→              disabled={uploading || (!newPhoto && !existingSel)}
+    30→   880→            >
+    31→   881→              {uploading
+    32→   882→                ? <Loader2 className="size-4 animate-spin" aria-hidden />
+    33→   883→                : <ArrowRight className="size-4" aria-hidden />}
+    34→   884→              {existingSel ? 'Nadaljuj s točkami' : 'Shrani fotografijo in nadaljuj'}
+    35→   885→            </Button>
+    36→   886→          </div>
+    37→   887→        ) : null}
+    38→   888→
+    39→   889→        {/* ═══ FAZA 2 — TOČKE IN KALIBRACIJA ═══ */}
+    40→   890→        {faza === 2 && photoUrl ? (
+    41→   891→          <div className="space-y-3">
+    42→   892→            {/* fotografija + SVG/HTML overlay točk */}
+    43→   893→            <div className="flex justify-center">
+    44→   894→              <div
+    45→   895→                ref={wrapRef}
+    46→   896→                className="relative inline-block max-w-full cursor-crosshair rounded-lg"
+    47→   897→                style={{ touchAction: 'pan-y' }}
+    48→   898→                onPointerDown={onWrapPointerDown}
+    49→   899→              >
+    50→   900→                <img
+    51→   901→                  src={photoUrl}
+    52→   902→                  alt="Fotografija terena z merilnimi točkami"
+    53→   903→                  className="block h-auto max-h-[420px] w-auto max-w-full rounded-lg select-none"
+    54→   904→                  draggable={false}
+    55→   905→                  onLoad={(e) => setImgSize({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight })}
+    56→   906→                />
+    57→   907→                <svg
+    58→   908→                  className="pointer-events-none absolute inset-0 h-full w-full"
+    59→   909→                  viewBox="0 0 100 100"
+    60→   910→                  preserveAspectRatio="none"
+    61→   911→                  aria-hidden="true"
+    62→   912→                >
+    63→   913→                  {points.length >= 2 ? (
+    64→   914→                    <>
+    65→   915→                      <polyline
+    66→   916→                        points={points.map((p) => `${p.x * 100},${p.y * 100}`).join(' ')}
+    67→   917→                        fill="none"
+    68→   918→                        stroke="#d97706"
+    69→   919→                        strokeOpacity={0.25}
+    70→   920→                        strokeWidth={7}
+    71→   921→                        strokeLinejoin="round"
+    72→   922→                        strokeLinecap="round"
+    73→   923→                        vectorEffect="non-scaling-stroke"
+    74→   924→                      />
+    75→   925→                      <polyline
+    76→   926→                        points={points.map((p) => `${p.x * 100},${p.y * 100}`).join(' ')}
+    77→   927→                        fill="none"
+    78→   928→                        stroke="#d97706"
+    79→   929→                        strokeWidth={2}
+    80→   930→                        strokeLinejoin="round"
+    81→   931→                        strokeLinecap="round"
+    82→   932→                        vectorEffect="non-scaling-stroke"
+    83→   933→                      />
+    84→   934→                    </>
+    85→   935→                  ) : null}
+    86→   936→                  {calibMode && calibPicks.length === 2 && points[calibPicks[0]] && points[calibPicks[1]] ? (
+    87→   937→                    <line
+    88→   938→                      x1={points[calibPicks[0]].x * 100}
+    89→   939→                      y1={points[calibPicks[0]].y * 100}
+    90→   940→                      x2={points[calibPicks[1]].x * 100}
+    91→   941→                      y2={points[calibPicks[1]].y * 100}
+    92→   942→                      stroke="#0ea5e9"
+    93→   943→                      strokeWidth={2}
+    94→   944→                      strokeDasharray="6 4"
+    95→   945→                      vectorEffect="non-scaling-stroke"
+    96→   946→                    />
+    97→   947→                  ) : null}
+    98→   948→                </svg>
+    99→   949→                {points.map((p, i) => {
+   100→   950→                  const picked = calibPicks.includes(i)
+   101→   951→                  return (
+   102→   952→                    <button
+   103→   953→                      key={i}
+   104→   954→                      type="button"
+   105→   955→                      className="absolute flex size-11 -translate-x-1/2 -translate-y-1/2 cursor-touch items-center justify-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-roksal-amber"
+   106→   956→                      style={{ left: `${p.x * 100}%`, top: `${p.y * 100}%`, touchAction: 'none' }}
+   107→   957→                      onPointerDown={(e) => onPointPointerDown(e, i)}
+   108→   958→                      onPointerMove={onPointPointerMove}
+   109→   959→                      onPointerUp={onPointPointerUp}
+   110→   960→                      onPointerCancel={() => { dragRef.current = null }}
+   111→   961→                      onKeyDown={(e) => {
+   112→   962→                        if (e.key === 'Delete' || e.key === 'Backspace') {
+   113→   963→                          e.preventDefault()
+   114→   964→                          removePoint(i)
+   115→   965→                        }
+   116→   966→                      }}
+   117→   967→                      aria-label={`Točka ${i + 1}${p.label ? ` — ${p.label}` : ''}: kliknite za odstranitev, povlecite za premik`}
+   118→   968→                      title={p.label ? `${i + 1}. ${p.label}` : `Točka ${i + 1} — klik: odstrani, vleci: premakni`}
+   119→   969→                    >
+   120→   970→                      <span
+   121→   971→                        className={cn(
+   122→   972→                          'flex size-6 items-center justify-center rounded-full border-2 border-white text-[10px] font-bold text-white shadow',
+   123→   973→                          picked ? 'bg-sky-500' : 'bg-amber-600'
+   124→   974→                        )}
+   125→   975→                        aria-hidden
+   126→   976→                      >
+   127→   977→                        {i + 1}
+   128→   978→                      </span>
+   129→   979→                      {p.label ? (
+   130→   980→                        <span className="pointer-events-none absolute left-full top-0 ml-1 max-w-24 truncate rounded bg-black/70 px-1.5 py-0.5 text-[10px] font-medium text-white">
+   131→   981→                          {p.label}
+   132→   982→                        </span>
+   133→   983→                      ) : null}
+   134→   984→                    </button>
+   135→   985→                  )
+   136→   986→                })}
+   137→   987→              </div>
+   138→   988→            </div>
+   139→   989→
+   140→   990→            {/* orodna vrstica */}
+   141→   991→            <div className="flex flex-wrap items-center gap-2">
+   142→   992→              <Button type="button" size="sm" variant="outline" onClick={() => void detectPoints()} disabled={detecting}>
+   143→   993→                {detecting ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Sparkles className="size-4" aria-hidden />}
+   144→   994→                ✨ Zaznaj točke samodejno
+   145→   995→              </Button>
+   146→   996→              <Button
+   147→   997→                type="button"
+   148→   998→                size="sm"
+   149→   999→                variant={calibMode ? 'default' : 'outline'}
+   150→  1000→                onClick={() => { setCalibMode(!calibMode); setCalibPicks([]) }}
+   151→  1001→                aria-pressed={calibMode}
+   152→  1002→              >
+   153→  1003→                <Ruler className="size-4" aria-hidden /> Kalibracija
+   154→  1004→              </Button>
+   155→  1005→              <Button type="button" size="sm" variant="outline" onClick={clearPoints} disabled={points.length === 0}>
+   156→  1006→                <Eraser className="size-4" aria-hidden /> Počisti točke
+   157→  1007→              </Button>
+   158→  1008→              <span className="ml-auto text-xs text-muted-foreground" aria-live="polite">
+   159→  1009→                {points.length} {points.length === 1 ? 'točka' : points.length >= 2 && points.length <= 4 ? 'točke' : 'točk'}
+   160→  1010→              </span>
+   161→  1011→            </div>
+   162→  1012→
+   163→  1013→            {detecting ? (
+   164→  1014→              <div className="flex items-center gap-2 rounded-lg border border-sky-300 bg-sky-50 p-3 text-sm text-sky-900 dark:border-sky-900 dark:bg-sky-950/50 dark:text-sky-200" role="status">
+   165→  1015→                <Loader2 className="size-4 shrink-0 animate-spin" aria-hidden />
+   166→  1016→                VLM analizira fotografijo (do 60 s) … prosimo počakajte.
+   167→  1017→              </div>
+   168→  1018→            ) : null}
+   169→  1019→
+   170→  1020→            {detectWarn ? (
+   171→  1021→              <div
+   172→  1022→                role="alert"
+   173→  1023→                className="flex items-start justify-between gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/50 dark:text-amber-200"
+   174→  1024→              >
+   175→  1025→                <span>
+   176→  1026→                  <strong>Samodejna zaznava ni uspela.</strong> {detectWarn}
+   177→  1027→                  <br />Točke označite ročno — ročni vnos ostaja popolnoma podprt.
+   178→  1028→                </span>
+   179→  1029→                <button
+   180→  1030→                  type="button"
+   181→  1031→                  className="shrink-0 rounded-md p-1.5 hover:bg-amber-100 dark:hover:bg-amber-900"
+   182→  1032→                  onClick={() => setDetectWarn(null)}
+   183→  1033→                  aria-label="Zapri opozorilo"
+   184→  1034→                >
+   185→  1035→                  <X className="size-4" aria-hidden />
+   186→  1036→                </button>
+   187→  1037→              </div>
+   188→  1038→            ) : null}
+   189→  1039→
+   190→  1040→            {pendingDetect ? (
+   191→  1041→              <div className="rounded-lg border border-sky-300 bg-sky-50 p-3 text-sm dark:border-sky-900 dark:bg-sky-950/50">
+   192→  1042→                <p className="font-medium text-sky-900 dark:text-sky-200">
+   193→  1043→                  VLM je zaznal {pendingDetect.length} {tockeWord(pendingDetect.length)}
+   194→  1044→                  {detect?.scene ? <> — prizor: {detect.scene}</> : null}.
+   195→  1045→                </p>
+   196→  1046→                <div className="mt-2 flex flex-wrap gap-2">
+   197→  1047→                  <Button type="button" size="sm" onClick={() => { setPoints((pts) => [...pts, ...(pendingDetect ?? [])]); setPendingDetect(null) }}>
+   198→  1048→                    <Plus className="size-4" aria-hidden /> Dodaj k obstoječim
+   199→  1049→                  </Button>
+   200→  1050→                  <Button type="button" size="sm" variant="outline" onClick={() => { setPoints(pendingDetect); setCalibPicks([]); setPendingDetect(null) }}>
+   201→  1051→                    Zamenjaj obstoječe
+   202→  1052→                  </Button>
+   203→  1053→                  <Button type="button" size="sm" variant="ghost" onClick={() => setPendingDetect(null)}>Zavrzi</Button>
+   204→  1054→                </div>
+   205→  1055→              </div>
+   206→  1056→            ) : null}
+   207→  1057→
+   208→  1058→            {/* hitra kalibracija iz VLM referenčnih objektov */}
+   209→  1059→            {detect?.refObjects?.length ? (
+   210→  1060→              <div className="flex flex-wrap items-end gap-2">
+   211→  1061→                <div className="min-w-52 space-y-1.5">
+   212→  1062→                  <Label htmlFor="mk-ref" className="text-xs">Referenčni objekt (hitra kalibracija)</Label>
+   213→  1063→                  <Select
+   214→  1064→                    value={refChoice}
+   215→  1065→                    onValueChange={(v) => {
+   216→  1066→                      setRefChoice(v)
+   217→  1067→                      if (v === 'none' || !detect) return
+   218→  1068→                      const ref = detect.refObjects[Number(v)]
+   219→  1069→                      if (ref) applyRefObject(ref)
+   220→  1070→                    }}
+   221→  1071→                  >
+   222→  1072→                    <SelectTrigger id="mk-ref" aria-label="Referenčni objekt za kalibracijo">
+   223→  1073→                      <SelectValue placeholder="Izberite objekt z znano dolžino" />
+   224→  1074→                    </SelectTrigger>
+   225→  1075→                    <SelectContent className="max-h-48">
+   226→  1076→                      <SelectItem value="none">Brez</SelectItem>
+   227→  1077→                      {detect.refObjects.map((r, i) => (
+   228→  1078→                        <SelectItem key={i} value={String(i)}>{r.label} ({r.estCm} cm)</SelectItem>
+   229→  1079→                      ))}
+   230→  1080→                    </SelectContent>
+   231→  1081→                  </Select>
+   232→  1082→                </div>
+   233→  1083→              </div>
+   234→  1084→            ) : null}
+   235→  1085→
+   236→  1086→            {/* kalibracijsko okno */}
+   237→  1087→            {calibMode ? (
+   238→  1088→              <Card>
+   239→  1089→                <CardContent className="space-y-3 p-4">
+   240→  1090→                  <p className="text-sm">
+   241→  1091→                    Označite <strong>dve točki</strong> na sliki, katerih razdalja je znana (npr. višina stopnice,
+   242→  1092→                    širina vrat). Kliknite obstoječi točki ali dodajte novi s klikom na sliko.
+   243→  1093→                  </p>
+   244→  1094→                  <div className="flex flex-wrap items-center gap-2 text-sm">
+   245→  1095→                    <Badge variant={calibPicks.length >= 1 ? 'default' : 'outline'}>
+   246→  1096→                      1. točka: {calibPicks[0] != null ? `#${calibPicks[0] + 1}` : 'ni izbrana'}
+   247→  1097→                    </Badge>
+   248→  1098→                    <Badge variant={calibPicks.length >= 2 ? 'default' : 'outline'}>
+   249→  1099→                      2. točka: {calibPicks[1] != null ? `#${calibPicks[1] + 1}` : 'ni izbrana'}
+   250→  1100→                    </Badge>
+   251→  1101→                    {calibPx != null ? (
+   252→  1102→                      <span className="text-xs text-muted-foreground">razdalja na sliki: {Math.round(calibPx)} px</span>
+   253→  1103→                    ) : null}
+   254→  1104→                  </div>
+   255→  1105→                  <div className="flex flex-wrap items-end gap-2">
+   256→  1106→                    <div className="space-y-1.5">
+   257→  1107→                      <Label htmlFor="mk-calib-cm">Realna dolžina (cm)</Label>
+   258→  1108→                      <Input
+   259→  1109→                        id="mk-calib-cm"
+   260→  1110→                        className="w-32"
+   261→  1111→                        inputMode="decimal"
+   262→  1112→                        value={calibCm}
+   263→  1113→                        onChange={(e) => setCalibCm(e.target.value)}
+   264→  1114→                        placeholder="npr. 17"
+   265→  1115→                      />
+   266→  1116→                    </div>
+   267→  1117→                    <Button type="button" size="sm" onClick={applyCalib} disabled={calibPx == null || numOrNull(calibCm) == null}>
+   268→  1118→                      <Ruler className="size-4" aria-hidden /> Nastavi merilo
+   269→  1119→                    </Button>
+   270→  1120→                    <Button type="button" size="sm" variant="ghost" onClick={() => { setCalibMode(false); setCalibPicks([]) }}>
+   271→  1121→                      Prekliči
+   272→  1122→                    </Button>
+   273→  1123→                  </div>
+   274→  1124→                </CardContent>
+   275→  1125→              </Card>
+   276→  1126→            ) : calib ? (
+   277→  1127→              <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border bg-secondary/40 p-2.5 text-xs">
+   278→  1128→                <span className="inline-flex items-center gap-1.5">
+   279→  1129→                  <Ruler className="size-3.5 text-roksal-amber" aria-hidden />
+   280→  1130→                  Merilo: <strong className="text-foreground">1 px = {(calib.cm / calib.px).toFixed(3)} cm</strong>
+   281→  1131→                  <span className="text-muted-foreground">({calib.from})</span>
+   282→  1132→                </span>
+   283→  1133→                <span className="flex items-center gap-1">
+   284→  1134→                  <Button type="button" size="sm" variant="ghost" onClick={() => setCalibMode(true)}>Ponovno kalibriraj</Button>
+   285→  1135→                  <Button type="button" size="sm" variant="ghost" onClick={resetCalib}>Ponastavi</Button>
+   286→  1136→                </span>
+   287→  1137→              </div>
+   288→  1138→            ) : (
+   289→  1139→              <p className="rounded-lg border border-dashed p-2.5 text-xs text-muted-foreground">
+   290→  1140→                Brez kalibracije se dolžine prikazujejo v pikslih —
+   291→  1141→                <button type="button" className="ml-1 underline underline-offset-2 hover:text-foreground" onClick={() => setCalibMode(true)}>
+   292→  1142→                  kalibrirajte merilo
+   293→  1143→                </button>
+   294→  1144→                za centimetre.
+   295→  1145→              </p>
+   296→  1146→            )}
+   297→  1147→
+   298→  1148→            {/* stopniški način */}
+   299→  1149→            <div className="flex items-center justify-between rounded-lg border px-3 py-2">
+   300→  1150→              <Label htmlFor="mk-stairs" className="cursor-pointer">Stopniški način (štetje stopnic)</Label>
+   301→  1151→              <Switch id="mk-stairs" checked={stairsMode} onCheckedChange={setStairsMode} aria-label="Stopniški način izračuna" />
+   302→  1152→            </div>
+   303→  1153→            {stairsMode && stairs ? (
+   304→  1154→              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm dark:border-amber-900 dark:bg-amber-950/40" role="status">
+   305→  1155→                <p className="font-medium">
+   306→  1156→                  {stairs.count} {stopniceWord(stairs.count)}
+   307→  1157→                  {stairs.avgRise != null ? <> × približno {stairs.avgRise.toFixed(1)} cm višine</> : null}
+   308→  1158→                </p>
+   309→  1159→                <p className="mt-0.5 text-xs text-muted-foreground">
+   310→  1160→                  Štejejo segmenti z nagibom do {HORIZON_DEG}° (vodoravni deli); višina stopnice je povprečna višinska
+   311→  1161→                  razlika ostalih segmentov. Primerno za tip NAGIB.
+   312→  1162→                </p>
+   313→  1163→              </div>
+   314→  1164→            ) : null}
+   315→  1165→
+   316→  1166→            {/* tabela segmentov — živi izračun */}
+   317→  1167→            {segRows.length > 0 ? (
+   318→  1168→              <div className="overflow-x-auto rounded-lg border">
+   319→  1169→                <table className="w-full min-w-[420px] text-xs">
+   320→  1170→                  <caption className="sr-only">Živi izračun segmentov med označenimi točkami</caption>
+   321→  1171→                  <thead>
+   322→  1172→                    <tr className="border-b bg-secondary/50 text-left">
+   323→  1173→                      <th scope="col" className="px-2.5 py-2 font-medium">Točki</th>
+   324→  1174→                      <th scope="col" className="px-2.5 py-2 font-medium">Dolžina</th>
+   325→  1175→                      <th scope="col" className="px-2.5 py-2 font-medium">Kot</th>
+   326→  1176→                      <th scope="col" className="px-2.5 py-2 font-medium">Δ višine</th>
+   327→  1177→                      <th scope="col" className="px-2.5 py-2 font-medium">Vogal</th>
+   328→  1178→                    </tr>
+   329→  1179→                  </thead>
+   330→  1180→                  <tbody>
+   331→  1181→                    {segRows.map((s) => (
+   332→  1182→                      <tr key={s.key} className="border-b last:border-0">
+   333→  1183→                        <td className="px-2.5 py-1.5 font-mono">{s.from + 1} → {s.to + 1}</td>
+   334→  1184→                        <td className="px-2.5 py-1.5 font-semibold">
+   335→  1185→                          {s.lengthCm != null ? fmtM(s.lengthCm) : `${Math.round(s.lengthPx)} px`}
+   336→  1186→                        </td>
+   337→  1187→                        <td className="px-2.5 py-1.5">{s.angleDeg.toFixed(1)}°</td>
+   338→  1188→                        <td className="px-2.5 py-1.5">
+   339→  1189→                          {s.heightDiffCm != null ? `${s.heightDiffCm > 0 ? '+' : ''}${s.heightDiffCm.toFixed(1)} cm` : '—'}
+   340→  1190→                        </td>
+   341→  1191→                        <td className="px-2.5 py-1.5">{s.interiorDeg != null ? `${s.interiorDeg.toFixed(1)}°` : '—'}</td>
+   342→  1192→                      </tr>
+   343→  1193→                    ))}
+   344→  1194→                  </tbody>
+   345→  1195→                </table>
+   346→  1196→              </div>
+   347→  1197→            ) : (
+   348→  1198→              <p className="text-xs text-muted-foreground">
+   349→  1199→                Kliknite na fotografijo in označite vsaj 2 točke — klik na točko jo odstrani, vlečenje premakne.
+   350→  1200→              </p>
+   351→  1201→            )}
+   352→  1202→
+   353→  1203→            {/* povzetek */}
+   354→  1204→            {segRows.length > 0 ? (
+   355→  1205→              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+   356→  1206→                <div className="rounded-lg border p-2 text-center">
+   357→  1207→                  <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Skupna dolžina</div>
+   358→  1208→                  <div className="text-sm font-bold">{totalCm != null ? fmtM(totalCm) : `${Math.round(totalPx)} px`}</div>
+   359→  1209→                </div>
+   360→  1210→                <div className="rounded-lg border p-2 text-center">
+   361→  1211→                  <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Stebrov (≤ {MAX_SPAN_CM} cm)</div>
+   362→  1212→                  <div className="text-sm font-bold">{postsCount != null ? postsCount : '—'}</div>
+   363→  1213→                </div>
+   364→  1214→                <div className="rounded-lg border p-2 text-center">
+   365→  1215→                  <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Segmentov</div>
+   366→  1216→                  <div className="text-sm font-bold">{segRows.length}</div>
+   367→  1217→                </div>
+   368→  1218→                <div className="rounded-lg border p-2 text-center">
+   369→  1219→                  <div className="flex items-center justify-center gap-1 text-[10px] uppercase tracking-wide text-muted-foreground">
+   370→  1220→                    <TrendingUp className="size-3" aria-hidden /> Nagib
+   371→  1221→                  </div>
+   372→  1222→                  <div className="text-sm font-bold">{overallSlopeDeg != null ? `${overallSlopeDeg.toFixed(1)}°` : '—'}</div>
+   373→  1223→                </div>
+   374→  1224→              </div>
+   375→  1225→            ) : null}
+   376→  1226→
+   377→  1227→            {/* preverjanje na strežniku */}
+   378→  1228→            <div className="space-y-2">
+   379→  1229→              <Button
+   380→  1230→                type="button"
+   381→  1231→                size="sm"
+   382→  1232→                variant="outline"
+   383→  1233→                onClick={() => void checkLayout()}
+   384→  1234→                disabled={layoutBusy || calib == null || points.length < 2}
+   385→  1235→              >
+   386→  1236→                {layoutBusy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Server className="size-4" aria-hidden />}
+   387→  1237→                Izračunaj postavitev (strežnik)
+   388→  1238→              </Button>
+   389→  1239→              {calib == null && points.length >= 2 ? (
+   390→  1240→                <p className="text-[11px] text-muted-foreground">Preverjanje na strežniku zahteva kalibracijo merila.</p>
+   391→  1241→              ) : null}
+   392→  1242→              {layout ? (
+   393→  1243→                <div className="rounded-lg border bg-secondary/40 p-3 text-sm">
+   394→  1244→                  <div className="flex flex-wrap items-center justify-between gap-2">
+   395→  1245→                    <span className="font-medium">Preverjanje na strežniku</span>
+   396→  1246→                    {layoutDelta != null && layoutDelta > 1 ? (
+   397→  1247→                      <Badge className="border-transparent bg-amber-100 font-medium text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+   398→  1248→                        odstopanje {layoutDelta.toFixed(1)} cm
+   399→  1249→                      </Badge>
+   400→  1250→                    ) : (
+   401→  1251→                      <Badge className="border-transparent bg-emerald-100 font-medium text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
+   402→  1252→                        se ujema
+   403→  1253→                      </Badge>
+   404→  1254→                    )}
+   405→  1255→                  </div>
+   406→  1256→                  <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+   407→  1257→                    <span>skupaj <strong className="text-foreground">{fmtM(layout.totalLengthCm)}</strong></span>
+   408→  1258→                    <span>stebrov <strong className="text-foreground">{layout.posts}</strong></span>
+   409→  1259→                    <span>ročnik <strong className="text-foreground">{layout.handrailM.toFixed(2)} m</strong></span>
+   410→  1260→                    <span>segmentov <strong className="text-foreground">{layout.segments.length}</strong></span>
+   411→  1261→                    {layout.slopeDeg != null ? <span>nagib <strong className="text-foreground">{layout.slopeDeg.toFixed(1)}°</strong></span> : null}
+   412→  1262→                  </div>
+   413→  1263→                </div>
+   414→  1264→              ) : null}
+   415→  1265→            </div>
+   416→  1266→
+   417→  1267→            <div className="flex items-center justify-between gap-2">
+   418→  1268→              <Button type="button" variant="outline" onClick={() => setFaza(1)}>
+   419→  1269→                <ArrowLeft className="size-4" aria-hidden /> Nazaj
+   420→  1270→              </Button>
+   421→  1271→              <div className="flex flex-col items-end gap-1">
+   422→  1272→                <Button type="button" onClick={goPhase3} disabled={points.length < 2}>
+   423→  1273→                  Naprej — potrditev <ArrowRight className="size-4" aria-hidden />
+   424→  1274→                </Button>
+   425→  1275→                {points.length < 2 ? (
+   426→  1276→                  <span className="text-[11px] text-muted-foreground">označite vsaj 2 točki</span>
+   427→  1277→                ) : null}
+   428→  1278→              </div>
+   429→  1279→            </div>
+   430→  1280→          </div>
+   431→  1281→        ) : null}
+   432→  1282→
+   433→  1283→        {/* ═══ FAZA 3 — POTRDITEV ═══ */}
+   434→  1284→        {faza === 3 ? (
+   435→  1285→          savedInfo ? (
+   436→  1286→            <div className="space-y-4 py-4 text-center">
+   437→  1287→              <div className="mx-auto flex size-14 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-950">
+   438→  1288→                <Check className="size-7 text-emerald-600 dark:text-emerald-400" aria-hidden />
+   439→  1289→              </div>
+   440→  1290→              <div>
+   441→  1291→                <p className="font-semibold">Meritev shranjena ({fmtM(savedInfo.lengthCm)}).</p>
+   442→  1292→                <p className="mt-1 text-sm text-muted-foreground">
+   443→  1293→                  {savedInfo.project ? `Shranjeno v projekt ${savedInfo.project}.` : 'Shranjeno brez povezave na projekt.'}
+   444→  1294→                </p>
+   445→  1295→              </div>
+   446→  1296→              <div className="flex flex-wrap justify-center gap-2">
+   447→  1297→                <Button type="button" variant="outline" onClick={anotherMeasurement}>
+   448→  1298→                  <RotateCcw className="size-4" aria-hidden /> Še ena meritev na tej fotografiji
+   449→  1299→                </Button>
+   450→  1300→                <Button type="button" onClick={onClose}>Zapri</Button>
+   451→  1301→              </div>
+   452→  1302→            </div>
+   453→  1303→          ) : (
+   454→  1304→            <div className="space-y-3">
+   455→  1305→              {/* povzetek iz točk */}
+   456→  1306→              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+   457→  1307→                <div className="rounded-lg border p-2 text-center">
+   458→  1308→                  <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Izmerjeno (točke)</div>
+   459→  1309→                  <div className="text-sm font-bold">{totalCm != null ? fmtM(totalCm) : '—'}</div>
+   460→  1310→                </div>
+   461→  1311→                <div className="rounded-lg border p-2 text-center">
+   462→  1312→                  <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Stebrov</div>
+   463→  1313→                  <div className="text-sm font-bold">{postsCount != null ? postsCount : '—'}</div>
+   464→  1314→                </div>
+   465→  1315→                <div className="rounded-lg border p-2 text-center">
+   466→  1316→                  <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Nagib</div>
+   467→  1317→                  <div className="text-sm font-bold">{overallSlopeDeg != null ? `${overallSlopeDeg.toFixed(1)}°` : '—'}</div>
+   468→  1318→                </div>
+   469→  1319→                <div className="rounded-lg border p-2 text-center">
+   470→  1320→                  <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Točk</div>
+   471→  1321→                  <div className="text-sm font-bold">{points.length}</div>
+   472→  1322→                </div>
+   473→  1323→              </div>
+   474→  1324→
+   475→  1325→              <div className="grid gap-3 sm:grid-cols-2">
+   476→  1326→                <div className="space-y-2">
+   477→  1327→                  <Label>Tip meritve</Label>
+   478→  1328→                  <Select value={confType} onValueChange={setConfType}>
+   479→  1329→                    <SelectTrigger aria-label="Tip meritve"><SelectValue /></SelectTrigger>
+   480→  1330→                    <SelectContent>
+   481→  1331→                      {CONFIRM_TYPES.map((t) => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}
+   482→  1332→                    </SelectContent>
+   483→  1333→                  </Select>
+   484→  1334→                </div>
+   485→  1335→                <div className="space-y-2">
+   486→  1336→                  <Label htmlFor="mk-conf-length">Dolžina (cm)</Label>
+   487→  1337→                  <Input
+   488→  1338→                    id="mk-conf-length"
+   489→  1339→                    type="number"
+   490→  1340→                    min="0"
+   491→  1341→                    inputMode="decimal"
+   492→  1342→                    value={confLength}
+   493→  1343→                    onChange={(e) => setConfLength(e.target.value)}
+   494→  1344→                    placeholder={totalCm != null ? String(totalCm) : 'ročno'}
+   495→  1345→                  />
+   496→  1346→                  {numOrNull(confLength) ? <p className="text-[11px] text-muted-foreground">= {fmtM(numOrNull(confLength))}</p> : null}
+   497→  1347→                </div>
+   498→  1348→                <div className="space-y-2">
+   499→  1349→                  <Label htmlFor="mk-conf-height">Višina (cm)</Label>
+   500→  1350→                  <Input
+   501→  1351→                    id="mk-conf-height"
+   502→  1352→                    type="number"
+   503→  1353→                    min="0"
+   504→  1354→                    inputMode="decimal"
+   505→  1355→                    value={confHeight}
+   506→  1356→                    onChange={(e) => setConfHeight(e.target.value)}
+   507→  1357→                    placeholder="100"
+   508→  1358→                  />
+   509→  1359→                </div>
+   510→  1360→                <div className="space-y-2">
+   511→  1361→                  <Label htmlFor="mk-conf-slope">Nagib (°)</Label>
+   512→  1362→                  <Input
+   513→  1363→                    id="mk-conf-slope"
+   514→  1364→                    type="number"
+   515→  1365→                    min="0"
+   516→  1366→                    step="0.1"
+   517→  1367→                    inputMode="decimal"
+   518→  1368→                    value={confSlope}
+   519→  1369→                    onChange={(e) => setConfSlope(e.target.value)}
+   520→  1370→                    placeholder="npr. 32.5"
+   521→  1371→                  />
+   522→  1372→                </div>
+   523→  1373→              </div>
+   524→  1374→
+   525→  1375→              <div className="flex items-center justify-between rounded-lg border px-3 py-2">
+   526→  1376→                <Label htmlFor="mk-handrail" className="cursor-pointer">Ročnik</Label>
+   527→  1377→                <Switch id="mk-handrail" checked={handrail} onCheckedChange={setHandrail} aria-label="Ročnik vključen" />
+   528→  1378→              </div>
+   529→  1379→
+   530→  1380→              {confType !== 'OSTANEO' ? (
+   531→  1381→                <div className="space-y-2">
+   532→  1382→                  <Label>Profil (izdelek)</Label>
+   533→  1383→                  <Select value={confProduct} onValueChange={setConfProduct}>
+   534→  1384→                    <SelectTrigger aria-label="Izbira profila"><SelectValue /></SelectTrigger>
+   535→  1385→                    <SelectContent className="max-h-48">
+   536→  1386→                      <SelectItem value="none">Brez izbire</SelectItem>
+   537→  1387→                      {(products.data?.data ?? []).map((p) => (
+   538→  1388→                        <SelectItem key={p.id} value={p.id}>
+   539→  1389→                          <span className="font-mono">{p.sku}</span> — {p.name} · {fmtPrice(p.pricePerM)}
+   540→  1390→                        </SelectItem>
+   541→  1391→                      ))}
+   542→  1392→                    </SelectContent>
+   543→  1393→                  </Select>
+   544→  1394→                  <ErrorBox error={products.error} />
+   545→  1395→                  {confProduct !== 'none' ? (
+   546→  1396→                    <p className="text-[11px] text-muted-foreground">Izbrani profil se ob shranjevanju zapiše v opombo meritve.</p>
+   547→  1397→                  ) : null}
+   548→  1398→                </div>
+   549→  1399→              ) : null}
+   550→  1400→
+   551→  1401→              <div className="space-y-2">
+   552→  1402→                <Label htmlFor="mk-conf-note">Opomba</Label>
+   553→  1403→                <Textarea
+   554→  1404→                  id="mk-conf-note"
+   555→  1405→                  value={confNote}
+   556→  1406→                  onChange={(e) => setConfNote(e.target.value)}
+   557→  1407→                  placeholder="Opombe s terena …"
+   558→  1408→                  className="min-h-16"
+   559→  1409→                />
+   560→  1410→              </div>
+   561→  1411→
+   562→  1412→              <div className="flex items-center justify-between gap-2">
+   563→  1413→                <Button type="button" variant="outline" onClick={() => setFaza(2)}>
+   564→  1414→                  <ArrowLeft className="size-4" aria-hidden /> Nazaj na točke
+   565→  1415→                </Button>
+   566→  1416→                <Button type="button" onClick={() => void confirmSave()} disabled={saving || !photoId}>
+   567→  1417→                  {saving ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Save className="size-4" aria-hidden />}
+   568→  1418→                  Potrdi in shrani meritev
+   569→  1419→                </Button>
+   570→  1420→              </div>
+   571→  1421→            </div>
+   572→  1422→          )
+   573→  1423→        ) : null}
+   574→  1424→      </DialogContent>
+   575→  1425→    </Dialog>
+   576→  1426→  )
+   577→  1427→}
+   578→  1428→

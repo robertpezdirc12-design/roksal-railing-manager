@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { jsonError, requirePermission } from '@/lib/auth'
+import { jsonError, readsAllData, requirePermission } from '@/lib/auth'
 
 export async function GET (req: NextRequest) {
   const auth = await requirePermission(req, 'projects.read')
   if (auth instanceof NextResponse) return auth
+  const { user } = auth
 
   const url = new URL(req.url)
   const status = url.searchParams.get('status')
@@ -14,6 +15,8 @@ export async function GET (req: NextRequest) {
     where: {
       ...(status ? { status } : {}),
       ...(q ? { OR: [{ title: { contains: q } }, { code: { contains: q } }, { customer: { name: { contains: q } } }] } : {}),
+      // obseg (issue #1): monter vidi SAMO projekte svojih nalogov
+      ...(readsAllData(user) ? {} : { workOrders: { some: { assigneeId: user.id } } }),
     },
     include: {
       customer: { select: { name: true, city: true } },

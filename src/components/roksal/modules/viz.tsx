@@ -1,33 +1,33 @@
 'use client'
 
-// VIZ — parametrična SVG vizualizacija ograje (vrata projects.read v nav-registry)
-// Tloris + stranski pogled v ENEM SVG (črno-bela tehnična podoba na belem platnu,
-// da izvoz SVG deluje samostojno). Merilo 1:1 znotraj risbe, mreža 50 cm.
-// Shranjevanje kot meritev (measurements.write), izvoz SVG kot datoteka.
+// VIZ — 3D konfigurator + parametrična SVG risba ograje (vrata projects.read v nav-registry)
+// R436 (GitLab issue #1): tip ograje (OGRAJA/BALUSTRADA/NAGIB), dimenzije iz meritev,
+// materiali iz kataloga, barve RAL, izračun cene + ponudba (POST /api/quotes),
+// 3D pogled (viz-3d.tsx — lastna perspektivna projekcija) in 2D tehnična risba
+// (tloris + stranski pogled, merilo 1:1, izvoz SVG) — ohranjeni.
+// Shranjevanje kot meritev (measurements.write) zdaj nosi params.konfigurator.
 
 import { useId, useMemo, useRef, useState, type ReactNode, type Ref } from 'react'
-import { Box, Download, Loader2, Ruler, Save, Sigma } from 'lucide-react'
+import { Box, Download, FilePlus2, Loader2, Orbit, Ruler, Save, Sigma } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useToast } from '@/hooks/use-toast'
 import { useAppStore } from '@/lib/store'
-import { apiPost, useApi } from '@/lib/api-client'
+import { apiPost, fmtEUR, useApi } from '@/lib/api-client'
 import { EmptyState, ErrorBox, PageHeader } from '@/components/roksal/ui-bits'
 import { hasPerm } from '@/lib/permissions-core'
+import {
+  RAL_COLORS, Railing3D, TIP_LABELS, TIP_SHORT, fmtM, fmtQty, izracunajCeno,
+  isColorId, parseKonfigurator, ralLabel,
+  type ColorId, type KonfigTip,
+} from './viz-3d'
 
 // ─── konstante ───────────────────────────────────────────────────────────────
-
-const RAL_COLORS = [
-  { id: 'antracit', label: 'Antracit RAL 7016', hex: '#2b2f36' },
-  { id: 'bela', label: 'Bela RAL 9016', hex: '#f5f5f4' },
-  { id: 'inox', label: 'Inox (srebrna)', hex: '#c0c5ce' },
-  { id: 'bronasta', label: 'Bronasta', hex: '#8a6d3b' },
-] as const
-type ColorId = (typeof RAL_COLORS)[number]['id']
 
 const GLASS_FILL = 'rgba(148, 163, 184, 0.28)'
 const GLASS_STROKE = 'rgba(100, 116, 139, 0.55)'
@@ -38,7 +38,7 @@ const PAPER = '#ffffff'
 interface ProfileRow { id: string; sku: string; name: string; material: string; type: string; pricePerM: number }
 interface ProjectRow { id: string; code: string; title: string }
 interface MeasurementRow {
-  id: string; type: string; location: string | null; note: string | null
+  id: string; type: string; location: string | null; note: string | null; params: string | null
   lengthCm: number | null; heightCm: number | null; posts: number | null
   segments: number | null; handrail: boolean | null; slopeDeg: number | null
   projectId: string | null; createdAt: string
@@ -50,11 +50,6 @@ const toNum = (v: string, fallback: number, min: number, max: number): number =>
   return Math.min(max, Math.max(min, n))
 }
 
-const fmtM = (cm: number) => {
-  const m = cm / 100
-  return m.toFixed(m % 1 === 0 ? 0 : 2).replace('.', ',')
-}
-
 export default function VizModule () {
   const user = useAppStore((s) => s.user)
   const { toast } = useToast()
@@ -63,6 +58,7 @@ export default function VizModule () {
 
   const canWrite = hasPerm(user?.perms, 'measurements.write')
   const canReadMeasurements = hasPerm(user?.perms, 'measurements.read')
+  const canQuote = hasPerm(user?.perms, 'quotes.create')
 
   // parametri
   const [profileId, setProfileId] = useState('none')
@@ -72,11 +68,14 @@ export default function VizModule () {
   const [segmentsS, setSegmentsS] = useState('4')
   const [handrail, setHandrail] = useState(true)
   const [colorId, setColorId] = useState<ColorId>('antracit')
+  const [tip, setTip] = useState<KonfigTip>('OGRAJA')
+  const [montaza, setMontaza] = useState(true)
   const [slopeS, setSlopeS] = useState('0')
   const [projectId, setProjectId] = useState('none')
   const [location, setLocation] = useState('')
   const [fromMeasurement, setFromMeasurement] = useState('none')
   const [busy, setBusy] = useState(false)
+  const [quoteBusy, setQuoteBusy] = useState(false)
 
   const catalog = useApi<{ data: ProfileRow[] }>('/api/catalog', [])
   const projects = useApi<{ data: ProjectRow[] }>('/api/projects', [])
@@ -95,7 +94,14 @@ export default function VizModule () {
   const segments = Math.round(toNum(segmentsS, Math.max(1, posts - 1), 1, 40))
   const slope = toNum(slopeS, 0, 0, 60)
 
-  const isGlass = profile?.type === 'BALUSTRADA'
+  const isGlass = tip === 'BALUSTRADA'
+
+  /** Izbor profila iz kataloga hkrati predlaga tip ograje. */
+  function onProfileChange (v: string): void {
+    setProfileId(v)
+    const p = profiles.find((r) => r.id === v) ?? null
+    setTip(p?.type === 'BALUSTRADA' ? 'BALUSTRADA' : p?.type === 'NAGIBNA' ? 'NAGIB' : 'OGRAJA')
+  }
 
   function onPostsChange (v: string): void {
     setPostsS(v)
@@ -114,17 +120,30 @@ export default function VizModule () {
     setHandrail(m.handrail ?? true)
     setSlopeS(m.slopeDeg != null ? String(Math.round(m.slopeDeg * 10) / 10) : '0')
     if (m.projectId) setProjectId(m.projectId)
-    toast({
-      title: 'Meritev naložena.',
-      description: `${m.location ?? 'Brez lokacije'} · ${(m.lengthCm ?? 0) / 100} m · ${m.heightCm ?? '—'} cm`,
-    })
+    // izboljšava (issue #1): če meritev nosi shranjeno konfiguracijo, obnovi
+    // celoten konfigurator — profil, barvo in tip, ne samo geometrijo
+    const k = parseKonfigurator(m.params)
+    if (k) {
+      if (k.profileId) setProfileId(k.profileId)
+      if (isColorId(k.colorId)) setColorId(k.colorId)
+      setTip(k.tip)
+      toast({
+        title: 'Konfiguracija naložena.',
+        description: `${k.sku ? `${k.sku} · ` : ''}${ralLabel(k.colorId)} · ${TIP_LABELS[k.tip]}`,
+      })
+    } else {
+      toast({
+        title: 'Meritev naložena.',
+        description: `${m.location ?? 'Brez lokacije'} · ${(m.lengthCm ?? 0) / 100} m · ${m.heightCm ?? '—'} cm`,
+      })
+    }
   }
 
   async function save (): Promise<void> {
     setBusy(true)
     try {
       await apiPost('/api/measurements', {
-        type: isGlass ? 'BALUSTRADA' : 'OGRAJA',
+        type: tip,
         lengthCm: Math.round(lengthCm * 10) / 10,
         heightCm: Math.round(heightCm),
         posts,
@@ -133,12 +152,26 @@ export default function VizModule () {
         slopeDeg: slope > 0 ? Math.round(slope * 100) / 100 : null,
         projectId: projectId !== 'none' ? projectId : null,
         location: location.trim() || null,
-        params: JSON.stringify({ viz: { profileId: profile?.id ?? null, sku: profile?.sku ?? null, color: colorId } }),
-        note: `Vizualizacija: ${profile ? `${profile.sku} · ` : ''}${color.label}`,
+        params: JSON.stringify({
+          viz: { profileId: profile?.id ?? null, sku: profile?.sku ?? null, color: colorId },
+          konfigurator: {
+            profileId: profile?.id ?? null,
+            sku: profile?.sku ?? null,
+            colorId,
+            tip,
+            lengthCm: Math.round(lengthCm * 10) / 10,
+            heightCm: Math.round(heightCm),
+            posts,
+            handrail,
+            slopeDeg: Math.round(slope * 100) / 100,
+            material: profile?.material ?? null,
+          },
+        }),
+        note: `Konfigurator: ${profile ? `${profile.sku} · ` : ''}${color.label}${tip !== 'OGRAJA' ? ` · ${TIP_SHORT[tip]}` : ''}`,
       })
       toast({
-        title: 'Vizualizacija shranjena kot meritev.',
-        description: `${isGlass ? 'Balustrada' : 'Ograja'} ${fmtM(lengthCm)} m × ${Math.round(heightCm)} cm · ${posts} stebrov`,
+        title: 'Konfiguracija shranjena kot meritev.',
+        description: `${TIP_LABELS[tip]} · ${fmtM(lengthCm)} m × ${Math.round(heightCm)} cm · ${posts} stebrov`,
       })
     } catch (e) {
       toast({ title: 'Napaka pri shranjevanju meritve', description: e instanceof Error ? e.message : undefined, variant: 'destructive' })
@@ -169,11 +202,42 @@ export default function VizModule () {
 
   const measurableRows = (measurements.data?.data ?? []).filter((m) => m.lengthCm != null)
 
+  /** Izračun cene iz trenutne konfiguracije (povezava s ponudbo). */
+  const cena = izracunajCeno({
+    tip,
+    lengthCm,
+    heightCm,
+    posts,
+    handrail,
+    montaza,
+    profile: profile ? { sku: profile.sku, name: profile.name, pricePerM: profile.pricePerM } : null,
+    colorLabel: color.label,
+  })
+
+  async function ustvariPonudbo (): Promise<void> {
+    setQuoteBusy(true)
+    try {
+      const res = await apiPost<{ data: { code: string; total: number } }>('/api/quotes', {
+        projectId: projectId !== 'none' ? projectId : null,
+        note: `Konfigurator: ${profile ? `${profile.sku} · ` : 'brez profila · '}${color.label}`,
+        lines: cena.postavke.map((p) => ({ description: p.label, qty: p.qty, unitPrice: p.unitPrice })),
+      })
+      toast({
+        title: 'Ponudba ustvarjena.',
+        description: `${res.data.code} · skupaj z DDV ${fmtEUR(res.data.total)}`,
+      })
+    } catch (e) {
+      toast({ title: 'Napaka pri ustvarjanju ponudbe', description: e instanceof Error ? e.message : undefined, variant: 'destructive' })
+    } finally {
+      setQuoteBusy(false)
+    }
+  }
+
   return (
     <div className="space-y-4">
       <PageHeader
         title="Vizualizacija"
-        desc="Parametrična risba ograje — tloris in stranski pogled v realnem merilu"
+        desc="3D konfigurator ograje in parametrična tehnična risba v realnem merilu"
         actions={
           <Button variant="outline" onClick={downloadSvg}>
             <Download className="size-4" aria-hidden /> Prenesi SVG
@@ -181,7 +245,8 @@ export default function VizModule () {
         }
       />
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,380px)_minmax(0,1fr)]">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,400px)_minmax(0,1fr)]">
+        <div className="min-w-0 space-y-4">
         {/* parametri */}
         <Card>
           <CardContent className="space-y-4 p-4 sm:p-6">
@@ -191,7 +256,7 @@ export default function VizModule () {
 
             <div className="space-y-2">
               <Label htmlFor="viz-profile">Profil</Label>
-              <Select value={profileId} onValueChange={setProfileId}>
+              <Select value={profileId} onValueChange={onProfileChange}>
                 <SelectTrigger id="viz-profile" aria-label="Profil ograje">
                   <SelectValue placeholder={catalog.loading ? 'Nalagam katalog …' : 'Brez profila'} />
                 </SelectTrigger>
@@ -210,6 +275,30 @@ export default function VizModule () {
               ) : null}
             </div>
 
+            {/* tip ograje (issue #1) */}
+            <fieldset className="space-y-2">
+              <legend className="text-sm font-medium leading-none">Tip ograje</legend>
+              <div className="grid grid-cols-3 gap-2">
+                {(['OGRAJA', 'BALUSTRADA', 'NAGIB'] as const).map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => setTip(t)}
+                    aria-pressed={tip === t}
+                    className={`flex min-h-11 flex-col items-center justify-center gap-0.5 rounded-lg border px-1.5 py-2 text-center transition hover:border-roksal-amber/60 ${tip === t ? 'border-roksal-amber bg-amber-50 dark:bg-amber-950/30' : ''}`}
+                  >
+                    <span className="text-xs font-semibold">{t === 'OGRAJA' ? 'Ograja' : t === 'BALUSTRADA' ? 'Balustrada' : 'Nagib'}</span>
+                    <span className="text-[10px] leading-tight text-muted-foreground">
+                      {t === 'OGRAJA' ? 'navpične palice' : t === 'BALUSTRADA' ? 'steklo' : 'stopniščna'}
+                    </span>
+                  </button>
+                ))}
+              </div>
+              {tip === 'NAGIB' && slope === 0 ? (
+                <p className="text-[11px] text-muted-foreground">Za tip »nagib« nastavite nagib stopnišča spodaj.</p>
+              ) : null}
+            </fieldset>
+
             {canReadMeasurements ? (
               <div className="space-y-2">
                 <Label htmlFor="viz-from">Naloži iz meritve</Label>
@@ -221,7 +310,7 @@ export default function VizModule () {
                     <SelectItem value="none">— nova risba —</SelectItem>
                     {measurableRows.map((m) => (
                       <SelectItem key={m.id} value={m.id}>
-                        {m.type} · {(m.lengthCm ?? 0) / 100} m{m.location ? ` · ${m.location}` : ''}
+                        {m.type} · {(m.lengthCm ?? 0) / 100} m{m.location ? ` · ${m.location}` : ''}{m.params?.includes('"konfigurator"') ? ' · 3D' : ''}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -314,8 +403,81 @@ export default function VizModule () {
               </div>
             ) : (
               <p className="border-t pt-3 text-center text-xs text-muted-foreground">
-                Za shranjevanje vizualizacije je potrebna pravica measurements.write.
+                Za shranjevanje konfiguracije je potrebna pravica measurements.write.
               </p>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* izračun (povezava konfiguracije s ponudbo) */}
+        <Card>
+          <CardContent className="space-y-3 p-4 sm:p-6">
+            <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-widest text-muted-foreground">
+              <Sigma className="size-4 text-roksal-amber" aria-hidden /> Izračun
+            </h2>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="h-8">Postavka</TableHead>
+                  <TableHead className="h-8 text-right">Količina</TableHead>
+                  <TableHead className="h-8 text-right">Cena</TableHead>
+                  <TableHead className="h-8 text-right">Skupaj</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {cena.postavke.map((p) => (
+                  <TableRow key={p.key}>
+                    <TableCell className="py-1.5 text-xs">{p.label}</TableCell>
+                    <TableCell className="py-1.5 text-right text-xs whitespace-nowrap tabular-nums">{fmtQty(p.qty)} {p.qtyUnit}</TableCell>
+                    <TableCell className="py-1.5 text-right text-xs whitespace-nowrap tabular-nums">{fmtEUR(p.unitPrice)}</TableCell>
+                    <TableCell className="py-1.5 text-right text-xs font-medium whitespace-nowrap tabular-nums">{fmtEUR(p.total)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            <div className="flex items-center justify-between border-t pt-2">
+              <span className="text-sm font-semibold">Skupaj (brez DDV)</span>
+              <span className="text-lg font-bold tabular-nums text-roksal-amber">{fmtEUR(cena.skupaj)}</span>
+            </div>
+            <p className="text-[11px] text-muted-foreground">Ocena iz konfiguracije — DDV 22 % se obračuna v ponudbi.</p>
+            <div className="flex items-center justify-between rounded-lg border px-3 py-2">
+              <Label htmlFor="viz-montaza" className="cursor-pointer">Montaža (35 €/m)</Label>
+              <Switch id="viz-montaza" checked={montaza} onCheckedChange={setMontaza} />
+            </div>
+            {canQuote ? (
+              <Button className="w-full" onClick={() => void ustvariPonudbo()} disabled={quoteBusy}>
+                {quoteBusy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <FilePlus2 className="size-4" aria-hidden />}
+                Ustvari ponudbo iz konfiguracije
+              </Button>
+            ) : (
+              <p className="text-center text-xs text-muted-foreground">
+                Ustvarjanje ponudb zahteva pravico quotes.create.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+        </div>
+
+        <div className="min-w-0 space-y-4">
+        {/* 3D konfigurator */}
+        <Card>
+          <CardContent className="p-4 sm:p-6">
+            <h2 className="mb-2 flex items-center gap-2 text-sm font-bold uppercase tracking-widest text-muted-foreground">
+              <Orbit className="size-4 text-roksal-amber" aria-hidden /> 3D konfigurator
+            </h2>
+            {lengthCm <= 20 ? (
+              <EmptyState title="Vnesite smiselne parametre" desc="Dolžina vsaj 0,2 m in višina vsaj 20 cm." icon={Orbit} />
+            ) : (
+              <Railing3D
+                lengthCm={lengthCm}
+                heightCm={heightCm}
+                posts={posts}
+                handrail={handrail}
+                slopeDeg={slope}
+                colorHex={color.hex}
+                tip={tip}
+                sku={profile?.sku ?? null}
+              />
             )}
           </CardContent>
         </Card>
@@ -346,6 +508,7 @@ export default function VizModule () {
             )}
           </CardContent>
         </Card>
+        </div>
       </div>
     </div>
   )
