@@ -30,6 +30,7 @@ verify:
     paths:
       - node_modules/
   script:
+    - apt-get update -qq && apt-get install -y -qq --no-install-recommends git ca-certificates >/dev/null
     - bun install --frozen-lockfile
     - bun run lint
     - bunx tsc --noEmit -p tsconfig.ci.json

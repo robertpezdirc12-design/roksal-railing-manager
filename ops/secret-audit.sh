@@ -14,6 +14,11 @@
 set -euo pipefail
 . "$(dirname "$0")/lib.sh"
 
+# predpogoj: brez git-a pregled NIMA pomena (vse preverjanje gre čez git) —
+# namenso trdo spodleti, namesto da bi tiho "prešel" (videno v CI: oven/bun
+# slika nima git-a, checkout opravi runner helper)
+command -v git >/dev/null 2>&1 || { echo "NAPAKA: git ni na voljo — skrivnostni pregled ni mogoč."; exit 3; }
+
 HISTORY_SCAN="${1:---history}" # --history (privzeto) ali --tree-only
 
 # Vzorci trdih skrivnosti — žetoni in zasebni ključi. Vsak zadetek je usoden.
