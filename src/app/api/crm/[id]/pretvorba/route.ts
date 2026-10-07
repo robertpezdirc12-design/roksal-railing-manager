@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { jsonError, requirePermission } from '@/lib/auth'
+import { nextCodeFromList } from '@/lib/codes'
 import { writeAudit } from '@/lib/audit'
 
 type Params = { params: Promise<{ id: string }> }
@@ -41,9 +42,9 @@ export async function POST (req: NextRequest, { params }: Params) {
     customerId = customer.id
   }
 
-  const year = new Date().getFullYear()
-  const count = await db.project.count()
-  const code = `P-${year}-${String(count + 1).padStart(3, '0')}`
+  // R439: koda glede na zasedene (count pade ob brisanju → unikatnost ni zagotovljena)
+  const existingCodes = await db.project.findMany({ where: { code: { startsWith: 'P-' } }, select: { code: true } })
+  const code = nextCodeFromList(existingCodes.map((p) => p.code), 'P-')
 
   const title = typeof body?.title === 'string' && body.title.trim() ? body.title.trim() : `Ograja — ${lead.name}`
   const address = typeof body?.address === 'string' && body.address.trim() ? body.address.trim() : null

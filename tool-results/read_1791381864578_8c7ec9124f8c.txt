@@ -1,0 +1,544 @@
+     1→'use client'
+     2→
+     3→// App ogrodje — IA po R429: DANES | PROJEKTI | ZAJEM | PISARNA | PROFIL
+     4→// Desktop: stranska vrstica z zavihki. Mobile: spodnja navigacija (danes PRVI, R429) + tabletke zavihkov.
+     5→// R433: globalno iskanje (Ctrl+K / gumb povečevala) — /api/search, obseg po pravicah.
+     6→// R439 (issue #6): OfflineBadge v glavi + samodejna sinhronizacija (initOfflineSync)
+     7→// + clearOfflineData ob odjavi (varnostna zahteva — vrsta NE sme preživeti odjave).
+     8→
+     9→import { useCallback, useEffect, useState } from 'react'
+    10→import { useTheme } from 'next-themes'
+    11→import { Bell, Cloud, CloudOff, LogOut, Moon, RefreshCw, Search, Sun, Ruler } from 'lucide-react'
+    12→import { Button } from '@/components/ui/button'
+    13→import { Badge } from '@/components/ui/badge'
+    14→import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+    15→import {
+    16→  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
+    17→  DropdownMenuSeparator, DropdownMenuTrigger,
+    18→} from '@/components/ui/dropdown-menu'
+    19→import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+    20→import {
+    21→  CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
+    22→} from '@/components/ui/command'
+    23→import { cn } from '@/lib/utils'
+    24→import { useAppStore } from '@/lib/store'
+    25→import { useToast } from '@/hooks/use-toast'
+    26→import { ROLE_LABELS, type Role } from '@/lib/permissions-core'
+    27→import { SECTIONS, tabVisible } from '@/lib/nav-registry'
+    28→import { apiGet, apiPost, fmtDateTime, useApi } from '@/lib/api-client'
+    29→import {
+    30→  clearOfflineData, getOfflineState, initOfflineSync, listUnsynced, syncNow, useOnline,
+    31→  type OfflineState, type QueueOp,
+    32→} from '@/lib/offline'
+    33→import { RoksalLogo } from '@/components/roksal/logo'
+    34→import { ModuleView } from '@/components/roksal/module-view'
+    35→
+    36→interface NotificationRow { id: string; title: string; body: string; read: boolean; createdAt: string }
+    37→
+    38→interface SearchHit { id: string; label: string; sub: string; section: string; tab: string; kind: string }
+    39→interface SearchGroup { kind: string; label: string; hits: SearchHit[] }
+    40→
+    41→export function AppShell () {
+    42→  const { user, section, tab, setSection, setTab, clearAuth } = useAppStore()
+    43→  const { theme, setTheme } = useTheme()
+    44→  const notif = useApi<{ data: NotificationRow[]; unread: number }>('/api/notifications')
+    45→
+    46→  // ── globalno iskanje (R433) ──
+    47→  const [searchOpen, setSearchOpen] = useState(false)
+    48→  const [searchQ, setSearchQ] = useState('')
+    49→  const [searchHits, setSearchHits] = useState<SearchGroup[]>([])
+    50→  const [searching, setSearching] = useState(false)
+    51→
+    52→  useEffect(() => {
+    53→    function onKey (e: KeyboardEvent) {
+    54→      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+    55→        e.preventDefault()
+    56→        setSearchOpen((o) => !o)
+    57→      }
+    58→    }
+    59→    window.addEventListener('keydown', onKey)
+    60→    return () => window.removeEventListener('keydown', onKey)
+    61→  }, [])
+    62→
+    63→  // R439: samodejna sinhronizacija — 'online' dogodek + interval 30 s (cleanup ob unmount)
+    64→  useEffect(() => initOfflineSync(), [])
+    65→
+    66→  const runSearch = useCallback((q: string) => {
+    67→    setSearchQ(q)
+    68→    if (q.trim().length < 2) { setSearchHits([]); return }
+    69→    setSearching(true)
+    70→    const url = `/api/search?q=${encodeURIComponent(q.trim())}`
+    71→    apiGet<{ data: { groups: SearchGroup[] } }>(url)
+    72→      .then((r) => setSearchHits(r.data.groups))
+    73→      .catch(() => setSearchHits([]))
+    74→      .finally(() => setSearching(false))
+    75→  }, [])
+    76→
+    77→  function goToHit (hit: SearchHit) {
+    78→    setSearchOpen(false)
+    79→    setSection(hit.section)
+    80→    setTab(hit.tab)
+    81→  }
+    82→
+    83→  if (!user) return null
+    84→
+    85→  function pickSection (id: string) {
+    86→    setSection(id)
+    87→    const sec = SECTIONS.find((s) => s.id === id)
+    88→    const first = sec?.tabs.find((t) => tabVisible(user?.perms, t))
+    89→    if (first) setTab(first.id)
+    90→  }
+    91→
+    92→  function openNotifications (open: boolean) {
+    93→    if (open && notif.data && notif.data.unread > 0) {
+    94→      void apiPost('/api/notifications').then(() => notif.reload()).catch(() => {})
+    95→    }
+    96→  }
+    97→
+    98→  async function logout () {
+    99→    try { await apiPost('/api/auth/logout') } catch { /* seja že potekla */ }
+   100→    // R439 (issue #6): varnost — ob odjavi izbriši VSE offline shrambe (vrsta/foto/predpomnilnik)
+   101→    await clearOfflineData()
+   102→    clearAuth()
+   103→  }
+   104→
+   105→  const currentSection = SECTIONS.find((s) => s.id === section) ?? SECTIONS[0]
+   106→  const currentTab = currentSection.tabs.find((t) => t.id === tab)
+   107→  const initials = user.name.split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase()
+   108→
+   109→  return (
+   110→    <div className="flex min-h-screen flex-col bg-background">
+   111→      {/* glava */}
+   112→      <header className="sticky top-0 z-30 border-b bg-card/80 backdrop-blur supports-[backdrop-filter]:bg-card/60">
+   113→        <div className="mx-auto flex h-14 w-full max-w-7xl items-center justify-between gap-2 px-3 sm:px-4">
+   114→          <button
+   115→            type="button" onClick={() => pickSection('danes')}
+   116→            className="rounded-lg px-1 py-1 transition hover:bg-secondary focus-visible:outline-2 focus-visible:outline-ring"
+   117→            aria-label="Roksal Railing Manager — domov"
+   118→          >
+   119→            <RoksalLogo compact />
+   120→          </button>
+   121→
+   122→          <div className="hidden min-w-0 flex-1 items-center gap-2 px-4 md:flex" aria-current="page">
+   123→            <span className="truncate text-sm font-semibold text-foreground">{currentSection.label}</span>
+   124→            {currentTab && currentTab.id !== currentSection.id ? (
+   125→              <>
+   126→                <span className="text-muted-foreground">/</span>
+   127→                <span className="truncate text-sm text-muted-foreground">{currentTab.label}</span>
+   128→              </>
+   129→            ) : null}
+   130→          </div>
+   131→
+   132→          <div className="flex items-center gap-1.5">
+   133→            {/* R439 (issue #6): stanje signala + vrsta offline operacij */}
+   134→            <OfflineBadge />
+   135→
+   136→            <Button
+   137→              variant="ghost" onClick={() => setSearchOpen(true)}
+   138→              className="h-9 gap-2 rounded-full px-3 text-muted-foreground"
+   139→              aria-label="Globalno iskanje (Ctrl+K)"
+   140→            >
+   141→              <Search className="size-4" aria-hidden />
+   142→              <span className="hidden text-xs sm:inline">Iskanje</span>
+   143→              <kbd className="ml-1 hidden rounded border bg-secondary px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground lg:inline">Ctrl K</kbd>
+   144→            </Button>
+   145→
+   146→            <Popover onOpenChange={openNotifications}>
+   147→              <PopoverTrigger asChild>
+   148→                <Button variant="ghost" size="icon" className="relative" aria-label="Obvestila">
+   149→                  <Bell className="size-5" />
+   150→                  {notif.data && notif.data.unread > 0 ? (
+   151→                    <span className="absolute -right-0.5 -top-0.5 flex size-4 items-center justify-center rounded-full bg-roksal-amber text-[10px] font-bold text-roksal-ink">
+   152→                      {notif.data.unread}
+   153→                    </span>
+   154→                  ) : null}
+   155→                </Button>
+   156→              </PopoverTrigger>
+   157→              <PopoverContent align="end" className="w-80 p-0">
+   158→                <div className="max-h-96 overflow-y-auto p-2">
+   159→                  <div className="px-2 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Obvestila</div>
+   160→                  {notif.loading ? (
+   161→                    <div className="p-4 text-sm text-muted-foreground">Nalagam…</div>
+   162→                  ) : !notif.data || notif.data.data.length === 0 ? (
+   163→                    <div className="p-4 text-sm text-muted-foreground">Ni obvestil.</div>
+   164→                  ) : (
+   165→                    notif.data.data.map((n) => (
+   166→                      <div key={n.id} className={cn('rounded-lg p-3', !n.read && 'bg-secondary/60')}>
+   167→                        <div className="text-sm font-medium leading-snug">{n.title}</div>
+   168→                        <div className="mt-0.5 text-xs text-muted-foreground">{n.body}</div>
+   169→                        <div className="mt-1 text-[10px] text-muted-foreground/70">{fmtDateTime(n.createdAt)}</div>
+   170→                      </div>
+   171→                    ))
+   172→                  )}
+   173→                </div>
+   174→              </PopoverContent>
+   175→            </Popover>
+   176→
+   177→            <Button
+   178→              variant="ghost" size="icon" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+   179→              aria-label="Preklopi temo"
+   180→            >
+   181→              <Sun className="size-5 dark:hidden" /><Moon className="hidden size-5 dark:block" />
+   182→            </Button>
+   183→
+   184→            <DropdownMenu>
+   185→              <DropdownMenuTrigger asChild>
+   186→                <button
+   187→                  type="button"
+   188→                  className="flex items-center gap-2 rounded-full py-1 pl-1 pr-2 transition hover:bg-secondary focus-visible:outline-2 focus-visible:outline-ring"
+   189→                  aria-label="Uporabniški meni"
+   190→                >
+   191→                  <Avatar className="size-8 border">
+   192→                    <AvatarFallback className="bg-roksal-ink text-xs font-bold text-primary-foreground">{initials}</AvatarFallback>
+   193→                  </Avatar>
+   194→                  <span className="hidden text-left leading-tight sm:block">
+   195→                    <span className="block max-w-28 truncate text-xs font-semibold">{user.name}</span>
+   196→                    <span className="block text-[10px] text-muted-foreground">{ROLE_LABELS[user.role as Role] ?? user.role}</span>
+   197→                  </span>
+   198→                </button>
+   199→              </DropdownMenuTrigger>
+   200→              <DropdownMenuContent align="end" className="w-52">
+   201→                <DropdownMenuLabel>
+   202→                  <div className="text-sm font-semibold">{user.name}</div>
+   203→                  <div className="text-xs font-normal text-muted-foreground">{user.email}</div>
+   204→                  <Badge variant="secondary" className="mt-1.5 bg-roksal-ink text-primary-foreground">
+   205→                    {ROLE_LABELS[user.role as Role] ?? user.role}
+   206→                  </Badge>
+   207→                </DropdownMenuLabel>
+   208→                <DropdownMenuSeparator />
+   209→                <DropdownMenuItem onClick={() => { setSection('profil'); setTab('profil') }}>
+   210→                  <Ruler className="size-4" aria-hidden /> Moj profil
+   211→                </DropdownMenuItem>
+   212→                <DropdownMenuSeparator />
+   213→                <DropdownMenuItem variant="destructive" onClick={() => void logout()}>
+   214→                  <LogOut className="size-4" aria-hidden /> Odjava
+   215→                </DropdownMenuItem>
+   216→              </DropdownMenuContent>
+   217→            </DropdownMenu>
+   218→          </div>
+   219→        </div>
+   220→      </header>
+   221→
+   222→      {/* globalno iskanje (R433) */}
+   223→      <CommandDialog
+   224→        open={searchOpen} onOpenChange={setSearchOpen}
+   225→        title="Globalno iskanje" description="Išči po projektih, strankah, ponudbah, računih, nalogih in zalogi."
+   226→      >
+   227→        <CommandInput value={searchQ} onValueChange={runSearch} placeholder="Išči projekte, stranke, ponudbe, račune, naloge …" />
+   228→        <CommandList>
+   229→          {searching ? (
+   230→            <div className="p-4 text-center text-sm text-muted-foreground">Iščem …</div>
+   231→          ) : searchQ.trim().length < 2 ? (
+   232→            <div className="p-4 text-center text-sm text-muted-foreground">Vnesi vsaj 2 znaka.</div>
+   233→          ) : searchHits.length === 0 ? (
+   234→            <CommandEmpty>Ni zadetkov za „{searchQ}“.</CommandEmpty>
+   235→          ) : (
+   236→            searchHits.map((g) => (
+   237→              <CommandGroup key={g.kind} heading={g.label}>
+   238→                {g.hits.map((h) => (
+   239→                  <CommandItem key={`${h.kind}-${h.id}`} value={`${h.label} ${h.sub}`} onSelect={() => goToHit(h)}>
+   240→                    <Search className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+   241→                    <span className="min-w-0 flex-1">
+   242→                      <span className="block truncate text-sm font-medium">{h.label}</span>
+   243→                      <span className="block truncate text-xs text-muted-foreground">{h.sub}</span>
+   244→                    </span>
+   245→                  </CommandItem>
+   246→                ))}
+   247→              </CommandGroup>
+   248→            ))
+   249→          )}
+   250→        </CommandList>
+   251→      </CommandDialog>
+   252→
+   253→      {/* telo */}
+   254→      <div className="mx-auto flex w-full max-w-7xl flex-1 gap-6 px-3 pb-24 pt-4 sm:px-4 md:pb-8">
+   255→        {/* stranska vrstica — desktop */}
+   256→        <nav aria-label="Glavna navigacija" className="hidden w-60 shrink-0 md:block">
+   257→          <div className="sticky top-20 max-h-[calc(100vh-6rem)] space-y-5 overflow-y-auto pr-1">
+   258→            {SECTIONS.map((sec) => {
+   259→              const tabs = sec.tabs.filter((t) => tabVisible(user.perms, t))
+   260→              if (tabs.length === 0) return null
+   261→              return (
+   262→                <div key={sec.id}>
+   263→                  <button
+   264→                    type="button" onClick={() => pickSection(sec.id)}
+   265→                    className={cn(
+   266→                      'mb-1 w-full rounded-lg px-2 py-1.5 text-left text-[11px] font-bold uppercase tracking-widest transition',
+   267→                      section === sec.id ? 'text-roksal-amber' : 'text-muted-foreground hover:text-foreground'
+   268→                    )}
+   269→                    aria-current={section === sec.id ? 'true' : undefined}
+   270→                  >
+   271→                    {sec.label}
+   272→                  </button>
+   273→                  <ul className="space-y-0.5">
+   274→                    {tabs.map((t) => (
+   275→                      <li key={t.id}>
+   276→                        <button
+   277→                          type="button" onClick={() => { setSection(sec.id); setTab(t.id) }}
+   278→                          className={cn(
+   279→                            'w-full rounded-lg px-3 py-2 text-left text-sm font-medium transition',
+   280→                            tab === t.id
+   281→                              ? 'bg-roksal-ink text-primary-foreground shadow-sm'
+   282→                              : 'text-foreground/80 hover:bg-secondary'
+   283→                          )}
+   284→                          aria-current={tab === t.id ? 'page' : undefined}
+   285→                        >
+   286→                          {t.label}
+   287→                        </button>
+   288→                      </li>
+   289→                    ))}
+   290→                  </ul>
+   291→                </div>
+   292→              )
+   293→            })}
+   294→          </div>
+   295→        </nav>
+   296→
+   297→        {/* vsebina */}
+   298→        <main className="min-w-0 flex-1" aria-live="polite">
+   299→          {/* tabletke zavihkov znotraj sekcije */}
+   300→          {currentSection.tabs.filter((t) => tabVisible(user.perms, t)).length > 1 ? (
+   301→            <div className="mb-4 flex gap-1.5 overflow-x-auto pb-1" role="tablist" aria-label={`Zavihki — ${currentSection.label}`}>
+   302→              {currentSection.tabs.filter((t) => tabVisible(user.perms, t)).map((t) => (
+   303→                <button
+   304→                  key={t.id} type="button" role="tab"
+   305→                  aria-selected={tab === t.id}
+   306→                  onClick={() => setTab(t.id)}
+   307→                  className={cn(
+   308→                    'shrink-0 rounded-full border px-3.5 py-1.5 text-xs font-semibold transition',
+   309→                    tab === t.id
+   310→                      ? 'border-transparent bg-roksal-ink text-primary-foreground'
+   311→                      : 'border-border bg-card text-foreground/70 hover:bg-secondary'
+   312→                  )}
+   313→                >
+   314→                  {t.label}
+   315→                </button>
+   316→              ))}
+   317→            </div>
+   318→          ) : null}
+   319→
+   320→          <ModuleView tabId={tab} />
+   321→        </main>
+   322→      </div>
+   323→
+   324→      {/* noga — prilepljena dnu (kratka vsebina), naravno potisnjena dol (dolga vsebina) */}
+   325→      <footer className="mt-auto border-t bg-card/60 px-4 py-2.5 text-center text-[11px] text-muted-foreground">
+   326→        © 2026 Roksal d.o.o. · Roksal Railing Manager — rekonstrukcija R431 · build {typeof window === 'undefined' ? '' : new Date().getFullYear()}
+   327→      </footer>
+   328→
+   329→      {/* spodnja navigacija — mobile (DANES prvi, R429) */}
+   330→      <nav
+   331→        aria-label="Navigacija sekcij" role="navigation"
+   332→        className="fixed inset-x-0 bottom-0 z-30 border-t bg-card/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden"
+   333→      >
+   334→        <div className="mx-auto grid max-w-lg grid-cols-5">
+   335→          {SECTIONS.map((sec) => {
+   336→            const Icon = SECTION_ICONS[sec.id]
+   337→            const available = sec.tabs.some((t) => tabVisible(user.perms, t))
+   338→            if (!available) {
+   339→              return <div key={sec.id} className="flex items-center justify-center py-1" aria-disabled="true" />
+   340→            }
+   341→            return (
+   342→              <button
+   343→                key={sec.id} type="button" onClick={() => pickSection(sec.id)}
+   344→                className={cn(
+   345→                  'flex min-h-[56px] flex-col items-center justify-center gap-0.5 px-1 py-2 text-[10px] font-semibold transition',
+   346→                  section === sec.id ? 'text-roksal-amber' : 'text-muted-foreground hover:text-foreground'
+   347→                )}
+   348→                aria-current={section === sec.id ? 'page' : undefined}
+   349→              >
+   350→                <Icon className="size-5" aria-hidden />
+   351→                {sec.label}
+   352→              </button>
+   353→            )
+   354→          })}
+   355→        </div>
+   356→      </nav>
+   357→    </div>
+   358→  )
+   359→}
+   360→
+   361→// ─── R439 (issue #6): OfflineBadge — stanje signala + vrsta sinhronizacije ───
+   362→
+   363→const OP_KIND_LABELS: Record<string, string> = {
+   364→  meritev: 'Meritev',
+   365→  foto: 'Fotografija z merjenjem',
+   366→  'nalog-opomba': 'Opomba naloga',
+   367→  'nalog-status': 'Sprememba statusa',
+   368→  'nalog-zakljucek': 'Zaključek terena',
+   369→}
+   370→
+   371→function OfflineBadge () {
+   372→  const { toast } = useToast()
+   373→  const online = useOnline() // R439: takojšen odziv na online/offline dogodke
+   374→  const [state, setState] = useState<OfflineState | null>(null)
+   375→  const [detail, setDetail] = useState<QueueOp[]>([])
+   376→  const [busy, setBusy] = useState(false)
+   377→
+   378→  const refresh = useCallback(() => {
+   379→    void getOfflineState().then(setState).catch(() => {})
+   380→  }, [])
+   381→
+   382→  useEffect(() => {
+   383→    void refresh()
+   384→    const t = window.setInterval(() => void refresh(), 5_000)
+   385→    const on = () => void refresh()
+   386→    window.addEventListener('online', on)
+   387→    window.addEventListener('offline', on)
+   388→    return () => {
+   389→      window.clearInterval(t)
+   390→      window.removeEventListener('online', on)
+   391→      window.removeEventListener('offline', on)
+   392→    }
+   393→  }, [refresh])
+   394→
+   395→  // osveži podrobnosti ob spremembi stanja
+   396→  useEffect(() => {
+   397→    void listUnsynced().then(setDetail).catch(() => {})
+   398→  }, [state])
+   399→
+   400→  async function runSync () {
+   401→    setBusy(true)
+   402→    const res = await syncNow()
+   403→    setBusy(false)
+   404→    refresh()
+   405→    if (res.error) {
+   406→      toast({ title: 'Sinhronizacija ni uspela', description: res.error, variant: 'destructive' })
+   407→    } else if (res.skipped === 'offline') {
+   408→      toast({ title: 'Še brez povezave', description: 'Operacije bodo poslane, ko se signal vrne.' })
+   409→    } else {
+   410→      const parts = [
+   411→        res.synced ? `${res.synced} uspešno` : null,
+   412→        res.conflicts ? `${res.conflicts} konflikt${res.conflicts === 1 ? '' : 'ov'}` : null,
+   413→        res.errors ? `${res.errors} napak${res.errors === 1 ? 'a' : ''}` : null,
+   414→      ].filter(Boolean)
+   415→      toast({
+   416→        title: 'Sinhronizacija zaključena',
+   417→        description: parts.length > 0 ? parts.join(' · ') : 'Ni bilo čakajočih sprememb.',
+   418→      })
+   419→    }
+   420→  }
+   421→
+   422→  const unsynced = state ? state.pending + state.conflicts + state.errors : 0
+   423→
+   424→  return (
+   425→    <Popover>
+   426→      <PopoverTrigger asChild>
+   427→        <Button
+   428→          variant="ghost" className="h-9 gap-1.5 rounded-full px-2.5 text-muted-foreground"
+   429→          aria-label={online
+   430→            ? (unsynced > 0 ? `Povezava vzpostavljena — ${unsynced} sprememb čaka na sinhronizacijo` : 'Povezava vzpostavljena')
+   431→            : 'Brez povezave — spremembe se shranjujejo lokalno'}
+   432→          title={online ? 'Sinhronizacija — stanje povezave' : 'Brez povezave — offline način'}
+   433→        >
+   434→          <span className="relative flex">
+   435→            {online ? <Cloud className="size-5" aria-hidden /> : <CloudOff className="size-5" aria-hidden />}
+   436→            <span
+   437→              className={cn('absolute -bottom-0.5 -right-0.5 size-2.5 rounded-full border-2 border-card', online ? 'bg-emerald-500' : 'bg-muted-foreground/50')}
+   438→              aria-hidden
+   439→            />
+   440→          </span>
+   441→          {unsynced > 0 ? (
+   442→            <span className="text-xs font-bold text-orange-600 dark:text-orange-400">
+   443→              {unsynced} čaka
+   444→              <span className="sr-only"> na sinhronizacijo</span>
+   445→            </span>
+   446→          ) : null}
+   447→        </Button>
+   448→      </PopoverTrigger>
+   449→      <PopoverContent align="end" className="w-80 p-0">
+   450→        <div className="p-3">
+   451→          <div className="flex items-center justify-between gap-2">
+   452→            <div className="flex items-center gap-2 text-sm font-semibold">
+   453→              {online
+   454→                ? <><Cloud className="size-4 text-emerald-600" aria-hidden /> Online</>
+   455→                : <><CloudOff className="size-4 text-muted-foreground" aria-hidden /> Brez povezave</>}
+   456→            </div>
+   457→            <span
+   458→              className={cn(
+   459→                'inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold',
+   460→                online
+   461→                  ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+   462→                  : 'bg-muted text-muted-foreground'
+   463→              )}
+   464→            >
+   465→              <span className={cn('size-1.5 rounded-full', online ? 'bg-emerald-500' : 'bg-muted-foreground/60')} aria-hidden />
+   466→              {online ? 'signal je nazaj' : 'offline način'}
+   467→            </span>
+   468→          </div>
+   469→
+   470→          <dl className="mt-2 grid grid-cols-2 gap-1.5 text-xs">
+   471→            <div className="rounded-lg bg-secondary/60 p-2">
+   472→              <dt className="text-muted-foreground">Čakajoče spremembe</dt>
+   473→              <dd className="text-base font-bold">{state?.pending ?? 0}</dd>
+   474→            </div>
+   475→            <div className="rounded-lg bg-secondary/60 p-2">
+   476→              <dt className="text-muted-foreground">Čakajoče fotografije</dt>
+   477→              <dd className="text-base font-bold">{state?.photos ?? 0}</dd>
+   478→            </div>
+   479→            <div className={cn('rounded-lg p-2', (state?.conflicts ?? 0) > 0 ? 'bg-red-100 dark:bg-red-950/60' : 'bg-secondary/60')}>
+   480→              <dt className={(state?.conflicts ?? 0) > 0 ? 'font-semibold text-red-700 dark:text-red-300' : 'text-muted-foreground'}>Konflikti</dt>
+   481→              <dd className={cn('text-base font-bold', (state?.conflicts ?? 0) > 0 && 'text-red-700 dark:text-red-300')}>{state?.conflicts ?? 0}</dd>
+   482→            </div>
+   483→            <div className={cn('rounded-lg p-2', (state?.errors ?? 0) > 0 ? 'bg-amber-100 dark:bg-amber-950/60' : 'bg-secondary/60')}>
+   484→              <dt className="text-muted-foreground">Napake</dt>
+   485→              <dd className="text-base font-bold">{state?.errors ?? 0}</dd>
+   486→            </div>
+   487→          </dl>
+   488→
+   489→          <p className="mt-2 text-[11px] text-muted-foreground">
+   490→            Zadnja sinhronizacija: {state?.lastSync ? fmtDateTime(state.lastSync) : '—'}
+   491→          </p>
+   492→
+   493→          {detail.length > 0 ? (
+   494→            <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto pr-1" aria-label="Neusklajene operacije">
+   495→              {detail.map((op) => (
+   496→                <li key={op.opId} className="rounded-lg border px-2 py-1.5 text-xs">
+   497→                  <div className="flex items-center justify-between gap-2">
+   498→                    <span className="min-w-0 flex-1 truncate font-medium">{OP_KIND_LABELS[op.kind] ?? op.kind}</span>
+   499→                    <span
+   500→                      className={cn(
+   501→                        'shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold',
+   502→                        op.status === 'conflict'
+   503→                          ? 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300'
+   504→                          : op.status === 'error'
+   505→                            ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+   506→                            : 'bg-secondary text-secondary-foreground'
+   507→                      )}
+   508→                    >
+   509→                      {op.status === 'conflict' ? 'konflikt' : op.status === 'error' ? 'napaka' : 'čaka'}
+   510→                    </span>
+   511→                  </div>
+   512→                  {op.error ? <p className="mt-0.5 break-words text-[11px] text-muted-foreground">{op.error}</p> : null}
+   513→                </li>
+   514→              ))}
+   515→            </ul>
+   516→          ) : null}
+   517→
+   518→          {(state?.conflicts ?? 0) > 0 ? (
+   519→            <p className="mt-2 rounded-lg bg-red-50 p-2 text-[11px] text-red-700 dark:bg-red-950/40 dark:text-red-300">
+   520→              Konflikti ostajajo v vrsti — na strežniku je stanje že drugačno (npr. nalog je že v novem statusu).
+   521→            </p>
+   522→          ) : null}
+   523→
+   524→          <Button
+   525→            size="sm" className="mt-2 w-full" disabled={busy || !online || unsynced === 0}
+   526→            onClick={() => void runSync()}
+   527→          >
+   528→            <RefreshCw className={cn('size-4', busy && 'animate-spin')} aria-hidden />
+   529→            Sinhroniziraj zdaj
+   530→          </Button>
+   531→        </div>
+   532→      </PopoverContent>
+   533→    </Popover>
+   534→  )
+   535→}
+   536→
+   537→const SECTION_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
+   538→  danes: (props) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M8 2v4" /><path d="M12 2v4" /><path d="M16 2v4" /><rect width="16" height="18" x="4" y="4" rx="2" /><path d="M8 10h.01M12 10h.01M16 10h.01M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01M16 18h.01" /></svg>,
+   539→  projekti: (props) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M3 21h18" /><path d="M5 21V7l7-4 7 4v14" /><path d="M9 21v-6h6v6" /></svg>,
+   540→  zajem: (props) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M4 8V6a2 2 0 0 1 2-2h2" /><path d="M20 8V6a2 2 0 0 0-2-2h-2" /><path d="M4 16v2a2 2 0 0 0 2 2h2" /><path d="M20 16v2a2 2 0 0 1-2 2h-2" /><path d="M12 8v8" /><path d="M8 12h8" /></svg>,
+   541→  pisarna: (props) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M3 21h18" /><path d="M6 21V8l6-5 6 5v13" /><path d="M10 21v-4h4v4" /><path d="M9 10h.01M15 10h.01" /></svg>,
+   542→  profil: (props) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><circle cx="12" cy="8" r="4" /><path d="M6 21v-1a6 6 0 0 1 12 0v1" /></svg>,
+   543→}
+   544→

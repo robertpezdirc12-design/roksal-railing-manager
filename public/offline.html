@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="sl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Roksal — brez povezave</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body {
+      margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      background: #f8fafc; color: #1d2b3e;
+    }
+    main { max-width: 26rem; padding: 2rem; text-align: center; }
+    .logo { width: 64px; height: 64px; margin: 0 auto 1rem; display: block; }
+    h1 { font-size: 1.25rem; margin: 0 0 .5rem; }
+    p { margin: .25rem 0; color: #475569; font-size: .95rem; line-height: 1.5; }
+    .badge {
+      display: inline-flex; align-items: center; gap: .5rem; margin-top: 1rem;
+      padding: .45rem 1rem; border-radius: 9999px; font-size: .85rem; font-weight: 700;
+      background: #fef3c7; color: #92400e;
+    }
+    @media (prefers-color-scheme: dark) {
+      body { background: #0f172a; color: #e2e8f0; }
+      p { color: #94a3b8; }
+      .badge { background: #451a03; color: #fbbf24; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <svg class="logo" viewBox="0 0 32 32" aria-hidden="true">
+      <rect x="4" y="6" width="24" height="3.2" rx="1.6" fill="#f59e0b"/>
+      <rect x="4" y="14" width="24" height="3.2" rx="1.6" fill="#f59e0b"/>
+      <rect x="5.5" y="6" width="3.4" height="22" rx="1.7" fill="#1d2b3e"/>
+      <rect x="14.3" y="6" width="3.4" height="22" rx="1.7" fill="#1d2b3e"/>
+      <rect x="23.1" y="6" width="3.4" height="22" rx="1.7" fill="#1d2b3e"/>
+    </svg>
+    <h1>Roksal Railing Manager</h1>
+    <p>Trenutno ste brez povezave in predpomnjena aplikacija še ni na voljo.</p>
+    <p>Po vrnitvi signala se vse lokalno shranjene spremembe samodejno sinhronizirajo.</p>
+    <p class="badge" id="st">Preverjanje predpomnilnika …</p>
+  </main>
+  <script>
+    // če ima SW predpomnjen shell, ga ponudi takoj (offline.html je samo rezerva)
+    (async () => {
+      try {
+        const cacheNames = await caches.keys()
+        const shell = await Promise.all(
+          cacheNames.flatMap((n) => n.includes('shell') ? [caches.open(n)] : [])
+        )
+        for (const c of shell) {
+          if (await c.match('/')) { location.replace('/'); return }
+        }
+        document.getElementById('st').textContent = 'Aplikacija še ni bila predpomnjena — povežite se in jo odprite.'
+      } catch { /* IndexedDB/caches niso na voljo */ }
+    })()
+  </script>
+</body>
+</html>

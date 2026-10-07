@@ -204,7 +204,7 @@ model WorkOrderEvent {
   workOrder   WorkOrder  @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
   userId      String?
   user        User?      @relation(fields: [userId], references: [id])
-  type        String // DODELJEN | ZACETEK | ZAJEM | PREVERITEV | ZAKLJUCEK | KOMENTAR
+  type        String // DODELJEN | ZACETEK | ZAJEM | PREVERITEV | ZAKLJUCEK | KOMENTAR | OPOMBA (R439: sync)
   note        String?
   createdAt   DateTime   @default(now())
 }
@@ -548,6 +548,22 @@ model EngineeringRule {
   note      String?
   active    Boolean  @default(true)
   updatedAt DateTime @updatedAt
+}
+
+// ─── Offline sinhronizacija (R439: issue #6 — mobilni teren brez signala) ────
+// SyncOp = zadetek uspešno obdelanega opa iz /api/sync. id = opId (UUID, ga
+// generira ODJEMALEC) → ponovno pošiljanje istega opId vrne shranjen rezultat
+// (idempotenca — podvajanje meritev/dogodkov NI mogoče).
+
+model SyncOp {
+  id        String   @id // opId (UUID, generira odjemalec) — idempotenca
+  deviceId  String
+  userId    String
+  kind      String // meritev | foto | nalog-opomba | nalog-status | nalog-zakljucek
+  result    String // JSON odgovor operacije
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
 }
 
 // ─── Ankete / povpraševanja (R437: /api/surveys iz route-mape izvirnika) ────

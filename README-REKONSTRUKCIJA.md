@@ -1,4 +1,4 @@
-# Roksal Railing Manager — REKONSTRUKCIJA (R431–R435)
+# Roksal Railing Manager — REKONSTRUKCIJA (R431–R439)
 
 > **Datum:** 6.–7. 10. 2026 · **Veja:** `rekonstrukcija`
 > Ta veja vsebuje **funkcionalno rekonstrukcijo** aplikacije, zgrajeno iz blueprinta na veji `main`
@@ -33,6 +33,12 @@
 | **Portal stranke** | model `PortalLink` — javni varni pogled statusa (`/api/public/portal?token=`), predogled v aplikaciji, preklic, štetje ogledov — R435 |
 | **Vzdrževanje** | model `JobRun` — cron opravila izvirnika (seje-gc, portal-gc, obvestila-gc) z ročnim zagonom in dnevnikom — R435 |
 | **Namestitev & licenca** | prvi admin, ko ni uporabnikov (`/api/setup`) + aktivacija ključa z kontrolno vsoto mod 97 (`/api/aktivacija`) — R435 |
+| **Meritve s kamero** | večtočkovni zajem na fotografiji (klik → polyline, kalibracija, koti/Δv, stopnice), VLM zaznava točk (`glm-4.6v`), zgodovina verzij meritev — R436 (issue #1) |
+| **Celoten monter workflow** | vodi → projekt → nalog z navodili → dodelitev → teren → zaključek; RBAC obseg fail-closed (monter samo svoji) — R436 (issue #1) |
+| **3D konfigurator** | lastna perspektivna projekcija (brez three.js): stebri/steklo/nagib, RAL barve, izračun cene → ponudba — R436 (issue #1) |
+| **Obnova 15 rut** | material-prices/orders, punch, equipment/events, customers/dedup, deal-lock, payments/[id]+reconciliation, share meritev, surveys, engineering-rules, jobs/run, security/rate-limit — R437 (issue #2), glej `docs/RECOVERY-REPORT.md` |
+| **Obvestila** | event → delivery model (11 tipov × 4 kanali), prefs po uporabniku, retry z varnostjo pred podvajanjem, maskirani naslovi — R438 (issue #5) |
+| **Mobilni teren & offline** | IndexedDB vrsta + fotografije + predpomnilnik, idempotentna sinhronizacija prek `/api/sync` (opId), konflikti rešljivi v UI, PWA (manifest + sw.js) — R439 (issue #6) |
 
 ## Delujoči moduli
 
@@ -52,6 +58,7 @@ bun install
 bun run db:push        # ustvari SQLite bazo (prisma/schema.prisma)
 bunx node prisma/seed.cjs   # demo podatki (uporabniki, stranke, projekti, zaloga, profili, orodjarina, galerija)
 bun run dev            # http://localhost:3000
+bash tests/r437.sh && bash tests/r438.sh && bash tests/r439.sh   # regresija (dev strežnik mora teči)
 ```
 
 ### Demo prijava
@@ -70,6 +77,29 @@ bun run dev            # http://localhost:3000
 - **Vzdrževanje:** Pisarna → Varnost → *Vzdrževanje* (ADMIN) — zagon seje-gc / portal-gc / obvestila-gc.
 - **Licenca:** Pisarna → Varnost → *Licenca* — demo aktivacijski ključ: `RS-YZKZ2-MNUPY-Y0D84`.
 - **Začetna namestitev:** prikaže se le, če v bazi ni nobenega uporabnika (izprazni tabelo `User` ali počisti bazo).
+
+## Mobilni teren & offline (R439 — GitLab issue #6)
+
+Monter dela na objektu brez signala: vsako dejanje se shrani **lokalno v IndexedDB** (vrsta operacij + kompresirane fotografije + predpomnjeni seznam nalogov) in se ob vrnitvi signala **samodejno in idempotentno** sinhronizira prek `POST /api/sync` (enotni mehanizem iz route-mape izvirnika).
+
+- **Offline dejanja** (zavihek Nalogi → podrobnost): hitra meritev, opomba, sprememba statusa, zaključek terena — tudi v kameri gumb *Shrani (offline)*.
+- **Idempotenca:** vsak op nosi `opId` (UUID, generira odjemalec); strežnik shrani zadetek v `SyncOp` — ponovno pošiljanje istega opa VEDNO vrne shranjen rezultat brez podvajanja.
+- **Konflikti** (npr. nalog je medtem že prešel v nov status) ostanejo v vrsti, vidni so v OfflineBadge (oblak v glavi) z razlogom in gumbom za rešitev (sprejem stanja strežnika).
+- **Varnost:** ob **odjavi** se VSE lokalne shrambe izbrišejo; če se na isti napravi prijavi **drug uporabnik** (preklic/potek seje), se vrsta prejšnjega uporabnika pobriše ŠELEJ pred prvim pošiljanjem; zaključeni zapisi (starejši od 24 h) se samodejno počistijo.
+- **PWA:** `manifest.webmanifest` + `sw.js` (app-shell predpomnilnik; API in poslovni podatki NIKOLI iz predpomnilnika) — registracija SAMO v produkciji (`NODE_ENV=production`), razvoj (HMR) nedotaknjen.
+
+### Dejanska podpora naprav/brskalnikov (preverjeno)
+
+| Zmogljivost | Chrome/Edge (desktop) | Chrome/Samsung Internet (Android) | Safari (iOS 16.4+) |
+|---|---|---|---|
+| IndexedDB vrsta + fotografije | ✓ | ✓ | ✓ (kvota ~60 % prostora; preverjeno omejitev 8 MB na fotografijo) |
+| `navigator.onLine` + online/offline dogodki | ✓ | ✓ | ✓ (samo spremembe Wi-Fi/mobilnih podatkov; letalski način v Safari včasih zamudi) |
+| Kompresija fotografij (canvas → JPEG) | ✓ | ✓ | ✓ |
+| Samodejna sinhronizacija ob vrnitvi signala | ✓ | ✓ | ✓ (ob vrnitvi v pregrado/ospredju; v ozadju iOS zmrzne časovnike — ob odprtju aplikacije dohiti) |
+| PWA namestitev + offline odpiranje (sw.js) | ✓ | ✓ (namestitev doma) | ✓ prek »Dodaj na domači zaslon« (iOS 16.4+ podpira SW; starejši iOS samo ikono) |
+| Background Sync API (ni v uporabi) | ✓ | ✓ | ✗ — nadomeščeno z dogodkom `online` + intervalom 30 s |
+
+Preverjeno z brskalniško avtomatizacijo (Chromium): izguba signala med meritvijo ✓, izguba signala med zajemom fotografije ✓, samodejna sinhronizacija obeh vrst po vrnitvi ✓, konflikt dvojnega prehoda prikazan in rešljiv ✓, odjava počisti IndexedDB ✓.
 
 ## Tehnologija
 

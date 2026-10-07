@@ -106,7 +106,7 @@ export default function SignaturaModule () {
               <>
                 <div className="space-y-2">
                   <Label>Ponudba *</Label>
-                  <Select value={quoteId || undefined} onValueChange={setQuoteId}>
+                  <Select value={quoteId} onValueChange={setQuoteId}>
                     <SelectTrigger aria-label="Izberi ponudbo"><SelectValue placeholder="Izberite ponudbo …" /></SelectTrigger>
                     <SelectContent className="max-h-72">
                       {eligible.map((qq) => (

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { jsonError, readsAllData, requirePermission } from '@/lib/auth'
+import { nextCodeFromList } from '@/lib/codes'
 
 export async function GET (req: NextRequest) {
   const auth = await requirePermission(req, 'projects.read')
@@ -34,9 +35,9 @@ export async function POST (req: NextRequest) {
   const title = typeof body?.title === 'string' ? body.title.trim() : ''
   if (!title) return jsonError(400, 'Naslov projekta je obvezen.')
 
-  const year = new Date().getFullYear()
-  const count = await db.project.count()
-  const code = `P-${year}-${String(count + 1).padStart(3, '0')}`
+  // R439: koda glede na zasedene (count pade ob brisanju → unikatnost ni zagotovljena)
+  const existingCodes = await db.project.findMany({ where: { code: { startsWith: 'P-' } }, select: { code: true } })
+  const code = nextCodeFromList(existingCodes.map((p) => p.code), 'P-')
 
   const project = await db.project.create({
     data: {

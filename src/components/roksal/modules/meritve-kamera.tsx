@@ -5,9 +5,12 @@
 // izračun dolžin/kotov/višin v živo → VLM samodejna zaznava → potrditev in
 // shranjevanje v projekt/nalog (POST /api/measurement/confirm).
 // Več meritev na isti fotografiji; ročni obrazec v meritve.tsx ostane fallback.
+// R439 (issue #6): brez signala — gumb 'Shrani (offline)' v fazi potrditve
+// (compressImage → photos shramba + op 'foto' z merilnimi podatki; izbor
+// nalogov pade na predpomnjene vrstice).
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Camera, Check, Crosshair, Eraser, Image as ImageIcon, Loader2, Ruler, Sparkles, Trash2, Undo2 } from 'lucide-react'
+import { Camera, Check, CloudUpload, Crosshair, Eraser, Image as ImageIcon, Loader2, Ruler, Sparkles, Trash2, Undo2, WifiOff } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -18,6 +21,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useToast } from '@/hooks/use-toast'
 import { apiPost, fmtDate, useApi } from '@/lib/api-client'
+import { getCachedNalogi, queuePhoto, useOnline } from '@/lib/offline'
 import { EmptyState, ErrorBox } from '@/components/roksal/ui-bits'
 
 interface Pt { x: number; y: number; label?: string }
@@ -27,6 +31,8 @@ interface PhotoRow {
 }
 interface ProjectOption { id: string; code: string; title: string }
 interface WorkOrderOption { id: string; code: string; title: string }
+// R439: predpomnjena vrstica naloga (offline izbor v kameri)
+interface CachedWoRow { id: string; code: string; title: string }
 
 const MAX_IMG_W = 1600
 
@@ -98,6 +104,21 @@ export function KameraMeritevDialog ({ open, onClose, onSaved }: {
   const projects = useApi<{ data: ProjectOption[] }>(open ? '/api/projects' : null, [open])
   const orders = useApi<{ data: WorkOrderOption[] }>(open ? '/api/nalog?scope=open' : null, [open])
   const photos = useApi<{ data: PhotoRow[] }>(open ? '/api/measurements?type=FOTO' : null, [open])
+
+  // R439 (issue #6): stanje signala (useSyncExternalStore) + offline nabor nalogov
+  const online = useOnline()
+  const [cachedOrders, setCachedOrders] = useState<CachedWoRow[]>([])
+
+  useEffect(() => {
+    if (!open) return
+    void getCachedNalogi<CachedWoRow>().then((c) => { if (c) setCachedOrders(c.list) }).catch(() => {})
+  }, [open])
+
+  /** Nalogi za izbor: online API, offline predpomnjeni. */
+  const orderOptions = useMemo(
+    () => (orders.data?.data?.length ? orders.data.data : cachedOrders),
+    [orders.data, cachedOrders]
+  )
 
   // priprava kamere
   const startCamera = useCallback(async () => {
@@ -326,6 +347,47 @@ export function KameraMeritevDialog ({ open, onClose, onSaved }: {
     } finally { setBusy(false) }
   }
 
+  /**
+   * R439 (issue #6): offline shranjevanje — fotografija gre v IndexedDB photos
+   * shrambo (kompresirana), op 'foto' pa nosi tudi merilne podatke
+   * (tip/dolžina/višina/stebri/segmenti/nagib). Samodejna sinhronizacija prek
+   * /api/sync ob vrnitvi signala (idempotentno — opId).
+   */
+  async function saveOffline (): Promise<void> {
+    if (!dataUrl) return
+    const lengthCm = calc.totalCm
+    setBusy(true)
+    try {
+      await queuePhoto({
+        dataUrl,
+        projectId: projectId !== 'none' ? projectId : null,
+        workOrderId: workOrderId !== 'none' ? workOrderId : null,
+        note: note.trim() || (stairMode && calc.stairs ? `${calc.stairs} stopnic × ${fmt1(calc.stairH ?? 0)} cm` : null),
+        location: location.trim() || null,
+        type: stairMode ? 'NAGIB' : type,
+        lengthCm: lengthCm !== null && lengthCm > 0 ? lengthCm : null,
+        heightCm: Number(heightS.replace(',', '.')) > 0 ? Number(heightS.replace(',', '.')) : null,
+        posts: calc.posts,
+        segments: calc.segs.length,
+        slopeDeg: calc.slope !== null ? Math.round(calc.slope * 10) / 10 : null,
+      })
+      toast({
+        title: 'Shranjeno lokalno — sinhroniziralo se bo samodejno',
+        description: `${lengthCm ? `Meritev ${fmt1(lengthCm / 100)} m in fotografija` : 'Fotografija'} bosta poslani, ko se signal vrne.`,
+      })
+      resetAll()
+      onClose()
+    } catch (e) {
+      toast({
+        title: 'Offline shranjevanje ni uspelo',
+        description: e instanceof Error ? e.message : undefined,
+        variant: 'destructive',
+      })
+    } finally {
+      setBusy(false)
+    }
+  }
+
   function resetAll (): void {
     setPhase(1); setDataUrl(null); setPhotoId(null); setPoints([])
     setCalib(null); setCalibA(null); setCalibCm(''); setNote('')
@@ -418,10 +480,14 @@ export function KameraMeritevDialog ({ open, onClose, onSaved }: {
                 <SelectTrigger aria-label="Povezava na nalog"><SelectValue /></SelectTrigger>
                 <SelectContent className="max-h-48">
                   <SelectItem value="none">Brez naloga</SelectItem>
-                  {(orders.data?.data ?? []).map((w) => <SelectItem key={w.id} value={w.id}>{w.code} — {w.title}</SelectItem>)}
+                  {/* R439: offline → predpomnjeni nalogi iz IndexedDB */}
+                  {orderOptions.map((w) => <SelectItem key={w.id} value={w.id}>{w.code} — {w.title}</SelectItem>)}
                 </SelectContent>
               </Select>
-              <ErrorBox error={orders.error} />
+              {!online && orderOptions.length === 0 ? (
+                <p className="text-[11px] text-muted-foreground">Brez povezave in brez predpomnjenih nalogov — nalog izberite, ko bo signal nazaj.</p>
+              ) : null}
+              <ErrorBox error={online ? orders.error : null} />
             </div>
           </div>
           <div className="space-y-2">
@@ -456,6 +522,12 @@ export function KameraMeritevDialog ({ open, onClose, onSaved }: {
           </div>
 
           <div className="mx-auto inline-block max-w-full rounded-lg border bg-muted/40 p-1">
+            {!online ? (
+              <p className="mb-2 flex items-center gap-1.5 rounded-lg bg-amber-50 px-2 py-1.5 text-[11px] font-medium text-amber-900 dark:bg-amber-950/40 dark:text-amber-200" role="status">
+                <WifiOff className="size-3.5 shrink-0" aria-hidden />
+                Brez povezave — točke označite ročno, shranite z gumbom »Shrani (offline)« v koraku potrditve.
+              </p>
+            ) : null}
             <div className="relative inline-block cursor-crosshair" onClick={onImageClick} role="application" aria-label="Slika za označevanje merilnih točk — klik dodaja točko">
               <img src={dataUrl} alt="Teren za merjenje" className="block h-auto max-h-[420px] w-auto max-w-full select-none" draggable={false} />
               <svg viewBox="0 0 1 1" preserveAspectRatio="none" className="pointer-events-none absolute inset-0 size-full" aria-hidden>
@@ -604,12 +676,17 @@ export function KameraMeritevDialog ({ open, onClose, onSaved }: {
                 <span>Stebrov: <strong className="text-foreground">{calc.posts ?? '—'}</strong></span>
                 {stairMode && calc.stairs > 0 ? <span>Stopnic: <strong className="text-foreground">{calc.stairs} × {fmt1(calc.stairH ?? 0)} cm</strong></span> : null}
                 {calc.slope !== null ? <span>Nagib: <strong className="text-foreground">{fmt1(calc.slope)}°</strong></span> : null}
-                <span>Fotografija: <strong className="text-foreground">{photoId ? `✓ (${points.length} točk)` : 'ni shranjena'}</strong></span>
+                <span>Fotografija: <strong className="text-foreground">{photoId ? `✓ (${points.length} točk)` : online ? 'ni shranjena' : 'shranila se bo ob sinhronizaciji'}</strong></span>
               </div>
-              {!photoId ? (
+              {!photoId && online ? (
                 <Button size="sm" variant="outline" onClick={() => void uploadPhoto()} disabled={busy}>
                   {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null} Najprej naloži fotografijo
                 </Button>
+              ) : null}
+              {!photoId && !online ? (
+                <p className="text-[11px] text-muted-foreground">
+                  Brez povezave — fotografija in meritev se shranita lokalno ter pošljeta ob sinhronizaciji.
+                </p>
               ) : null}
             </CardContent>
           </Card>
@@ -641,6 +718,16 @@ export function KameraMeritevDialog ({ open, onClose, onSaved }: {
           <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-between">
             <Button variant="ghost" onClick={() => setPhase(2)}><Undo2 className="size-4" aria-hidden /> Nazaj na točke</Button>
             <div className="flex flex-wrap gap-2">
+              {/* R439 (issue #6): brez signala — shrani v vrsto (foto + meritev) */}
+              {!online ? (
+                <Button
+                  variant="outline" className="border-amber-400 bg-amber-50 text-amber-900 hover:bg-amber-100 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200 dark:hover:bg-amber-950"
+                  onClick={() => void saveOffline()} disabled={busy || !dataUrl}
+                >
+                  {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <CloudUpload className="size-4" aria-hidden />}
+                  Shrani (offline)
+                </Button>
+              ) : null}
               <Button variant="outline" onClick={() => void confirm(true)} disabled={busy || !photoId || calc.totalCm === null}>
                 Shrani in meri naprej na isti fotografiji
               </Button>

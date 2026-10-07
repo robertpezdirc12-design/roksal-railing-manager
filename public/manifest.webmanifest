@@ -1,0 +1,33 @@
+{
+  "name": "Roksal Railing Manager",
+  "short_name": "Roksal",
+  "description": "Upravljanje ograj — projekti, teren, meritve, proizvodnja, računi. Offline zajem na terenu z samodejno sinhronizacijo.",
+  "lang": "sl",
+  "dir": "ltr",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f8fafc",
+  "theme_color": "#f59e0b",
+  "categories": ["business", "productivity"],
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    {
+      "name": "Danes",
+      "short_name": "Danes",
+      "description": "Dnevni pregled",
+      "url": "/?sec=danes"
+    },
+    {
+      "name": "Nalogi",
+      "short_name": "Nalogi",
+      "description": "Terenski nalogi",
+      "url": "/?sec=zajem&tab=nalogi"
+    }
+  ]
+}

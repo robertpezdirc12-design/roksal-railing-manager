@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { jsonError, managesAssignments, readsAllData, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
 import { emitEvent, fmtTermin } from '@/lib/notify'
+import { nextCodeFromList } from '@/lib/codes'
 
 // GET /api/nalog?scope=today|open|mine|all — MONTER vedno vidi SAMO svoje naloge (issue #1)
 export async function GET (req: NextRequest) {
@@ -67,9 +68,9 @@ export async function POST (req: NextRequest) {
 
   const instructions = typeof body?.instructions === 'string' && body.instructions.trim() ? body.instructions.trim() : null
 
-  const year = new Date().getFullYear()
-  const count = await db.workOrder.count()
-  const code = `N-${year}-${String(count + 1).padStart(3, '0')}`
+  // R439: koda glede na zasedene (count pade ob brisanju → unikatnost ni zagotovljena)
+  const existingCodes = await db.workOrder.findMany({ where: { code: { startsWith: 'N-' } }, select: { code: true } })
+  const code = nextCodeFromList(existingCodes.map((w) => w.code), 'N-')
 
   const order = await db.workOrder.create({
     data: {

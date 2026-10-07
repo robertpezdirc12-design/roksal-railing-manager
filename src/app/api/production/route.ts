@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { jsonError, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
+import { nextCodeFromList } from '@/lib/codes'
 
 // GET /api/production — proizvodni nalogi s projektom, sortiranje po roku (production.read)
 export async function GET (req: NextRequest) {
@@ -43,9 +44,9 @@ export async function POST (req: NextRequest) {
     if (Number.isNaN(dueAt.getTime())) return jsonError(400, 'Neveljaven rok izdelave.')
   }
 
-  const year = new Date().getFullYear()
-  const count = await db.productionOrder.count()
-  const code = `PR-${year}-${String(count + 1).padStart(3, '0')}`
+  // R439: koda glede na zasedene (count pade ob brisanju → unikatnost ni zagotovljena)
+  const existingCodes = await db.productionOrder.findMany({ where: { code: { startsWith: 'PR-' } }, select: { code: true } })
+  const code = nextCodeFromList(existingCodes.map((w) => w.code), 'PR-')
 
   const order = await db.productionOrder.create({
     data: { code, title, projectId, dueAt },
