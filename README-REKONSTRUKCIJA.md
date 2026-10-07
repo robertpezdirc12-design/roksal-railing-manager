@@ -1,4 +1,4 @@
-# Roksal Railing Manager — REKONSTRUKCIJA (R431–R432)
+# Roksal Railing Manager — REKONSTRUKCIJA (R431–R434)
 
 > **Datum:** 6.–7. 10. 2026 · **Veja:** `rekonstrukcija`
 > Ta veja vsebuje **funkcionalno rekonstrukcijo** aplikacije, zgrajeno iz blueprinta na veji `main`
@@ -22,14 +22,22 @@
 | **Plačila** | ločena od računov (`payments.read`/`payments.manage`) — po R425 |
 | **Orodjarina** | modela `Equipment`/`EquipmentCheckout` — izposoja/vrnitev/servis, rok umeritve — R432 |
 | **PDF izvoz** | lasten mini generator (`pdf-mini.ts`, PDF 1.4 + Helvetica/WinAnsi, šumniki) — R432 |
+| **Globalno iskanje** | `/api/search` + Ctrl/Cmd+K dialog z navigacijo na zadetek — R433 |
+| **Seje & geslo** | upravljanje sej (security.read), sprememba gesla s preklicom sej — R433 |
+| **Timeline & termin** | kronološka zgodovina projekta, preurčitev termina naloga — R433 |
+| **eSLOG XML** | izvoz računa v UBL 2.1 e-račun s sklicem SI12 — R434 |
+| **Zgodovina nalogov** | globalni dnevnik dogodkov (MONTER vidi samo svoje) — R434 |
+| **Vreme** | napoved Open-Meteo (brez ključa) z oceno primernosti za montažo — R434 |
+| **Kontrola kakovosti** | model `QcCheck` — kontrolne točke proizvodnih nalogov — R434 |
+| **Garancija** | modela `Warranty`/`WarrantyVisit` — veljavnost, obiski, oddaja po zaključku — R434 |
 
 ## Delujoči moduli
 
-- **DANES** — operativni vhod, današnji nalogi, terenski tok z akcijami
-- **PROJEKTI** — preglednica (KPI), projekti (+ustvari/detail), stranke, ponudbe (sprejem), računi + plačila, teren
+- **DANES** — operativni vhod, današnji nalogi, terenski tok z akcijami, **vreme za teren** (4-dnevna napoved z oceno primernosti — R434)
+- **PROJEKTI** — preglednica (KPI), projekti (+ustvari/detail, **garancija z obiski** — R434), stranke, ponudbe (sprejem), računi + plačila (**eSLOG XML izvoz** — R434), nalogi (**globalna zgodovina dogodkov** — R434), teren
 - **ZAJEM** — nalogi center (časovnica dogodkov), meritve, foto zajem (canvas), nagib kalkulator, kalkulator ponudbe, signatura (podpis → zaklep posla), **vizualizacija** (parametrična SVG risba: tloris + stranski pogled, izvoz SVG), **AR** (kamera + vlečni overlay ograje, zajem → FOTO meritev; pošten demo brez kamere)
-- **PISARNA** — CRM (vodi + pipeline), **dokumenti** (poenoten arhiv ponudb + računov), zaloga (losi, sprejem), katalog profilov, proizvodnja, logistika (razpored), Material V5 (BOM), **orodjarina** (izposoja, umeritve), **galerija** zaključenih del (FOTO na ZAKLJUCEN/ARHIV projektih), varnost (revizija R428), **PDF** (predogled/prenos ponudb in računov), **PostSig** (kokpit zaklenjenih poslov: račun + proizvodnja po podpisu)
-- **PROFIL** — profil, dovoljenja po vlogi, tema, odjava
+- **PISARNA** — CRM (vodi + pipeline), **dokumenti** (poenoten arhiv ponudb + računov), zaloga (losi, sprejem), katalog profilov, proizvodnja (**kontrola kakovosti** — R434), logistika (razpored), Material V5 (BOM), **orodjarina** (izposoja, umeritve), **galerija** zaključenih del (FOTO na ZAKLJUCEN/ARHIV projektih), varnost (revizija R428 + aktivne seje), **PDF** (predogled/prenos ponudb in računov), **PostSig** (kokpit zaklenjenih poslov: račun + proizvodnja po podpisu)
+- **PROFIL** — profil (sprememba gesla — R433), dovoljenja po vlogi, tema, odjava
 - **Varnost** — revizijski dnevnik (R428)
 
 Vseh 29 zavihkov IA je implementiranih (R432) — ni več placeholder šolsjk.

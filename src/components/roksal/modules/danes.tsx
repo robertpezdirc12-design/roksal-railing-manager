@@ -2,13 +2,15 @@
 
 // DANES — operativni vhod (R429 §7: ŠKOLJKA nad NalogCenter)
 // Terenski tok: DANES → MOJI NALOGI → ODPRI NALOG → ZAČNI DELO → ZAJEM → PREVERI → ZAKLJUČI TEREN
+// R434: vremenska napoved za terenska dela (/api/weather — Open-Meteo).
 
 import { useState } from 'react'
-import { CalendarCheck, ChevronRight, MapPin, Play, Camera, CheckCircle2, CheckCheck, Loader2 } from 'lucide-react'
+import { CalendarCheck, ChevronRight, CloudRain, CloudSnow, Cloudy, MapPin, Play, Camera, CheckCircle2, CheckCheck, Loader2, Sun, Thermometer, TriangleAlert, Umbrella, Wind } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { useToast } from '@/hooks/use-toast'
 import { useAppStore } from '@/lib/store'
+import { cn } from '@/lib/utils'
 import { apiPost, fmtDate, fmtDateTime, useApi } from '@/lib/api-client'
 import { ErrorBox, LoadingRows, PageHeader, StatusBadge, EmptyState } from '@/components/roksal/ui-bits'
 import { hasPerm } from '@/lib/permissions-core'
@@ -19,6 +21,11 @@ interface WorkOrderRow {
   project: { code: string; title: string; address: string | null; customer: { name: string } | null } | null
   assignee: { name: string } | null
   _count: { measurements: number; events: number }
+}
+
+interface WeatherDay {
+  date: string; tmin: number; tmax: number; precip: number; precipHours: number
+  windMax: number; code: number; label: string; icon: string; score: number
 }
 
 // koraki terenskega toka (VERBATIM R429)
@@ -41,6 +48,7 @@ export default function DanesModule () {
   const [busy, setBusy] = useState<string | null>(null)
   const today = useApi<{ data: WorkOrderRow[] }>('/api/nalog?scope=today')
   const open = useApi<{ data: WorkOrderRow[] }>('/api/nalog?scope=open')
+  const weather = useApi<{ data: { place: string; days: WeatherDay[]; updated: string } }>('/api/weather')
 
   const canTransition = hasPerm(user?.perms, 'nalog.transition')
 
@@ -91,6 +99,21 @@ export default function DanesModule () {
           <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">{openList.filter((w) => w.status === 'V_TEKU' || w.status === 'V_ZAJEMU').length}</div>
         </CardContent></Card>
       </div>
+
+      {/* vreme za terenska dela — R434 */}
+      <section aria-label="Vremenska napoved">
+        <h2 className="mb-2 text-sm font-bold uppercase tracking-widest text-muted-foreground">Vreme — {weather.data?.data.place ?? 'teren'}</h2>
+        <ErrorBox error={weather.error} />
+        {weather.loading ? <LoadingRows rows={1} /> : !weather.error && weather.data ? (
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {weather.data.data.days.map((d, i) => (
+              <WeatherCard key={d.date} day={d} isToday={i === 0} />
+            ))}
+          </div>
+        ) : (
+          !weather.error ? <p className="text-sm text-muted-foreground">Napoved trenutno ni na voljo.</p> : null
+        )}
+      </section>
 
       {/* MOJI NALOGI — današnji */}
       <section aria-label="Današnji nalogi">
@@ -188,6 +211,58 @@ function WorkOrderCard ({ wo, busy, canTransition, onTransition }: {
         {wo.status === 'ZAKLJUCEN' && wo.completedAt ? (
           <div className="mt-2 text-xs text-muted-foreground">Zaključeno {fmtDateTime(wo.completedAt)}</div>
         ) : null}
+      </CardContent>
+    </Card>
+  )
+}
+
+// ─── vreme (R434) ────────────────────────────────────────────────────────────
+
+const W_ICONS: Record<string, typeof Sun> = {
+  sun: Sun, cloud: Cloudy, rain: CloudRain, snow: CloudSnow, storm: TriangleAlert, fog: Cloudy,
+}
+
+const DAY_NAMES = ['ned', 'pon', 'tor', 'sre', 'čet', 'pet', 'sob']
+
+function scoreLabel (score: number): { text: string; cls: string } {
+  if (score >= 75) return { text: 'primerno za montažo', cls: 'text-emerald-600 dark:text-emerald-400' }
+  if (score >= 45) return { text: 'previdno — preveri termin', cls: 'text-amber-600 dark:text-amber-400' }
+  return { text: 'neprimerno za teren', cls: 'text-red-600 dark:text-red-400' }
+}
+
+function WeatherCard ({ day, isToday }: { day: WeatherDay; isToday: boolean }) {
+  const Icon = W_ICONS[day.icon] ?? Cloudy
+  const sl = scoreLabel(day.score)
+  const dt = new Date(day.date)
+  const dayName = isToday ? 'danes' : DAY_NAMES[dt.getDay()]
+  return (
+    <Card className={cn(isToday && 'border-roksal-amber/60')}>
+      <CardContent className="space-y-1.5 p-3">
+        <div className="flex items-center justify-between gap-1">
+          <span className="text-xs font-bold uppercase tracking-wide text-muted-foreground">{dayName}</span>
+          <Icon className="size-4 text-muted-foreground" aria-hidden />
+        </div>
+        <div className="flex items-baseline gap-1.5">
+          <Thermometer className="size-3.5 shrink-0 self-center text-muted-foreground" aria-hidden />
+          <span className="text-lg font-bold leading-none">{day.tmax}°</span>
+          <span className="text-xs text-muted-foreground">{day.tmin}°</span>
+        </div>
+        <div className="space-y-0.5 text-[11px] text-muted-foreground">
+          <div className="flex items-center gap-1">
+            <Umbrella className="size-3 shrink-0" aria-hidden />
+            {day.precip > 0 ? `${day.precip.toFixed(1)} mm · ${day.precipHours} h` : 'brez padavin'}
+          </div>
+          <div className="flex items-center gap-1">
+            <Wind className="size-3 shrink-0" aria-hidden />
+            {day.windMax} km/h
+          </div>
+        </div>
+        <p className={cn('text-[11px] font-semibold leading-tight', sl.cls)}>{sl.text}</p>
+        <p className="sr-only">
+          {dayName}: {day.label}, {day.tmin} do {day.tmax} stopinj,
+          {day.precip > 0 ? ` padavine ${day.precip.toFixed(1)} milimetrov` : ' brez padavin'},
+          veter do {day.windMax} kilometrov na uro. {sl.text}.
+        </p>
       </CardContent>
     </Card>
   )

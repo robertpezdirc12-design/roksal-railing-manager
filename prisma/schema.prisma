@@ -31,6 +31,7 @@ model User {
   measurements Measurement[]
   equipHeld    Equipment[]     @relation("equipmentHolder")
   equipLogs    EquipmentCheckout[] @relation("equipmentUser")
+  qcChecks     QcCheck[]       @relation("qcUser")
 }
 
 model Session {
@@ -107,6 +108,7 @@ model Project {
   measurements     Measurement[]
   invoices         Invoice[]
   productionOrders ProductionOrder[]
+  warranties       Warranty[]
 }
 
 model Quote {
@@ -322,6 +324,47 @@ model ProductionOrder {
   dueAt     DateTime?
   note      String?
   createdAt DateTime  @default(now())
+
+  qcChecks QcCheck[]
+}
+
+// ─── Kontrola kakovosti (R434 — vir: /api/qc iz ROUTE-MAP) ──────────────────
+
+model QcCheck {
+  id                String          @id @default(cuid())
+  productionOrderId String
+  productionOrder   ProductionOrder @relation(fields: [productionOrderId], references: [id], onDelete: Cascade)
+  item              String // kontrolna točka, npr. "Vertikalnost stebričev"
+  result            String          @default("V_TEKU") // OK | NOK | NA | V_TEKU
+  note              String?
+  userId            String?
+  user              User?           @relation("qcUser", fields: [userId], references: [id])
+  createdAt         DateTime        @default(now())
+}
+
+// ─── Garancija (R434 — vir: /api/warranty iz ROUTE-MAP) ─────────────────────
+
+model Warranty {
+  id        String          @id @default(cuid())
+  projectId String
+  project   Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  startsAt  DateTime        @default(now())
+  months    Int             @default(24)
+  status    String          @default("AKTIVNA") // AKTIVNA | POTEKLA | PREKINJENA
+  note      String?
+  createdAt DateTime        @default(now())
+
+  visits WarrantyVisit[]
+}
+
+model WarrantyVisit {
+  id         String    @id @default(cuid())
+  warrantyId String
+  warranty   Warranty  @relation(fields: [warrantyId], references: [id], onDelete: Cascade)
+  date       DateTime  @default(now())
+  note       String?
+  userId     String?
+  createdAt  DateTime  @default(now())
 }
 
 // ─── Revizija & obvestila ───────────────────────────────────────────────────
