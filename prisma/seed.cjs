@@ -12,6 +12,21 @@ function hashPassword (password) {
 const { PrismaClient } = require('@prisma/client')
 const db = new PrismaClient()
 
+// podpis stranke — kompakten SVG (data URL), enaka oblika kot signatura modul
+function sigDataUrl () {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="260" height="90"><rect width="260" height="90" fill="#ffffff"/><path d="M18 62 C 40 20, 58 18, 60 50 C 62 74, 74 76, 84 48 C 94 22, 108 24, 106 52 C 104 74, 120 76, 130 50 C 140 26, 152 28, 150 52 C 148 72, 162 74, 172 52 C 180 34, 192 36, 196 50 C 200 64, 216 60, 232 44" stroke="#1d2b3e" stroke-width="2.5" fill="none" stroke-linecap="round"/><path d="M22 74 C 80 80, 180 78, 240 70" stroke="#f59e0b" stroke-width="1.5" fill="none"/></svg>`
+  return 'data:image/svg+xml;utf8,' + encodeURIComponent(svg)
+}
+
+// demo fotografija zaključenega dela — SVG prizor ograje (enaka oblika params.photo kot foto modul)
+function fotoSvg (label, post, accent, posts, handrail) {
+  let p = ''
+  for (let i = 0; i < posts; i++) { const x = 34 + i * ((412 - 12) / Math.max(posts - 1, 1)); p += `<rect x="${x - 4}" y="150" width="8" height="72" rx="2" fill="${post}"/>` }
+  const hr = handrail ? `<rect x="30" y="146" width="420" height="7" rx="3.5" fill="${post}"/><rect x="30" y="170" width="420" height="4" rx="2" fill="${post}" opacity="0.7"/>` : `<rect x="30" y="146" width="420" height="7" rx="3.5" fill="${post}"/>`
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="480" height="270"><defs><linearGradient id="nebo" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#cfe0ef"/><stop offset="1" stop-color="#e9eff5"/></linearGradient><linearGradient id="tl" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#b9a284"/><stop offset="1" stop-color="#a08c6f"/></linearGradient></defs><rect width="480" height="270" fill="url(#nebo)"/><circle cx="405" cy="48" r="22" fill="${accent}" opacity="0.85"/><path d="M0 222 L 480 214 L 480 270 L 0 270 Z" fill="url(#tl)"/><g>${p}${hr}</g><path d="M0 226 L 480 218" stroke="#8a7558" stroke-width="2"/><text x="24" y="250" font-family="sans-serif" font-size="13" fill="#5c4d36">${label}</text><rect x="0" y="264" width="480" height="6" fill="${accent}" opacity="0.6"/></svg>`
+  return 'data:image/svg+xml;utf8,' + encodeURIComponent(svg)
+}
+
 async function main () {
   console.log('[seed] brišem obstoječe podatke …')
   await db.notification.deleteMany()
@@ -22,6 +37,8 @@ async function main () {
   await db.inventoryItem.deleteMany()
   await db.profile.deleteMany()
   await db.measurement.deleteMany()
+  await db.equipmentCheckout.deleteMany()
+  await db.equipment.deleteMany()
   await db.workOrderEvent.deleteMany()
   await db.workOrder.deleteMany()
   await db.productionOrder.deleteMany()
@@ -75,7 +92,7 @@ async function main () {
     { code: 'PON-2026-001', projectId: projects[0].id, customerId: cs[0].id, status: 'SPREJET', lines: [['Alu ograja L-profil, antracit', 24, 89], ['Stebri 80×80 mm', 13, 45], ['Montaža', 24, 35]] },
     { code: 'PON-2026-002', projectId: projects[1].id, customerId: cs[1].id, status: 'POSLAN', lines: [['Steklena balustrada 10 mm', 12, 145], ['Lesena opora (termo jesen)', 12, 68], ['Montaža', 12, 40]] },
     { code: 'PON-2026-003', projectId: projects[2].id, customerId: cs[2].id, status: 'OSNUTEK', lines: [['Inox balkonska ograja V2A', 380, 120], ['Montaža', 380, 25]] },
-    { code: 'PON-2026-004', projectId: projects[3].id, customerId: cs[3].id, status: 'ZAKLENJEN', lines: [['Kovana ograja po meri', 18, 160], ['Nadstrešek polikarbonat', 12, 95], ['Montaža', 18, 45]] },
+    { code: 'PON-2026-004', projectId: projects[3].id, customerId: cs[3].id, status: 'ZAKLENJEN', signedBy: 'Janez Kovač', signedAt: new Date(Date.now() - 86400000 * 5), signature: sigDataUrl(), lines: [['Kovana ograja po meri', 18, 160], ['Nadstrešek polikarbonat', 12, 95], ['Montaža', 18, 45]] },
     { code: 'PON-2026-005', projectId: projects[4].id, customerId: cs[4].id, status: 'POSLAN', lines: [['Varnostna ograja igrišče', 65, 72], ['Vrata s samozapiranjem', 2, 320]] }
   ]
   const quotes = []
@@ -83,7 +100,8 @@ async function main () {
     const lines = q.lines.map(([description, qty, unitPrice]) => ({ description, qty, unitPrice, total: qty * unitPrice }))
     const subtotal = lines.reduce((s, l) => s + l.total, 0)
     const vat = Math.round(subtotal * 0.22 * 100) / 100
-    quotes.push(await db.quote.create({ data: { code: q.code, projectId: q.projectId, customerId: q.customerId, status: q.status, subtotal, vat, total: subtotal + vat, lines: { create: lines } } }))
+    const { lines: _l, ...head } = q // podpis (signature/signedAt/signedBy) se prenese v create
+    quotes.push(await db.quote.create({ data: { ...head, subtotal, vat, total: subtotal + vat, lines: { create: lines } } }))
   }
 
   console.log('[seed] naseljujem račune in plačila …')
@@ -186,6 +204,32 @@ async function main () {
     { code: 'PR-2026-001', projectId: projects[0].id, title: 'Izdelava segmentov ograje — Novak', status: 'V_IZDELAVI', dueAt: new Date(Date.now() + 86400000 * 2) },
     { code: 'PR-2026-002', projectId: projects[1].id, title: 'Rez stekla — Horvat', status: 'DOKONCAN', dueAt: new Date(Date.now() - 86400000) },
     { code: 'PR-2026-003', projectId: projects[5].id, title: 'Zvar stopniščnega okvirja — Zajc', status: 'NAVRTEN', dueAt: new Date(Date.now() + 86400000 * 5) }
+  ] })
+
+  console.log('[seed] naseljujem orodjarino …')
+  const eq = await Promise.all([
+    db.equipment.create({ data: { code: 'OR-001', name: 'Laserski daljinomer Leica DISTO D2', category: 'MERITEV', serialNumber: 'LD2-88412', status: 'NA_VOLJO', location: 'Skladišče — polica A1', calibrationDue: new Date(Date.now() + 86400000 * 90), note: 'Domet 100 m, meri tudi poševno' } }),
+    db.equipment.create({ data: { code: 'OR-002', name: 'Digitalna vodovaga 120 cm', category: 'MERITEV', serialNumber: 'VV-120-77', status: 'IZPOSOJENO', holderId: monter.id, location: 'Teren — Novak', calibrationDue: new Date(Date.now() + 86400000 * 30) } }),
+    db.equipment.create({ data: { code: 'OR-003', name: 'Digitalni kotnik s kontrolno lučko', category: 'MERITEV', serialNumber: 'KN-45-210', status: 'NA_VOLJO', location: 'Skladišče — predal M2' } }),
+    db.equipment.create({ data: { code: 'OR-004', name: 'Merilni kolut 20 m', category: 'MERITEV', serialNumber: 'MK-20-004', status: 'NA_VOLJO', location: 'Skladišče — predal M1', calibrationDue: new Date(Date.now() - 86400000 * 10), note: 'ROK UMERITVE POTEKEL — preveriti' } }),
+    db.equipment.create({ data: { code: 'OR-005', name: 'Vrtalni stroj Bosch GBH 2-28', category: 'MONTAZA', serialNumber: 'GBH-228-551', status: 'IZPOSOJENO', holderId: monter.id, location: 'Teren — vrtec Sonček' } }),
+    db.equipment.create({ data: { code: 'OR-006', name: 'Kotna brusilka Metabo W 750', category: 'MONTAZA', serialNumber: 'W750-3321', status: 'V_SERVISU', location: 'Servis — d.o.o. Elektro Celje', note: 'Zamenjava ležaja, prihodnost teden' } }),
+    db.equipment.create({ data: { code: 'EV-001', name: 'Detektor podzemnih instalacij Bosch GMS 120', category: 'PREVERITEV', serialNumber: 'GMS-120-89', status: 'NA_VOLJO', location: 'Skladišče — polica A3', calibrationDue: new Date(Date.now() + 86400000 * 150) } }),
+    db.equipment.create({ data: { code: 'OR-007', name: 'Libela nivojska 180 cm', category: 'VZDRZEVANJE', status: 'POKVARJENO', location: 'Skladišče — za popravilo', note: 'Zračni mehurček počil' } })
+  ])
+  await db.equipmentCheckout.createMany({ data: [
+    { equipmentId: eq[1].id, userId: monter.id, outAt: new Date(Date.now() - 86400000 * 2), note: 'Terenski dan — terasa Novak' },
+    { equipmentId: eq[4].id, userId: monter.id, outAt: new Date(Date.now() - 86400000), note: 'Vrtanje stebrov — vrtec' },
+    { equipmentId: eq[0].id, userId: vodja.id, outAt: new Date(Date.now() - 86400000 * 30), inAt: new Date(Date.now() - 86400000 * 27), note: 'Kontrolni pregled objekta' },
+    { equipmentId: eq[3].id, userId: monter.id, outAt: new Date(Date.now() - 86400000 * 60), inAt: new Date(Date.now() - 86400000 * 58) },
+    { equipmentId: eq[6].id, userId: proizvodnja.id, outAt: new Date(Date.now() - 86400000 * 14), inAt: new Date(Date.now() - 86400000 * 13), note: 'Preverjanje kablov pred rezom' }
+  ] })
+
+  console.log('[seed] naseljujem galerijo zaključenih del …')
+  await db.measurement.createMany({ data: [
+    { projectId: projects[3].id, authorId: monter.id, type: 'FOTO', location: 'Ograja — vhod, Kovač', note: 'Zaključeno delo: kovana ograja + nadstrešek', params: JSON.stringify({ photo: fotoSvg('Kovana ograja — vhod', '#2b3a4e', '#c9a227', 9, true) }) },
+    { projectId: projects[3].id, authorId: monter.id, type: 'FOTO', location: 'Nadstrešek — dvorišče, Kovač', note: 'Polikarbonatna plošča, odvod na desno', params: JSON.stringify({ photo: fotoSvg('Nadstrešek — dvorišče', '#37475e', '#9fb4cc', 0, false) }) },
+    { projectId: projects[7].id, authorId: vodja.id, type: 'FOTO', location: 'Vrtna ograja — Pri Lipi', note: 'Zaključeno + predano stranki', params: JSON.stringify({ photo: fotoSvg('Vrtna ograja — Pri Lipi', '#4a5a48', '#d9c9a3', 11, false) }) }
   ] })
 
   console.log('[seed] naseljujem revizijo in obvestila …')

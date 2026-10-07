@@ -29,6 +29,8 @@ model User {
   workOrders   WorkOrder[]     @relation("assignee")
   woEvents     WorkOrderEvent[]
   measurements Measurement[]
+  equipHeld    Equipment[]     @relation("equipmentHolder")
+  equipLogs    EquipmentCheckout[] @relation("equipmentUser")
 }
 
 model Session {
@@ -275,6 +277,37 @@ model MaterialPrice {
   supplierId String?
   price      Float
   createdAt  DateTime      @default(now())
+}
+
+// ─── Orodjarina (merilna orodja, izposoja) ──────────────────────────────────
+
+model Equipment {
+  id             String   @id @default(cuid())
+  code           String   @unique // npr. OR-001
+  name           String
+  category       String   @default("MERITEV") // MERITEV | MONTAZA | PREVERITEV | VZDRZEVANJE
+  serialNumber   String?
+  status         String   @default("NA_VOLJO") // NA_VOLJO | IZPOSOJENO | V_SERVISU | POKVARJENO
+  holderId       String? // trenutni imetnik (denormalizirano iz zadnje izposoje)
+  holder         User?    @relation("equipmentHolder", fields: [holderId], references: [id])
+  location       String?
+  calibrationDue DateTime? // rok umeritve / kalibracije
+  note           String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  checkouts EquipmentCheckout[]
+}
+
+model EquipmentCheckout {
+  id          String    @id @default(cuid())
+  equipmentId String
+  equipment   Equipment @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+  userId      String?
+  user        User?     @relation("equipmentUser", fields: [userId], references: [id])
+  outAt       DateTime  @default(now())
+  inAt        DateTime? // null = še izposojeno
+  note        String?
 }
 
 // ─── Proizvodnja ────────────────────────────────────────────────────────────

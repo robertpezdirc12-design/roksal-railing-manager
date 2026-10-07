@@ -54,3 +54,4 @@ server.log
 /skills/
 # database (sqlite — demo podatki se seedirajo z node prisma/seed.cjs)
 /db/
+agent-ctx/
