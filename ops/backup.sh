@@ -172,7 +172,7 @@ else
         | while read -r pid; do
             curl -s --max-time 30 -X DELETE -H "PRIVATE-TOKEN: $TOKEN" \
               "$GITLAB_API/projects/$GITLAB_PROJECT_ID/packages/$pid" >/dev/null 2>&1 || true
-          done
+          done || true # hišni red je NIKOLI usoden za uspeh kopije
     fi
   fi
 fi
