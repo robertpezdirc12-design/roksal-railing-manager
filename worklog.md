@@ -655,3 +655,9 @@ Stage Summary:
 - R443 P1 INVENTORY CORE ZAKLJUČEN: FIZIČNA ≠ REZERVIRANA ≠ RAZPOLOŽLJIVA dosledno izvedena skozi celoten tok (rezervacija kosovnice → picking lista → izdaja → vračilo), nemutabilni dnevnik gibanj, atomarne transakcije, fail-closed RBAC, auditirane mutacije
 - Ključne varovalke integritete: statusi REZERVIRAN/PORABLJEN samo prek namenskih rut; regeneracija BOM blokirana, če ima rezervacije/pickinge; izdaja preverja fizično pokritost; pobir ≤ potrebno
 - Sledi R444 (ROLE EXPERIENCES: direktor cockpit, monter MOJ DAN mobile-first, proizvodnja) in R445 (DELIVERY + INSTALLATION), nato navigacija §11, P2 in issue #8/#9
+- Dopolnitev (GitLab izid): MR !6 ci zelen → združen v main (merge e169ea4, veja izbrisana); tag v1.2.0 na e169ea4; komentar na issue #7 (note 3973252503); lokalni main usklajen
+- Past sandbox avtomatizacije se je PONOVLILA (preklop r443-p1→main MED commitom): popravljeno z branch -f r443-p1 0bd8962 + reset main a04620a + push — VEDNO preveriti `git branch --show-current` PRED in PO commitu
+- GitLab API naslov za tag: POST /projects/:id/repository/tags (ne /tags — ta vrne 404)
+
+Stage Summary (dopolnitev):
+- R443 P1 INVENTORY CORE: MR !6 združen, tag v1.2.0, issue #7 obveščen — faza ZAKLJUČENA
