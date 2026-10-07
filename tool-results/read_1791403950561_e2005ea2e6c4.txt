@@ -1,0 +1,870 @@
+     1→// Roksal Railing Manager — REKONSTRUKCIJA (R431)
+     2→// Vir: blueprint iz GitLab recovery repo (route-map, RBAC katalog R425–R428, IA register R429)
+     3→// Original: Next.js 16 + Prisma (PostgreSQL/Neon) — tu: SQLite (sandbox)
+     4→// SPORAZUM: ta shema je EN VIR — module (subagenti) NE spreminjajo sheme!
+     5→
+     6→generator client {
+     7→  provider = "prisma-client-js"
+     8→}
+     9→
+    10→datasource db {
+    11→  provider = "sqlite"
+    12→  url      = env("DATABASE_URL")
+    13→}
+    14→
+    15→// ─── Identiteta & dostop ────────────────────────────────────────────────────
+    16→
+    17→model User {
+    18→  id           String   @id @default(cuid())
+    19→  email        String   @unique
+    20→  passwordHash String
+    21→  name         String
+    22→  role         String // ADMIN | VODJA | MONTER | SKLADISCE | PROIZVODNJA
+    23→  active       Boolean  @default(true)
+    24→  createdAt    DateTime @default(now())
+    25→  updatedAt    DateTime @updatedAt
+    26→
+    27→  sessions     Session[]
+    28→  auditLogs    AuditLog[]
+    29→  workOrders   WorkOrder[]     @relation("assignee")
+    30→  woEvents     WorkOrderEvent[]
+    31→  measurements Measurement[]
+    32→  measVersions MeasurementVersion[] @relation("measurementVersions")
+    33→  equipHeld    Equipment[]     @relation("equipmentHolder")
+    34→  equipLogs    EquipmentCheckout[] @relation("equipmentUser")
+    35→  qcChecks     QcCheck[]       @relation("qcUser")
+    36→  jobRuns      JobRun[]
+    37→  punchEntries PunchEntry[]    @relation("punchUser") // R437: prisotnost
+    38→  stockMovements StockMovement[] @relation("stockMovements") // R443: skladiščni dnevnik
+    39→}
+    40→
+    41→model Session {
+    42→  id        String   @id @default(cuid())
+    43→  token     String   @unique
+    44→  userId    String
+    45→  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+    46→  createdAt DateTime @default(now())
+    47→  expiresAt DateTime
+    48→}
+    49→
+    50→// ─── CRM ────────────────────────────────────────────────────────────────────
+    51→
+    52→model Customer {
+    53→  id        String   @id @default(cuid())
+    54→  name      String
+    55→  email     String?
+    56→  phone     String?
+    57→  address   String?
+    58→  city      String?
+    59→  taxId     String?
+    60→  note      String?
+    61→  createdAt DateTime @default(now())
+    62→
+    63→  projects Project[]
+    64→  quotes   Quote[]
+    65→  leads    Lead[]
+    66→}
+    67→
+    68→model Lead {
+    69→  id         String    @id @default(cuid())
+    70→  customerId String?
+    71→  customer   Customer? @relation(fields: [customerId], references: [id])
+    72→  name       String
+    73→  email      String?
+    74→  phone      String?
+    75→  source     String    @default("SPLET") // SPLET | TELEFON | PRIPOROČILO | SEJEM
+    76→  status     String    @default("NOV") // NOV | KONTAKTIRAN | KVALIFIKACIJAN | IZGUBLJEN | PRETVORJEN
+    77→  note       String?
+    78→  createdAt  DateTime  @default(now())
+    79→
+    80→  opportunities Opportunity[]
+    81→}
+    82→
+    83→model Opportunity {
+    84→  id           String    @id @default(cuid())
+    85→  leadId       String?
+    86→  lead         Lead?     @relation(fields: [leadId], references: [id])
+    87→  title        String
+    88→  stage        String    @default("KVALIFIKACIJA") // KVALIFIKACIJA | PONUDBA | POGAJANJA | ZMAGOVALNA | IZGUBLJENA
+    89→  value        Float     @default(0)
+    90→  probability  Int       @default(50)
+    91→  expectedClose DateTime?
+    92→  note         String?
+    93→  createdAt    DateTime  @default(now())
+    94→}
+    95→
+    96→// ─── Projekti & ponudbe ─────────────────────────────────────────────────────
+    97→
+    98→model Project {
+    99→  id         String    @id @default(cuid())
+   100→  code       String    @unique // npr. P-2026-001
+   101→  title      String
+   102→  status     String    @default("AKTIVNI") // NACRT | AKTIVNI | TEREN | ZAKLJUCEN | ARHIV
+   103→  customerId String?
+   104→  customer   Customer? @relation(fields: [customerId], references: [id])
+   105→  address    String?
+   106→  note       String?
+   107→  createdAt  DateTime  @default(now())
+   108→  updatedAt  DateTime  @updatedAt
+   109→
+   110→  quotes           Quote[]
+   111→  workOrders       WorkOrder[]
+   112→  measurements     Measurement[]
+   113→  invoices         Invoice[]
+   114→  productionOrders ProductionOrder[]
+   115→  warranties       Warranty[]
+   116→  portalLinks      PortalLink[]
+   117→  packages         ProjectPackage[] // R442: več produktnih paketov na projekt
+   118→  stockReservations StockReservation[] @relation("stockReservations") // R443: rezervacije materiala
+   119→}
+   120→
+   121→model Quote {
+   122→  id         String    @id @default(cuid())
+   123→  code       String    @unique // npr. PON-2026-001
+   124→  projectId  String?
+   125→  project    Project?  @relation(fields: [projectId], references: [id])
+   126→  customerId String?
+   127→  customer   Customer? @relation(fields: [customerId], references: [id])
+   128→  status     String    @default("OSNUTEK") // OSNUTEK | POSLAN | SPREJET | ZAVRNJEN | ZAKLENJEN
+   129→  subtotal   Float     @default(0)
+   130→  vat        Float     @default(0)
+   131→  total      Float     @default(0)
+   132→  note       String?
+   133→  signature  String? // podpis stranke (data URL)
+   134→  signedAt   DateTime?
+   135→  signedBy   String?
+   136→  createdAt  DateTime  @default(now())
+   137→
+   138→  lines   QuoteLine[]
+   139→  invoices Invoice[]
+   140→}
+   141→
+   142→model QuoteLine {
+   143→  id          String @id @default(cuid())
+   144→  quoteId     String
+   145→  quote       Quote  @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+   146→  description String
+   147→  qty         Float
+   148→  unitPrice   Float
+   149→  total       Float
+   150→}
+   151→
+   152→model Invoice {
+   153→  id        String    @id @default(cuid())
+   154→  code      String    @unique // npr. RA-2026-001
+   155→  projectId String?
+   156→  project   Project?  @relation(fields: [projectId], references: [id])
+   157→  quoteId   String?
+   158→  quote     Quote?    @relation(fields: [quoteId], references: [id])
+   159→  status    String    @default("IZDAN") // OSNUTEK | IZDAN | DELNO_PLACAN | PLACAN | ZAPRT
+   160→  subtotal  Float     @default(0)
+   161→  vat       Float     @default(0)
+   162→  total     Float     @default(0)
+   163→  paid      Float     @default(0)
+   164→  dueDate   DateTime?
+   165→  note      String?
+   166→  createdAt DateTime  @default(now())
+   167→
+   168→  payments Payment[]
+   169→}
+   170→
+   171→model Payment {
+   172→  id        String   @id @default(cuid())
+   173→  invoiceId String
+   174→  invoice   Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+   175→  amount    Float
+   176→  method    String   @default("NAKAZNICA") // NAKAZNICA | GOTOVINA | KARTICA
+   177→  reference String?
+   178→  createdAt DateTime @default(now())
+   179→}
+   180→
+   181→// ─── Nalogi (terenski tok) ──────────────────────────────────────────────────
+   182→
+   183→model WorkOrder {
+   184→  id           String    @id @default(cuid())
+   185→  code         String    @unique // npr. N-2026-001
+   186→  projectId    String?
+   187→  project      Project?  @relation(fields: [projectId], references: [id])
+   188→  title        String
+   189→  status       String    @default("NAPROGRAMIRAN") // NAPROGRAMIRAN | V_TEKU | V_ZAJEMU | V_PREVERI | ZAKLJUCEN
+   190→  assigneeId   String?
+   191→  assignee     User?     @relation("assignee", fields: [assigneeId], references: [id])
+   192→  scheduledFor DateTime?
+   193→  startedAt    DateTime?
+   194→  completedAt  DateTime?
+   195→  summary      String?
+   196→  instructions String? // navodila za monterja (pisarna → teren)
+   197→  createdAt    DateTime  @default(now())
+   198→  updatedAt    DateTime  @updatedAt
+   199→
+   200→  events       WorkOrderEvent[]
+   201→  measurements Measurement[]
+   202→}
+   203→
+   204→model WorkOrderEvent {
+   205→  id          String     @id @default(cuid())
+   206→  workOrderId String
+   207→  workOrder   WorkOrder  @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+   208→  userId      String?
+   209→  user        User?      @relation(fields: [userId], references: [id])
+   210→  type        String // DODELJEN | ZACETEK | ZAJEM | PREVERITEV | ZAKLJUCEK | KOMENTAR | OPOMBA (R439: sync)
+   211→  note        String?
+   212→  createdAt   DateTime   @default(now())
+   213→}
+   214→
+   215→// ─── Zajem (meritve, foto) ──────────────────────────────────────────────────
+   216→
+   217→model Measurement {
+   218→  id          String      @id @default(cuid())
+   219→  projectId   String?
+   220→  project     Project?    @relation(fields: [projectId], references: [id])
+   221→  workOrderId String?
+   222→  workOrder   WorkOrder?  @relation(fields: [workOrderId], references: [id])
+   223→  authorId    String?
+   224→  author      User?       @relation(fields: [authorId], references: [id])
+   225→  type        String      @default("OGRAJA") // legacy tip (OGRAJA | BALUSTRADA | NAGIB | OSTANEO)
+   226→  familyCode  String? // R442: produktna družina (TERASA | OGRAJA_PRECNA | FASADA | …) — generalizacija meritev
+   227→  location    String?
+   228→  lengthCm    Float?
+   229→  heightCm    Float?
+   230→  posts       Int?
+   231→  segments    Int?
+   232→  handrail    Boolean     @default(true)
+   233→  slopeDeg    Float?
+   234→  source      String      @default("ROCNO") // ROCNO | KAMERA (večtočkovne meritve na fotografiji)
+   235→  params      String? // JSON (profileId, barva, photoId, points, calibration, viz, konfigurator …)
+   236→  note        String?
+   237→  // R437 (issue #2): javna deljena povezava meritve (žeton /m/[token] izvirnika → /api/public/measure?token=)
+   238→  shareToken  String?     @unique
+   239→  createdAt   DateTime    @default(now())
+   240→
+   241→  versions    MeasurementVersion[]
+   242→  packages    ProjectPackage[] @relation("packageMeasurements") // R442: paketi, vezani na to izmero
+   243→}
+   244→
+   245→// Zgodovina verzij meritev — posnetek stanja ob vsaki spremembi (issue #1: zgodovina verzij)
+   246→model MeasurementVersion {
+   247→  id           String   @id @default(cuid())
+   248→  measurement  Measurement @relation(fields: [measurementId], references: [id], onDelete: Cascade)
+   249→  measurementId String
+   250→  version      Int
+   251→  data         String   // JSON posnetek (type, lengthCm, heightCm, posts, slopeDeg, note, params …)
+   252→  userId       String?
+   253→  user         User?    @relation("measurementVersions", fields: [userId], references: [id])
+   254→  note         String?
+   255→  createdAt    DateTime @default(now())
+   256→
+   257→  @@index([measurementId, version])
+   258→}
+   259→
+   260→// ─── Katalog & zaloga ───────────────────────────────────────────────────────
+   261→
+   262→model Profile {
+   263→  id          String  @id @default(cuid())
+   264→  sku         String  @unique
+   265→  name        String
+   266→  material    String  @default("ALU") // ALU | INOX | KOVANO ŽELEZO | STIKLO
+   267→  type        String  @default("OGRAJA") // OGRAJA | BALUSTRADA | NAGIBNA
+   268→  pricePerM   Float   @default(0)
+   269→  description String?
+   270→  active      Boolean @default(true)
+   271→}
+   272→
+   273→model InventoryItem {
+   274→  id        String   @id @default(cuid())
+   275→  sku       String   @unique
+   276→  name      String
+   277→  unit      String   @default("m") // m | kos | kg | l
+   278→  qty       Float    @default(0)
+   279→  reorderAt Float    @default(0)
+   280→  location  String?
+   281→  createdAt DateTime @default(now())
+   282→
+   283→  lots   StockLot[]
+   284→  prices MaterialPrice[]
+   285→  // R442: produktni model — EKSPlicitne ID povezave (vir resnice za BOM)
+   286→  bomTemplates ProductComponent[] @relation("inBomTemplates")
+   287→  bomLines     BomLine[]          @relation("inBomLines")
+   288→  priceRules   PriceRule[]        @relation("itemPriceRules")
+   289→  // R443: skladiščni tok — gibanja, rezervacije, picking
+   290→  movements    StockMovement[]    @relation("stockMovements")
+   291→  reservations StockReservation[] @relation("stockReservations")
+   292→  pickingLines PickingLine[]      @relation("pickingLines")
+   293→}
+   294→
+   295→model StockLot {
+   296→  id          String   @id @default(cuid())
+   297→  itemId      String
+   298→  item        InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+   299→  qty         Float
+   300→  unitCost    Float    @default(0)
+   301→  supplierId  String?
+   302→  deliveredAt DateTime @default(now())
+   303→}
+   304→
+   305→model Supplier {
+   306→  id    String  @id @default(cuid())
+   307→  name  String
+   308→  email String?
+   309→  phone String?
+   310→  note  String?
+   311→}
+   312→
+   313→model MaterialPrice {
+   314→  id         String        @id @default(cuid())
+   315→  itemId     String?
+   316→  item       InventoryItem? @relation(fields: [itemId], references: [id])
+   317→  supplierId String?
+   318→  price      Float
+   319→  createdAt  DateTime      @default(now())
+   320→}
+   321→
+   322→// ─── Orodjarina (merilna orodja, izposoja) ──────────────────────────────────
+   323→
+   324→model Equipment {
+   325→  id             String   @id @default(cuid())
+   326→  code           String   @unique // npr. OR-001
+   327→  name           String
+   328→  category       String   @default("MERITEV") // MERITEV | MONTAZA | PREVERITEV | VZDRZEVANJE
+   329→  serialNumber   String?
+   330→  status         String   @default("NA_VOLJO") // NA_VOLJO | IZPOSOJENO | V_SERVISU | POKVARJENO
+   331→  holderId       String? // trenutni imetnik (denormalizirano iz zadnje izposoje)
+   332→  holder         User?    @relation("equipmentHolder", fields: [holderId], references: [id])
+   333→  location       String?
+   334→  calibrationDue DateTime? // rok umeritve / kalibracije
+   335→  note           String?
+   336→  createdAt      DateTime @default(now())
+   337→  updatedAt      DateTime @updatedAt
+   338→
+   339→  checkouts EquipmentCheckout[]
+   340→}
+   341→
+   342→model EquipmentCheckout {
+   343→  id          String    @id @default(cuid())
+   344→  equipmentId String
+   345→  equipment   Equipment @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+   346→  userId      String?
+   347→  user        User?     @relation("equipmentUser", fields: [userId], references: [id])
+   348→  outAt       DateTime  @default(now())
+   349→  inAt        DateTime? // null = še izposojeno
+   350→  note        String?
+   351→}
+   352→
+   353→// ─── Proizvodnja ────────────────────────────────────────────────────────────
+   354→
+   355→model ProductionOrder {
+   356→  id        String    @id @default(cuid())
+   357→  code      String    @unique // npr. PR-2026-001
+   358→  projectId String?
+   359→  project   Project?  @relation(fields: [projectId], references: [id])
+   360→  title     String
+   361→  status    String    @default("NAVRTEN") // NAVRTEN | V_IZDELAVI | DOKONCAN | ODPOSLAN
+   362→  dueAt     DateTime?
+   363→  note      String?
+   364→  createdAt DateTime  @default(now())
+   365→
+   366→  qcChecks QcCheck[]
+   367→}
+   368→
+   369→// ─── Kontrola kakovosti (R434 — vir: /api/qc iz ROUTE-MAP) ──────────────────
+   370→
+   371→model QcCheck {
+   372→  id                String          @id @default(cuid())
+   373→  productionOrderId String
+   374→  productionOrder   ProductionOrder @relation(fields: [productionOrderId], references: [id], onDelete: Cascade)
+   375→  item              String // kontrolna točka, npr. "Vertikalnost stebričev"
+   376→  result            String          @default("V_TEKU") // OK | NOK | NA | V_TEKU
+   377→  note              String?
+   378→  userId            String?
+   379→  user              User?           @relation("qcUser", fields: [userId], references: [id])
+   380→  createdAt         DateTime        @default(now())
+   381→}
+   382→
+   383→// ─── Garancija (R434 — vir: /api/warranty iz ROUTE-MAP) ─────────────────────
+   384→
+   385→model Warranty {
+   386→  id        String          @id @default(cuid())
+   387→  projectId String
+   388→  project   Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+   389→  startsAt  DateTime        @default(now())
+   390→  months    Int             @default(24)
+   391→  status    String          @default("AKTIVNA") // AKTIVNA | POTEKLA | PREKINJENA
+   392→  note      String?
+   393→  createdAt DateTime        @default(now())
+   394→
+   395→  visits WarrantyVisit[]
+   396→}
+   397→
+   398→model WarrantyVisit {
+   399→  id         String    @id @default(cuid())
+   400→  warrantyId String
+   401→  warranty   Warranty  @relation(fields: [warrantyId], references: [id], onDelete: Cascade)
+   402→  date       DateTime  @default(now())
+   403→  note       String?
+   404→  userId     String?
+   405→  createdAt  DateTime  @default(now())
+   406→}
+   407→
+   408→// ─── Revizija & obvestila ───────────────────────────────────────────────────
+   409→
+   410→model AuditLog {
+   411→  id        String   @id @default(cuid())
+   412→  userId    String?
+   413→  user      User?    @relation(fields: [userId], references: [id])
+   414→  action    String // npr. LOGIN, LOGOUT, QUOTE_ISSUE, PAYMENT_RECORD, WO_TRANSITION, USER_ROLE_CHANGE …
+   415→  entity    String // ime entitete (invoice, workOrder …)
+   416→  entityId  String?
+   417→  projectId String? // null = sistemski dogodek (R428: globalni pregled)
+   418→  detail    String? // JSON
+   419→  createdAt DateTime @default(now())
+   420→}
+   421→
+   422→model Notification {
+   423→  id        String   @id @default(cuid())
+   424→  userId    String?
+   425→  title     String
+   426→  body      String
+   427→  read      Boolean  @default(false)
+   428→  createdAt DateTime @default(now())
+   429→}
+   430→
+   431→// ─── Obvestila in komunikacija (R438: issue #5 — event → notification model) ─
+   432→// En poslovni dogodek (NotificationEvent) = en vir resnice; več kanalov
+   433→// (NotificationDelivery) porabi isti event. Retry je varen pred podvajanjem (key + unique).
+   434→
+   435→model NotificationEvent {
+   436→  id        String   @id @default(cuid())
+   437→  key       String   @unique // dedup: npr. "wo-assign:<nalogId>:<assigneeId>"
+   438→  type      String // WO_ASSIGNED | WO_TERMIN | … (NOTIFICATION_EVENT_TYPES v notify-events.ts)
+   439→  payload   String // JSON { title, body, customerEmail?, customerName? }
+   440→  projectId String?
+   441→  createdAt DateTime @default(now())
+   442→
+   443→  deliveries NotificationDelivery[]
+   444→}
+   445→
+   446→model NotificationDelivery {
+   447→  id        String    @id @default(cuid())
+   448→  eventId   String
+   449→  event     NotificationEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+   450→  channel   String // IN_APP | EMAIL | SMS | WHATSAPP
+   451→  userId    String? // prejemnik-app uporabnik (IN_APP)
+   452→  recipient String? // prikriti zunanji naslov (e-pošta/telefon — NIKOLI celoten)
+   453→  status    String    @default("PENDING") // PENDING | SENT | FAILED | SKIPPED
+   454→  attempts  Int       @default(0)
+   455→  error     String?
+   456→  createdAt DateTime  @default(now())
+   457→  sentAt    DateTime?
+   458→
+   459→  @@unique([eventId, channel, userId]) // dedup dostave (userId null za zunanje)
+   460→  @@index([status, attempts])
+   461→}
+   462→
+   463→// Nastavitve obveščanja po uporabniku (R438): event '*' = vsi dogodki.
+   464→model NotificationPref {
+   465→  id      String  @id @default(cuid())
+   466→  userId  String
+   467→  event   String // tip dogodka (ali * = vse)
+   468→  channel String // IN_APP | EMAIL | SMS
+   469→  enabled Boolean @default(true)
+   470→
+   471→  @@unique([userId, event, channel])
+   472→}
+   473→
+   474→// ─── Portal stranke (R435: /p/[token] izvirnika → javni API + predogled) ────
+   475→
+   476→model PortalLink {
+   477→  id           String    @id @default(cuid())
+   478→  token        String    @unique // neuraden žeton URL /api/public/portal?token=…
+   479→  projectId    String
+   480→  project      Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+   481→  note         String? // interne opombe (npr. "poslano na e-pošto")
+   482→  views        Int       @default(0)
+   483→  lastViewedAt DateTime?
+   484→  createdAt    DateTime  @default(now())
+   485→  expiresAt    DateTime
+   486→  revokedAt    DateTime?
+   487→}
+   488→
+   489→// ─── Nastavitve sistema (R435: licenca/aktivacija, setup) ───────────────────
+   490→
+   491→model Setting {
+   492→  key       String   @id // npr. "licence.key", "licence.status"
+   493→  value     String
+   494→  updatedAt DateTime @updatedAt
+   495→}
+   496→
+   497→// ─── Vzdrževalna opravila (R435: cron jobs izvirnika → ročni zagon + dnevnik) ─
+   498→
+   499→model JobRun {
+   500→  id         String   @id @default(cuid())
+   501→  job        String // seje-gc | portal-gc | obvestila-gc
+   502→  ok         Boolean
+   503→  affected   Int      @default(0)
+   504→  detail     String? // JSON
+   505→  startedAt  DateTime
+   506→  finishedAt DateTime
+   507→  userId     String? // null = sistemski/cron zagon
+   508→  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+   509→}
+   510→
+   511→// ─── Nabava materiala (R437: /api/material-orders iz route-mape izvirnika) ──
+   512→
+   513→model MaterialOrder {
+   514→  id         String    @id @default(cuid())
+   515→  code       String    @unique // npr. NAR-2026-001
+   516→  supplierId String? // skalarno (enako kot MaterialPrice/StockLot)
+   517→  status     String    @default("PRIPRAVA") // PRIPRAVA | POSLANO | PREJETO | PREKINJENO
+   518→  note       String?
+   519→  createdBy  String?
+   520→  createdAt  DateTime  @default(now())
+   521→  sentAt     DateTime?
+   522→  receivedAt DateTime?
+   523→
+   524→  lines MaterialOrderLine[]
+   525→}
+   526→
+   527→model MaterialOrderLine {
+   528→  id        String  @id @default(cuid())
+   529→  orderId   String
+   530→  order     MaterialOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+   531→  itemId    String? // povezava na artikel (opcijsko)
+   532→  itemName  String // denormalizirano ime (artikel lahko izgine)
+   533→  qty       Float
+   534→  unit      String  @default("m")
+   535→  unitPrice Float   @default(0)
+   536→}
+   537→
+   538→// ─── Prisotnost (R437: /api/punch iz route-mape izvirnika) ──────────────────
+   539→
+   540→model PunchEntry {
+   541→  id        String    @id @default(cuid())
+   542→  userId    String
+   543→  user      User      @relation("punchUser", fields: [userId], references: [id], onDelete: Cascade)
+   544→  day       String // lokalni dan YYYY-MM-DD
+   545→  inAt      DateTime?
+   546→  outAt     DateTime?
+   547→  note      String?
+   548→  createdAt DateTime  @default(now())
+   549→
+   550→  @@unique([userId, day]) // ena prijava/odjava na dan
+   551→}
+   552→
+   553→// ─── Inženirska pravila (R437: /api/engineering-rules iz route-mape) ────────
+   554→
+   555→model EngineeringRule {
+   556→  id        String   @id @default(cuid())
+   557→  key       String   @unique // npr. max_razdalja_stebrov
+   558→  label     String // človeško berljivo ime
+   559→  value     Float
+   560→  unit      String   @default("cm")
+   561→  note      String?
+   562→  active    Boolean  @default(true)
+   563→  updatedAt DateTime @updatedAt
+   564→}
+   565→
+   566→// ─── Offline sinhronizacija (R439: issue #6 — mobilni teren brez signala) ────
+   567→// SyncOp = zadetek uspešno obdelanega opa iz /api/sync. id = opId (UUID, ga
+   568→// generira ODJEMALEC) → ponovno pošiljanje istega opId vrne shranjen rezultat
+   569→// (idempotenca — podvajanje meritev/dogodkov NI mogoče).
+   570→
+   571→model SyncOp {
+   572→  id        String   @id // opId (UUID, generira odjemalec) — idempotenca
+   573→  deviceId  String
+   574→  userId    String
+   575→  kind      String // meritev | foto | nalog-opomba | nalog-status | nalog-zakljucek
+   576→  result    String // JSON odgovor operacije
+   577→  createdAt DateTime @default(now())
+   578→
+   579→  @@index([userId, createdAt])
+   580→}
+   581→
+   582→// ─── Ankete / povpraševanja (R437: /api/surveys iz route-mape izvirnika) ────
+   583→
+   584→model Survey {
+   585→  id        String   @id @default(cuid())
+   586→  name      String // ime kontaktirane osebe
+   587→  email     String?
+   588→  phone     String?
+   589→  type      String   @default("OGRAJA") // tip zahteve (OGRAJA | STOPNISCE | TERASA | DRUGO)
+   590→  lengthCm  Float? // ocenjena dolžina
+   591→  location  String?
+   592→  message   String?
+   593→  handled   Boolean  @default(false) // obdelano v pisarni
+   594→  createdAt DateTime @default(now())
+   595→}
+   596→
+   597→// ═══════════════════════════════════════════════════════════════════════════
+   598→// PRODUKTNI MODEL (R442 — issue #7 §1–§6, P0 DATA CORE)
+   599→// Vir resnice za izdelke, variante, komponente, BOM, cene in pakete projektov.
+   600→// Profile (zgoraj) ostaja kot LEGACY za stari railing konfigurator (viz/kalkulator)
+   601→// — nova poslovna logika MORA uporabljati ta model z EKSPPLICITNIMI ID povezavami.
+   602→// PostgreSQL-kompatibilno: samo skalarni tipi + JSON kot String (issue #7 §14).
+   603→// ═══════════════════════════════════════════════════════════════════════════
+   604→
+   605→// ─── Produktna družina (issue #7 §1) ────────────────────────────────────────
+   606→
+   607→model ProductFamily {
+   608→  id        String   @id @default(cuid())
+   609→  code      String   @unique // TERASA | OGRAJA_PRECNA | OGRAJA_POKOCNA | FASADA | PREGRADA | NAPUSC | STROP | STOPNICE | VRTNA_RESITEV | KOMPONENTA
+   610→  name      String
+   611→  desc      String?
+   612→  unit      String   @default("m2") // glavna enota družine: m2 | m | kos
+   613→  sortOrder Int      @default(0)
+   614→  active    Boolean  @default(true)
+   615→  createdAt DateTime @default(now())
+   616→  updatedAt DateTime @updatedAt
+   617→
+   618→  products Product[]
+   619→}
+   620→
+   621→// ─── Produkt (prodajni izdelek; issue #7 §1: SKU, enota, dimenzije, cene …) ─
+   622→
+   623→model Product {
+   624→  id             String        @id @default(cuid())
+   625→  familyId       String
+   626→  family         ProductFamily @relation(fields: [familyId], references: [id])
+   627→  sku            String        @unique
+   628→  name           String
+   629→  desc           String?
+   630→  unit           String        @default("m2") // prodajna enota: m2 | m | kos
+   631→  // dimenzije (mm)
+   632→  widthMm        Int?
+   633→  heightMm       Int?
+   634→  depthMm        Int?
+   635→  // tehnične lastnosti (JSON): material, ral, obremenitev, toplotna prevodnost …
+   636→  tech           String?
+   637→  // osnovni ceni (nabavna/prodajna na enoto); veljavne cene razrešuje PriceList
+   638→  costPrice      Float         @default(0)
+   639→  salePrice      Float         @default(0)
+   640→  warrantyMonths Int           @default(24)
+   641→  active         Boolean       @default(true)
+   642→  validFrom      DateTime      @default(now())
+   643→  validTo        DateTime?
+   644→  createdAt      DateTime      @default(now())
+   645→  updatedAt      DateTime      @updatedAt
+   646→
+   647→  variants      ProductVariant[]
+   648→  components    ProductComponent[] @relation("bomTemplate")
+   649→  boms          Bom[]
+   650→  packages      ProjectPackage[]
+   651→  priceRules    PriceRule[]      @relation("productPriceRules")
+   652→}
+   653→
+   654→// ─── Varianta produkta (barva/RAL, dimenzija; issue #7 §1) ──────────────────
+   655→
+   656→model ProductVariant {
+   657→  id        String   @id @default(cuid())
+   658→  productId String
+   659→  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+   660→  sku       String   @unique
+   661→  name      String // npr. "WPC terasa — Grafit"
+   662→  color     String? // človeško berljivo ime barve
+   663→  ral       String? // npr. "RAL 7016"
+   664→  widthMm   Int?
+   665→  heightMm  Int?
+   666→  // override ceni (null = podeduje produkt)
+   667→  costPrice Float?
+   668→  salePrice Float?
+   669→  tech      String? // JSON dopolnilne tehnične lastnosti
+   670→  active    Boolean  @default(true)
+   671→  sortOrder Int      @default(0)
+   672→
+   673→  packages ProjectPackage[]
+   674→  boms     Bom[]
+   675→}
+   676→
+   677→// ─── Komponenta produkta (BOM PREDLOGA; issue #7 §2) ────────────────────────
+   678→// EKSPlicitna ID povezava productId → itemId (InventoryItem).
+   679→// qty = količina artikla na ENOTO osnove (unitBasis) produkta.
+   680→// Primer: TERASA → WPC deska 1.05 m² na m² (vključen odpad).
+   681→
+   682→model ProductComponent {
+   683→  id        String        @id @default(cuid())
+   684→  productId String
+   685→  product   Product       @relation("bomTemplate", fields: [productId], references: [id], onDelete: Cascade)
+   686→  itemId    String
+   687→  item      InventoryItem @relation("inBomTemplates", fields: [itemId], references: [id])
+   688→  qty       Float // količina na enoto osnove
+   689→  unitBasis String        @default("m2") // m2 | m | kos — osnova produkta
+   690→  optional  Boolean       @default(false)
+   691→  note      String?
+   692→  sortOrder Int           @default(0)
+   693→}
+   694→
+   695→// ─── Kosovnica (generirana BOM; issue #7 §2 + §5) ───────────────────────────
+   696→// Nastane iz predloge (ProductComponent) × količina paketa.
+   697→// Vrstice kazajo EKSPlicitno na InventoryItem — nikoli na imena.
+   698→
+   699→model Bom {
+   700→  id        String           @id @default(cuid())
+   701→  code      String           @unique // npr. BOM-2026-001
+   702→  packageId String?           @unique // povezava na projektni paket (izmera/ponudba; 1:1)
+   703→  package   ProjectPackage?  @relation(fields: [packageId], references: [id], onDelete: SetNull)
+   704→  productId String
+   705→  product   Product          @relation(fields: [productId], references: [id])
+   706→  variantId String?
+   707→  variant   ProductVariant?  @relation(fields: [variantId], references: [id])
+   708→  qty       Float // količina (v enoti produkta)
+   709→  unit      String // m2 | m | kos
+   710→  status    String           @default("OSNUTEK") // OSNUTEK | POTRJEN | REZERVIRAN | PORABLJEN | PREKLICAN
+   711→  note      String?
+   712→  createdAt DateTime         @default(now())
+   713→  updatedAt DateTime         @updatedAt
+   714→
+   715→  lines BomLine[]
+   716→  // R443: skladiščni tok vezan na kosovnico
+   717→  reservations StockReservation[] @relation("bomReservations")
+   718→  pickings     PickingList[]      @relation("bomPickings")
+   719→}
+   720→
+   721→model BomLine {
+   722→  id        String        @id @default(cuid())
+   723→  bomId     String
+   724→  bom       Bom           @relation(fields: [bomId], references: [id], onDelete: Cascade)
+   725→  itemId    String // EKSPlicitna povezava na artikel
+   726→  item      InventoryItem @relation("inBomLines", fields: [itemId], references: [id])
+   727→  qty       Float
+   728→  unit      String
+   729→  note      String?
+   730→  sortOrder Int           @default(0)
+   731→}
+   732→
+   733→// ─── Ceniki (issue #7 §6: poslovne cene NISO hardcoded) ─────────────────────
+   734→
+   735→model PriceList {
+   736→  id        String   @id @default(cuid())
+   737→  name      String // npr. "Prodajni cenik 2026"
+   738→  type      String   @default("PRODAJNA") // NABAVNA | PRODAJNA | MONTAZA
+   739→  currency  String   @default("EUR")
+   740→  validFrom DateTime @default(now())
+   741→  validTo   DateTime?
+   742→  active    Boolean  @default(true)
+   743→  note      String?
+   744→  createdAt DateTime @default(now())
+   745→  updatedAt DateTime @updatedAt
+   746→
+   747→  rules PriceRule[]
+   748→}
+   749→
+   750→model PriceRule {
+   751→  id          String        @id @default(cuid())
+   752→  priceListId String
+   753→  priceList   PriceList     @relation(fields: [priceListId], references: [id], onDelete: Cascade)
+   754→  // cilj pravila: produkt (prodajna cena) ali artikel (nabavna/montažna)
+   755→  productId   String?
+   756→  product     Product?      @relation("productPriceRules", fields: [productId], references: [id], onDelete: Cascade)
+   757→  itemId      String?
+   758→  item        InventoryItem? @relation("itemPriceRules", fields: [itemId], references: [id], onDelete: Cascade)
+   759→  price       Float
+   760→  unit        String        @default("m2")
+   761→  discountPct Float         @default(0)
+   762→  minPrice    Float? // najnižja dovoljena cena
+   763→  seasonFrom  String? // MM-DD (sezonska cena)
+   764→  seasonTo    String? // MM-DD
+   765→  note        String?
+   766→  active      Boolean       @default(true)
+   767→  validFrom   DateTime      @default(now())
+   768→  validTo     DateTime?
+   769→  createdAt   DateTime      @default(now())
+   770→  updatedAt   DateTime      @updatedAt
+   771→
+   772→  @@index([priceListId, active])
+   773→}
+   774→
+   775→// ─── Projektni paket (issue #7 §3: projekt = več rešitev) ───────────────────
+   776→// Primer: P-2026-014 → TERASA 36,4 m² + OGRAJA 18,6 m + NAPUŠČ 24 m².
+   777→
+   778→model ProjectPackage {
+   779→  id            String          @id @default(cuid())
+   780→  code          String          @unique // npr. PAK-P-2026-014-1
+   781→  projectId     String
+   782→  project       Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+   783→  productId     String
+   784→  product       Product         @relation(fields: [productId], references: [id])
+   785→  variantId     String?
+   786→  variant       ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+   787→  measurementId String? // povezava na izmero (generalizirana)
+   788→  measurement   Measurement?    @relation("packageMeasurements", fields: [measurementId], references: [id], onDelete: SetNull)
+   789→  name          String // prikazno ime, npr. "Terasa — WPC Grafit"
+   790→  qty           Float           @default(0) // količina v enoti produkta
+   791→  unit          String          @default("m2")
+   792→  status        String          @default("POVPRAŠEVANJE") // POVPRAŠEVANJE | IZMERA | KONFIGURACIJA | PONUDBA | POTRJENO | REZERVIRANO | V_IZDELAVI | DOSTAVLJENO | MONTIRANO | PREDANO
+   793→  calcJson      String? // JSON kalkulacija (cena, marža, material)
+   794→  note          String?
+   795→  createdAt     DateTime        @default(now())
+   796→  updatedAt     DateTime        @updatedAt
+   797→
+   798→  bom Bom?
+   799→}
+   800→
+   801→// ═══════════════════════════════════════════════════════════════════════════
+   802→// SKLADIŠČNI TOK (R443 — issue #7 §7, P1 INVENTORY CORE)
+   803→// VEČNO LOČENO: FIZIČNA ZALOGA (InventoryItem.qty) ≠ REZERVIRANA (Σ aktivnih
+   804→// rezervacij) ≠ RAZPOLOŽLJIVA (fizična − rezervirana).
+   805→// StockMovement = nemutabilni dnevnik vseh gibanj (prevzem/izdaja/vračilo/inventura).
+   806→// ═══════════════════════════════════════════════════════════════════════════
+   807→
+   808→model StockMovement {
+   809→  id        String        @id @default(cuid())
+   810→  itemId    String
+   811→  item      InventoryItem @relation("stockMovements", fields: [itemId], references: [id])
+   812→  qty       Float // + prevzem/vračilo; − izdaja/inventurni minus
+   813→  type      String // PREVZEM | IZDAJA | VRACILO | INVENTURA
+   814→  refType   String? // pickingList | materialOrder | rocni
+   815→  refId     String?
+   816→  userId    String?
+   817→  user      User?         @relation("stockMovements", fields: [userId], references: [id], onDelete: SetNull)
+   818→  note      String?
+   819→  createdAt DateTime      @default(now())
+   820→
+   821→  @@index([itemId, createdAt])
+   822→}
+   823→
+   824→model StockReservation {
+   825→  id         String        @id @default(cuid())
+   826→  itemId     String
+   827→  item       InventoryItem @relation("stockReservations", fields: [itemId], references: [id])
+   828→  qty        Float
+   829→  status     String        @default("AKTIVNA") // AKTIVNA | PORABLJENA | PREKLICANA
+   830→  projectId  String?
+   831→  project    Project?      @relation("stockReservations", fields: [projectId], references: [id], onDelete: SetNull)
+   832→  bomId      String?
+   833→  bom        Bom?          @relation("bomReservations", fields: [bomId], references: [id], onDelete: SetNull)
+   834→  userId     String?
+   835→  note       String?
+   836→  createdAt  DateTime      @default(now())
+   837→  consumedAt DateTime?
+   838→
+   839→  @@index([itemId, status])
+   840→}
+   841→
+   842→// Picking list — skladiščno zbiranje (picking) materiala za kosovnico
+   843→model PickingList {
+   844→  id        String   @id @default(cuid())
+   845→  code      String   @unique // npr. PICK-2026-001
+   846→  bomId     String?
+   847→  bom       Bom?     @relation("bomPickings", fields: [bomId], references: [id], onDelete: SetNull)
+   848→  status    String   @default("PRIPRAVLJENA") // PRIPRAVLJENA | V_ZAKLJUCEVANJU | ZAKLJUCENA | PREKLICANA
+   849→  note      String?
+   850→  userId    String? // skladiščnik, ki je pripravil
+   851→  createdAt DateTime @default(now())
+   852→  updatedAt DateTime @updatedAt
+   853→
+   854→  lines PickingLine[]
+   855→}
+   856→
+   857→model PickingLine {
+   858→  id            String        @id @default(cuid())
+   859→  pickingListId String
+   860→  pickingList   PickingList   @relation(fields: [pickingListId], references: [id], onDelete: Cascade)
+   861→  itemId        String
+   862→  item          InventoryItem @relation("pickingLines", fields: [itemId], references: [id])
+   863→  qtyNeeded     Float // potrebno (iz vrstice kosovnice)
+   864→  qtyPicked     Float         @default(0) // dejansko pobrano
+   865→  sortOrder     Int           @default(0) // vrstni red iz kosovnice (R443)
+   866→  note          String?
+   867→
+   868→  @@index([pickingListId, sortOrder])
+   869→}
+   870→

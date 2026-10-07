@@ -36,6 +36,8 @@ model User {
   jobRuns      JobRun[]
   punchEntries PunchEntry[]    @relation("punchUser") // R437: prisotnost
   stockMovements StockMovement[] @relation("stockMovements") // R443: skladiščni dnevnik
+  checklistDone InstallationChecklist[] @relation("checklistDone") // R444: odkljukane točke
+  materialUsage InstallationMaterialUsage[] @relation("usageUser") // R444: poraba na terenu
 }
 
 model Session {
@@ -199,6 +201,9 @@ model WorkOrder {
 
   events       WorkOrderEvent[]
   measurements Measurement[]
+  // R444 (issue #7 §8 MONTER): kontrolni seznam + poraba materiala na terenu
+  checklist    InstallationChecklist[]
+  materialUsage InstallationMaterialUsage[]
 }
 
 model WorkOrderEvent {
@@ -207,7 +212,7 @@ model WorkOrderEvent {
   workOrder   WorkOrder  @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
   userId      String?
   user        User?      @relation(fields: [userId], references: [id])
-  type        String // DODELJEN | ZACETEK | ZAJEM | PREVERITEV | ZAKLJUCEK | KOMENTAR | OPOMBA (R439: sync)
+  type        String // DODELJEN | ZACETEK | ZAJEM | PREVERITEV | ZAKLJUCEK | KOMENTAR | OPOMBA | TEZAVA (R439: sync; R444: TEZAVA — težave na terenu)
   note        String?
   createdAt   DateTime   @default(now())
 }
@@ -290,6 +295,8 @@ model InventoryItem {
   movements    StockMovement[]    @relation("stockMovements")
   reservations StockReservation[] @relation("stockReservations")
   pickingLines PickingLine[]      @relation("pickingLines")
+  // R444: poraba materiala na terenu (MOJ DAN)
+  usageItems   InstallationMaterialUsage[] @relation("usageItems")
 }
 
 model StockLot {
@@ -866,4 +873,43 @@ model PickingLine {
   note          String?
 
   @@index([pickingListId, sortOrder])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MONTERJEV DAN (R444 — issue #7 §8, P1 ROLE EXPERIENCES)
+// Kontrolni seznam + poraba materiala na montažnem nalogu (mobile-first MOJ DAN).
+// ═══════════════════════════════════════════════════════════════════════════
+
+// kontrolni seznam za montažni nalog (issue #7 §8 MONTER: checklist)
+model InstallationChecklist {
+  id          String    @id @default(cuid())
+  workOrderId String
+  workOrder   WorkOrder @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  label       String // npr. "Preverjena vodovodna instalacija"
+  done        Boolean   @default(false)
+  doneAt      DateTime?
+  doneById    String?
+  doneBy      User?     @relation("checklistDone", fields: [doneById], references: [id])
+  sortOrder   Int       @default(0)
+  createdAt   DateTime  @default(now())
+
+  @@index([workOrderId, sortOrder])
+}
+
+// poraba materiala na terenu (issue #7 §8 MONTER: poraba materiala)
+// Količinsko se zaznamuje prek StockMovement (IZDAJA, refType=workOrder) —
+// ta zapis je vez na nalog z opombo in avtorjem (kdo je porabil).
+model InstallationMaterialUsage {
+  id          String            @id @default(cuid())
+  workOrderId String
+  workOrder   WorkOrder         @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  itemId      String
+  item        InventoryItem     @relation("usageItems", fields: [itemId], references: [id])
+  qty         Float // vedno > 0
+  note        String?
+  userId      String?
+  user        User?             @relation("usageUser", fields: [userId], references: [id])
+  createdAt   DateTime          @default(now())
+
+  @@index([workOrderId])
 }

@@ -2,9 +2,13 @@
 
 // PROIZVODNJA — proizvodni nalogi s prehodi statusov (vrata production.read; prehodi = production.manage)
 // R434: kontrola kakovosti (QC) — dialog s kontrolnimi točkami po nalogu (/api/qc).
+// R444 (issue #7 §8 PROIZVODNJA): Priprava materiala — za proizvodni nalog pokaže
+// kosovnice (BOM) povezanega projekta (ProductionOrder NI direktno vezan na BOM —
+// povezava teče prek projekta paketov; informativni pregled, rezervacija/picking
+// ostajata v Zaloga → Kosovnice).
 
 import { useMemo, useState } from 'react'
-import { AlertTriangle, ArrowRight, BadgeCheck, ClipboardCheck, Factory, Plus } from 'lucide-react'
+import { AlertTriangle, ArrowRight, BadgeCheck, ClipboardCheck, Factory, Package, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
@@ -21,7 +25,14 @@ import { cn } from '@/lib/utils'
 
 interface ProductionRow {
   id: string; code: string; title: string; status: string; dueAt: string | null; note: string | null
-  project: { code: string; title: string } | null
+  project: { id: string; code: string; title: string } | null
+}
+
+interface BomRow {
+  id: string; code: string; status: string; qty: number; unit: string
+  product: { sku: string; name: string }
+  package: { code: string; name: string } | null
+  lines: { id: string; item: { sku: string; name: string } }[]
 }
 
 interface QcCheckRow {
@@ -59,6 +70,7 @@ export default function ProizvodnjaModule () {
   const qc = useApi<{ data: QcCheckRow[] }>(qcFor ? `/api/qc?productionOrderId=${qcFor.id}` : null, [qcFor?.id])
 
   const canManage = hasPerm(user?.perms, 'production.manage')
+  const canSeeBom = hasPerm(user?.perms, 'inventory.read')
 
   const rows = useMemo(() => {
     const all = list.data?.data ?? []
@@ -166,6 +178,11 @@ export default function ProizvodnjaModule () {
                   {qcFor.project ? ` · ${qcFor.project.code}` : ''}
                 </DialogDescription>
               </DialogHeader>
+
+              {/* Priprava materiala — kosovnice projekta (R444, issue #7 §8 PROIZVODNJA) */}
+              {canSeeBom ? (
+                <MaterialPrepSection projectId={qcFor.project?.id ?? null} projectCode={qcFor.project?.code ?? null} />
+              ) : null}
 
               <ErrorBox error={qc.error} />
               {qc.loading ? <LoadingRows rows={3} /> : !qc.error && qcRows.length === 0 ? (
@@ -322,6 +339,58 @@ function QcAddForm ({ orderId, onSaved }: { orderId: string; onSaved: () => Prom
           <BadgeCheck className="size-4" aria-hidden /> {busy ? 'Zapisujem …' : 'Zabeleži kontrolo'}
         </Button>
       </div>
+    </div>
+  )
+}
+
+/** Priprava materiala (R444) — kosovnice projekta proizvodnega naloga (informativno). */
+function MaterialPrepSection ({ projectId, projectCode }: { projectId: string | null; projectCode: string | null }) {
+  const boms = useApi<{ data: BomRow[] }>(projectId ? `/api/bom?projectId=${projectId}` : null, [projectId])
+
+  if (!projectId) {
+    return (
+      <div className="rounded-xl border bg-secondary/40 p-3">
+        <h4 className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-muted-foreground">
+          <Package className="size-4 text-roksal-amber" aria-hidden /> Priprava materiala
+        </h4>
+        <p className="mt-1 text-sm text-muted-foreground">Nalog ni vezan na projekt — potrebe po materialu ni mogoče prikazati.</p>
+      </div>
+    )
+  }
+
+  const rows = boms.data?.data ?? []
+  return (
+    <div className="rounded-xl border bg-secondary/40 p-3">
+      <h4 className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-muted-foreground">
+        <Package className="size-4 text-roksal-amber" aria-hidden /> Priprava materiala — kosovnice projekta {projectCode}
+      </h4>
+      <ErrorBox error={boms.error} />
+      {boms.loading ? (
+        <LoadingRows rows={1} />
+      ) : !boms.error && rows.length === 0 ? (
+        <p className="mt-1 text-sm text-muted-foreground">Projekt še nima generiranih kosovnic (paketih projektov manjka BOM).</p>
+      ) : !boms.error ? (
+        <ul className="mt-2 max-h-56 space-y-1.5 overflow-y-auto pr-1">
+          {rows.map((b) => (
+            <li key={b.id} className="flex items-center justify-between gap-3 rounded-lg bg-background/60 px-3 py-2">
+              <div className="min-w-0">
+                <div className="truncate text-sm font-medium">
+                  <span className="font-mono text-xs text-muted-foreground">{b.code}</span> · {b.product.name}
+                </div>
+                <div className="text-[11px] text-muted-foreground">
+                  {b.package ? `${b.package.name} · ` : ''}{b.qty} {b.unit} · {b.lines.length} vrstic materiala
+                </div>
+              </div>
+              <StatusBadge status={b.status} />
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {rows.length > 0 ? (
+        <p className="mt-2 text-[11px] leading-snug text-muted-foreground">
+          Rezervacijo materiala in picking listo izvedete v Zaloga → Kosovnice (informativni pregled za proizvodnjo).
+        </p>
+      ) : null}
     </div>
   )
 }
