@@ -1,16 +1,18 @@
 'use client'
 
 // VARNOST — revizijski dnevnik (R428) + upravljanje sej (R433: security.read)
+// R435: vzdrževalna opravila (cron izvirnika) + licenca/aktivacija.
 
 import { useState } from 'react'
-import { LogIn, ScrollText, Trash2 } from 'lucide-react'
+import { BadgeCheck, KeyRound, LogIn, Play, ScrollText, Timer, Trash2, Wrench } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useToast } from '@/hooks/use-toast'
 import { useAppStore } from '@/lib/store'
-import { apiDelete, fmtDateTime, useApi } from '@/lib/api-client'
+import { apiDelete, apiPost, fmtDateTime, useApi } from '@/lib/api-client'
 import { EmptyState, ErrorBox, LoadingRows, PageHeader } from '@/components/roksal/ui-bits'
 import { READS_ALL_PROJECTS, hasPerm } from '@/lib/permissions-core'
 
@@ -34,6 +36,12 @@ const ACTION_LABELS: Record<string, string> = {
   PASSWORD_CHANGE: 'Sprememba gesla', SESSION_REVOKE: 'Preklic seje', DOC_GENERATE: 'Izvoz PDF',
   EQUIP_CHECKOUT: 'Izposoja orodja', EQUIP_RETURN: 'Vrnitev orodja',
   SETUP_COMPLETE: 'Zaključek nastavitve',
+  // R434:
+  ESLOG_EXPORT: 'Izvoz eSLOG', QC_CHECK: 'Kontrola kakovosti',
+  WARRANTY_CREATE: 'Oddaja garancije', WARRANTY_VISIT: 'Obisk garancije',
+  // R435:
+  PORTAL_CREATE: 'Nova povezava portala', PORTAL_REVOKE: 'Preklic povezave portala',
+  MAINTENANCE_RUN: 'Vzdrževalno opravilo', ACTIVATION: 'Aktivacija licence',
 }
 
 export default function VarnostModule () {
@@ -57,7 +65,6 @@ export default function VarnostModule () {
   const canSessions = hasPerm(user?.perms, 'security.read')
   const sessions = useApi<{ data: SessionRow[] }>(canSessions ? '/api/auth/sessions?all=1' : null, [canSessions])
   const [revoking, setRevoking] = useState<string | null>(null)
-
   async function revokeSession (id: string) {
     setRevoking(id)
     try {
@@ -111,6 +118,9 @@ export default function VarnostModule () {
           </CardContent>
         </Card>
       ) : null}
+
+      {canSessions ? <MaintenanceCard /> : null}
+      {canSessions ? <LicenceCard /> : null}
 
       <div className="flex flex-wrap items-center gap-2">
         {canSystem ? (
@@ -169,5 +179,148 @@ export default function VarnostModule () {
         </ul>
       )}
     </div>
+  )
+}
+
+// ── Vzdrževanje (R435: cron opravila izvirnika — ročni zagon + dnevnik) ─────
+
+interface JobDef {
+  job: string; label: string; desc: string; cron: string
+  last: { ok: boolean; affected: number; startedAt: string; finishedAt: string; user: { name: string } | null } | null
+}
+
+function MaintenanceCard () {
+  const { toast } = useToast()
+  const jobs = useApi<{ data: { definitions: JobDef[]; runs: { id: string; job: string; ok: boolean; affected: number; startedAt: string; finishedAt: string; user: { name: string } | null }[] } }>('/api/jobs', [])
+  const [running, setRunning] = useState<string | null>(null)
+
+  async function run (job: string) {
+    setRunning(job)
+    try {
+      const res = await apiPost<{ data: { job: string; affected: number; durationMs: number } }>('/api/jobs', { job })
+      toast({
+        title: `${res.data.job} zaključeno.`,
+        description: `Spremenjenih zapisov: ${res.data.affected} · ${res.data.durationMs} ms.`,
+      })
+      await jobs.reload()
+    } catch (e) {
+      toast({ title: 'Zagon ni uspel.', description: e instanceof Error ? e.message : undefined, variant: 'destructive' })
+    } finally {
+      setRunning(null)
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Wrench className="size-4 text-roksal-amber" aria-hidden /> Vzdrževanje
+        </CardTitle>
+        <CardDescription>Redna opravila (cron izvirnika) — tu jih lahko ADMIN zažene takoj; vsak zagon je zabeležen.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {jobs.loading ? <LoadingRows rows={2} /> : jobs.error ? <ErrorBox error={jobs.error} /> : (
+          <ul className="space-y-1.5">
+            {(jobs.data?.data.definitions ?? []).map((d) => (
+              <li key={d.job} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-2">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm font-medium">{d.label}</span>
+                    <code className="rounded bg-secondary px-1 font-mono text-[10px] text-muted-foreground">{d.job}</code>
+                  </div>
+                  <p className="mt-0.5 text-xs text-muted-foreground">{d.desc}</p>
+                  {d.last ? (
+                    <p className="mt-0.5 inline-flex flex-wrap items-center gap-x-2 text-[11px] text-muted-foreground">
+                      <Timer className="size-3" aria-hidden />
+                      zadnji zagon {fmtDateTime(d.last.startedAt)} · {d.last.affected} zapisov
+                      {d.last.user ? ` · ${d.last.user.name}` : ' · sistem'} · {d.last.ok ? 'uspešno' : 'napaka'}
+                    </p>
+                  ) : (
+                    <p className="mt-0.5 text-[11px] text-muted-foreground">še ni zagnano</p>
+                  )}
+                </div>
+                <Button
+                  size="sm" variant="outline" className="h-7 gap-1 px-2 text-xs"
+                  onClick={() => void run(d.job)} disabled={running === d.job}
+                >
+                  <Play className="size-3.5" aria-hidden /> {running === d.job ? 'Teče…' : 'Zaženi'}
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+// ── Licenca (R435: /aktivacija izvirnika) ───────────────────────────────────
+
+interface LicenceState {
+  status: string; key: string | null; activatedAt: string | null; activatedBy: string | null
+}
+
+function LicenceCard () {
+  const { toast } = useToast()
+  const licence = useApi<{ data: LicenceState }>('/api/aktivacija', [])
+  const [key, setKey] = useState('')
+  const [busy, setBusy] = useState(false)
+  const active = licence.data?.data.status === 'AKTIVNA'
+
+  async function activate () {
+    if (!key.trim()) { toast({ title: 'Vnesite ključ.', variant: 'destructive' }); return }
+    setBusy(true)
+    try {
+      await apiPost('/api/aktivacija', { key })
+      toast({ title: 'Licenca aktivirana.', description: 'Hvala za zaupanje.' })
+      setKey('')
+      await licence.reload()
+    } catch (e) {
+      toast({ title: 'Aktivacija ni uspela.', description: e instanceof Error ? e.message : undefined, variant: 'destructive' })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <KeyRound className="size-4 text-roksal-amber" aria-hidden /> Licenca
+        </CardTitle>
+        <CardDescription>Status aplikacije po licenci (route-map izvirnika: /aktivacija).</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {licence.loading ? <LoadingRows rows={1} /> : licence.error ? <ErrorBox error={licence.error} /> : (
+          <div className="space-y-3">
+            <div className="flex flex-wrap items-center gap-2">
+              {active ? (
+                <Badge className="gap-1 border-transparent bg-emerald-700 text-white"><BadgeCheck className="size-3" aria-hidden /> Aktivna</Badge>
+              ) : (
+                <Badge variant="secondary">Neaktivna (demo)</Badge>
+              )}
+              {licence.data?.data.key ? (
+                <code className="rounded bg-secondary px-1.5 py-0.5 font-mono text-[11px]">{licence.data.data.key}</code>
+              ) : null}
+              {licence.data?.data.activatedAt ? (
+                <span className="text-[11px] text-muted-foreground">
+                  od {fmtDateTime(licence.data.data.activatedAt)} · {licence.data.data.activatedBy}
+                </span>
+              ) : null}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Input
+                value={key} onChange={(e) => setKey(e.target.value.toUpperCase())}
+                placeholder="RS-XXXXX-XXXXX-XXXXX" className="min-w-0 flex-1 font-mono" aria-label="Aktivacijski ključ"
+                onKeyDown={(e) => { if (e.key === 'Enter') void activate() }}
+              />
+              <Button size="sm" onClick={() => void activate()} disabled={busy}>
+                {busy ? 'Preverjam…' : 'Aktiviraj'}
+              </Button>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   )
 }
