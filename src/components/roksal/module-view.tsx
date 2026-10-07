@@ -34,6 +34,7 @@ const MODULES: Record<string, () => Promise<{ default: ComponentType<TabProps> }
   katalog: () => import('@/components/roksal/modules/katalog'),
   logistika: () => import('@/components/roksal/modules/logistika'),
   dostave: () => import('@/components/roksal/modules/dostave'), // R445: dostave, vozila, ekipe
+  servis: () => import('@/components/roksal/modules/servis'), // R446: garancije, reklamacije, servis
   proizvodnja: () => import('@/components/roksal/modules/proizvodnja'),
   galerija: () => import('@/components/roksal/modules/galerija'),
   varnost: () => import('@/components/roksal/modules/varnost'),
