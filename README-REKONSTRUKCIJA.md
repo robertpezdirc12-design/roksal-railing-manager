@@ -101,6 +101,20 @@ Monter dela na objektu brez signala: vsako dejanje se shrani **lokalno v Indexed
 
 Preverjeno z brskalniško avtomatizacijo (Chromium): izguba signala med meritvijo ✓, izguba signala med zajemom fotografije ✓, samodejna sinhronizacija obeh vrst po vrnitvi ✓, konflikt dvojnega prehoda prikazan in rešljiv ✓, odjava počisti IndexedDB ✓.
 
+## Disaster recovery & security (R441 — GitLab issue #3)
+
+Po incidentu z izgubo GitHub računa ima sistem trajno neodvisno obnovitveno pot — **GitLab je kanonični vir**, nobena obnova ne zahteva starega GitHub računa.
+
+- **Zaščiteni `main`:** direktni push onemogočen za vse (push_access_level = 0), brez force-push, merge SAMO skozi merge request z **zelenim CI** (`only_allow_merge_if_pipeline_succeeds`). Produkcijske verzije: zavarovani tagi `v*` + GitLab Release ([v1.0.0](https://gitlab.com/markec-group/roksal-railing-manager/-/releases/v1.0.0)).
+- **CI vratarji** (`.gitlab-ci.yml`, GitLab shared runners): `bun install --frozen-lockfile` → ESLint → `tsc --noEmit` → `prisma validate` + `db push` v prazno bazo → **skrivnostni pregled** (delovna kopija + celotna zgodovina) → sintaksa ops skript.
+- **Šifrirane varnostne kopije** (`ops/backup.sh`, job *varnostna-kopija* v Varnost → Vzdrževanje): ena datoteka `.rkb` (AES-256-CBC, PBKDF2 200k) vsebuje `git bundle --all` (cel repozitorij: zgodovina, veje, tagi, migrations, CI) + dosleden posnetek SQLite baze (online backup API) + strojno berljiv JSON export vseh tabel + manifest s SHA-256/prstnim odtisom sheme/števci. Geslo NI v repozitoriju (glej `docs/SECRETS.md`).
+- **Off-site hramba:** GitLab generic package registry (`roksal-backup`, zadnjih 10 verzij) — nalaganje v kosih po 128 KiB z do 6 poskusi (Cloudflare občasno blokira IP peskovnice glede na velikost zahteve).
+- **Obnova** (`ops/restore.sh --verify / --target-dir`): sestavljanje kosov + preverba proti stranskemu manifestu, dešifriranje, kontrolne vsote vseh komponent, `git fsck`, prstni odtis sheme + števci vrstic vseh tabel — brez dotika delujoče aplikacije.
+- **Recovery drill** (`ops/drill.sh`): simulacija popolne izgube → obnova IZKLJUČNO iz off-site kopije + gesla → `bun install` + `tsc` → zagon aplikacije (ločena vrata 3100) → prijava + poslovni test; izmerjeno **RTO 65 s** (cilj ≤ 30 min), **RPO ~3,5 min** (cilj ≤ 24 h) — poročila v `docs/RECOVERY-DRILL-*.md`.
+- **`GET /api/health`:** javni deploy-check (200/503) za verifikacijo namestitve in sprožitev rollbacka; `/api/public/health` route-mape ostaja nespremenjena.
+- **Dokumentacija:** `docs/RECOVERY.md` (runbook: CI/CD → deploy → health → rollback, incident checklist, preslikava na Neon/Blob), `docs/SECRETS.md` (inventar poverilnic BREZ vrednosti + vrstni red rotacije), `docs/BLOB-INVENTORY.md` (vsak trajen podatek: lokacija, kopija, obnova).
+- Odstranjen `.github/workflows/sync.yml` — ostareli dvosmerni most GitHub↔GitLab iz obdobja rekonstrukcije (točno tveganje, ki ga issue naslavlja).
+
 ## Tehnologija
 
 Next.js 16 (App Router) · TypeScript · Tailwind CSS 4 + shadcn/ui · Prisma (SQLite; original: PostgreSQL/Neon) · zustand · lucide-react
