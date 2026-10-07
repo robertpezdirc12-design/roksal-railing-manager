@@ -690,3 +690,29 @@ Stage Summary:
 
 Stage Summary (dopolnitev):
 - R444 ROLE EXPERIENCES: MR !7 združen, tag v1.3.0, issue #7 obveščen — faza ZAKLJUČENA
+
+---
+Task ID: 20
+Agent: main (Z.ai Code)
+Task: Zaključek R445 (issue #7 §9, P1 DELIVERY + INSTALLATION): pregled delnega dela iz prejšnje seje, popravki RBAC vrzeli, UI dodelitev ekipe na nalogu, iskanje, smetje iz repa, testi, brskalniška verifikacija + GitLab MR
+
+Work Log:
+- IZHODIŠČE: prejšnja seja je pustila delno R445 delo v commitu 85d8111 (UUID sporočilo — past sandbox avtomatizacije): shema Vehicle/Delivery/DeliveryItem/Crew + WorkOrder.crewId, seed-r445.cjs (3 vozila, 4 ekipe, 2 dostavi, ekipa na N-2026-005), API rute deliveries/crews/vehicles, dostave.tsx (927 vrstic, 3 zavihki), nav/module-view/ui-bits/logistika/danes popravki — brez worklog zapisa, brez testov, brez verifikacije, z 22 orodnimi smetmi v repu (tool-results/, tmp-check/)
+- RBAC VRZELI (3) odkrite in zaprte: (1) crewId v PATCH /api/nalog/[id] NI zahteval managesAssignments — monter bi lahko na svojem nalogu dodeljeval ekipe/podizvajalce; (2) POST /api/vehicles in (3) POST/PATCH /api/crews sta zahtevala le projects.write, ki ga ima MONTER (terenski projekti) — mutacije vozil/ekip sedaj zahtevajo readsAllData (pisarna ADMIN/VODJA), enako vzorec kot /api/deliveries POST
+- nalogi.tsx: ekipa v seznamu (Users ikona + tip interna/podizvajalec) in podrobnosti (Ekipa v osnovnih podatkih); sekcija Dodelitev ekipe (select Obdrži/none/ekipe + gumb Dodeli) SAMO za ADMIN/VODJA (canAssignCrew) in online; revizija WO_CREW_ASSIGN na strežniku
+- /api/search: nova skupina Dostave (koda/naslov/opomba) z ENAKIM obsegom kot /api/deliveries (monter: voznik ALI nalog dodeljen njemu); zadetki navigirajo na pisarna/dostave
+- dostave.tsx: a11y popravek — veja nalaganja DeliveryDetailDialog brez DialogDescription je sprožala Radix opozorilo (3× v konzoli); dodan sr-only opis
+- pospravljeno: tool-results/ (21 datotek) + tmp-check/ odstranjeni iz sledenja (git rm --cached) + .gitignore dopolnjen
+- VERIFIKACIJA: tsc -p tsconfig.ci.json ČISTO; lint ČISTO; tests/r445.py NOV (75/75 ✓): vozila (unikatna registrska 409, prazna 400, monter/skladišče 403), ekipe (validacija tipa/ocene, filter PODIZVAJALEC, delni PATCH, monter 403), nalog+ekipa (managesAssignments 403 za monterja, admin dodeli/počisti, tuja ekipa 400), dostave (celoten tok NACRTOVANO→…→DOSTAVLJENO s časovnico, napačni prehodi 409, load brez vozila 409, cancel z razlogom v note, preklic iz DOSTAVLJENO 409), voznik-monter (load/depart/deliver dovoljeni vozniku, tuja dostava 403), dostava iz ZAKLJUČENE picking liste (vrstice s itemId + qtyPicked, brez fuzzy), obseg (monter vidi TOČNO svoje), iskanje (admin skupina, monter samo svoje), revizija (7 akcij), regresija (6 rut 200)
+- brskalniška verifikacija (agent-browser): monter — 1 dostava (voznik), BREZ gumba Nova dostava; admin — Nova dostava prek UI (projekt → nalogi projekta → naslov/opomba) → Dopolni načrt (vozilo + voznik) → Pripravi → Natovari → Na pot → Dostavljeno s prevzemnikom (DEL-2026-003); Vozila — dodajanje GO 225-KZ prek UI; Ekipe — urejanje ocene 4→5 in razpoložljivosti prek UI; Nalogi — N-2026-005 dodelitev Alu-Mont (podizvajalec) in povratak na Ekipo Novak prek UI (DB + revizija potrjena); mobilni 390 px — seznam in dialog brez vodoravnega preliva, footer prisoten; konzola ČISTA po a11y popravku; globalno iskanje DEL- → zadetki s klikom navigirajo na Dostave
+- opaženo: DEL-2026-002 je bila DOSTAVLJENA v prejšnji seji prek UI (revizijski sled: »Prevzela ravnateljica M. Kos«) — legitimno demo stanje, ne hrošč
+- dev.log: zgodnjih 8× GET / 500 iz prehodnega obdobja (zastareli Prisma klient pred ponovnim zagonom po db:push — znano); zadnjih 200 vrstic brez 5xx; /api/weather 502 = znani Open-Meteo rate limit
+- PAST SANDBOKS AVTOMATIZACIJE se je ponovila DVAKRAT (preklop r445-delivery→main MED ukazi): commit fadbdab je pristal na main → popravljeno z branch -f r445-delivery fadbdab + reset main f73b787; nato se je preklop ponovil PO checkoutu (delovno drevo začasno brez R445 datotek) → vejo potisnil BREZ checkouta (git push origin r445-delivery deluje neodvisno od trenutne veje), main usklajen šele po mergu
+- GitLab: MR !8 ustvarjen (CI zelen: pipeline success), združen v main (merge 907aef3, veja izbrisana); tag v1.4.0 na 907aef3; komentar na issue #7 (note 3973788872) s poročilom P1 DELIVERY + acceptance criteria ✓
+- lokalni main: fast-forward na 907aef3 (fadbdab je gradil na lokalnem f73b787, zato brez konfliktov); R445 datoteke nazaj na disku; aplikacija po sinhronizaciji preverjena (GET / 200, dostave API 200)
+
+Stage Summary:
+- R445 P1 DELIVERY + INSTALLATION ZAKLJUČEN: dostave s celotnim tokom in časovnico, vezave na projekt/picking/nalog/vozilo/voznika, ekipe/podizvajalci z vsemi atributi iz §9, vozila; 3 RBAC vrzeli zaprte (fail-closed dosledno), iskanje z obsegom, mutacije auditirane
+- Acceptance criteria (R445 del): dostava povezana s projektom ✓; montaža povezana z materialom (picking) in nalogom ✓; logično ločeni delovni poglede ✓; API RBAC fail-closed ✓; iskanje spoštuje scope ✓; brez fuzzy source-of-truth ✓
+- issue #7: P0 ✓ (R442) + P1 ✓ (R443 skladišče, R444 vloge, R445 dostave) — sledita P2 (konfiguratorji za teraso/ograjo/fasado/pregrado/napušč + garancije/reklamacije/servis §10) in navigacija §11 (ciljna IA), nato issue #8 (verzioniranje kataloga) in #9 (manjše nedoslednosti)
+- nova spoznanja: (1) veje PUSHATI brez checkouta kadar avtomatizacija preklaplja (git push origin <veja> je neodvisen od trenutne veje); (2) Radix DialogContent brez DialogDescription sproži opozorilo tudi v veji nalaganja — vedno dodati sr-only opis; (3) revizijski detail je JSON niz (JSON.parse pri testiranju)
