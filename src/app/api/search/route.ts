@@ -90,6 +90,21 @@ export async function GET (req: NextRequest) {
     })
   }
 
+  // R442: izdelki iz produktnega modela (katalog po družinah)
+  if (hasPerm(perms, 'catalog.read')) {
+    const products = await db.product.findMany({
+      where: { active: true, OR: [{ name: { contains: q } }, { sku: { contains: q } }] },
+      select: { id: true, sku: true, name: true, unit: true, salePrice: true, family: { select: { name: true } } }, take: 5,
+    })
+    if (products.length) groups.push({
+      kind: 'izdelek', label: 'Izdelki',
+      hits: products.map((p) => ({
+        id: p.id, label: p.name, sub: `${p.sku} · ${p.family.name} · ${p.salePrice} €/${p.unit}`,
+        section: 'pisarna', tab: 'katalog', kind: 'izdelek',
+      })),
+    })
+  }
+
   if (hasPerm(perms, 'users.read')) {
     const users = await db.user.findMany({
       where: { OR: [{ name: { contains: q } }, { email: { contains: q } }] },

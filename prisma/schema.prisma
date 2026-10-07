@@ -113,6 +113,7 @@ model Project {
   productionOrders ProductionOrder[]
   warranties       Warranty[]
   portalLinks      PortalLink[]
+  packages         ProjectPackage[] // R442: več produktnih paketov na projekt
 }
 
 model Quote {
@@ -219,7 +220,8 @@ model Measurement {
   workOrder   WorkOrder?  @relation(fields: [workOrderId], references: [id])
   authorId    String?
   author      User?       @relation(fields: [authorId], references: [id])
-  type        String      @default("OGRAJA") // OGRAJA | BALUSTRADA | NAGIB | OSTANEO
+  type        String      @default("OGRAJA") // legacy tip (OGRAJA | BALUSTRADA | NAGIB | OSTANEO)
+  familyCode  String? // R442: produktna družina (TERASA | OGRAJA_PRECNA | FASADA | …) — generalizacija meritev
   location    String?
   lengthCm    Float?
   heightCm    Float?
@@ -235,6 +237,7 @@ model Measurement {
   createdAt   DateTime    @default(now())
 
   versions    MeasurementVersion[]
+  packages    ProjectPackage[] @relation("packageMeasurements") // R442: paketi, vezani na to izmero
 }
 
 // Zgodovina verzij meritev — posnetek stanja ob vsaki spremembi (issue #1: zgodovina verzij)
@@ -277,6 +280,10 @@ model InventoryItem {
 
   lots   StockLot[]
   prices MaterialPrice[]
+  // R442: produktni model — EKSPlicitne ID povezave (vir resnice za BOM)
+  bomTemplates ProductComponent[] @relation("inBomTemplates")
+  bomLines     BomLine[]          @relation("inBomLines")
+  priceRules   PriceRule[]        @relation("itemPriceRules")
 }
 
 model StockLot {
@@ -579,4 +586,205 @@ model Survey {
   message   String?
   handled   Boolean  @default(false) // obdelano v pisarni
   createdAt DateTime @default(now())
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PRODUKTNI MODEL (R442 — issue #7 §1–§6, P0 DATA CORE)
+// Vir resnice za izdelke, variante, komponente, BOM, cene in pakete projektov.
+// Profile (zgoraj) ostaja kot LEGACY za stari railing konfigurator (viz/kalkulator)
+// — nova poslovna logika MORA uporabljati ta model z EKSPPLICITNIMI ID povezavami.
+// PostgreSQL-kompatibilno: samo skalarni tipi + JSON kot String (issue #7 §14).
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ─── Produktna družina (issue #7 §1) ────────────────────────────────────────
+
+model ProductFamily {
+  id        String   @id @default(cuid())
+  code      String   @unique // TERASA | OGRAJA_PRECNA | OGRAJA_POKOCNA | FASADA | PREGRADA | NAPUSC | STROP | STOPNICE | VRTNA_RESITEV | KOMPONENTA
+  name      String
+  desc      String?
+  unit      String   @default("m2") // glavna enota družine: m2 | m | kos
+  sortOrder Int      @default(0)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  products Product[]
+}
+
+// ─── Produkt (prodajni izdelek; issue #7 §1: SKU, enota, dimenzije, cene …) ─
+
+model Product {
+  id             String        @id @default(cuid())
+  familyId       String
+  family         ProductFamily @relation(fields: [familyId], references: [id])
+  sku            String        @unique
+  name           String
+  desc           String?
+  unit           String        @default("m2") // prodajna enota: m2 | m | kos
+  // dimenzije (mm)
+  widthMm        Int?
+  heightMm       Int?
+  depthMm        Int?
+  // tehnične lastnosti (JSON): material, ral, obremenitev, toplotna prevodnost …
+  tech           String?
+  // osnovni ceni (nabavna/prodajna na enoto); veljavne cene razrešuje PriceList
+  costPrice      Float         @default(0)
+  salePrice      Float         @default(0)
+  warrantyMonths Int           @default(24)
+  active         Boolean       @default(true)
+  validFrom      DateTime      @default(now())
+  validTo        DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  variants      ProductVariant[]
+  components    ProductComponent[] @relation("bomTemplate")
+  boms          Bom[]
+  packages      ProjectPackage[]
+  priceRules    PriceRule[]      @relation("productPriceRules")
+}
+
+// ─── Varianta produkta (barva/RAL, dimenzija; issue #7 §1) ──────────────────
+
+model ProductVariant {
+  id        String   @id @default(cuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  sku       String   @unique
+  name      String // npr. "WPC terasa — Grafit"
+  color     String? // človeško berljivo ime barve
+  ral       String? // npr. "RAL 7016"
+  widthMm   Int?
+  heightMm  Int?
+  // override ceni (null = podeduje produkt)
+  costPrice Float?
+  salePrice Float?
+  tech      String? // JSON dopolnilne tehnične lastnosti
+  active    Boolean  @default(true)
+  sortOrder Int      @default(0)
+
+  packages ProjectPackage[]
+  boms     Bom[]
+}
+
+// ─── Komponenta produkta (BOM PREDLOGA; issue #7 §2) ────────────────────────
+// EKSPlicitna ID povezava productId → itemId (InventoryItem).
+// qty = količina artikla na ENOTO osnove (unitBasis) produkta.
+// Primer: TERASA → WPC deska 1.05 m² na m² (vključen odpad).
+
+model ProductComponent {
+  id        String        @id @default(cuid())
+  productId String
+  product   Product       @relation("bomTemplate", fields: [productId], references: [id], onDelete: Cascade)
+  itemId    String
+  item      InventoryItem @relation("inBomTemplates", fields: [itemId], references: [id])
+  qty       Float // količina na enoto osnove
+  unitBasis String        @default("m2") // m2 | m | kos — osnova produkta
+  optional  Boolean       @default(false)
+  note      String?
+  sortOrder Int           @default(0)
+}
+
+// ─── Kosovnica (generirana BOM; issue #7 §2 + §5) ───────────────────────────
+// Nastane iz predloge (ProductComponent) × količina paketa.
+// Vrstice kazajo EKSPlicitno na InventoryItem — nikoli na imena.
+
+model Bom {
+  id        String           @id @default(cuid())
+  code      String           @unique // npr. BOM-2026-001
+  packageId String?           @unique // povezava na projektni paket (izmera/ponudba; 1:1)
+  package   ProjectPackage?  @relation(fields: [packageId], references: [id], onDelete: SetNull)
+  productId String
+  product   Product          @relation(fields: [productId], references: [id])
+  variantId String?
+  variant   ProductVariant?  @relation(fields: [variantId], references: [id])
+  qty       Float // količina (v enoti produkta)
+  unit      String // m2 | m | kos
+  status    String           @default("OSNUTEK") // OSNUTEK | POTRJEN | REZERVIRAN | PORABLJEN | PREKLICAN
+  note      String?
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  lines BomLine[]
+}
+
+model BomLine {
+  id        String        @id @default(cuid())
+  bomId     String
+  bom       Bom           @relation(fields: [bomId], references: [id], onDelete: Cascade)
+  itemId    String // EKSPlicitna povezava na artikel
+  item      InventoryItem @relation("inBomLines", fields: [itemId], references: [id])
+  qty       Float
+  unit      String
+  note      String?
+  sortOrder Int           @default(0)
+}
+
+// ─── Ceniki (issue #7 §6: poslovne cene NISO hardcoded) ─────────────────────
+
+model PriceList {
+  id        String   @id @default(cuid())
+  name      String // npr. "Prodajni cenik 2026"
+  type      String   @default("PRODAJNA") // NABAVNA | PRODAJNA | MONTAZA
+  currency  String   @default("EUR")
+  validFrom DateTime @default(now())
+  validTo   DateTime?
+  active    Boolean  @default(true)
+  note      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  rules PriceRule[]
+}
+
+model PriceRule {
+  id          String        @id @default(cuid())
+  priceListId String
+  priceList   PriceList     @relation(fields: [priceListId], references: [id], onDelete: Cascade)
+  // cilj pravila: produkt (prodajna cena) ali artikel (nabavna/montažna)
+  productId   String?
+  product     Product?      @relation("productPriceRules", fields: [productId], references: [id], onDelete: Cascade)
+  itemId      String?
+  item        InventoryItem? @relation("itemPriceRules", fields: [itemId], references: [id], onDelete: Cascade)
+  price       Float
+  unit        String        @default("m2")
+  discountPct Float         @default(0)
+  minPrice    Float? // najnižja dovoljena cena
+  seasonFrom  String? // MM-DD (sezonska cena)
+  seasonTo    String? // MM-DD
+  note        String?
+  active      Boolean       @default(true)
+  validFrom   DateTime      @default(now())
+  validTo     DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([priceListId, active])
+}
+
+// ─── Projektni paket (issue #7 §3: projekt = več rešitev) ───────────────────
+// Primer: P-2026-014 → TERASA 36,4 m² + OGRAJA 18,6 m + NAPUŠČ 24 m².
+
+model ProjectPackage {
+  id            String          @id @default(cuid())
+  code          String          @unique // npr. PAK-P-2026-014-1
+  projectId     String
+  project       Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  productId     String
+  product       Product         @relation(fields: [productId], references: [id])
+  variantId     String?
+  variant       ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  measurementId String? // povezava na izmero (generalizirana)
+  measurement   Measurement?    @relation("packageMeasurements", fields: [measurementId], references: [id], onDelete: SetNull)
+  name          String // prikazno ime, npr. "Terasa — WPC Grafit"
+  qty           Float           @default(0) // količina v enoti produkta
+  unit          String          @default("m2")
+  status        String          @default("POVPRAŠEVANJE") // POVPRAŠEVANJE | IZMERA | KONFIGURACIJA | PONUDBA | POTRJENO | REZERVIRANO | V_IZDELAVI | DOSTAVLJENO | MONTIRANO | PREDANO
+  calcJson      String? // JSON kalkulacija (cena, marža, material)
+  note          String?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  bom Bom?
 }
