@@ -5,7 +5,8 @@ import { hasPerm } from '@/lib/permissions-core'
 
 // /api/search — globalno iskanje po entitetah (route-map: GET/POST /api/search)
 // Obseg rezultatov strogo po pravicah prijavljenega uporabnika (fail-closed).
-// Vrača skupine: projekti, stranke, ponudbe, računi, nalogi, dostave, zaloga, izdelki, uporabniki — z navigacijskimi podatki.
+// Vrača skupine: projekti, stranke, ponudbe, računi, nalogi, dostave,
+// reklamacije/servis (R446 — samo pisarna), zaloga, izdelki, uporabniki — z navigacijskimi podatki.
 
 type Hit = {
   id: string
@@ -99,6 +100,35 @@ export async function GET (req: NextRequest) {
         section: 'pisarna', tab: 'dostave', kind: 'dostava',
       })),
     })
+  }
+
+  // R446 (issue #7 §10): reklamacije in servisni primeri — SAMO za readsAllData
+  // (pisarna); monter in ostali z omejenim branjem ne vidijo opisov težav strank
+  // (fail-closed). Zadetki navigirajo na zavihek servis.
+  if (readsAllData(auth.user)) {
+    const claims = await db.claim.findMany({
+      where: { OR: [{ code: { contains: q } }, { title: { contains: q } }] },
+      select: { id: true, code: true, title: true, status: true, customer: { select: { name: true } } },
+      take: 5,
+    })
+    const cases = await db.serviceCase.findMany({
+      where: { OR: [{ code: { contains: q } }, { title: { contains: q } }] },
+      select: { id: true, code: true, title: true, status: true, project: { select: { code: true } } },
+      take: 5,
+    })
+    const hits: Hit[] = [
+      ...claims.map((c) => ({
+        id: c.id, label: `${c.code} — ${c.title}`,
+        sub: `reklamacija · ${c.customer.name} · ${c.status}`,
+        section: 'pisarna', tab: 'servis', kind: 'reklamacija',
+      })),
+      ...cases.map((c) => ({
+        id: c.id, label: `${c.code} — ${c.title}`,
+        sub: `servis · ${c.project.code} · ${c.status}`,
+        section: 'pisarna', tab: 'servis', kind: 'servis',
+      })),
+    ]
+    if (hits.length) groups.push({ kind: 'servis', label: 'Reklamacije / Servis', hits })
   }
 
   if (hasPerm(perms, 'inventory.read')) {
