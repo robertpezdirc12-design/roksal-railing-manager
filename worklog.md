@@ -567,3 +567,5 @@ Stage Summary:
 - Odkrita in rešena okoljska ovira: Cloudflare verjetnostno blokira IP peskovnice glede na velikost zahteve → kosi 128 KiB + do 6 poskusov (velja za backup upload in vse GitLab API klice — api_get uporen)
 - 4 nove ops skripte + export-db.py + health ruta + backup job + UI kartica + 3 dokumenti + testna suita 57/57
 - Naslednja faza: issue #7 (ROKSAL Manager — preoblikovanje v celovit poslovni sistem), nato #8 (verzioniranje kataloga) in #9 (nedoslednosti iz E2E)
+- Dopolnitev (po zapisu zgoraj): hišni red off-site verzij v ops/backup.sh dobi || true (ob ohlapnem API odgovoru se uspešno naložena kopija vseeno šteje za uspešno — odkrito pri končni kopiji, kjer je pipeline brisanja ubil skripto po uspešnem nalaganju) → MR !3 (23e1214); končna kopija f771042e naložena čisto (14 kosov, 39 tabel, 1879 vrstic); issue #3 ZAPRT s komentarjem rezultatov (geslo namenso IZVEN issue-ja — prva različica komentarja z geslom je bila takoj izbrisana)
+- Končno stanje: 3 MR skozi zaščiteni main (!1 CI+skripte 87a3b6c, !2 zaključek f771042, !3 housekeeping 23e1214), vsi z zelenim CI; 6 off-site verzij na GitLabu; secret-audit ČIST; lint/tsc/dev.log ČISTI
