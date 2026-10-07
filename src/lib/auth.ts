@@ -72,3 +72,31 @@ export async function requirePermission (req: NextRequest, perm: Permission): Pr
   }
   return { user, perms: user.perms }
 }
+
+// ─── Obseg podatkov (issue #1: monter vidi SAMO svoje projekte/naloge) ──────
+
+/** Vidi vse projekte/naloge: ADMIN, VODJA, SKLADISCE, PROIZVODNJA (ne MONTER). */
+export function readsAllData (user: { role: string }): boolean {
+  return ['ADMIN', 'VODJA', 'SKLADISCE', 'PROIZVODNJA'].includes(user.role)
+}
+
+/** Upravlja dodelitve (assignee): samo ADMIN in VODJA. */
+export function managesAssignments (user: { role: string }): boolean {
+  return user.role === 'ADMIN' || user.role === 'VODJA'
+}
+
+/** Preveri, da nalog pripada prijavljenemu monterju (sicer 403). */
+export async function requireOwnWorkOrder (
+  user: SessionUser,
+  workOrderId: string
+): Promise<{ id: string; projectId: string | null } | NextResponse> {
+  const wo = await db.workOrder.findUnique({
+    where: { id: workOrderId },
+    select: { id: true, projectId: true, assigneeId: true },
+  })
+  if (!wo) return jsonError(404, 'Nalog ne obstaja.')
+  if (wo.assigneeId !== user.id) {
+    return jsonError(403, 'Nalog ni dodeljen vam.', 'Monter vidi samo svoje naloge; dodelitve upravlja pisarna.')
+  }
+  return { id: wo.id, projectId: wo.projectId }
+}

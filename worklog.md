@@ -342,3 +342,34 @@ Stage Summary:
 - R435 zaključen: zadnje dokumentirane zmožnosti route-mapa izvirnika rekonstruirane znotraj omejitve ene rutne aplikacije (portal stranke, cron vzdrževanje, setup, aktivacija)
 - Route-map pokritost: 29/29 zavihkov IA + R433 (iskanje/seje/geslo/timeline/termin/version) + R434 (eSLOG/zgodovina/vreme/QC/garancija) + R435 (portal/jobs/setup/aktivacija) — infrastruktura izven peskovnice (Vercel Blob proxy) ostaja izven obsega
 - Demo ključ za aktivacijo dokumentiran v README-REKONSTRUKCIJA.md: RS-YZKZ2-MNUPY-Y0D84
+
+---
+Task ID: 10 (B+C+D)
+Agent: main (Z.ai Code) + 2× full-stack-developer (delno, prekinjena ob deadline — delo dokončal main)
+Task: R436 — GitLab issue #1: napredne meritve s kamero + celoten monter workflow + pravice admin/monter + 3D konfigurator
+
+Work Log:
+- GitLab API: prebran odprt issue #1 (4 področja + acceptance criteria); analiza obstoječe kode (meritve/nalog/projekti/viz) proti issuejevem seznamu API-jev
+- Prisma: novi modeli MeasurementVersion (zgodovina verzij, posnetek JSON + user + note), WorkOrder.instructions (navodila pisarne za monterja), Measurement.source (ROCNO|KAMERA) — db:push aditivno
+- Novi API: POST /api/measure/photo (nalaganje fotografije → FOTO meritev, max 8 MB), POST /api/measurement/detect (VLM glm-4.6v zaznava točk/referenčnih objektov v normaliziranih koordinatah, timeout 60 s, defenzivno razčlenjevanje JSON), POST /api/measurement/confirm (potrditev izmerjenega → shranitev v projekt/nalog + verzija v1 + revizija MEASUREMENT_CONFIRM; več meritev na isti fotografiji), GET /api/measurement/products (profili po tipu), GET /api/measurements/[id]/verzije, GET/POST /api/railing-layout (geometrija: segmenti/koti/višinske razlike/vogali/stebri ≤120 cm; GET iz shranjenih točk s pretvorbo norm→px)
+- PATCH /api/measurements/[id]: samodejni posnetek verzije PRED spremembo (v1→v2→…)
+- RBAC obseg (issue #1 točka 3): /api/nalog GET (monter vedno samo svoji, fail-closed neodvisno od scope), /api/nalog/[id] GET (403 tuji), transition + termin (403 tuji), /api/measurements + [id] GET/PATCH (lastne + nalogovi), /api/projects + [id] GET/PATCH (samo projekti svojih nalogov); helperja readsAllData/managesAssignments v lib/auth.ts
+- Dodelitve: POST /api/nalog assigneeId samo ADMIN/VODJA (monter 403), dogodek DODELJEN z navodili + revizija WO_CREATE; POST /api/crm/[id]/pretvorba (vod → stranka + projekt, status PRETVORJEN, 409 ob ponovitvi, revizija LEAD_CONVERT)
+- UI meritve-kamera.tsx (main, 665 vrst): KameraMeritevDialog — 3 faze (fotografija: getUserMedia environment + file fallback + izbira obstoječih FOTO; točke: klik dodaja/briše, polyline, kalibracija 2 točke + realna razdalja ali VLM refObject, izračun v živo, stopniški način, preverjanje na strežniku; potrditev: povzetek + tip/višina/opomba + shrani ali nadaljuj na isti fotografiji)
+- meritve.tsx: gumb Meritve s kamero, KAMERA badge v seznamu, zgodovina verzij v urejevalnem obrazcu (subagent B delno — dokončano)
+- viz-3d.tsx (subagent C, 631 vrst): lastna perspektivna projekcija (yaw/pitch rotacija + f/(f−z), BREZ three.js), Railing3D (stebri-palizade/steklo/nagib, RAL barve, lighten, samodejno vrtenje z raf cleanup), izvozi RAL/parseKonfigurator/izracunajCeno (profil €/m + stebri 45 + ročnik 15 + steklo 85 €/m² + priprava 15 % + montaža 35 €/m)
+- viz.tsx: 3D konfigurator (tip/geometrija/materiali/barve + 2D tehnična risba ohranjena), izračun cene z razčlenitvijo, Ustvari ponudbo iz konfiguracije → POST /api/quotes (samo quotes.create), shranjevanje params.konfigurator
+- projekti.tsx: razdelek 3D predogled v detail dialogu (zadnja meritev s konfiguratorjem, Railing3D kompakt)
+- nalogi.tsx: navodila (Textarea v novem nalogu + prikaz v podrobnosti), Vodnik terena (6 korakov: projekt/dodelitev/zajem foto/meritve/zaključek z stanjem)
+- crm.tsx: gumb V projekt (prompt naslova → pretvorba)
+- Popravki med testiranjem: handrail ReferenceError v confirm, model:'glm-4.6v' za createVision (SDK tip), readsAllData/minimalni tipi, transition user referenca, meritve-kamera Dialog ovijalec + onSaved tip, points norm→px pretvorba v layout GET (imgW/imgH v kalibraciji)
+- Testi (curl): products 200, photo 201, detect z REALNO generirano fotografijo stopnišča (VLM: 12 točk, 2 referenčna objekta, prizor pravilno opisan), confirm 201 (source KAMERA), verzije v1+v2 po PATCH, layout POST (geometrija: 147,6 cm, koti 84,6°) + GET, RBAC: tuji nalog/projekt 403 (detail/transition/termin/PATCH), monter scope=all 6/7 nalogov, projekti 5/8, meritve 6/10, dodelitev monter 403, pretvorba 201 + 409 ob ponovitvi, nov nalog z navodili + DODELJEN dogodek
+- Brskalnik (agent-browser, admin): meritve s kamero celoten tok (izbira fotografije → 8 točk → kalibracija 1 px = 0,7 cm → tabela segmentov/kotov/Δv → preveri na strežniku (12,2 m · 15 stebrov) → potrditev → nova meritev KAMERA na vrhu seznama + zgodovina verzij v1), viz: 3D SVG + sliderja (yaw sprememba potrjena) + izračun 858,75 € + Ustvari ponudbo (PON-2026-009, 1047,68 € z DDV, 5 pozicij), projekti: 3D predogled (ALU-NAG-45, 6 m × 95 cm, nagib 35°), nalogi: navodila + vodnik terena + dogodek Dodelitev z navodili, CRM: V projekt (P-2026-010, stranka Mojca Kos, vod PRETVORJEN)
+- Mobile 390px: meritve + kamera dialog + vizualizacija (3D SVG se izriše) brez horizontalnega preliva (390/390), noga naravno porinjena pod vsebino
+- bun run lint: ČIST; konzola brskalnika: ČISTA; dev.log: brez novih napak
+- Čiščenje testnih artefaktov (testni projekti/meritve/ponudbe), preimenovanje demo vrednosti (N-2026-008 → Zajem meritev — stopnišče, vhod)
+
+Stage Summary:
+- GitLab issue #1 v celoti implementiran: (1) napredne meritve s kamero (večtočkovne, koti, višine, stopnice, VLM zaznava, kalibracija/preverjanje, verzije, več meritev na fotografiji, ročni fallback ohranjen), (2) celoten workflow vod → projekt → nalog z navodili → dodelitev → teren (foto/meritve/statusi) → zaključek → zgodovina (kdo/kdaj/kaj), (3) pravice: monter fail-closed obseg na nalogih/meritvah/projektih, dodelitve samo ADMIN/VODJA, vse občutljive spremembe v reviziji, (4) 3D konfigurator (tip/geometrija iz meritev/materiali/barve/izračun/ponudba/predogled na projektu)
+- 8 novih API poti + 3 modelske razširitve + 6 UI modulov posodobljenih
+- Issue #1 zaprt z komentarjem o rezultatih na GitLabu

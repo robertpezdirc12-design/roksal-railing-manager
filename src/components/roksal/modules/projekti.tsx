@@ -3,9 +3,10 @@
 // PROJEKTI — seznam + podrobnost (vrata projects.read)
 // R434: garancija projekta — sklop v podrobnosti (/api/warranty, obiski).
 // R435: portal stranke — povezave + predogled javnega pogleda (/api/portal, /api/public/portal).
+// R436: 3D predogled — zadnja shranjena konfiguracija iz zavihka Vizualizacija.
 
 import { useMemo, useState } from 'react'
-import { CalendarCheck, Copy, ExternalLink, Eye, FolderKanban, HardHat, History, Link2, MapPin, Plus, Ruler, Search, FileText, Banknote, ShieldCheck } from 'lucide-react'
+import { Box, CalendarCheck, Copy, ExternalLink, Eye, FolderKanban, HardHat, History, Link2, MapPin, Plus, Ruler, Search, FileText, Banknote, ShieldCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
@@ -19,6 +20,7 @@ import { cn } from '@/lib/utils'
 import { apiDelete, apiPost, fmtDate, fmtDateTime, fmtEUR, useApi } from '@/lib/api-client'
 import { EmptyState, ErrorBox, LoadingRows, PageHeader, StatusBadge } from '@/components/roksal/ui-bits'
 import { hasPerm } from '@/lib/permissions-core'
+import { Railing3D, TIP_LABELS, parseKonfigurator, ralHex, ralLabel } from './viz-3d'
 
 interface ProjectRow {
   id: string; code: string; title: string; status: string; address: string | null; createdAt: string
@@ -31,7 +33,11 @@ interface ProjectDetail extends ProjectRow {
   customer: { name: string; city: string | null; email: string | null; phone: string | null } | null
   quotes: { id: string; code: string; status: string; total: number }[]
   workOrders: { id: string; code: string; title: string; status: string; scheduledFor: string | null; assignee: { name: string } | null }[]
-  measurements: { id: string; type: string; location: string | null; lengthCm: number | null; createdAt: string }[]
+  measurements: {
+    id: string; type: string; location: string | null; lengthCm: number | null
+    heightCm: number | null; posts: number | null; handrail: boolean | null
+    slopeDeg: number | null; params: string | null; createdAt: string
+  }[]
   invoices: { id: string; code: string; status: string; total: number; paid: number }[]
 }
 
@@ -232,6 +238,8 @@ function ProjectDetailDialog ({ detail }: { detail: ProjectDetail }) {
             </ul>
           )}
         </section>
+
+        <KonfigPreviewSection measurements={detail.measurements} />
 
         <WarrantySection projectId={detail.id} projectStatus={detail.status} />
         <PortalSection projectId={detail.id} projectCode={detail.code} />
@@ -570,6 +578,62 @@ function PortalPreviewDialog ({ token, code }: { token: string | null; code: str
         </div>
       ) : null}
     </DialogContent>
+  )
+}
+
+/** 3D predogled (R436) — zadnja shranjena konfiguracija (params.konfigurator). */
+function KonfigPreviewSection ({ measurements }: { measurements: ProjectDetail['measurements'] }) {
+  // meritve so urejene desc — prva z konfiguratorjem je ZADNJA shranjena
+  // (brez useMemo: parseKonfigurator je poceni, React Compiler pa zanke z
+  // zgodnjim returnom ne zna ohraniti kot ročno memoizacijo)
+  const found = (() => {
+    for (const m of measurements) {
+      const k = parseKonfigurator(m.params)
+      if (k) return { m, k }
+    }
+    return null
+  })()
+
+  return (
+    <section aria-label="3D predogled konfiguracije">
+      <h3 className="mb-1.5 flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest text-muted-foreground">
+        <Box className="size-3.5 text-roksal-amber" aria-hidden /> 3D predogled
+      </h3>
+      {!found ? (
+        <EmptyState
+          title="Ni shranjene konfiguracije"
+          desc="Za ta projekt še ni shranjene konfiguracije — ustvarite jo v zavihku Vizualizacija."
+          icon={Box}
+        />
+      ) : (
+        <div className="space-y-2 rounded-xl border p-3">
+          <Railing3D
+            compact
+            lengthCm={found.k.lengthCm}
+            heightCm={found.k.heightCm}
+            posts={found.k.posts}
+            handrail={found.k.handrail}
+            slopeDeg={found.k.slopeDeg}
+            colorHex={ralHex(found.k.colorId)}
+            tip={found.k.tip}
+            sku={found.k.sku}
+          />
+          <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+            <span className="font-medium text-foreground">{TIP_LABELS[found.k.tip]}</span>
+            {found.k.sku ? <span className="font-mono">{found.k.sku}</span> : null}
+            <span>{ralLabel(found.k.colorId)}</span>
+            <span>
+              {(found.k.lengthCm / 100).toFixed(2).replace('.', ',')} m × {Math.round(found.k.heightCm)} cm
+            </span>
+            <span>{found.k.posts} stebrov</span>
+            {found.k.slopeDeg > 0 ? (
+              <span>nagib {found.k.slopeDeg.toFixed(1).replace('.', ',')}°</span>
+            ) : null}
+            <span className="ml-auto">{fmtDate(found.m.createdAt)}</span>
+          </p>
+        </div>
+      )}
+    </section>
   )
 }
 

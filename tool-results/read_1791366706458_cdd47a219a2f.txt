@@ -1,0 +1,633 @@
+     1→'use client'
+     2→
+     3→// VIZ — parametrična SVG vizualizacija ograje (vrata projects.read v nav-registry)
+     4→// Tloris + stranski pogled v ENEM SVG (črno-bela tehnična podoba na belem platnu,
+     5→// da izvoz SVG deluje samostojno). Merilo 1:1 znotraj risbe, mreža 50 cm.
+     6→// Shranjevanje kot meritev (measurements.write), izvoz SVG kot datoteka.
+     7→
+     8→import { useId, useMemo, useRef, useState, type ReactNode, type Ref } from 'react'
+     9→import { Box, Download, Loader2, Ruler, Save, Sigma } from 'lucide-react'
+    10→import { Button } from '@/components/ui/button'
+    11→import { Card, CardContent } from '@/components/ui/card'
+    12→import { Input } from '@/components/ui/input'
+    13→import { Label } from '@/components/ui/label'
+    14→import { Switch } from '@/components/ui/switch'
+    15→import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+    16→import { useToast } from '@/hooks/use-toast'
+    17→import { useAppStore } from '@/lib/store'
+    18→import { apiPost, useApi } from '@/lib/api-client'
+    19→import { EmptyState, ErrorBox, PageHeader } from '@/components/roksal/ui-bits'
+    20→import { hasPerm } from '@/lib/permissions-core'
+    21→
+    22→// ─── konstante ───────────────────────────────────────────────────────────────
+    23→
+    24→const RAL_COLORS = [
+    25→  { id: 'antracit', label: 'Antracit RAL 7016', hex: '#2b2f36' },
+    26→  { id: 'bela', label: 'Bela RAL 9016', hex: '#f5f5f4' },
+    27→  { id: 'inox', label: 'Inox (srebrna)', hex: '#c0c5ce' },
+    28→  { id: 'bronasta', label: 'Bronasta', hex: '#8a6d3b' },
+    29→] as const
+    30→type ColorId = (typeof RAL_COLORS)[number]['id']
+    31→
+    32→const GLASS_FILL = 'rgba(148, 163, 184, 0.28)'
+    33→const GLASS_STROKE = 'rgba(100, 116, 139, 0.55)'
+    34→const INK = '#334155'      // črte / besedilo
+    35→const INK_SOFT = '#94a3b8' // mreža
+    36→const PAPER = '#ffffff'
+    37→
+    38→interface ProfileRow { id: string; sku: string; name: string; material: string; type: string; pricePerM: number }
+    39→interface ProjectRow { id: string; code: string; title: string }
+    40→interface MeasurementRow {
+    41→  id: string; type: string; location: string | null; note: string | null
+    42→  lengthCm: number | null; heightCm: number | null; posts: number | null
+    43→  segments: number | null; handrail: boolean | null; slopeDeg: number | null
+    44→  projectId: string | null; createdAt: string
+    45→}
+    46→
+    47→const toNum = (v: string, fallback: number, min: number, max: number): number => {
+    48→  const n = Number(v.replace(',', '.'))
+    49→  if (!Number.isFinite(n)) return fallback
+    50→  return Math.min(max, Math.max(min, n))
+    51→}
+    52→
+    53→const fmtM = (cm: number) => {
+    54→  const m = cm / 100
+    55→  return m.toFixed(m % 1 === 0 ? 0 : 2).replace('.', ',')
+    56→}
+    57→
+    58→export default function VizModule () {
+    59→  const user = useAppStore((s) => s.user)
+    60→  const { toast } = useToast()
+    61→  const svgRef = useRef<SVGSVGElement>(null)
+    62→  const titleId = useId()
+    63→
+    64→  const canWrite = hasPerm(user?.perms, 'measurements.write')
+    65→  const canReadMeasurements = hasPerm(user?.perms, 'measurements.read')
+    66→
+    67→  // parametri
+    68→  const [profileId, setProfileId] = useState('none')
+    69→  const [lengthM, setLengthM] = useState('4')
+    70→  const [heightCmS, setHeightCmS] = useState('110')
+    71→  const [postsS, setPostsS] = useState('5')
+    72→  const [segmentsS, setSegmentsS] = useState('4')
+    73→  const [handrail, setHandrail] = useState(true)
+    74→  const [colorId, setColorId] = useState<ColorId>('antracit')
+    75→  const [slopeS, setSlopeS] = useState('0')
+    76→  const [projectId, setProjectId] = useState('none')
+    77→  const [location, setLocation] = useState('')
+    78→  const [fromMeasurement, setFromMeasurement] = useState('none')
+    79→  const [busy, setBusy] = useState(false)
+    80→
+    81→  const catalog = useApi<{ data: ProfileRow[] }>('/api/catalog', [])
+    82→  const projects = useApi<{ data: ProjectRow[] }>('/api/projects', [])
+    83→  const measurements = useApi<{ data: MeasurementRow[] }>(
+    84→    canReadMeasurements ? '/api/measurements' : null,
+    85→    [canReadMeasurements]
+    86→  )
+    87→
+    88→  const profiles = catalog.data?.data ?? []
+    89→  const profile = profiles.find((p) => p.id === profileId) ?? null
+    90→  const color = RAL_COLORS.find((c) => c.id === colorId) ?? RAL_COLORS[0]
+    91→
+    92→  const lengthCm = toNum(lengthM, 4, 0.2, 60) * 100
+    93→  const heightCm = toNum(heightCmS, 110, 20, 400)
+    94→  const posts = Math.round(toNum(postsS, 5, 1, 40))
+    95→  const segments = Math.round(toNum(segmentsS, Math.max(1, posts - 1), 1, 40))
+    96→  const slope = toNum(slopeS, 0, 0, 60)
+    97→
+    98→  const isGlass = profile?.type === 'BALUSTRADA'
+    99→
+   100→  function onPostsChange (v: string): void {
+   101→    setPostsS(v)
+   102→    const n = Math.round(toNum(v, 5, 1, 40))
+   103→    setSegmentsS(String(Math.max(1, n - 1)))
+   104→  }
+   105→
+   106→  function loadFromMeasurement (mid: string): void {
+   107→    setFromMeasurement(mid)
+   108→    const m = (measurements.data?.data ?? []).find((r) => r.id === mid)
+   109→    if (!m) return
+   110→    if (m.lengthCm != null) setLengthM(String(Math.round(m.lengthCm) / 100))
+   111→    if (m.heightCm != null) setHeightCmS(String(Math.round(m.heightCm)))
+   112→    if (m.posts != null && m.posts >= 1) setPostsS(String(m.posts))
+   113→    setSegmentsS(String(m.segments ?? Math.max(1, (m.posts ?? 5) - 1)))
+   114→    setHandrail(m.handrail ?? true)
+   115→    setSlopeS(m.slopeDeg != null ? String(Math.round(m.slopeDeg * 10) / 10) : '0')
+   116→    if (m.projectId) setProjectId(m.projectId)
+   117→    toast({
+   118→      title: 'Meritev naložena.',
+   119→      description: `${m.location ?? 'Brez lokacije'} · ${(m.lengthCm ?? 0) / 100} m · ${m.heightCm ?? '—'} cm`,
+   120→    })
+   121→  }
+   122→
+   123→  async function save (): Promise<void> {
+   124→    setBusy(true)
+   125→    try {
+   126→      await apiPost('/api/measurements', {
+   127→        type: isGlass ? 'BALUSTRADA' : 'OGRAJA',
+   128→        lengthCm: Math.round(lengthCm * 10) / 10,
+   129→        heightCm: Math.round(heightCm),
+   130→        posts,
+   131→        segments,
+   132→        handrail,
+   133→        slopeDeg: slope > 0 ? Math.round(slope * 100) / 100 : null,
+   134→        projectId: projectId !== 'none' ? projectId : null,
+   135→        location: location.trim() || null,
+   136→        params: JSON.stringify({ viz: { profileId: profile?.id ?? null, sku: profile?.sku ?? null, color: colorId } }),
+   137→        note: `Vizualizacija: ${profile ? `${profile.sku} · ` : ''}${color.label}`,
+   138→      })
+   139→      toast({
+   140→        title: 'Vizualizacija shranjena kot meritev.',
+   141→        description: `${isGlass ? 'Balustrada' : 'Ograja'} ${fmtM(lengthCm)} m × ${Math.round(heightCm)} cm · ${posts} stebrov`,
+   142→      })
+   143→    } catch (e) {
+   144→      toast({ title: 'Napaka pri shranjevanju meritve', description: e instanceof Error ? e.message : undefined, variant: 'destructive' })
+   145→    } finally {
+   146→      setBusy(false)
+   147→    }
+   148→  }
+   149→
+   150→  function downloadSvg (): void {
+   151→    const svg = svgRef.current
+   152→    if (!svg) return
+   153→    try {
+   154→      const xml = new XMLSerializer().serializeToString(svg)
+   155→      const blob = new Blob([xml], { type: 'image/svg+xml;charset=utf-8' })
+   156→      const url = URL.createObjectURL(blob)
+   157→      const a = document.createElement('a')
+   158→      a.href = url
+   159→      a.download = `vizualizacija-${profile?.sku?.toLowerCase() ?? 'ograja'}.svg`
+   160→      document.body.appendChild(a)
+   161→      a.click()
+   162→      a.remove()
+   163→      URL.revokeObjectURL(url)
+   164→      toast({ title: 'SVG prenešen.', description: 'Tehnična risba (tloris + stranski pogled).' })
+   165→    } catch (e) {
+   166→      toast({ title: 'Izvoz SVG ni uspel.', description: e instanceof Error ? e.message : undefined, variant: 'destructive' })
+   167→    }
+   168→  }
+   169→
+   170→  const measurableRows = (measurements.data?.data ?? []).filter((m) => m.lengthCm != null)
+   171→
+   172→  return (
+   173→    <div className="space-y-4">
+   174→      <PageHeader
+   175→        title="Vizualizacija"
+   176→        desc="Parametrična risba ograje — tloris in stranski pogled v realnem merilu"
+   177→        actions={
+   178→          <Button variant="outline" onClick={downloadSvg}>
+   179→            <Download className="size-4" aria-hidden /> Prenesi SVG
+   180→          </Button>
+   181→        }
+   182→      />
+   183→
+   184→      <div className="grid gap-4 xl:grid-cols-[minmax(0,380px)_minmax(0,1fr)]">
+   185→        {/* parametri */}
+   186→        <Card>
+   187→          <CardContent className="space-y-4 p-4 sm:p-6">
+   188→            <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-widest text-muted-foreground">
+   189→              <Ruler className="size-4 text-roksal-amber" aria-hidden /> Parametri
+   190→            </h2>
+   191→
+   192→            <div className="space-y-2">
+   193→              <Label htmlFor="viz-profile">Profil</Label>
+   194→              <Select value={profileId} onValueChange={setProfileId}>
+   195→                <SelectTrigger id="viz-profile" aria-label="Profil ograje">
+   196→                  <SelectValue placeholder={catalog.loading ? 'Nalagam katalog …' : 'Brez profila'} />
+   197→                </SelectTrigger>
+   198→                <SelectContent className="max-h-56">
+   199→                  <SelectItem value="none">Brez profila (splošna ograja)</SelectItem>
+   200→                  {profiles.map((p) => (
+   201→                    <SelectItem key={p.id} value={p.id}>{p.sku} — {p.name}</SelectItem>
+   202→                  ))}
+   203→                </SelectContent>
+   204→              </Select>
+   205→              <ErrorBox error={catalog.error} />
+   206→              {profile ? (
+   207→                <p className="text-[11px] text-muted-foreground">
+   208→                  {profile.material} · {profile.type} · {profile.pricePerM.toFixed(2).replace('.', ',')} €/m
+   209→                </p>
+   210→              ) : null}
+   211→            </div>
+   212→
+   213→            {canReadMeasurements ? (
+   214→              <div className="space-y-2">
+   215→                <Label htmlFor="viz-from">Naloži iz meritve</Label>
+   216→                <Select value={fromMeasurement} onValueChange={loadFromMeasurement}>
+   217→                  <SelectTrigger id="viz-from" aria-label="Naloži iz obstoječe meritve">
+   218→                    <SelectValue placeholder="Izberite meritev" />
+   219→                  </SelectTrigger>
+   220→                  <SelectContent className="max-h-56">
+   221→                    <SelectItem value="none">— nova risba —</SelectItem>
+   222→                    {measurableRows.map((m) => (
+   223→                      <SelectItem key={m.id} value={m.id}>
+   224→                        {m.type} · {(m.lengthCm ?? 0) / 100} m{m.location ? ` · ${m.location}` : ''}
+   225→                      </SelectItem>
+   226→                    ))}
+   227→                  </SelectContent>
+   228→                </Select>
+   229→                <ErrorBox error={measurements.error} />
+   230→              </div>
+   231→            ) : null}
+   232→
+   233→            <div className="grid grid-cols-2 gap-3">
+   234→              <div className="space-y-2">
+   235→                <Label htmlFor="viz-len">Dolžina (m)</Label>
+   236→                <Input id="viz-len" type="number" min="0.2" max="60" step="0.1" inputMode="decimal"
+   237→                  value={lengthM} onChange={(e) => setLengthM(e.target.value)} />
+   238→              </div>
+   239→              <div className="space-y-2">
+   240→                <Label htmlFor="viz-h">Višina (cm)</Label>
+   241→                <Input id="viz-h" type="number" min="20" max="400" inputMode="numeric"
+   242→                  value={heightCmS} onChange={(e) => setHeightCmS(e.target.value)} />
+   243→              </div>
+   244→              <div className="space-y-2">
+   245→                <Label htmlFor="viz-posts">Št. stebrov</Label>
+   246→                <Input id="viz-posts" type="number" min="1" max="40" inputMode="numeric"
+   247→                  value={postsS} onChange={(e) => onPostsChange(e.target.value)} />
+   248→              </div>
+   249→              <div className="space-y-2">
+   250→                <Label htmlFor="viz-segs">Št. segmentov</Label>
+   251→                <Input id="viz-segs" type="number" min="1" max="40" inputMode="numeric"
+   252→                  value={segmentsS} onChange={(e) => setSegmentsS(e.target.value)} />
+   253→              </div>
+   254→              <div className="space-y-2">
+   255→                <Label htmlFor="viz-slope">Nagib stopnišča (°)</Label>
+   256→                <Input id="viz-slope" type="number" min="0" max="60" step="0.5" inputMode="decimal"
+   257→                  value={slopeS} onChange={(e) => setSlopeS(e.target.value)} aria-describedby="viz-slope-hint" />
+   258→                <p id="viz-slope-hint" className="text-[11px] text-muted-foreground">0 = ravna ograja</p>
+   259→              </div>
+   260→              <div className="flex items-center justify-between rounded-lg border px-3 py-2">
+   261→                <Label htmlFor="viz-hand" className="cursor-pointer">Ročnik</Label>
+   262→                <Switch id="viz-hand" checked={handrail} onCheckedChange={setHandrail} />
+   263→              </div>
+   264→            </div>
+   265→
+   266→            <fieldset className="space-y-2">
+   267→              <legend className="text-sm font-medium leading-none">Barva (RAL)</legend>
+   268→              <div className="grid grid-cols-2 gap-2">
+   269→                {RAL_COLORS.map((c) => (
+   270→                  <button
+   271→                    key={c.id}
+   272→                    type="button"
+   273→                    onClick={() => setColorId(c.id)}
+   274→                    aria-pressed={colorId === c.id}
+   275→                    className={`flex items-center gap-2 rounded-lg border p-2 text-left text-xs transition hover:border-roksal-amber/60 ${colorId === c.id ? 'border-roksal-amber bg-amber-50 dark:bg-amber-950/30' : ''}`}
+   276→                  >
+   277→                    <span
+   278→                      aria-hidden
+   279→                      className="size-5 shrink-0 rounded-full border border-black/20"
+   280→                      style={{ backgroundColor: c.hex }}
+   281→                    />
+   282→                    <span className="leading-tight">{c.label}</span>
+   283→                  </button>
+   284→                ))}
+   285→              </div>
+   286→            </fieldset>
+   287→
+   288→            {canWrite ? (
+   289→              <div className="space-y-3 border-t pt-3">
+   290→                <div className="space-y-2">
+   291→                  <Label htmlFor="viz-project">Projekt (za shranjevanje)</Label>
+   292→                  <Select value={projectId} onValueChange={setProjectId}>
+   293→                    <SelectTrigger id="viz-project" aria-label="Poveži s projektom">
+   294→                      <SelectValue />
+   295→                    </SelectTrigger>
+   296→                    <SelectContent className="max-h-48">
+   297→                      <SelectItem value="none">Brez projekta</SelectItem>
+   298→                      {(projects.data?.data ?? []).map((p) => (
+   299→                        <SelectItem key={p.id} value={p.id}>{p.code} — {p.title}</SelectItem>
+   300→                      ))}
+   301→                    </SelectContent>
+   302→                  </Select>
+   303→                  <ErrorBox error={projects.error} />
+   304→                </div>
+   305→                <div className="space-y-2">
+   306→                  <Label htmlFor="viz-loc">Lokacija</Label>
+   307→                  <Input id="viz-loc" value={location} onChange={(e) => setLocation(e.target.value)}
+   308→                    placeholder="npr. Terasa — severna stran" />
+   309→                </div>
+   310→                <Button className="w-full" onClick={() => void save()} disabled={busy}>
+   311→                  {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Save className="size-4" aria-hidden />}
+   312→                  Shrani kot meritev
+   313→                </Button>
+   314→              </div>
+   315→            ) : (
+   316→              <p className="border-t pt-3 text-center text-xs text-muted-foreground">
+   317→                Za shranjevanje vizualizacije je potrebna pravica measurements.write.
+   318→              </p>
+   319→            )}
+   320→          </CardContent>
+   321→        </Card>
+   322→
+   323→        {/* risba */}
+   324→        <Card>
+   325→          <CardContent className="p-4 sm:p-6">
+   326→            <h2 className="mb-2 flex items-center gap-2 text-sm font-bold uppercase tracking-widest text-muted-foreground">
+   327→              <Box className="size-4 text-roksal-amber" aria-hidden /> Tehnična risba
+   328→            </h2>
+   329→            {lengthCm <= 20 ? (
+   330→              <EmptyState title="Vnesite smiselne parametre" desc="Dolžina vsaj 0,2 m in višina vsaj 20 cm." icon={Sigma} />
+   331→            ) : (
+   332→              <RailingSvg
+   333→                ref={svgRef}
+   334→                titleId={titleId}
+   335→                lengthCm={lengthCm}
+   336→                heightCm={heightCm}
+   337→                posts={posts}
+   338→                handrail={handrail}
+   339→                slopeDeg={slope}
+   340→                colorHex={color.hex}
+   341→                glass={isGlass}
+   342→                sku={profile?.sku ?? null}
+   343→                profileName={profile?.name ?? null}
+   344→                colorLabel={color.label}
+   345→              />
+   346→            )}
+   347→          </CardContent>
+   348→        </Card>
+   349→      </div>
+   350→    </div>
+   351→  )
+   352→}
+   353→
+   354→// ─── SVG risba ───────────────────────────────────────────────────────────────
+   355→
+   356→interface RailingSvgProps {
+   357→  lengthCm: number
+   358→  heightCm: number
+   359→  posts: number
+   360→  handrail: boolean
+   361→  slopeDeg: number
+   362→  colorHex: string
+   363→  glass: boolean
+   364→  sku: string | null
+   365→  profileName: string | null
+   366→  colorLabel: string
+   367→  titleId: string
+   368→}
+   369→
+   370→function RailingSvg (props: RailingSvgProps & { ref?: Ref<SVGSVGElement> }) {
+   371→  const { ref, titleId } = props
+   372→  const geo = useMemo(() => computeGeometry(props), [props])
+   373→
+   374→  const postsX = geo.postsX
+   375→  const x0 = geo.x0
+   376→  const x1 = geo.x1
+   377→  const groundY = geo.groundY
+   378→  const pxH = geo.pxH
+   379→  const slope = props.slopeDeg
+   380→
+   381→  return (
+   382→    <svg
+   383→      ref={ref}
+   384→      viewBox={`0 0 ${geo.VW} ${geo.VH}`}
+   385→      className="w-full"
+   386→      role="img"
+   387→      aria-label={`Risba ograje: dolžina ${fmtM(props.lengthCm)} m, višina ${Math.round(props.heightCm)} cm, ${props.posts} stebrov`}
+   388→    >
+   389→      <title id={titleId}>Vizualizacija ograje — tloris in stranski pogled</title>
+   390→
+   391→      {/* platno */}
+   392→      <rect x="0" y="0" width={geo.VW} height={geo.VH} fill={PAPER} />
+   393→      <rect x="4" y="4" width={geo.VW - 8} height={geo.VH - 8} fill="none" stroke="#e2e8f0" strokeWidth="2" rx="10" />
+   394→
+   395→      {/* ── TLORIS ── */}
+   396→      <text x="28" y="34" fontSize="15" fontWeight="700" fill={INK}>Tloris</text>
+   397→      <PlanView geo={geo} colorHex={props.colorHex} glass={props.glass} />
+   398→
+   399→      {/* dimenzija dolžine */}
+   400→      <DimLine x1={x0} x2={x1} y={geo.planDimY} label={`${fmtM(props.lengthCm)} m`} />
+   401→
+   402→      {/* ── STRANSKI POGLED ── */}
+   403→      <text x="28" y={geo.elevTitleY} fontSize="15" fontWeight="700" fill={INK}>Stranski pogled</text>
+   404→
+   405→      {/* mreža 50 cm */}
+   406→      <GridLines geo={geo} />
+   407→
+   408→      {/* tla */}
+   409→      <line x1={geo.gridX0 - 16} y1={groundY} x2={geo.gridX1 + 16} y2={groundY} stroke={INK} strokeWidth="2.5" />
+   410→
+   411→      {/* ograja (rotirana pri nagibu) */}
+   412→      <g transform={slope > 0 ? `rotate(${-slope} ${x0} ${groundY})` : undefined}>
+   413→        {/* polnilo segmentov */}
+   414→        {postsX.slice(0, -1).map((px, i) => {
+   415→          const nx = postsX[i + 1]
+   416→          const w = nx - px - geo.postW - 4
+   417→          if (w <= 2) return null
+   418→          const fillTop = groundY - pxH + (props.handrail ? 16 : 6)
+   419→          const fillBot = groundY - 8
+   420→          if (props.glass) {
+   421→            return (
+   422→              <rect
+   423→                key={`seg-${i}`} x={px + geo.postW / 2 + 2} y={fillTop}
+   424→                width={w} height={fillBot - fillTop}
+   425→                fill={GLASS_FILL} stroke={GLASS_STROKE} strokeWidth="1"
+   426→              />
+   427→            )
+   428→          }
+   429→          // navpični palice — razmak ~12 cm
+   430→          const paleGap = Math.max(6, geo.pxPerCm * 12)
+   431→          const paleCount = Math.max(2, Math.floor(w / paleGap))
+   432→          const paleW = Math.max(2, Math.min(5, geo.pxPerCm * 2))
+   433→          return (
+   434→            <g key={`seg-${i}`}>
+   435→              {Array.from({ length: paleCount }).map((_, j) => {
+   436→                const pxx = px + geo.postW / 2 + 4 + (j * (w - paleW)) / Math.max(1, paleCount - 1)
+   437→                return <rect key={j} x={pxx} y={fillTop} width={paleW} height={fillBot - fillTop} fill={props.colorHex} opacity="0.9" rx="1" />
+   438→              })}
+   439→            </g>
+   440→          )
+   441→        })}
+   442→
+   443→        {/* srednja palica */}
+   444→        {props.handrail ? (
+   445→          <rect x={x0 - 4} y={groundY - pxH * 0.55} width={x1 - x0 + 8} height={Math.max(4, geo.pxPerCm * 3)} fill={props.colorHex} rx="2" />
+   446→        ) : null}
+   447→
+   448→        {/* stebri */}
+   449→        {postsX.map((px, i) => (
+   450→          <rect key={`post-${i}`} x={px} y={groundY - pxH} width={geo.postW} height={pxH} fill={props.colorHex} rx="1.5" />
+   451→        ))}
+   452→
+   453→        {/* ročnik */}
+   454→        {props.handrail ? (
+   455→          <rect x={x0 - 6} y={groundY - pxH - 10} width={x1 - x0 + 12} height={Math.max(6, geo.pxPerCm * 4)} fill={props.colorHex} rx="3" />
+   456→        ) : null}
+   457→      </g>
+   458→
+   459→      {/* dimenzija višine */}
+   460→      <DimLineV x={geo.dimVX} y1={groundY - pxH - (props.handrail ? 14 : 4)} y2={groundY} label={`${Math.round(props.heightCm)} cm`} />
+   461→
+   462→      {/* kot nagiba */}
+   463→      {slope > 0 ? (
+   464→        <g>
+   465→          <path
+   466→            d={`M ${x0 + 44} ${groundY} A 44 44 0 0 0 ${x0 + 44 * Math.cos((slope * Math.PI) / 180)} ${groundY - 44 * Math.sin((slope * Math.PI) / 180)}`}
+   467→            fill="none" stroke="#b45309" strokeWidth="1.5"
+   468→          />
+   469→          <text x={x0 + 54} y={groundY - 12} fontSize="12" fontWeight="700" fill="#b45309">
+   470→            {slope.toFixed(1).replace('.', ',')}°
+   471→          </text>
+   472→        </g>
+   473→      ) : null}
+   474→
+   475→      {/* naslovni blok */}
+   476→      <g>
+   477→        <rect x={geo.VW - 330} y={geo.VH - 74} width="300" height="58" rx="8" fill="#f8fafc" stroke="#e2e8f0" />
+   478→        <text x={geo.VW - 316} y={geo.VH - 54} fontSize="12" fontWeight="700" fill={INK}>
+   479→          {props.sku ? `${props.sku} · ${props.profileName ?? ''}` : 'Ograja po meri'}
+   480→        </text>
+   481→        <text x={geo.VW - 316} y={geo.VH - 36} fontSize="11" fill={INK}>
+   482→          {fmtM(props.lengthCm)} m × {Math.round(props.heightCm)} cm · {props.posts} stebrov{props.handrail ? ' · ročnik' : ''}
+   483→        </text>
+   484→        <text x={geo.VW - 316} y={geo.VH - 20} fontSize="11" fill={INK}>Barva: {props.colorLabel}</text>
+   485→      </g>
+   486→
+   487→      {/* merilo */}
+   488→      <g>
+   489→        <rect x="28" y={geo.VH - 60} width={geo.scaleBarPx} height="8" fill="#0f172a" />
+   490→        <rect x="28" y={geo.VH - 60} width={geo.scaleBarPx / 2} height="8" fill="#ffffff" stroke="#0f172a" strokeWidth="1" />
+   491→        <text x="28" y={geo.VH - 66} fontSize="11" fill={INK}>Merilo: {geo.scaleLabel}</text>
+   492→      </g>
+   493→    </svg>
+   494→  )
+   495→}
+   496→
+   497→// ─── geometrija ──────────────────────────────────────────────────────────────
+   498→
+   499→interface Geo {
+   500→  VW: number; VH: number
+   501→  x0: number; x1: number; pxLen: number; postW: number
+   502→  planBandY: number; planBandH: number; planDimY: number
+   503→  elevTitleY: number; groundY: number; pxH: number
+   504→  gridX0: number; gridX1: number; gridStep: number
+   505→  dimVX: number; pxPerCm: number; postsX: number[]
+   506→  scaleBarPx: number; scaleLabel: string
+   507→}
+   508→
+   509→function computeGeometry (p: RailingSvgProps): Geo {
+   510→  const VW = 860
+   511→  const VH = 720
+   512→  const x0 = 90
+   513→  const availW = VW - 90 - 60 // 710
+   514→  const availH = 300          // prostor za višino v elevaciji
+   515→  const pxPerCm = Math.min(availW / p.lengthCm, availH / p.heightCm)
+   516→  const pxLen = p.lengthCm * pxPerCm
+   517→  const x1 = x0 + pxLen
+   518→  const postW = Math.max(5, Math.min(14, pxPerCm * 8))
+   519→  const pxH = p.heightCm * pxPerCm
+   520→
+   521→  const n = Math.max(1, p.posts)
+   522→  const postsX = n === 1
+   523→    ? [x0]
+   524→    : Array.from({ length: n }, (_, i) => x0 + (i * pxLen) / (n - 1) - postW / 2)
+   525→
+   526→  const planBandY = 120
+   527→  const planBandH = 44
+   528→  const planDimY = planBandY + planBandH + 44
+   529→  const elevTitleY = planDimY + 58
+   530→  const groundY = elevTitleY + 26 + pxH
+   531→
+   532→  // mreža: 50 cm
+   533→  const gridStep = pxPerCm * 50
+   534→  const gridX0 = x0
+   535→  const gridX1 = x1
+   536→
+   537→  const scaleBarPx = Math.max(60, Math.min(220, pxPerCm * 100))
+   538→  const scaleLabel = `1 px = ${(1 / pxPerCm).toFixed(2).replace('.', ',')} cm · trak = ${fmtM(scaleBarPx / pxPerCm)} m`
+   539→
+   540→  return {
+   541→    VW, VH, x0, x1, pxLen, postW,
+   542→    planBandY, planBandH, planDimY,
+   543→    elevTitleY, groundY, pxH,
+   544→    gridX0, gridX1, gridStep,
+   545→    dimVX: x0 - 34, pxPerCm, postsX,
+   546→    scaleBarPx, scaleLabel,
+   547→  }
+   548→}
+   549→
+   550→// ─── delci risbe ─────────────────────────────────────────────────────────────
+   551→
+   552→function PlanView ({ geo, colorHex, glass }: { geo: Geo; colorHex: string; glass: boolean }) {
+   553→  const bandY = geo.planBandY
+   554→  const bandH = geo.planBandH
+   555→  const midY = bandY + bandH / 2
+   556→  const posts = geo.postsX
+   557→  const x0 = geo.x0
+   558→  const x1 = geo.x1
+   559→
+   560→  return (
+   561→    <g>
+   562→      {/* banda ograje */}
+   563→      <rect x={x0} y={bandY} width={geo.pxLen} height={bandH} fill="#f1f5f9" stroke="#cbd5e1" strokeWidth="1" />
+   564→      {/* polnilo segmentov (tloris) */}
+   565→      {posts.slice(0, -1).map((px, i) => {
+   566→        const nx = posts[i + 1]
+   567→        const w = nx - px - geo.postW - 4
+   568→        if (w <= 2) return null
+   569→        if (glass) {
+   570→          return <rect key={`pg-${i}`} x={px + geo.postW / 2 + 2} y={bandY + 8} width={w} height={bandH - 16} fill={GLASS_FILL} stroke={GLASS_STROKE} strokeWidth="0.8" />
+   571→        }
+   572→        return <line key={`pg-${i}`} x1={px + geo.postW / 2 + 3} y1={midY} x2={nx + geo.postW / 2 - 3} y2={midY} stroke={colorHex} strokeWidth="3" strokeLinecap="round" opacity="0.55" />
+   573→      })}
+   574→      {/* stebri */}
+   575→      {posts.map((px, i) => (
+   576→        <rect key={`pp-${i}`} x={px} y={midY - geo.postW / 2} width={geo.postW} height={geo.postW} fill={colorHex} stroke="#1f293722" rx="1" />
+   577→      ))}
+   578→      {/* središčna os */}
+   579→      <line x1={x0} y1={midY} x2={x1} y2={midY} stroke="#cbd5e1" strokeWidth="0.6" strokeDasharray="6 4" />
+   580→    </g>
+   581→  )
+   582→}
+   583→
+   584→function GridLines ({ geo }: { geo: Geo }) {
+   585→  const lines: ReactNode[] = []
+   586→  const topY = geo.elevTitleY + 18
+   587→  const bottomY = geo.groundY
+   588→  if (geo.gridStep < 8) return null // pregosto — izpusti
+   589→  for (let x = geo.gridX0, i = 0; x <= geo.gridX1 + 0.1; x += geo.gridStep, i++) {
+   590→    lines.push(<line key={`gx-${i}`} x1={x} y1={topY} x2={x} y2={bottomY} stroke={INK_SOFT} strokeWidth="0.5" opacity="0.35" />)
+   591→  }
+   592→  for (let y = bottomY, j = 0; y >= topY; y -= geo.gridStep, j++) {
+   593→    lines.push(<line key={`gy-${j}`} x1={geo.gridX0} y1={y} x2={geo.gridX1} y2={y} stroke={INK_SOFT} strokeWidth="0.5" opacity="0.35" />)
+   594→  }
+   595→  // oznaka mreže
+   596→  lines.push(
+   597→    <text key="grid-label" x={geo.gridX0} y={topY - 4} fontSize="10" fill={INK_SOFT}>
+   598→      mreža = 50 cm
+   599→    </text>
+   600→  )
+   601→  return <g>{lines}</g>
+   602→}
+   603→
+   604→function DimLine ({ x1, x2, y, label }: { x1: number; x2: number; y: number; label: string }) {
+   605→  const mid = (x1 + x2) / 2
+   606→  return (
+   607→    <g>
+   608→      <line x1={x1} y1={y} x2={x2} y2={y} stroke={INK} strokeWidth="1" />
+   609→      <line x1={x1} y1={y - 8} x2={x1} y2={y + 8} stroke={INK} strokeWidth="1" />
+   610→      <line x1={x2} y1={y - 8} x2={x2} y2={y + 8} stroke={INK} strokeWidth="1" />
+   611→      <polygon points={`${x1},${y} ${x1 + 8},${y - 3.5} ${x1 + 8},${y + 3.5}`} fill={INK} />
+   612→      <polygon points={`${x2},${y} ${x2 - 8},${y - 3.5} ${x2 - 8},${y + 3.5}`} fill={INK} />
+   613→      <rect x={mid - 34} y={y - 20} width="68" height="16" fill={PAPER} />
+   614→      <text x={mid} y={y - 8} fontSize="13" fontWeight="700" fill={INK} textAnchor="middle">{label}</text>
+   615→    </g>
+   616→  )
+   617→}
+   618→
+   619→function DimLineV ({ x, y1, y2, label }: { x: number; y1: number; y2: number; label: string }) {
+   620→  const mid = (y1 + y2) / 2
+   621→  return (
+   622→    <g>
+   623→      <line x1={x} y1={y1} x2={x} y2={y2} stroke={INK} strokeWidth="1" />
+   624→      <line x1={x - 8} y1={y1} x2={x + 8} y2={y1} stroke={INK} strokeWidth="1" />
+   625→      <line x1={x - 8} y1={y2} x2={x + 8} y2={y2} stroke={INK} strokeWidth="1" />
+   626→      <polygon points={`${x},${y1} ${x - 3.5},${y1 + 8} ${x + 3.5},${y1 + 8}`} fill={INK} />
+   627→      <polygon points={`${x},${y2} ${x - 3.5},${y2 - 8} ${x + 3.5},${y2 - 8}`} fill={INK} />
+   628→      <rect x={x - 4} y={mid - 24} width="52" height="16" fill={PAPER} />
+   629→      <text x={x + 4} y={mid - 12} fontSize="12" fontWeight="700" fill={INK}>{label}</text>
+   630→    </g>
+   631→  )
+   632→}
+   633→

@@ -29,6 +29,7 @@ model User {
   workOrders   WorkOrder[]     @relation("assignee")
   woEvents     WorkOrderEvent[]
   measurements Measurement[]
+  measVersions MeasurementVersion[] @relation("measurementVersions")
   equipHeld    Equipment[]     @relation("equipmentHolder")
   equipLogs    EquipmentCheckout[] @relation("equipmentUser")
   qcChecks     QcCheck[]       @relation("qcUser")
@@ -188,6 +189,7 @@ model WorkOrder {
   startedAt    DateTime?
   completedAt  DateTime?
   summary      String?
+  instructions String? // navodila za monterja (pisarna → teren)
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
@@ -224,9 +226,27 @@ model Measurement {
   segments    Int?
   handrail    Boolean     @default(true)
   slopeDeg    Float?
-  params      String? // JSON (profileId, barva, dodatki …)
+  source      String      @default("ROCNO") // ROCNO | KAMERA (večtočkovne meritve na fotografiji)
+  params      String? // JSON (profileId, barva, photoId, points, calibration, viz, konfigurator …)
   note        String?
   createdAt   DateTime    @default(now())
+
+  versions    MeasurementVersion[]
+}
+
+// Zgodovina verzij meritev — posnetek stanja ob vsaki spremembi (issue #1: zgodovina verzij)
+model MeasurementVersion {
+  id           String   @id @default(cuid())
+  measurement  Measurement @relation(fields: [measurementId], references: [id], onDelete: Cascade)
+  measurementId String
+  version      Int
+  data         String   // JSON posnetek (type, lengthCm, heightCm, posts, slopeDeg, note, params …)
+  userId       String?
+  user         User?    @relation("measurementVersions", fields: [userId], references: [id])
+  note         String?
+  createdAt    DateTime @default(now())
+
+  @@index([measurementId, version])
 }
 
 // ─── Katalog & zaloga ───────────────────────────────────────────────────────

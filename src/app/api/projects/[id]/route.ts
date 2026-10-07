@@ -1,14 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { jsonError, requirePermission } from '@/lib/auth'
+import { jsonError, readsAllData, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
 
 type Params = { params: Promise<{ id: string }> }
 
+/** Obseg (issue #1): monter dostopa samo do projektov svojih nalogov. */
+async function projectInScope (userId: string, id: string): Promise<'missing' | boolean> {
+  const p = await db.project.findUnique({
+    where: { id },
+    select: { id: true, workOrders: { select: { assigneeId: true } } },
+  })
+  if (!p) return 'missing'
+  return p.workOrders.some((w) => w.assigneeId === userId)
+}
+
 export async function GET (req: NextRequest, { params }: Params) {
   const auth = await requirePermission(req, 'projects.read')
   if (auth instanceof NextResponse) return auth
+  const { user } = auth
   const { id } = await params
+
+  if (!readsAllData(user)) {
+    const inScope = await projectInScope(user.id, id)
+    if (inScope === 'missing') return jsonError(404, 'Projekt ne obstaja.')
+    if (!inScope) return jsonError(403, 'Projekt ni v vašem obsegu.', 'Monter vidi samo projekte svojih nalogov.')
+  }
+
   const project = await db.project.findUnique({
     where: { id },
     include: {
@@ -31,6 +49,12 @@ export async function PATCH (req: NextRequest, { params }: Params) {
   const body = await req.json().catch(() => null)
   const existing = await db.project.findUnique({ where: { id } })
   if (!existing) return jsonError(404, 'Projekt ne obstaja.')
+
+  // obseg (issue #1): monter popravlja samo projekte svojih nalogov
+  if (!readsAllData(auth.user)) {
+    const inScope = await projectInScope(auth.user.id, id)
+    if (!inScope) return jsonError(403, 'Projekt ni v vašem obsegu.', 'Monter popravlja samo projekte svojih nalogov.')
+  }
 
   const patch: Record<string, unknown> = {}
   for (const key of ['title', 'status', 'address', 'note'] as const) {

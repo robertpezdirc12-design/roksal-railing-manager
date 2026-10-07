@@ -4,7 +4,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { jsonError, requirePermission } from '@/lib/auth'
+import { jsonError, readsAllData, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
 
 const TYPES = ['OGRAJA', 'BALUSTRADA', 'NAGIB', 'FOTO', 'OSTANEO']
@@ -20,6 +20,7 @@ function int (v: unknown): number | null {
 export async function GET (req: NextRequest) {
   const auth = await requirePermission(req, 'measurements.read')
   if (auth instanceof NextResponse) return auth
+  const { user } = auth
 
   const url = new URL(req.url)
   const projectId = url.searchParams.get('projectId')
@@ -35,6 +36,8 @@ export async function GET (req: NextRequest) {
       ...(projectId ? { projectId } : {}),
       ...(workOrderId ? { workOrderId } : {}),
       ...(type ? { type } : {}),
+      // obseg (issue #1): monter vidi samo meritve svojih nalogov in lastne
+      ...(readsAllData(user) ? {} : { OR: [{ authorId: user.id }, { workOrder: { assigneeId: user.id } }] }),
     },
     include: {
       author: { select: { name: true } },

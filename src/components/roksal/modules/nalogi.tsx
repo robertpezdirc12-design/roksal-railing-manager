@@ -34,6 +34,8 @@ interface WorkOrderRow {
 
 interface WorkOrderDetail extends Omit<WorkOrderRow, 'assignee' | '_count'> {
   assignee: { id: string; name: string } | null
+  instructions: string | null
+  projectId: string | null
   events: { id: string; type: string; note: string | null; createdAt: string; user: { name: string } | null }[]
   measurements: {
     id: string; type: string; location: string | null; lengthCm: number | null
@@ -366,6 +368,41 @@ function NalogDetail ({ detail, canTransition, canReschedule, onTransition, onRe
         {detail.summary ? <div className="col-span-2 sm:col-span-3"><dt className="text-xs text-muted-foreground">Povzetek</dt><dd className="font-medium">{detail.summary}</dd></div> : null}
       </dl>
 
+      {/* navodila za monterja (issue #1: pisarna → teren) */}
+      {detail.instructions ? (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm dark:border-amber-900 dark:bg-amber-950/30">
+          <p className="mb-1 flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest text-amber-800 dark:text-amber-300">
+            <ClipboardList className="size-3.5" aria-hidden /> Navodila za teren
+          </p>
+          <p className="whitespace-pre-line text-amber-900 dark:text-amber-100">{detail.instructions}</p>
+        </div>
+      ) : null}
+
+      {/* vodnik terena — celoten workflow pisarna → monter → teren (issue #1) */}
+      <section aria-label="Vodnik terena">
+        <h3 className="mb-2 text-xs font-bold uppercase tracking-widest text-muted-foreground">Vodnik terena</h3>
+        <ol className="grid gap-1.5 sm:grid-cols-2">
+          {[
+            { label: 'Projekt odprt', done: !!detail.projectId },
+            { label: 'Monter dodeljen', done: !!detail.assignee },
+            { label: 'Delo začeto', done: !!detail.startedAt },
+            { label: 'Fotografije zajete', done: detail.measurements.some((m) => m.type === 'FOTO') },
+            { label: 'Meritve izvedene', done: detail.measurements.some((m) => m.type !== 'FOTO') },
+            { label: 'Teren zaključen', done: detail.status === 'ZAKLJUCEN' },
+          ].map((step, i) => (
+            <li key={step.label} className={`flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-sm ${step.done ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-900 dark:bg-emerald-950/30' : ''}`}>
+              <span className={`flex size-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${step.done ? 'bg-emerald-500 text-white' : 'bg-muted text-muted-foreground'}`} aria-hidden>
+                {step.done ? '✓' : i + 1}
+              </span>
+              <span className={step.done ? 'font-medium text-emerald-900 dark:text-emerald-200' : 'text-muted-foreground'}>
+                {step.label}
+                <span className="sr-only"> — {step.done ? 'opravljeno' : 'čaka'}</span>
+              </span>
+            </li>
+          ))}
+        </ol>
+      </section>
+
       {/* preurčitev termina (R433) */}
       {canReschedule && detail.status !== 'ZAKLJUCEN' ? (
         <section aria-label="Preurčitev termina" className="flex flex-wrap items-end gap-2">
@@ -487,6 +524,7 @@ function CreateNalogDialog ({ open, canReadUsers, onClose, onCreated }: {
   const [assigneeId, setAssigneeId] = useState('none')
   const [assigneeName, setAssigneeName] = useState('')
   const [scheduledFor, setScheduledFor] = useState('')
+  const [instructions, setInstructions] = useState('')
   const [busy, setBusy] = useState(false)
 
   // izbirnike naložimo šele ob odprtju dialoga
@@ -505,9 +543,10 @@ function CreateNalogDialog ({ open, canReadUsers, onClose, onCreated }: {
         projectId: projectId === 'none' ? null : projectId,
         assigneeId: canReadUsers && assigneeId !== 'none' ? assigneeId : null,
         scheduledFor: scheduledFor || null,
+        instructions: instructions.trim() || null,
       })
       toast({ title: 'Nalog ustvarjen.', description: `${title.trim()} — kodo je določil sistem.` })
-      setTitle(''); setProjectId('none'); setAssigneeId('none'); setAssigneeName(''); setScheduledFor('')
+      setTitle(''); setProjectId('none'); setAssigneeId('none'); setAssigneeName(''); setScheduledFor(''); setInstructions('')
       await onCreated()
     } catch (e) {
       toast({ title: 'Napaka pri ustvarjanju naloga', description: e instanceof Error ? e.message : undefined, variant: 'destructive' })
@@ -574,6 +613,16 @@ function CreateNalogDialog ({ open, canReadUsers, onClose, onCreated }: {
         <div className="space-y-2">
           <Label htmlFor="nn-date">Termin</Label>
           <Input id="nn-date" type="date" value={scheduledFor} onChange={(e) => setScheduledFor(e.target.value)} />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="nn-instructions">Navodila za monterja</Label>
+          <Textarea
+            id="nn-instructions" value={instructions} onChange={(e) => setInstructions(e.target.value)}
+            placeholder="npr. Pokliči stranko 30 min pred prihodom. Stopnišče ima 14 stopnic — izmeri višino in nagib. Pri vhodu pazi na ploščice."
+            className="min-h-20"
+          />
+          <p className="text-xs text-muted-foreground">Navodila se pokažejo monterju v podrobnosti naloga.</p>
         </div>
       </div>
       <DialogFooter>
