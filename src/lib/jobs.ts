@@ -2,10 +2,12 @@
 // Uporabljata ga oba vnosa: POST /api/jobs { job } in POST /api/jobs/run { key } (route-map izvirnika).
 // Vsak zagon se zabeleži v JobRun dnevnik + revizija MAINTENANCE_RUN.
 // R438 (issue #5): nov job obvestila-retry (retryPending iz src/lib/notify.ts).
+// R441 (issue #3): nov job varnostna-kopija (ops/backup.sh — šifrirana + off-site).
 
 import { db } from '@/lib/db'
 import { writeAudit } from '@/lib/audit'
 import { retryPending } from '@/lib/notify'
+import { runBackup } from '@/lib/backup'
 
 export interface JobDef {
   job: string
@@ -20,6 +22,7 @@ export const JOB_DEFS: JobDef[] = [
   { job: 'portal-gc', label: 'Čiščenje portala', desc: 'Odstrani potekle/preklicane povezave portala strank po 30 dneh.', cron: 'vsak teden (izvirnik: viz/gc)' },
   { job: 'obvestila-gc', label: 'Čiščenje obvestil', desc: 'Izbriše prebrana obvestila, starejša od 30 dni.', cron: 'vsak dan 03:10 (izvirnik)' },
   { job: 'obvestila-retry', label: 'Ponovitev obvestil', desc: 'Ponovi neuspešne/čakajoče dostave obvestil (max 3 poskusi, varno pred podvajanjem).', cron: 'vsakih 15 min (issue #5)' },
+  { job: 'varnostna-kopija', label: 'Varnostna kopija', desc: 'Šifrirana kopija (baza + cel repozitorij) z off-site nalaganjem na GitLab — recovery v docs/RECOVERY.md.', cron: 'vsak dan 04:00 (issue #3)' },
 ]
 
 export function isKnownJob (key: string): boolean {
@@ -60,6 +63,21 @@ export async function runJob (key: string, userId: string | null): Promise<RunJo
       const res = await retryPending(50)
       affected = res.processed
       detail = { obdelanih: res.processed, poslanih: res.sent, spodletelih: res.failed }
+    } else if (key === 'varnostna-kopija') {
+      // R441 (issue #3): šifrirana varnostna kopija + off-site nalaganje (ops/backup.sh)
+      const res = await runBackup()
+      affected = 1
+      detail = {
+        datoteka: res.file,
+        sha256: res.sha256.slice(0, 16) + '…',
+        velikost_kb: Math.round(res.bytes / 1024),
+        sifrirano: res.encrypted,
+        off_site: res.offsite.uploaded,
+        ...(res.offsite.chunks ? { kosov_off_site: res.offsite.chunks } : {}),
+        ...(res.offsite.note ? { opomba: res.offsite.note } : {}),
+        ...(res.manifest ? { tabel: res.manifest.tableCount, vrstic: res.manifest.totalRows } : {}),
+        trajanje_s: res.durationSec,
+      }
     } else {
       const res = await db.notification.deleteMany({ where: { read: true, createdAt: { lt: cutoff30 } } })
       affected = res.count
