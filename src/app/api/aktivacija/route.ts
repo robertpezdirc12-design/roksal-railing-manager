@@ -66,6 +66,6 @@ export async function POST (req: NextRequest) {
     db.setting.upsert({ where: { key: 'licence.activatedBy' }, create: { key: 'licence.activatedBy', value: user.email }, update: { value: user.email } }),
   ])
 
-  await writeAudit({ userId: user.id, action: 'ACTIVATION', entity: 'sistem', detail: JSON.stringify({ key: key.slice(0, 8) + '…' }) })
+  await writeAudit({ userId: user.id, action: 'ACTIVATION', entity: 'sistem', detail: { key: key.slice(0, 8) + '…' } })
   return NextResponse.json({ data: await readLicence() })
 }

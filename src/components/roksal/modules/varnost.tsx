@@ -3,9 +3,10 @@
 // VARNOST — revizijski dnevnik (R428) + upravljanje sej (R433: security.read)
 // R435: vzdrževalna opravila (cron izvirnika) + licenca/aktivacija.
 // R438 (issue #5): Dnevnik obvestil — sled dostav (kanal/prejemnik/status/poskusi) + retry.
+// R441 (issue #3): Varnostne kopije — stanje zadnje šifrirane kopije + off-site + RTO/RPO.
 
 import { useState } from 'react'
-import { BadgeCheck, BellRing, KeyRound, LogIn, Play, RefreshCw, ScrollText, Timer, Trash2, Wrench } from 'lucide-react'
+import { BadgeCheck, BellRing, CloudUpload, DatabaseBackup, KeyRound, LogIn, Play, RefreshCw, ScrollText, ShieldCheck, Timer, Trash2, Wrench } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -102,7 +103,7 @@ export default function VarnostModule () {
               <EmptyState title="Ni aktivnih sej" desc="Nihče ni prijavljen." icon={LogIn} />
             ) : (
               <ul className="max-h-72 space-y-1.5 overflow-y-auto pr-1">
-                {sessions.data.data.map((s) => (
+                {(sessions.data?.data ?? []).map((s) => (
                   <li key={s.id} className="flex items-center justify-between gap-2 rounded-lg border p-2">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
@@ -127,6 +128,7 @@ export default function VarnostModule () {
       ) : null}
 
       {canSessions ? <MaintenanceCard /> : null}
+      {canSessions ? <BackupCard /> : null}
       {canSessions ? <LicenceCard /> : null}
       {canDeliveryLog ? <DeliveryLogCard /> : null}
 
@@ -194,7 +196,7 @@ export default function VarnostModule () {
 
 interface JobDef {
   job: string; label: string; desc: string; cron: string
-  last: { ok: boolean; affected: number; startedAt: string; finishedAt: string; user: { name: string } | null } | null
+  last: { ok: boolean; affected: number; detail: string | null; startedAt: string; finishedAt: string; user: { name: string } | null } | null
 }
 
 function MaintenanceCard () {
@@ -256,6 +258,71 @@ function MaintenanceCard () {
               </li>
             ))}
           </ul>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+// ── Varnostne kopije (R441 / issue #3: DR) ──────────────────────────────
+
+interface BackupDetail {
+  datoteka?: string; sha256?: string; velikost_kb?: number
+  sifrirano?: boolean; off_site?: boolean; kosov_off_site?: number
+  tabel?: number; vrstic?: number; trajanje_s?: number; opomba?: string
+}
+
+function BackupCard () {
+  const jobs = useApi<{ data: { definitions: JobDef[] } }>('/api/jobs', [])
+  const last = jobs.data?.data.definitions.find(d => d.job === 'varnostna-kopija')?.last ?? null
+  const detail: BackupDetail = last?.detail ? JSON.parse(last.detail) : {}
+  const offsiteOk = detail.off_site === true
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <DatabaseBackup className="size-4 text-roksal-amber" aria-hidden /> Varnostne kopije
+        </CardTitle>
+        <CardDescription>
+          Šifrirana kopija (AES-256) celotnega sistema — baza + repozitorij — z off-site hrambo na GitLabu.
+          Cilj RTO ≤ 30 min · RPO ≤ 24 h. Postopek obnove: <code className="rounded bg-secondary px-1 font-mono text-[10px]">docs/RECOVERY.md</code>.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {jobs.loading ? <LoadingRows rows={2} /> : jobs.error ? <ErrorBox error={jobs.error} /> : !last ? (
+          <EmptyState
+            title="Še ni varnostne kopije"
+            desc="Zaženi jo med Vzdrževanji (opravilo varnostna-kopija)."
+            icon={ShieldCheck}
+          />
+        ) : (
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              <Timer className="size-3" aria-hidden />
+              zadnja kopija {fmtDateTime(last.startedAt)} · {(detail.trajanje_s ?? 0)} s · {detail.velikost_kb ?? '—'} KB
+              {detail.tabel ? ` · ${detail.tabel} tabel / ${detail.vrstic} vrstic` : ''}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Badge className={last.ok ? 'border-transparent bg-emerald-600 text-white' : 'border-transparent bg-destructive text-white'}>
+                {last.ok ? 'uspešna' : 'napaka'}
+              </Badge>
+              <Badge className={detail.sifrirano ? 'border-transparent bg-roksal-amber text-roksal-ink' : 'border-destructive text-destructive'}>
+                {detail.sifrirano ? 'šifrirana AES-256' : 'NEšifrirana'}
+              </Badge>
+              <Badge className={offsiteOk
+                ? 'border-transparent bg-emerald-600 text-white'
+                : 'border-destructive/40 bg-destructive/10 text-destructive'}>
+                <CloudUpload className="mr-1 size-3" aria-hidden />
+                {offsiteOk ? `off-site (${detail.kosov_off_site ?? '?'} kosov)` : 'samo lokalno'}
+              </Badge>
+            </div>
+            {detail.opomba ? <p className="text-xs text-muted-foreground">Opomba: {detail.opomba}</p> : null}
+            <p className="text-[11px] text-muted-foreground">
+              Hramba: lokalno (zadnjih 5) + off-site na GitLabu (paketni register, zadnjih 10 verzij).
+              Geslo za dešifriranje NI v repozitoriju — glej <code className="rounded bg-secondary px-1 font-mono text-[10px]">docs/SECRETS.md</code>.
+            </p>
+          </div>
         )}
       </CardContent>
     </Card>

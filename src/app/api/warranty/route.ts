@@ -73,7 +73,7 @@ export async function POST (req: NextRequest) {
     })
     await writeAudit({
       userId: user.id, action: 'WARRANTY_VISIT', entity: 'warranty', entityId: warranty.id, projectId: warranty.projectId,
-      detail: JSON.stringify({ project: warranty.project.code, note: visitNote, date: date.toISOString() }),
+      detail: { project: warranty.project.code, note: visitNote, date: date.toISOString() },
     })
     return NextResponse.json({ data: visit }, { status: 201 })
   }
@@ -106,7 +106,7 @@ export async function POST (req: NextRequest) {
   })
   await writeAudit({
     userId: user.id, action: 'WARRANTY_CREATE', entity: 'warranty', entityId: warranty.id, projectId,
-    detail: JSON.stringify({ project: project.code, months: m }),
+    detail: { project: project.code, months: m },
   })
 
   return NextResponse.json({ data: warranty }, { status: 201 })

@@ -59,7 +59,7 @@ export async function POST (req: NextRequest) {
 
   await writeAudit({
     userId: user.id, action: 'QC_CHECK', entity: 'productionOrder', entityId: order.id, projectId: order.projectId,
-    detail: JSON.stringify({ code: order.code, item, result }),
+    detail: { code: order.code, item, result },
   })
 
   // R438 (issue #5): neustrezna kontrola (NOK) → obvestilo pisarni (OFFICE)

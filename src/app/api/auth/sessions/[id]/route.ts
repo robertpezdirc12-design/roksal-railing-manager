@@ -31,7 +31,7 @@ export async function DELETE (req: NextRequest, { params }: Params) {
   await db.session.delete({ where: { id } })
   await writeAudit({
     userId: user.id, action: 'SESSION_REVOKE', entity: 'session', entityId: id,
-    detail: JSON.stringify({ owner: session.userId, current: session.token === (req.headers.get('authorization') ?? '').slice(7).trim() }),
+    detail: { owner: session.userId, current: session.token === (req.headers.get('authorization') ?? '').slice(7).trim() },
   })
   return NextResponse.json({ ok: true })
 }

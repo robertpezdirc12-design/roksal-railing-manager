@@ -69,7 +69,7 @@ export async function POST (req: NextRequest) {
   })
   await writeAudit({
     userId: user.id, action: 'PORTAL_CREATE', entity: 'portalLink', entityId: link.id, projectId,
-    detail: JSON.stringify({ project: project.code, days: d }),
+    detail: { project: project.code, days: d },
   })
 
   // R438 (issue #5): objava portala → statusno obvestilo stranki (EMAIL).

@@ -28,7 +28,7 @@ export async function POST (req: NextRequest) {
   await db.user.update({ where: { id: user.id }, data: { passwordHash: hashPassword(next) } })
   // preklic vseh ostalih sej (varnost: geslo se je spremenilo)
   const removed = await db.session.deleteMany({ where: { userId: user.id, NOT: { token: currentToken } } })
-  await writeAudit({ userId: user.id, action: 'PASSWORD_CHANGE', entity: 'user', entityId: user.id, detail: JSON.stringify({ sessionsRevoked: removed.count }) })
+  await writeAudit({ userId: user.id, action: 'PASSWORD_CHANGE', entity: 'user', entityId: user.id, detail: { sessionsRevoked: removed.count } })
 
   return NextResponse.json({ ok: true, sessionsRevoked: removed.count })
 }

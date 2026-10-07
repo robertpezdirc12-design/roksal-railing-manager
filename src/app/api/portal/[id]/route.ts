@@ -25,7 +25,7 @@ export async function DELETE (req: NextRequest, { params }: Params) {
   })
   await writeAudit({
     userId: user.id, action: 'PORTAL_REVOKE', entity: 'portalLink', entityId: id, projectId: link.projectId,
-    detail: JSON.stringify({ project: link.project.code, token: link.token.slice(0, 12) + '…' }),
+    detail: { project: link.project.code, token: link.token.slice(0, 12) + '…' },
   })
 
   return NextResponse.json({ data: revoked })
