@@ -1,0 +1,39 @@
+# GitLab CI — Roksal Manager (R441 / issue #3: DISASTER RECOVERY & SECURITY)
+#
+# GitLab je kanonični razvojni vir:
+#   • main je zaščiten — direktni push ONEMOGOČEN, spremembe samo skozi merge request;
+#   • merge zahteva ZELENO cevovodno preverjanje (only_allow_merge_if_pipeline_succeeds);
+#   • produkcijske verzije označujemo z zavarovanimi tagi v* + GitLab release.
+#
+# Vratarji (vsak mora biti zelen pred merge):
+#   1. bun install --frozen-lockfile — odvisnosti deterministično iz bun.lock
+#   2. bun run lint                 — ESLint (kakovost kode)
+#   3. tsc --noEmit                 — tipovna preveritev aplikacije (tsconfig.ci.json)
+#   4. prisma validate + db push    — shema je veljavna in se čisto uveljavi v prazno bazo
+#   5. ops/secret-audit.sh          — v repozitoriju NI žetonov/ključev (delovna kopija + zgodovina)
+#   6. bash -n ops/*.sh             — sintaksa operacijskih skript
+#
+# Namensko NE gradimo produkcijskega paketa v CI (orta tipa + shema sta vratarja;
+# polna gradnja poteče pri deployu — glej docs/RECOVERY.md).
+
+stages: [verify]
+
+default:
+  image: oven/bun:1
+
+verify:
+  stage: verify
+  cache:
+    key:
+      files:
+        - bun.lock
+    paths:
+      - node_modules/
+  script:
+    - bun install --frozen-lockfile
+    - bun run lint
+    - bunx tsc --noEmit -p tsconfig.ci.json
+    - bunx prisma validate
+    - DATABASE_URL="file:/tmp/ci-schema.db" bunx prisma db push --skip-generate
+    - bash ops/secret-audit.sh
+    - bash -n ops/*.sh

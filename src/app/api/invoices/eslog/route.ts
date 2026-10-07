@@ -155,7 +155,7 @@ ${lineXml}
 
   await writeAudit({
     userId: user.id, action: 'ESLOG_EXPORT', entity: 'invoice', entityId: invoice.id,
-    detail: JSON.stringify({ code: invoice.code, format: 'eSLOG/UBL 2.1' }),
+    detail: { code: invoice.code, format: 'eSLOG/UBL 2.1' },
   })
 
   return new NextResponse(xml, {

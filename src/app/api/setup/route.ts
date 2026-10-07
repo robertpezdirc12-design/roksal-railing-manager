@@ -36,7 +36,7 @@ export async function POST (req: NextRequest) {
   })
   await writeAudit({
     userId: user.id, action: 'SETUP_COMPLETE', entity: 'sistem',
-    detail: JSON.stringify({ note: 'Začetna namestitev — prvi administrator', email }),
+    detail: { note: 'Začetna namestitev — prvi administrator', email },
   })
 
   const token = await createSession(user.id)

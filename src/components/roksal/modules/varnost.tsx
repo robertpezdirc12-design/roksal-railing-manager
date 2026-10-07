@@ -102,7 +102,7 @@ export default function VarnostModule () {
               <EmptyState title="Ni aktivnih sej" desc="Nihče ni prijavljen." icon={LogIn} />
             ) : (
               <ul className="max-h-72 space-y-1.5 overflow-y-auto pr-1">
-                {sessions.data.data.map((s) => (
+                {(sessions.data?.data ?? []).map((s) => (
                   <li key={s.id} className="flex items-center justify-between gap-2 rounded-lg border p-2">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">

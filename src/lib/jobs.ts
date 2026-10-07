@@ -72,7 +72,7 @@ export async function runJob (key: string, userId: string | null): Promise<RunJo
         startedAt, finishedAt: new Date(), userId,
       },
     })
-    await writeAudit({ userId, action: 'MAINTENANCE_RUN', entity: 'jobRun', entityId: run.id, detail: JSON.stringify({ job: key, ok: false }) })
+    await writeAudit({ userId, action: 'MAINTENANCE_RUN', entity: 'jobRun', entityId: run.id, detail: { job: key, ok: false } })
     throw err instanceof Error ? err : new Error(String(err))
   }
 
@@ -81,7 +81,7 @@ export async function runJob (key: string, userId: string | null): Promise<RunJo
   })
   await writeAudit({
     userId, action: 'MAINTENANCE_RUN', entity: 'jobRun', entityId: run.id,
-    detail: JSON.stringify({ job: key, affected }),
+    detail: { job: key, affected },
   })
 
   return { job: key, affected, durationMs: run.finishedAt.getTime() - startedAt.getTime(), runId: run.id }
