@@ -968,3 +968,21 @@ Stage Summary:
 - modela ArSnapshot + VizProject; 6 novih audited rut; ar.tsx (AI analiza + zgodovina) in viz.tsx (shranjevanje/nalaganje/podvajanje) nadgrajena aditivno — obstoječi tokovi (meritev FOTO, Shrani kot meritev, ponudba) nespremenjeni
 - .zscripts/dev-detach.py (dvojni fork) — REŠITEV za vzdržne ozadnje procese v tej peskovnici (gateway pobije potomce klicne lupine; setsi ne zadostuje)
 - tests/r454.py 84/84 (2× idempotentno) + tests/fixtures/r454-terasa.jpg (VLM fixture); vsa regresija r437–r452 zelena
+
+---
+Task ID: 30b
+Agent: main (Z.ai Code)
+Task: R454 zaključek — GitLab (MR, tag, komentar), DR varnostna kopija, opombe
+
+Work Log:
+- GITLAB: veja r454-3d-ar, commit d92a28a (12 datotek: prisma/schema.prisma, 6 novih API rut, ar.tsx, viz.tsx, tests/r454.py, tests/fixtures/r454-terasa.jpg, .zscripts/dev-detach.py, worklog.md)
+- NENAVADNOST ob pushu: prvi push je poslal b3dccf7 (brez commita) — skrivnostni proces peskovnice OB VSAKI PRIMERI preklopi delovni imenik nazaj na main (reflog: »checkout: moving from r454-3d-ar to main« v isti sekundi kot commit) → commit je pristal na lokalnem main; sanacija: git branch -f r454-3d-ar d92a28a + reset main na b3dccf7 + force-with-lease push; PRAVILO ZA PRIHODNJE SEJE: pred vsakim commitom preveriti git branch --show-current (in po vsakem klicu!)
+- MR !25 ustvarjen (naslov + poln opis v slovenščini); po popravljenem pushu: sha d92a28a, konflikti NE (prejšnji has_conflicts=True je bil artefakt praznega diff-a), CI success → združen (merge 68f3ada), source branch izbrisan
+- tag v1.12.0 (annotated) potisnjen na 68f3ada; lokalni main usklajen (pull)
+- komentar na issue #7 objavljen (note 3976548926): polno poročilo R454 + P3 §16 POVSEM ZAKLJUČEN (P0–P3 vsi izvedeni); issue ostaja odprt za odločitev uporabnika
+- DR: ops/backup.sh → roksal-backup-20261008-100324-68f3adad.rkb (2 MB, šifrirano, sha256 cbdef608…, 16 kosov + manifest off-site na GitLab, 823 vrstic / 65 tabel); Cloudflare 403 retryji so delovali (manifest .01/.03/.05/.07/.09 so potrebovali 2. poskus)
+
+Stage Summary:
+- R454 dokumentiran in objavljen: MR !25 (68f3ada), tag v1.12.0, komentar na #7, šifrirana off-site kopija na novem main
+- issue #7 §16: P0 ✓ P1 ✓ P2 ✓ P3 ✓ — CELOTEN PRIORITETNI OKVIR IZVEDEN; issue odprt samo še za formalno odločitev uporabnika o zaključku
+- opomba za prihodnje seje: (1) preverjaj trenutno vejo pred commitom (sandbox preklaplja na main), (2) dev strežnik zaganjaj IZKLJUČNO prek .zscripts/dev-detach.py (dvojni fork)
