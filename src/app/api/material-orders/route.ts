@@ -3,6 +3,9 @@
 // POST  ustvari naročilo { supplierId?, note?, lines: [{ itemId?, itemName, qty, unit?, unitPrice? }] }
 //       (inventory.write) ali spremeni status { id, status } — PREJETO zahteva procurement.receive
 //       in ustvari losa v zalogi (povezava nabava → zaloga) → reviziji MATERIAL_ORDER_CREATE / MATERIAL_ORDER_STATUS.
+//       R450 (issue #9): PREJETO odgovor nosi lotsCreated + linesSkipped (imena vrstic BREZ itemId,
+//       za katere lot ni bil ustvarjen) + linesSkippedCount; ustvarjanje z vrsticami brez itemId
+//       vrne opozorilo (warning) — obstoječi odgovori ostajajo nespremenjeni (samo aditivno).
 
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
@@ -10,6 +13,15 @@ import { jsonError, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
 
 const STATUSES = ['PRIPRAVA', 'POSLANO', 'PREJETO', 'PREKINJENO']
+
+/** R450 (issue #9): slovenska mnočina za opozorila (1 pozicija je / 2 poziciji sta / 3-4 pozicije so / 5+ pozicij je). */
+function brezArtiklaFraza (n: number, imena: string[], kontekst: 'prejeto' | 'ustvarjanje'): string {
+  const stevnik = n === 1 ? 'pozicija je brez' : n === 2 ? 'poziciji sta brez' : n <= 4 ? 'pozicije so brez' : 'pozicij je brez'
+  if (kontekst === 'ustvarjanje') {
+    return `${n} ${stevnik} povezave na artikel (${imena.join(', ')}) — ob prejemu ne bodo vnesene v zalogo.`
+  }
+  return `${n} ${stevnik} povezave na artikel — lot v zalogi NI bil ustvarjen za: ${imena.join(', ')}.`
+}
 
 async function nextCode (): Promise<string> {
   const year = new Date().getFullYear()
@@ -93,10 +105,15 @@ export async function POST (req: NextRequest) {
     }
 
     // PREJETO: ustvari losa v zalogi za pozicije s povezanim artikelom (nabava → zaloga)
+    // R450 (issue #9): vrstice BREZ itemId se izpišejo v odgovoru (prej tiho preskočene)
     let lotsCreated = 0
+    const linesSkipped: string[] = []
     if (status === 'PREJETO') {
       for (const line of order.lines) {
-        if (!line.itemId) continue
+        if (!line.itemId) {
+          linesSkipped.push(line.itemName)
+          continue
+        }
         await db.stockLot.create({
           data: {
             itemId: line.itemId,
@@ -122,9 +139,17 @@ export async function POST (req: NextRequest) {
       action: 'MATERIAL_ORDER_STATUS',
       entity: 'materialOrder',
       entityId: order.id,
-      detail: { code: order.code, from: order.status, to: status, lotsCreated },
+      detail: { code: order.code, from: order.status, to: status, lotsCreated, linesSkipped: linesSkipped.length, linesSkippedNames: linesSkipped },
     })
-    return NextResponse.json({ data: updated, lotsCreated })
+    return NextResponse.json({
+      data: updated,
+      lotsCreated,
+      linesSkipped,
+      linesSkippedCount: linesSkipped.length,
+      ...(linesSkipped.length > 0
+        ? { warning: brezArtiklaFraza(linesSkipped.length, linesSkipped, 'prejeto') }
+        : {}),
+    })
   }
 
   // ── varianta 1: novo naročilo s pozicijami ────────────────────────────────
@@ -180,7 +205,15 @@ export async function POST (req: NextRequest) {
     action: 'MATERIAL_ORDER_CREATE',
     entity: 'materialOrder',
     entityId: order.id,
-    detail: { code: order.code, supplierId, positions: validated.length },
+    detail: { code: order.code, supplierId, positions: validated.length, brezArtikla: validated.filter((v) => !v.itemId).map((v) => v.itemName) },
   })
-  return NextResponse.json({ data: order }, { status: 201 })
+  // R450 (issue #9): proaktivno opozorilo ob ustvarjanju — vrstice brez povezave na
+  // artikel ob PREJETO ne bodo vnesene v zalogo (aditivno polje, ne zavrnemo)
+  const noItem = validated.filter((v) => !v.itemId).map((v) => v.itemName)
+  return NextResponse.json({
+    data: order,
+    ...(noItem.length > 0
+      ? { warning: brezArtiklaFraza(noItem.length, noItem, 'ustvarjanje') }
+      : {}),
+  }, { status: 201 })
 }
