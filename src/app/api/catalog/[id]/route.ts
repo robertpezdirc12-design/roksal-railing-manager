@@ -8,6 +8,17 @@ type Params = { params: Promise<{ id: string }> }
 const MATERIALS = ['ALU', 'INOX', 'KOVANO ŽELEZO', 'STIKLO']
 const TYPES = ['OGRAJA', 'BALUSTRADA', 'NAGIBNA']
 
+/** R449 (issue #8): posnetek celotnega profila za verzijo kataloga. */
+function profileSnapshot (p: {
+  sku: string; name: string; material: string; type: string; pricePerM: number
+  description: string | null; active: boolean
+}): Record<string, unknown> {
+  return {
+    sku: p.sku, name: p.name, material: p.material, type: p.type,
+    pricePerM: p.pricePerM, description: p.description, active: p.active,
+  }
+}
+
 // PATCH /api/catalog/[id] — urejanje profila / cene (catalog.write)
 export async function PATCH (req: NextRequest, { params }: Params) {
   const auth = await requirePermission(req, 'catalog.write')
@@ -34,9 +45,27 @@ export async function PATCH (req: NextRequest, { params }: Params) {
 
   const updated = await db.profile.update({ where: { id }, data: patch })
 
+  // R449 (issue #8): verzija ob vsaki spremembi — staro→novo (le spremenjena polja) + celoten posnetek
+  const before: Record<string, unknown> = {}
+  for (const key of Object.keys(patch)) {
+    before[key] = (existing as Record<string, unknown>)[key]
+  }
+  const version = await db.catalogVersion.create({
+    data: {
+      profileId: id,
+      userId: auth.user.id,
+      data: JSON.stringify({ before, after: patch, profile: profileSnapshot(updated) }),
+      note: `Sprememba: ${Object.keys(patch).join(', ')}`,
+    },
+  })
+
   await writeAudit({
     userId: auth.user.id, action: 'PROFILE_UPDATE', entity: 'profile', entityId: id,
     detail: { sku: existing.sku, ...patch },
+  })
+  await writeAudit({
+    userId: auth.user.id, action: 'CATALOG_VERSION', entity: 'catalogVersion', entityId: version.id,
+    detail: { profileId: id, sku: updated.sku, spremembe: Object.keys(patch) },
   })
   return NextResponse.json({ data: updated })
 }

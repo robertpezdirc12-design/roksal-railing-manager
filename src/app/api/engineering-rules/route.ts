@@ -2,6 +2,7 @@
 // GET  seznam aktivnih pravil (projects.read) — ?all=1 vključno z neaktivnimi
 // POST novo/posodobi pravilo { key, label, value, unit?, note? } (production.manage)
 //      — upsert po ključu; value > 0 → revizija ENGINEERING_RULE_UPSERT.
+//      R449 (issue #8): vsak upsert zapiše RuleVersion (staro→novo) + revizijo RULE_VERSION.
 
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
@@ -9,6 +10,14 @@ import { jsonError, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
 
 const UNITS = ['cm', 'm', '°', 'kos', 'mm']
+
+/** R449 (issue #8): posnetek stanja pravila za zgodovino vrednosti. */
+function ruleSnapshot (r: {
+  key: string; label: string; value: number; unit: string
+  note: string | null; active: boolean
+}): Record<string, unknown> {
+  return { key: r.key, label: r.label, value: r.value, unit: r.unit, note: r.note, active: r.active }
+}
 
 export async function GET (req: NextRequest) {
   const auth = await requirePermission(req, 'projects.read')
@@ -41,17 +50,37 @@ export async function POST (req: NextRequest) {
   if (!label) return jsonError(400, 'Oznaka (label) je obvezna.')
   if (!Number.isFinite(value) || value <= 0) return jsonError(400, 'Vrednost mora biti večja od 0.')
 
+  const existing = await db.engineeringRule.findUnique({ where: { key } })
   const rule = await db.engineeringRule.upsert({
     where: { key },
     create: { key, label, value, unit, note, active },
     update: { label, value, unit, note, active },
   })
+
+  // R449 (issue #8): zgodovina vrednosti — staro→novo ob vsakem upsertu
+  const version = await db.ruleVersion.create({
+    data: {
+      ruleId: rule.id,
+      userId: auth.user.id,
+      oldValue: existing ? JSON.stringify(ruleSnapshot(existing)) : null,
+      newValue: JSON.stringify(ruleSnapshot(rule)),
+      note: existing ? `Posodobitev pravila ${key}` : `Novo pravilo ${key}`,
+    },
+  })
+
   await writeAudit({
     userId: auth.user.id,
     action: 'ENGINEERING_RULE_UPSERT',
     entity: 'engineeringRule',
     entityId: rule.id,
     detail: { key, value, unit, active },
+  })
+  await writeAudit({
+    userId: auth.user.id,
+    action: 'RULE_VERSION',
+    entity: 'ruleVersion',
+    entityId: version.id,
+    detail: { ruleId: rule.id, key, operacija: existing ? 'posodobitev' : 'nastanek' },
   })
   return NextResponse.json({ data: rule }, { status: 201 })
 }

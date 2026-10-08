@@ -41,6 +41,8 @@ model User {
   drivenDeliveries Delivery[] @relation("drivenDeliveries") // R445: dostave, kjer je voznik
   serviceVisits   ServiceVisit[] @relation("serviceVisits") // R446: servisni obiski tehnika
   decidedCases    ServiceCase[] @relation("decidedCases") // R446: servisni primeri, ki jih je odločil
+  catalogVersions CatalogVersion[] @relation("catalogVersions") // R449: verzije kataloga (issue #8)
+  ruleVersions    RuleVersion[] @relation("ruleVersions") // R449: verzije inženirskih pravil (issue #8)
 }
 
 model Session {
@@ -285,6 +287,25 @@ model Profile {
   pricePerM   Float   @default(0)
   description String?
   active      Boolean @default(true)
+
+  versions    CatalogVersion[] // R449: zgodovina sprememb (issue #8)
+}
+
+// Zgodovina verzij profilov kataloga — posnetek CELEGA profila ob vsaki
+// spremembi (R449, issue #8; vzorec MeasurementVersion iz issue #1):
+// kdo/kdaj + staro→novo (data = JSON { before, after, profile }).
+model CatalogVersion {
+  id        String   @id @default(cuid())
+  profileId String?
+  profile   Profile? @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  userId    String?
+  user      User?    @relation("catalogVersions", fields: [userId], references: [id])
+  data      String   // JSON posnetek: { before: staro (le spremenjena polja | null pri novem), after: novo, profile: celoten posnetek }
+  note      String?
+  createdAt DateTime @default(now())
+
+  @@index([profileId, createdAt])
+  @@index([createdAt])
 }
 
 model InventoryItem {
@@ -670,6 +691,25 @@ model EngineeringRule {
   note      String?
   active    Boolean  @default(true)
   updatedAt DateTime @updatedAt
+
+  versions  RuleVersion[] // R449: zgodovina vrednosti (issue #8)
+}
+
+// Zgodovina vrednosti inženirskega pravila (R449, issue #8): staro→novo ob
+// vsaki spremembi (upsert/PATCH/deaktivacija) + kdo/kdaj.
+// oldValue/newValue = JSON posnetka { value, label, unit, note, active }.
+model RuleVersion {
+  id        String         @id @default(cuid())
+  ruleId    String
+  rule      EngineeringRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  userId    String?
+  user      User?          @relation("ruleVersions", fields: [userId], references: [id])
+  oldValue  String? // JSON stanje PRED spremembo (null ob nastanku pravila)
+  newValue  String // JSON stanje PO spremembi
+  note      String?
+  createdAt DateTime       @default(now())
+
+  @@index([ruleId, createdAt])
 }
 
 // ─── Offline sinhronizacija (R439: issue #6 — mobilni teren brez signala) ────

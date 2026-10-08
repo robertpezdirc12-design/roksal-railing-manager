@@ -6,6 +6,17 @@ import { writeAudit } from '@/lib/audit'
 const MATERIALS = ['ALU', 'INOX', 'KOVANO ŽELEZO', 'STIKLO']
 const TYPES = ['OGRAJA', 'BALUSTRADA', 'NAGIBNA']
 
+/** R449 (issue #8): posnetek celotnega profila za verzijo kataloga. */
+function profileSnapshot (p: {
+  sku: string; name: string; material: string; type: string; pricePerM: number
+  description: string | null; active: boolean
+}): Record<string, unknown> {
+  return {
+    sku: p.sku, name: p.name, material: p.material, type: p.type,
+    pricePerM: p.pricePerM, description: p.description, active: p.active,
+  }
+}
+
 // GET /api/catalog — seznam aktivnih profilov (catalog.read)
 export async function GET (req: NextRequest) {
   const auth = await requirePermission(req, 'catalog.read')
@@ -44,9 +55,23 @@ export async function POST (req: NextRequest) {
     },
   })
 
+  // R449 (issue #8): verzija ob vsaki spremembi — ob nastanku je before = null
+  const version = await db.catalogVersion.create({
+    data: {
+      profileId: profile.id,
+      userId: auth.user.id,
+      data: JSON.stringify({ before: null, after: profileSnapshot(profile), profile: profileSnapshot(profile) }),
+      note: 'Nov profil v katalogu',
+    },
+  })
+
   await writeAudit({
     userId: auth.user.id, action: 'CATALOG_UPDATE', entity: 'profile', entityId: profile.id,
     detail: { sku, name, material, type, pricePerM, operacija: 'nov profil' },
+  })
+  await writeAudit({
+    userId: auth.user.id, action: 'CATALOG_VERSION', entity: 'catalogVersion', entityId: version.id,
+    detail: { profileId: profile.id, sku, operacija: 'nov profil' },
   })
   return NextResponse.json({ data: profile }, { status: 201 })
 }
