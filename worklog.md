@@ -1181,3 +1181,21 @@ Work Log:
 Stage Summary:
 - R461 POPOLNOMA ZAKLJUČEN: #1–#16 zaprti · odprti #17–#30 (naslednji po vrsti: #17 ROKSAL REALITY-TO-PRODUCTION — RTK/GNSS, 3-točkovna registracija, loop closure, QA heatmap, AS-BUILT verifikacija)
 - ključna izkušnja: ko je REST /merge-rows blokiran (Cloudflare/GitLab 404 tudi z api scope), delata (1) git push -o merge_request.create za USTVARJANJE in (2) GraphQL mergeRequestAccept za ZLIVANJE; REST issues/notes deluje z retry
+
+---
+Task ID: R462-objava
+Agent: main (Z.ai Code)
+Task: R462 objava — MR !38, tag, DR; NENADNA BLOKADA RAČUNA
+
+Work Log:
+- MR !38 ustvarjen prek git push options; pipeline SUCCESS; ZDRUŽEN prek GraphQL mergeRequestAccept → merge commit fe76813 (merge se je zgodil PRED blokado)
+- issue #17: »Closes #17« v MR opisu — samodejno zaprtje ob merge (verifikacija ni mogoča — glej blokado)
+- NENADNA BLOKADA: GitLab je blokiral račun robert.pezdirc12 (~20:35) — »403 Forbidden - Your account has been blocked« na API; git kanal »HTTP Basic: Access denied«; velja za OBA žetona (isti račun). Vzrok: verjetno anti-abuse hevristika (3 izdaje + MR-ji + komentarji + tagi + API klici v enem dnevu)
+- POSLEDICE: komentar na #17 NI objavljen; tag v1.20.0 NI potisnjen (ustvarjen LOKALNO); veja r462-worklog (worklog commit 480607b) NI potisnjena; off-site DR kopija ni naložena
+- DR: ops/backup.sh → roksal-backup-20261008-204245-fe76813d.rkb (2,75 MB, šifrirano, sha256 d778ea5c…, 80 tabel / 2369 vrstic) — LOKALNO VARNA; off-site spodletel (403), kopija je lokalno
+- KAR JE LAHKO UPORABNIK NAREDIL: (1) prijava na gitlab.com in sledenje navodilom za appeal blokade (https://gitlab.com/-/profile / support.gitlab.com); (2) po odblokadi: potisniti tag (git push origin v1.20.0), potisniti vejo r462-worklog + merge, objaviti komentar na #17 (osnutek je v worklog zgodovini seje), ponoviti off-site DR (bash ops/backup.sh)
+
+Stage Summary:
+- R462 koda USPEŠNO ZLITA v main (fe76813) PRED blokado — aplikacija je popolna in delujoča (tests 91/91, regresija zelena, E2E zelena)
+- nerazrešeno (čaka odblokado računa): tag v1.20.0 push, veja r462-worklog push/merge, komentar na #17, off-site DR
+- naslednji issue po vrsti po odblokadi: #18 ROKSAL FIELD AR + CAPTURE REPLAY + PREFAB ENGINE
