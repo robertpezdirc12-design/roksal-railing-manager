@@ -1,6 +1,8 @@
 // /api/measurements — zajem meritev (OGRAJA / BALUSTRADA / NAGIB / FOTO)
 // GET  ?projectId&workOrderId&type — seznam z avtorjem+projektom+nalogom (measurements.read)
 // POST ustvari meritev, avtor = prijavljeni uporabnik (measurements.write)
+//      R450 (issue #9): ob ustvarjanju zapiše tudi verzijo v1 (zgodovina kdo/kdaj/kaj
+//      ob nastanku — enako kot /api/sync, /api/measurement/confirm, /api/railing-layout).
 
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
@@ -111,6 +113,20 @@ export async function POST (req: NextRequest) {
       author: { select: { name: true } },
       project: { select: { id: true, code: true, title: true } },
       workOrder: { select: { id: true, code: true, title: true } },
+    },
+  })
+
+  // R450 (issue #9): verzija v1 — začetni posnetek (isti vzorec kot /api/sync — opMeritev)
+  await db.measurementVersion.create({
+    data: {
+      measurementId: measurement.id,
+      version: 1,
+      userId: user.id,
+      data: JSON.stringify({
+        type, lengthCm, heightCm, posts, segments, handrail: measurement.handrail, slopeDeg,
+        location: measurement.location, note: measurement.note, params: measurement.params,
+      }),
+      note: type === 'FOTO' ? 'Ročna foto meritev' : 'Ročna meritev',
     },
   })
 
