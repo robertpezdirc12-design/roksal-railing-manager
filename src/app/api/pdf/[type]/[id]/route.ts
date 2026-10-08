@@ -1,12 +1,15 @@
-// API /api/pdf/[type]/[id] — izvoz ponudbe/računa v PDF (documents.generate)
+// API /api/pdf/[type]/[id] — izvoz ponudbe/računa/foto-vizualizacije v PDF (documents.generate)
 // GET → application/pdf (inline; filename="<koda>.pdf"), lasten generator pdf-mini.
-// Revizija: DOC_GENERATE (entity quote|invoice).
+// R459: tip photoviz — dokument FOTO-VIZUALIZACIJE s PREJ/POTEM slikama (issue #14 §14).
+// Revizija: DOC_GENERATE (entity quote|invoice|photoviz).
 
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { jsonError, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
-import { pdfDoc, AMBER, GRAY, LIGHT, NAVY, PAGE_W, type Rgb } from '@/lib/pdf-mini'
+import { jpegSize, pdfDoc, AMBER, GRAY, LIGHT, NAVY, PAGE_W, type Rgb } from '@/lib/pdf-mini'
+import { vizZaUporabnika } from '@/lib/photo-replace-engine'
+import { VIZ_ZIG } from '@/lib/photo-replace-core'
 
 type Params = { params: Promise<{ type: string; id: string }> }
 
@@ -290,6 +293,140 @@ async function renderInvoicePdf (id: string): Promise<{ bytes: Uint8Array<ArrayB
   return { bytes: doc.build(), code: invoice.code, projectId: invoice.projectId }
 }
 
+// ─── FOTO-VIZUALIZACIJA (R459 — issue #14 §14: vključitev v PDF) ──────────
+
+/** data URL (image/jpeg) → bajti; neveljaven → null. */
+function dataUrlToJpeg (dataUrl: string | null | undefined): Uint8Array | null {
+  if (!dataUrl || !dataUrl.startsWith('data:image/jpeg;base64,')) return null
+  try {
+    const b64 = dataUrl.slice('data:image/jpeg;base64,'.length)
+    const buf = Buffer.from(b64, 'base64')
+    return buf.length > 100 && jpegSize(buf) ? buf : null
+  } catch {
+    return null
+  }
+}
+
+interface VizRowFull {
+  id: string
+  variantLabel: string
+  status: string
+  sourcePhoto: string
+  rendered: string | null
+  renderParams: string
+  engineVersion: string
+  note: string | null
+  createdAt: Date
+  measurementId: string | null
+  measurementVersion: number | null
+  projectId: string
+  productId: string
+  variantId: string | null
+  authorId: string | null
+  project: { code: string; title: string; customer: { name: string } | null } | null
+  product: { sku: string; name: string; family: { code: string } } | null
+  variant: { sku: string; name: string; ral: string | null; color: string | null } | null
+  author: { name: string } | null
+}
+
+async function renderPhotoVizPdf (id: string): Promise<{ bytes: Uint8Array<ArrayBuffer>; code: string; projectId: string | null } | NextResponse> {
+  const viz = await db.photoVisualization.findUnique({
+    where: { id },
+    include: {
+      project: { select: { code: true, title: true, customer: { select: { name: true } } } },
+      product: { select: { sku: true, name: true, family: { select: { code: true } } } },
+      variant: { select: { sku: true, name: true, ral: true, color: true } },
+      author: { select: { name: true } },
+    },
+  }) as VizRowFull | null
+  if (!viz) return jsonError(404, 'Vizualizacija ne obstaja.')
+
+  // konfiguracija iz posnetka (prikaz povzetka)
+  let cfgInfo = ''
+  try {
+    const p = JSON.parse(viz.renderParams) as { config?: Record<string, unknown>; reference?: { cm?: number; tip?: string } }
+    const c = p.config ?? {}
+    const deli = [
+      `Tip: ${String(c.tip ?? '—')}`,
+      `Dolžina: ${String(c.lengthCm ?? '—')} cm`,
+      `Višina: ${String(c.heightCm ?? '—')} cm`,
+      `Stebri: ${String(c.posts ?? '—')}`,
+      c.handrail === false ? 'Brez ročnika' : 'Z ročnikom',
+    ]
+    cfgInfo = deli.join(' · ')
+  } catch { cfgInfo = '—' }
+
+  const doc = pdfDoc()
+  setFooter(doc)
+
+  doc.text(M, 54, 'ROKSAL RAILING MANAGER', { size: 16, bold: true, color: NAVY })
+  doc.text(R, 50, 'info@roksal.si · +386 1 234 56 78', { size: 8, color: GRAY, align: 'right' })
+  doc.text(R, 60, 'Lesarska cesta 12, 2380 Slovenj Graddek', { size: 8, color: GRAY, align: 'right' })
+  doc.line(M, 70, R, 70, { width: 2.5, color: AMBER })
+
+  doc.text(M, 104, 'FOTO-VIZUALIZACIJA', { size: 22, bold: true })
+  doc.text(R, 100, `${viz.project?.code ?? ''} — varianta ${viz.variantLabel}`, { size: 12, bold: true, color: NAVY, align: 'right' })
+  doc.text(R, 114, `Datum: ${fmtDate(viz.createdAt)}`, { size: 9, color: GRAY, align: 'right' })
+  doc.text(R, 127, `Status: ${viz.status === 'IZBRANA' ? 'Izbrana varianta' : viz.status === 'ARHIV' ? 'Arhivirana' : 'Osnutek'}`, { size: 9, color: GRAY, align: 'right' })
+
+  let y = 152
+  doc.text(M, y, 'PROJEKT', { size: 8, bold: true, color: LIGHT }); y += 14
+  doc.text(M, y, viz.project ? `${viz.project.code} — ${viz.project.title}` : '—', { size: 11, bold: true }); y += 14
+  if (viz.project?.customer) { doc.text(M, y, `Stranka: ${viz.project.customer.name}`, { size: 9.5, color: GRAY }); y += 13 }
+  doc.text(M, y, `Izdelek: ${viz.product?.name ?? '—'} (${viz.product?.sku ?? '—'})`, { size: 9.5, color: GRAY }); y += 13
+  doc.text(M, y, `Barva/varianta: ${viz.variant ? `${viz.variant.name}${viz.variant.ral ? ` — ${viz.variant.ral}` : ''}` : '—'}`, { size: 9.5, color: GRAY }); y += 13
+  doc.text(M, y, `Konfiguracija: ${cfgInfo}`, { size: 9.5, color: GRAY }); y += 13
+  if (viz.measurementId) {
+    doc.text(M, y, `Vezana meritev: ${viz.measurementId.slice(-8)} (verzija ${viz.measurementVersion ?? 1}) — proizvodne mere izhajajo IZKLJUČNO iz merilnega poteka.`, { size: 9, color: GRAY })
+    y += 13
+  }
+  y += 6
+
+  // §15: jasna ločitev VIZUALIZACIJA ≠ proizvodna mera
+  doc.rect(M, y, R - M, 24, { fill: [0.996, 0.949, 0.851] })
+  doc.text(M + 8, y + 15, `${VIZ_ZIG} — ni dokaz proizvodne točnosti.`, { size: 10, bold: true, color: [0.55, 0.35, 0.02] })
+  y += 36
+
+  const prej = dataUrlToJpeg(viz.sourcePhoto)
+  const potem = dataUrlToJpeg(viz.rendered)
+  const imgW = R - M
+
+  doc.text(M, y, 'PREJ — obstoječe stanje', { size: 10, bold: true, color: NAVY }); y += 6
+  if (prej) {
+    const size = jpegSize(prej)
+    if (size) {
+      const imgH = Math.min(300, (imgW * size.height) / size.width)
+      doc.image(M, y, imgW, imgH, prej)
+      y += imgH + 14
+    }
+  } else {
+    doc.text(M, y + 14, '— fotografija ni na voljo —', { size: 9.5, color: GRAY }); y += 32
+  }
+
+  doc.text(M, y, 'POTEM — nova ROKSAL ograja (vizualizacija)', { size: 10, bold: true, color: NAVY }); y += 6
+  if (potem) {
+    const size = jpegSize(potem)
+    if (size) {
+      let imgH = Math.min(300, (imgW * size.height) / size.width)
+      if (y + imgH > 760) { // prelom — POTEM na novo stran
+        doc.addPage()
+        doc.text(M, 60, 'POTEM — nova ROKSAL ograja (vizualizacija)', { size: 10, bold: true, color: NAVY })
+        y = 66
+      }
+      doc.image(M, y, imgW, imgH, potem)
+      y += imgH + 14
+    }
+  } else {
+    doc.text(M, y + 14, '— izrisana sličica še ni shranjena — izvozite jo iz zavihka Foto vizualizacija —', { size: 9.5, color: GRAY }); y += 32
+  }
+
+  if (viz.note && viz.note.trim()) {
+    drawNote(doc, y, viz.note)
+  }
+
+  return { bytes: doc.build(), code: `FOTO-VIZ-${viz.project?.code ?? ''}-${viz.variantLabel}`, projectId: viz.projectId }
+}
+
 // ─── GET ─────────────────────────────────────────────────────────────────────
 
 export async function GET (req: NextRequest, { params }: Params) {
@@ -297,14 +434,23 @@ export async function GET (req: NextRequest, { params }: Params) {
   if (auth instanceof NextResponse) return auth
   const { type, id } = await params
 
-  if (type !== 'quote' && type !== 'invoice') {
-    return jsonError(400, 'Neznana vrsta dokumenta.', 'Veljavni tipi: quote, invoice.')
+  if (type !== 'quote' && type !== 'invoice' && type !== 'photoviz') {
+    return jsonError(400, 'Neznana vrsta dokumenta.', 'Veljavni tipi: quote, invoice, photoviz.')
   }
   if (!id) return jsonError(400, 'Manjka identifikator dokumenta.')
 
+  // R459: foto-vizualizacija ima lasten obseg dostopa (§13 IDOR — fotografije
+  // strank ne smejo priti do tujih uporabnikov tudi prek PDF dokumenta)
+  if (type === 'photoviz') {
+    const res = await vizZaUporabnika(auth.user, id)
+    if (res instanceof NextResponse) return res
+  }
+
   const rendered = type === 'quote'
     ? await renderQuotePdf(id)
-    : await renderInvoicePdf(id)
+    : type === 'invoice'
+      ? await renderInvoicePdf(id)
+      : await renderPhotoVizPdf(id)
   if (rendered instanceof NextResponse) return rendered
 
   await writeAudit({

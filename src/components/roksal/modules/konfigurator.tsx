@@ -12,7 +12,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Calculator, CheckCircle2, Circle, ClipboardList, Download, FolderKanban, Layers, Loader2,
+  Calculator, CheckCircle2, Circle, ClipboardList, Download, FolderKanban, Image as ImageIcon, Layers, Loader2,
   Package, Palette, Plus, RotateCcw, Ruler, Save, Trash2, TriangleAlert,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
@@ -138,6 +138,8 @@ const pos = (n: number) => Number.isFinite(n) && n > 0
 
 export default function KonfiguratorModule () {
   const setTab = useAppStore((s) => s.setTab)
+  const photoVizId = useAppStore((s) => s.photoVizId)
+  const setPhotoVizIdStore = useAppStore((s) => s.setPhotoVizId)
   const { toast } = useToast()
 
   const [step, setStep] = useState(0)
@@ -176,6 +178,8 @@ export default function KonfiguratorModule () {
 
   const segId = useRef(1)
   const nextSegId = () => ++segId.current
+  const vizPrefillDone = useRef<string | null>(null)
+  const [vizBusy, setVizBusy] = useState(false)
 
   // ── podatki ──
   const projects = useApi<{ data: ProjectRow[] }>('/api/projects?limit=500')
@@ -228,6 +232,79 @@ export default function KonfiguratorModule () {
   useEffect(() => { setPlan(null); setCalcError(null) }, [productId, variantId, effectiveQty, includeOptional])
 
   // ── ravnanje ──
+
+  /**
+   * R459 (issue #14 §14): prefill iz shranjene FOTO-VIZUALIZACIJE — projekt,
+   * družina, izdelek, varianta in segmenti se prevzamejo po EKSPlicitnih ID
+   * povezavah (brez ponovnega ročnega vnosa konfiguracije).
+   */
+  async function prefillFromPhotoViz (id: string): Promise<void> {
+    setVizBusy(true)
+    try {
+      const res = await apiGet<{
+        data: {
+          id: string; projectId: string; variantId: string | null; renderParams: string
+          product: { id: string; sku: string; name: string; family: { code: string; name: string } }
+          variant: { id: string; name: string } | null
+        }
+      }>(`/api/photo-visualization/${id}`)
+      const d = res.data
+      let cfg: { config?: { lengthCm?: number; heightCm?: number } } = {}
+      try { cfg = JSON.parse(d.renderParams) as typeof cfg } catch { /* brez segmentov */ }
+      setProjectId(d.projectId)
+      setFamilyCode(d.product.family.code)
+      setProductId(d.product.id)
+      setVariantId(d.variantId ?? '')
+      setName('')
+      const len = typeof cfg.config?.lengthCm === 'number' && cfg.config.lengthCm > 0 ? cfg.config.lengthCm : null
+      const h = typeof cfg.config?.heightCm === 'number' && cfg.config.heightCm > 0 ? cfg.config.heightCm : null
+      if (len) {
+        setSegsM([{ id: nextSegId(), len: String(round2(len / 100)), h: h ? String(round2(h / 100)) : '' }])
+      }
+      setStep(2) // meritve — uporabnik nadaljuje tok do izračuna/ponudbe
+      toast({
+        title: 'Konfiguracija prevzeta iz foto-vizualizacije.',
+        description: `${d.product.name}${d.variant ? ` · ${d.variant.name}` : ''} — segmenti so predpolnjeni.`,
+      })
+    } catch (e) {
+      toast({ title: 'Prevzem foto-vizualizacije ni uspel.', description: e instanceof Error ? e.message : undefined, variant: 'destructive' })
+    } finally {
+      setVizBusy(false)
+    }
+  }
+
+  /** Prevezjava iz Foto vizualizacije (store) — enkraten prefill ob vstopu. */
+  useEffect(() => {
+    if (!photoVizId || vizPrefillDone.current === photoVizId) return
+    vizPrefillDone.current = photoVizId
+    const id = photoVizId
+    setPhotoVizIdStore(null)
+    void prefillFromPhotoViz(id)
+  }, [photoVizId, setPhotoVizIdStore])
+
+  /** Ročni prevzem: izbrana (ali zadnja) vizualizacija izbranega projekta. */
+  async function prefillFromProjectViz (): Promise<void> {
+    if (!projectId) {
+      toast({ title: 'Najprej izberite projekt.', description: 'Foto-vizualizacije so vezane na projekt.', variant: 'destructive' })
+      return
+    }
+    setVizBusy(true)
+    try {
+      const res = await apiGet<{ data: { id: string; status: string; variantLabel: string }[] }>(`/api/photo-visualization?projectId=${projectId}`)
+      const rows = res.data ?? []
+      if (rows.length === 0) {
+        toast({ title: 'Ta projekt nima foto-vizualizacij.', description: 'Ustvarite jo v zavihku Foto vizualizacija.' })
+        return
+      }
+      const izbrana = rows.find((r) => r.status === 'IZBRANA') ?? rows[0]
+      await prefillFromPhotoViz(izbrana.id)
+    } catch (e) {
+      toast({ title: 'Prevzem foto-vizualizacije ni uspel.', description: e instanceof Error ? e.message : undefined, variant: 'destructive' })
+    } finally {
+      setVizBusy(false)
+    }
+  }
+
   function resetMeasurements () {
     setSegs2([{ id: nextSegId(), len: '', wid: '' }])
     setSegsM([{ id: nextSegId(), len: '', h: '' }])
@@ -485,18 +562,28 @@ export default function KonfiguratorModule () {
             ) : null}
 
             {STEPS[step].key === 'izdelek' ? (
-              <StepIzdelek
-                families={families.data?.data ?? []}
-                products={prodRows}
-                loading={products.loading}
-                error={products.error}
-                familyCode={familyCode}
-                productId={productId}
-                variantId={variantId}
-                onFamily={(v) => { setFamilyCode(v); setProductId(''); setVariantId('') }}
-                onProduct={selectProduct}
-                onVariant={setVariantId}
-              />
+              <div className="space-y-3">
+                {projectId ? (
+                  <div className="flex justify-end">
+                    <Button type="button" size="sm" variant="outline" className="h-10" disabled={vizBusy} onClick={() => { void prefillFromProjectViz() }}>
+                      {vizBusy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <ImageIcon className="size-4" aria-hidden />}
+                      Prevzemi iz foto-vizualizacije
+                    </Button>
+                  </div>
+                ) : null}
+                <StepIzdelek
+                  families={families.data?.data ?? []}
+                  products={prodRows}
+                  loading={products.loading}
+                  error={products.error}
+                  familyCode={familyCode}
+                  productId={productId}
+                  variantId={variantId}
+                  onFamily={(v) => { setFamilyCode(v); setProductId(''); setVariantId('') }}
+                  onProduct={selectProduct}
+                  onVariant={setVariantId}
+                />
+              </div>
             ) : null}
 
             {STEPS[step].key === 'meritve' && product ? (

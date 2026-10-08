@@ -58,6 +58,9 @@ export const SECTIONS: SectionDef[] = [
       // poslovne cene — kršitev §15). Tok: produkt → izmera → izračun → paket/BOM/ponudba.
       { id: 'konfigurator', label: 'Konfigurator', gate: 'quotes.create', desc: 'Konfigurator produktov po družinah (R447)' },
       { id: 'viz', label: 'Vizualizacija', gate: 'projects.read', desc: '3D vizualizacije ograj' },
+      // R459 (issue #14): FOTO VIZUALIZACIJA — fotorealistična menjava ograje na
+      // originalni fotografiji (PREJ/POTEM, variante A/B/C, izvoz/PDF).
+      { id: 'foto-replace', label: 'Foto vizualizacija', gate: 'projects.read', desc: 'Realistic photo replacement (R459)' },
       { id: 'ar', label: 'AR', gate: 'projects.read', desc: 'Dopolnjena resničnost na terenu' },
       { id: 'signatura', label: 'Signatura', gate: 'quotes.create', desc: 'Zajem podpisa stranke' },
       { id: 'dokumenti', label: 'Dokumenti', gate: 'documents.read', desc: 'Arhiv dokumentov' },
