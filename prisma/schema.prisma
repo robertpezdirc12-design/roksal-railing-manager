@@ -45,6 +45,8 @@ model User {
   ruleVersions    RuleVersion[] @relation("ruleVersions") // R449: verzije inženirskih pravil (issue #8)
   arSnapshots     ArSnapshot[] @relation("arSnapshots") // R454: AR posnetki avtorja (3D/AR P3)
   vizProjects     VizProject[] @relation("vizProjects") // R454: shranjeni 3D projekti avtorja
+  playbookDefs    PlaybookDef[] @relation("playbookAuthor") // R458: avtor verzije playbooka (issue #13)
+  playbookRuns    PlaybookRun[] @relation("playbookUser") // R458: zagoni playbookov uporabnika
 }
 
 model Session {
@@ -131,6 +133,7 @@ model Project {
   serviceCases     ServiceCase[] // R446: servisni primeri projekta
   arSnapshots      ArSnapshot[] // R454: AR posnetki projekta (3D/AR P3)
   vizProjects      VizProject[] // R454: shranjene 3D konfiguracije
+  playbookRuns     PlaybookRun[] // R458: zagoni playbookov na projektu (issue #13)
 }
 
 model Quote {
@@ -222,6 +225,7 @@ model WorkOrder {
   crewId       String?
   crew         Crew?     @relation("crewWorkOrders", fields: [crewId], references: [id], onDelete: SetNull)
   deliveries   Delivery[]
+  playbookRuns PlaybookRun[] // R458: vodeni postopki na nalogu (issue #13)
 }
 
 model WorkOrderEvent {
@@ -458,7 +462,7 @@ model WarrantyVisit {
 // Tok: STRANKA → REKLAMACIJA (Claim) → PREVERITEV → ODLOČITEV → SERVIS
 //      (ServiceCase + ServiceVisit) → ZAKLJUČEK.
 // Obstoječi Warranty/WarrantyVisit ostaja NEPOŠKODOVAN — zgolj razširjen z
-// relacijami na reklamacije in servisne primerе (aditivno, brez sprememb tokov).
+// relacijami na reklamacije in servisne primere (aditivno, brez sprememb tokov).
 // Eksplicitne ID povezave (customerId/projectId/packageId/warrantyId/claimId),
 // BREZ fuzzy matchinga; PostgreSQL-kompatibilno (skalarni tipi brez seznamov).
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1192,4 +1196,81 @@ model VizProject {
   updatedAt DateTime @updatedAt
 
   @@index([projectId, updatedAt])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PLAYBOOK ENGINE (R458 — issue #13: SCRIPT-FIRST FIELD WORKFLOW)
+// Deterministični vodeni postopki brez runtime AI: PLAYBOOK → STEP → ACTION →
+// VALIDATION → NEXT STEP. Definicije so PODATKOVNO definirane (JSON) in
+// verzionirane; izvajanje je state-machine z revizijo vsakega prehoda.
+// ═══════════════════════════════════════════════════════════════════════════
+
+// DEFINICIJA PLAYBOOKA — verzioniran vir resnice (key + version edinstven).
+// status: DRAFT (priprava) | ACTIVE (aktiven za nove zagone) | RETIRED (upokojen).
+// §14: zaključeni zagoni ostanejo vezani na svojo verzijo prek snapshot polj na run-u.
+model PlaybookDef {
+  id            String   @id @default(cuid())
+  key           String // OGRAJA | KERAMIKA | STREHA | FASADA | MONTAZA
+  name          String
+  version       Int // zaporedna verzija (1, 2, …)
+  status        String   @default("DRAFT")
+  effectiveFrom DateTime @default(now())
+  authorId      String?
+  author        User?    @relation("playbookAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  definition    String // JSON: { steps: [...], pravila } — podatkovno definirani workflow
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  runs PlaybookRun[]
+
+  @@unique([key, version])
+  @@index([key, status])
+}
+
+// ZAGON PLAYBOOKA — izvedba na nalogu/projektu. Snapshot key+version zagotavlja
+// §14 vezavo na verzijo. context = odgovori na pogojna vprašanja (§5) +
+// kontekst naprave (§9). handoff = sled avtomatskih prehodov (§11).
+model PlaybookRun {
+  id             String      @id @default(cuid())
+  playbookDefId  String
+  playbookDef    PlaybookDef @relation(fields: [playbookDefId], references: [id])
+  playbookKey    String // snapshot (§14)
+  playbookVersion Int // snapshot (§14)
+  projectId      String?
+  project        Project?    @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  workOrderId    String?
+  workOrder      WorkOrder?  @relation(fields: [workOrderId], references: [id], onDelete: SetNull)
+  userId         String
+  user           User        @relation("playbookUser", fields: [userId], references: [id])
+  status         String      @default("V_TEKU") // V_TEKU | ZAKLJUCEN | PREKINJEN
+  context        String? // JSON: { odgovori: { jeStopnisce: true, … }, naprava: { tier, … } }
+  handoff        String? // JSON: [{ do: 'KONFIGURATOR', ob: ISO, runId }] (§11)
+  startedAt      DateTime    @default(now())
+  completedAt    DateTime?
+
+  steps PlaybookStepRun[]
+
+  @@index([workOrderId])
+  @@index([userId, startedAt])
+  @@index([projectId])
+}
+
+// KORAK ZAGONA — stanje posameznega koraka v izvedbi.
+// status: PENDING | IN_PROGRESS | COMPLETED | NI_PRIMERNO (§6 izjema z razlogom)
+//        | BLOKIRANO (§6 ovira z razlogom) | NEUSPESNO (validacija padla → ponovitev)
+// evidence = JSON dokazila (§10): foto id, meritev id, vrednosti, checklist, podpis.
+model PlaybookStepRun {
+  id              String      @id @default(cuid())
+  runId           String
+  run             PlaybookRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  stepId          String // id koraka iz definicije (stable identifier)
+  status          String      @default("PENDING")
+  evidence        String? // JSON dokazil (§10)
+  exceptionReason String? // §6: obvezni razlog za NI_PRIMERNO / BLOKIRANO
+  attempts        Int         @default(0) // število poskusov (retry podpora)
+  startedAt       DateTime?
+  completedAt     DateTime?
+  updatedAt       DateTime    @updatedAt
+
+  @@unique([runId, stepId])
 }

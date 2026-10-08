@@ -18,10 +18,13 @@ interface AppState {
   user: SessionUser | null
   section: string
   tab: string
+  /** R458 (issue #13 §12): izbrani zagon playbooka za odpiranje z Danes → Vodeni postopek */
+  playbookRunId: string | null
   setAuth: (token: string, user: SessionUser) => void
   clearAuth: () => void
   setSection: (section: string) => void
   setTab: (tab: string) => void
+  setPlaybookRunId: (runId: string | null) => void
 }
 
 export const useAppStore = create<AppState>()(
@@ -31,10 +34,12 @@ export const useAppStore = create<AppState>()(
       user: null,
       section: 'danes',
       tab: 'danes',
+      playbookRunId: null,
       setAuth: (token, user) => set({ token, user }),
       clearAuth: () => set({ token: null, user: null }),
       setSection: (section) => set({ section }),
       setTab: (tab) => set({ tab }),
+      setPlaybookRunId: (runId) => set({ playbookRunId: runId }),
     }),
     { name: 'roksal-session' }
   )

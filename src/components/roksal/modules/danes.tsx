@@ -20,9 +20,9 @@
 
 import { useState } from 'react'
 import {
-  CalendarCheck, Camera, Check, CheckCircle2, CheckCheck, ChevronDown, ChevronRight, Circle,
+  ArrowRight, CalendarCheck, Camera, Check, CheckCircle2, CheckCheck, ChevronDown, ChevronRight, Circle,
   ClipboardList, CloudRain, CloudSnow, Cloudy, HardHat, Loader2, MapPin, Package,
-  Play, Plus, Ruler, Sun, Thermometer, TriangleAlert, Umbrella, Wind,
+  Play, Plus, Ruler, Sun, Thermometer, TriangleAlert, Umbrella, Wind, Workflow,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -236,6 +236,81 @@ export default function DanesModule () {
   )
 }
 
+// ─── R458 (issue #13 §12): vodeni postopek na nalogu — MOJ DAN → NADALJUJ ────
+
+interface PlaybookRunRow {
+  id: string; key: string; version: number; naziv: string; status: string
+  startedAt: string; completedAt: string | null
+  napredek: { trenutni: number; skupaj: number; koncanih: number; izjem: number; odstotek: number } | null
+}
+
+/** Napredek zagonov playbooka na nalogu (npr. 7/9 korakov) + NADALJUJ. */
+function PlaybookStrip ({ woId }: { woId: string }) {
+  const setSection = useAppStore((s) => s.setSection)
+  const setTab = useAppStore((s) => s.setTab)
+  const setPlaybookRunId = useAppStore((s) => s.setPlaybookRunId)
+  const runs = useApi<{ data: PlaybookRunRow[] }>(`/api/playbook/runs?workOrderId=${woId}`)
+  const list = runs.data?.data ?? []
+
+  // playbook je dopolnilo Danes, ne ovira — napake tiho skrijemo
+  if (runs.loading || runs.error) return null
+
+  function odpri (runId: string) {
+    setPlaybookRunId(runId)
+    setSection('danes')
+    setTab('playbook')
+  }
+
+  if (list.length === 0) {
+    return (
+      <button
+        type="button"
+        onClick={() => { setSection('danes'); setTab('playbook') }}
+        className="flex w-full items-center gap-3 rounded-xl border border-dashed p-3 text-left transition hover:bg-secondary/40 focus-visible:outline-2 focus-visible:outline-ring"
+      >
+        <Workflow className="size-5 shrink-0 text-roksal-amber" aria-hidden />
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-medium text-foreground">Vodeni postopek ni zagnan</span>
+          <span className="block text-xs text-muted-foreground">Playbook te popelje skozi izmero ali montažo korak za korakom.</span>
+        </span>
+        <ChevronRight className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+      </button>
+    )
+  }
+
+  return (
+    <div className="space-y-2 rounded-xl border bg-secondary/30 p-3">
+      <h3 className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest text-muted-foreground">
+        <Workflow className="size-3.5 text-roksal-amber" aria-hidden /> Vodeni postopek
+      </h3>
+      {list.slice(0, 3).map((r) => (
+        <div key={r.id} className="flex items-center gap-3">
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-sm font-medium text-foreground">{r.naziv}</div>
+            <div className="mt-1 flex items-center gap-2">
+              <Progress value={r.napredek?.odstotek ?? 0} className="h-1.5 flex-1" aria-label={`Napredek ${r.napredek?.odstotek ?? 0} %`} />
+              <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                {r.status === 'ZAKLJUCEN'
+                  ? `zaključen (${r.napredek?.koncanih ?? 0}/${r.napredek?.skupaj ?? 0})`
+                  : `${r.napredek?.koncanih ?? 0}/${r.napredek?.skupaj ?? 0} korakov`}
+              </span>
+            </div>
+          </div>
+          {r.status === 'V_TEKU' ? (
+            <Button size="sm" className="h-9 shrink-0" onClick={() => odpri(r.id)}>
+              Nadaljuj <ArrowRight className="size-4" aria-hidden />
+            </Button>
+          ) : (
+            <Button size="sm" variant="outline" className="h-9 shrink-0" onClick={() => odpri(r.id)}>
+              Pregled
+            </Button>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 // ─── kartica naloga z razširljivo podrobnostjo (mobile-first) ─────────────────
 
 function WorkOrderCard ({ wo, expanded, onToggle, onTransitioned }: {
@@ -344,6 +419,10 @@ function WorkOrderDetail ({ woId, onTransitioned }: {
       <Stepper7 phase={phase} code={wo.code} />
 
       <PhaseHint status={wo.status} startedAt={wo.startedAt} completedAt={wo.completedAt} />
+
+      {/* R458 (issue #13 §12): vodeni postopek — napredek + NADALJUJ,
+          da monter ne išče modula po menijih (sistem ga vodi) */}
+      <PlaybookStrip woId={woId} />
 
       {/* navodila pisarne */}
       <section aria-label="Navodila" className="rounded-xl border bg-secondary/30 p-3">
