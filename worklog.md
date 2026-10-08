@@ -856,3 +856,25 @@ Stage Summary:
 - Issue #8 ZAPRT (MR !15, v1.8.0) · issue #9 ZAPRT (MR !16, v1.9.0)
 - Tagi: v1.5.0, v1.6.0, v1.7.0, v1.8.0, v1.9.0 — lokalni main usklajen (7241ce1)
 - Aplikacija brskalniško verificirana: interaktivna, responsive, brez napak v konzoli
+
+---
+Task ID: 27
+Agent: full-stack-developer (R451 NAPREDNI REPORTING — P3)
+
+Task: Issue #7 §16 P3 — napredni reporting: GET /api/reports s 4 tipi (prodaja/servis/zaloga/projekti) + modul Napredna poročila, RBAC fail-closed, testi
+
+Work Log:
+- IZHODIŠČE: main f0ba4b5 (tag v1.9.0), vsi P0/P1/P2 + navigacija zaključeni (R442–R450); P3 izvedba po končnem poročilu na #7 (uporabnik: »nadaljuj«)
+- implementacija (podagent, pred potekom konteksta): src/app/api/reports/route.ts — GET ?type=prodaja|servis|zaloga|projekti&months=3|6|12; košare po 'YYYY-MM' (zadnjih N mesecev vključno s tekočim); prodaja (invoicedMonthly/paymentsMonthly/topCustomers SAMO invoices.read, quotesMonthly/conversion quotes.read), servis (claimsByDecision/claimsMonthly pisarna readsAllData, monter SAMO lastni obiski/primere), zaloga (cel tip inventory.read sicer 403; movementsMonthly PREVZEM vs IZDAJA, topMovers, slowMovers brez izdaje, stockValue po povprečju lotov), projekti (newMonthly, statusFlow, onTime iz completedAt vs scheduledAt + overdueNow)
+- UI reports.tsx (558 vrstic): 4 pogledi s stolpičnimi grafikoni (BarChart/DualBarChart v stilu Kapacitete, aria-labeli s polnimi vrednostmi), izbira obdobja 3/6/12, tipi brez edinega sklopa SKRITI v izbiri (fail-closed), tabele max-h-72 z lepljivimi glavami; registracija v nav-registry (POROČILA, za Preglednico) + module-view
+- NADZOR (glavni agent po poteku podagenta): prevzem delnega stanja — veja r451-porocila z 1 commitom 15fdecd na f0ba4b5, delovno drevo IDENTIČNO commitu (md5 vseh 5 datotek); VERIFIKACIJA: tsc ČISTO, lint ČISTO, tests/r451.py 88/88 ✓ (struktura vseh tipov, obdobja, validacija 400, RBAC 401 brez žetona / monter brez denarja / skladišče brez financ, konzistentnost agregatov z /api/invoices+/api/payments+/api/quotes+/api/projects+/api/claims, regresija dashboard/quotes/stock/service-cases); dev.log brez novih 5xx
+- agent-browser (Chromium): ADMIN — Napredna poročila: vsi 4 tipi izrisani (Prodaja: 16.727,42 € računov, 5.344,42 € plačil, konverzija 20,0 %, grafikoni maj–okt; Zaloga: gibanja/menjavci/počasni; Projekti: 7 novih, pravočasnost, zamude zdaj), obdobja 3/6/12 delujejo; MONTER — Prodaja prikaže SAMO ponudbe (konverzija, grafikon ustvarjene/sprejete), BREZ denarja; mobilni 390×844 brez preliva (390/390); footer viden; konzola 0 error/warn
+- ugotovitev: podagent je PRED potekom že izvedel GitLab korake — MR !19 ustvarjen in ZDRUŽEN (merge 93cdd8c, 06:25:42), veja samodejno izbrisana, tag v1.10.0 pushan, komentar na #7 objavljen (note 3975292292); glavni agent je pomotoma ponovno pushal vejo (»new branch«) in ustvaril PODVOJEN MR !20 → ZAPRT (state closed), podvojena oddaljena veja IZBRISANA
+- Cloudflare (znani vzorec): 403/405 odgovori NISO zanesljiv indikator — MR merge je uspel kljub 403/405; vsako dejanje preveriti prek GET stanja (main ls-remote, MR list)
+- pospravljeno: lokalni main reset na 93cdd8c (datoteke R451 ostale na disku), lokalna veja r451-porocila izbrisana, delovno drevo ČISTO; health OK (build R451)
+
+Stage Summary:
+- R451 P3 NAPREDNI REPORTING ZAKLJUČEN: 4 tipi poročil po mesecih (prodaja/servis/zaloga/projekti) z obdobjem 3/6/12, fail-closed RBAC po sklopih (denar samo invoices.read, reklamacije pisarna, zaloga inventory.read, monter lastni obiski)
+- MR !19 združen (93cdd8c), tag v1.10.0, CI success (pipeline 2925215759), komentar na issue #7 (note 3975292292); podvojen MR !20 zaprt
+- tests/r451.py 88/88; tsc/lint/konzola/dev.log ČISTI
+- issue #7 P3: napredni reporting ✓ — ostaneta avtomatski predlog materiala (R452 sledi) in po potrebi nadgradnja 3D/AR
