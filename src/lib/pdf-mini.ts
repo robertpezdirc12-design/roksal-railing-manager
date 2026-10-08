@@ -135,21 +135,48 @@ interface TextOpts {
 interface LineOpts { width?: number; color?: Rgb }
 interface RectOpts { fill?: Rgb; stroke?: Rgb; width?: number }
 
-interface PageBuf { ops: string[] }
+interface PageBuf { ops: string[]; images: number[] } // images = indeksi registriranih JPEG slik (1-based)
 
 const fmtN = (v: number): string => String(Math.round(v * 100) / 100)
 
+// ─── JPEG dimenzije (SOF0/SOF2 markerji) — za /Width /Height XObjecta ────────
+
+export interface JpegSize { width: number; height: number }
+
+/** Prebere dimenzije iz JPEG bajtov (SOF0–SOF15, brez C4/C8/CC). */
+export function jpegSize (bytes: Uint8Array): JpegSize | null {
+  if (bytes.length < 4 || bytes[0] !== 0xff || bytes[1] !== 0xd8) return null
+  let i = 2
+  while (i + 9 < bytes.length) {
+    if (bytes[i] !== 0xff) { i++; continue }
+    const marker = bytes[i + 1]
+    if (marker === 0xd8 || marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) { i += 2; continue }
+    const segLen = (bytes[i + 2] << 8) | bytes[i + 3]
+    if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {
+      // SOF: [len(2)] [precision(1)] [height(2)] [width(2)]
+      const h = (bytes[i + 5] << 8) | bytes[i + 6]
+      const w = (bytes[i + 7] << 8) | bytes[i + 8]
+      if (w > 0 && h > 0) return { width: w, height: h }
+      return null
+    }
+    i += 2 + segLen
+  }
+  return null
+}
+
 export class PdfDoc {
-  private pages: PageBuf[] = [{ ops: [] }]
+  private pages: PageBuf[] = [{ ops: [], images: [] }]
   private active = 0
   private footerFn: ((page: number, total: number, doc: PdfDoc) => void) | null = null
+  /** registrirane JPEG slike (deduplicirane po referenci na isti Uint8Array) */
+  private images: { bytes: Uint8Array; size: JpegSize }[] = []
 
   /** aktivna stran (0-based) — tja pišejo .text/.line/.rect */
   get pageIndex (): number { return this.active }
 
   /** Zacni novo stran (vrne indeks) in jo naredi aktivno. */
   addPage (): number {
-    this.pages.push({ ops: [] })
+    this.pages.push({ ops: [], images: [] })
     this.active = this.pages.length - 1
     return this.active
   }
@@ -203,6 +230,25 @@ export class PdfDoc {
     return this
   }
 
+  /**
+   * JPEG slika (DCTDecode XObject) — (x, y) je LEVI ZGORNJI vogal, w/h velikost
+   * v točkah. Enaka referanca bajtov se deli (ena slika → en XObject). R459.
+   */
+  image (x: number, y: number, w: number, h: number, jpeg: Uint8Array): this {
+    const size = jpegSize(jpeg)
+    if (!size) return this // neveljaven JPEG → preskoči (dokument ostane berljiv)
+    let idx = this.images.findIndex((im) => im.bytes === jpeg)
+    if (idx < 0) {
+      this.images.push({ bytes: jpeg, size })
+      idx = this.images.length - 1
+    }
+    const page = this.pages[this.pageIndex]
+    if (!page.images.includes(idx)) page.images.push(idx)
+    const py = PAGE_H - y - h
+    page.ops.push(`q ${fmtN(w)} 0 0 ${fmtN(h)} ${fmtN(x)} ${fmtN(py)} cm /Im${idx + 1} Do Q`)
+    return this
+  }
+
   /** Prelomi niz na vrstice, ki ustrezajo maxWidth (točke). */
   wrap (str: string, maxWidth: number, size: number, bold = false): string[] {
     const words = str.split(/\s+/).filter(Boolean)
@@ -235,8 +281,10 @@ export class PdfDoc {
     }
 
     const nPages = this.pages.length
-    // objekti: 1 katalog, 2 pages, 3/4 fonti, nato 5+2i stran, 6+2i vsebina
-    const totalObjs = 4 + 2 * nPages
+    const nImages = this.images.length
+    // objekti: 1 katalog, 2 pages, 3/4 fonti, nato 5+2i stran, 6+2i vsebina,
+    // za njimi 4+2*nPages+k JPEG XObjecti (R459)
+    const totalObjs = 4 + 2 * nPages + nImages
 
     const chunks: Uint8Array[] = []
     const offsets: number[] = new Array(totalObjs + 1).fill(0)
@@ -268,11 +316,24 @@ export class PdfDoc {
       const content = encodePdf(this.pages[i].ops.join('\n'))
       const pageNum = 5 + 2 * i
       const contNum = 6 + 2 * i
+      const xobjs = this.pages[i].images
+        .map((idx) => `/Im${idx + 1} ${4 + 2 * nPages + idx + 1} 0 R`)
+        .join(' ')
       offsets[pageNum] = pos
-      push(`${pageNum} 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PAGE_W} ${PAGE_H}] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents ${contNum} 0 R >>\nendobj\n`)
+      push(`${pageNum} 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PAGE_W} ${PAGE_H}] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> ${xobjs ? `/XObject << ${xobjs} >>` : ''} >> /Contents ${contNum} 0 R >>\nendobj\n`)
       offsets[contNum] = pos
       push(`${contNum} 0 obj\n<< /Length ${content.length} >>\nstream\n`)
       push(content)
+      push('\nendstream\nendobj\n')
+    }
+
+    // JPEG XObjecti (R459) — surovi bajti skozi stream (DCTDecode)
+    for (let k = 0; k < nImages; k++) {
+      const im = this.images[k]
+      const objNum = 4 + 2 * nPages + k + 1
+      offsets[objNum] = pos
+      push(`${objNum} 0 obj\n<< /Type /XObject /Subtype /Image /Width ${im.size.width} /Height ${im.size.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${im.bytes.length} >>\nstream\n`)
+      push(im.bytes)
       push('\nendstream\nendobj\n')
     }
 

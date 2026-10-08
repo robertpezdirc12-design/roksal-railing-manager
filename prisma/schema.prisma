@@ -47,6 +47,8 @@ model User {
   vizProjects     VizProject[] @relation("vizProjects") // R454: shranjeni 3D projekti avtorja
   playbookDefs    PlaybookDef[] @relation("playbookAuthor") // R458: avtor verzije playbooka (issue #13)
   playbookRuns    PlaybookRun[] @relation("playbookUser") // R458: zagoni playbookov uporabnika
+  photoViz        PhotoVisualization[] @relation("photoVizAuthor") // R459: foto-vizualizacije avtorja (issue #14)
+  photoVizVersions PhotoVisualizationVersion[] @relation("photoVizVersions") // R459: verzije, ki jih je zapisal uporabnik
 }
 
 model Session {
@@ -134,6 +136,7 @@ model Project {
   arSnapshots      ArSnapshot[] // R454: AR posnetki projekta (3D/AR P3)
   vizProjects      VizProject[] // R454: shranjene 3D konfiguracije
   playbookRuns     PlaybookRun[] // R458: zagoni playbookov na projektu (issue #13)
+  photoViz         PhotoVisualization[] // R459: foto-vizualizacije projekta (issue #14)
 }
 
 model Quote {
@@ -806,6 +809,7 @@ model Product {
   boms          Bom[]
   packages      ProjectPackage[]
   priceRules    PriceRule[]      @relation("productPriceRules")
+  photoViz      PhotoVisualization[] @relation("photoVizProduct") // R459: foto-vizualizacije tega izdelka
 }
 
 // ─── Varianta produkta (barva/RAL, dimenzija; issue #7 §1) ──────────────────
@@ -829,6 +833,7 @@ model ProductVariant {
 
   packages ProjectPackage[]
   boms     Bom[]
+  photoViz PhotoVisualization[] @relation("photoVizVariant") // R459: foto-vizualizacije v tej varianti
 }
 
 // ─── Komponenta produkta (BOM PREDLOGA; issue #7 §2) ────────────────────────
@@ -1196,6 +1201,66 @@ model VizProject {
   updatedAt DateTime @updatedAt
 
   @@index([projectId, updatedAt])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// REALISTIC PHOTO REPLACEMENT (R459 — issue #14: fotorealistična menjava
+// obstoječe ograje na ORIGINALNI fotografiji). Ločen PHOTO sloj nad parametrično
+// 3D vizualizacijo (viz.tsx/viz-3d.tsx ostajata nedotaknjeni — §8 brez podvajanja).
+// §12 single source of truth: EKSPPLICITNE ID povezave (projectId, measurementId
+// + verzija, productId, variantId) — nikoli fuzzy matching.
+// §13 revizija: kdo/kdaj/iz katere fotografije/iz katere verzije meritve/kateri
+// produkt/barva/engine → AuditLog + verzijski posnetki (stare variante NISO tiho
+// prepisane — vsaka sprememba renderParams ustvari novo verzijo).
+// ═══════════════════════════════════════════════════════════════════════════
+
+// FOTO-VIZUALIZACIJA — ena shranjena varianta (A/B/C) na projektu.
+// sourcePhoto = data URL ORIGINALNE fotografije (ostane vir slike, §1);
+// rendered = izrisana POTEM sličica (za PDF/portal); renderParams = deterministični
+// vhod engine-a (quad + referenca + konfiguracija) — reproducibilno iz risanja.
+model PhotoVisualization {
+  id            String   @id @default(cuid())
+  projectId     String
+  project       Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  authorId      String?
+  author        User?    @relation("photoVizAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  variantLabel  String   @default("A") // A | B | C (§7 primerjava variant)
+  status        String   @default("OSNUTEK") // OSNUTEK | IZBRANA | ARHIV
+  sourcePhoto   String // data URL (image/jpeg) originalne fotografije — ≤ 4 MB
+  sourcePhotoId String? // meritev tip FOTO, iz katere izhaja fotografija (sledljivost §13)
+  measurementId String? // POTRJENA meritev (geometrija §6)
+  measurementVersion Int? // snapshot verzije meritve ob ustvarjanju (§12/§13)
+  productId     String // ROKSAL izdelek — edini vir videza (§2)
+  product       Product  @relation("photoVizProduct", fields: [productId], references: [id])
+  variantId     String? // varianta produkta (barva/RAL, §3)
+  variant       ProductVariant? @relation("photoVizVariant", fields: [variantId], references: [id], onDelete: SetNull)
+  engineVersion String // verzija render engine-a (photo-replace-core)
+  renderParams  String // JSON: { quad, reference, config } — BREZ fotografije (≤ 8 KB)
+  rendered      String? // data URL izrisane POTEM sličice z žigom (≤ 2,5 MB)
+  note          String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  versions PhotoVisualizationVersion[]
+
+  @@index([projectId, status])
+  @@index([projectId, variantLabel])
+}
+
+// VERZIJA FOTO-VIZUALIZACIJE — posnetek renderParams ob vsaki spremembi (§12:
+// nove verzije DA, tiho prepisovanje NE). data = JSON { renderParams, meta }.
+model PhotoVisualizationVersion {
+  id              String   @id @default(cuid())
+  visualizationId String
+  visualization   PhotoVisualization @relation(fields: [visualizationId], references: [id], onDelete: Cascade)
+  version         Int
+  data            String // JSON posnetek (brez blob fotografij)
+  userId          String?
+  user            User?    @relation("photoVizVersions", fields: [userId], references: [id], onDelete: SetNull)
+  note            String?
+  createdAt       DateTime @default(now())
+
+  @@index([visualizationId, version])
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

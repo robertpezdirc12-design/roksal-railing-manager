@@ -30,6 +30,7 @@ const MODULES: Record<string, () => Promise<{ default: ComponentType<TabProps> }
   predlogi: () => import('@/components/roksal/modules/predlogi'), // R452: avtomatski predlog materiala (issue #7 §16 P3)
   orodjarina: () => import('@/components/roksal/modules/orodjarina'),
   viz: () => import('@/components/roksal/modules/viz'),
+  'foto-replace': () => import('@/components/roksal/modules/foto-replace'), // R459: foto vizualizacija (issue #14)
   ar: () => import('@/components/roksal/modules/ar'),
   crm: () => import('@/components/roksal/modules/crm'),
   dokumenti: () => import('@/components/roksal/modules/dokumenti'),
