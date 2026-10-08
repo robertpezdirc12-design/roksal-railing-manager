@@ -138,7 +138,7 @@ export default function DanesModule () {
         title="Moj dan"
         desc={`Operativni vhod — ${user?.name ?? 'monter'}, tvoj delovni dan na terenu (R444)`}
         actions={
-          <Button variant="outline" size="sm" onClick={() => { setSection('projekti'); setTab('nalogi') }}>
+          <Button variant="outline" size="sm" onClick={() => { setSection('operativa'); setTab('nalogi') }}>
             Vsi nalogi <ChevronRight className="size-4" aria-hidden />
           </Button>
         }
@@ -376,7 +376,7 @@ function WorkOrderDetail ({ woId, onTransitioned }: {
       <div className="grid grid-cols-2 gap-2">
         <Button
           variant="outline" className="h-11 justify-start gap-2"
-          onClick={() => { setSection('zajem'); setTab('meritve') }}
+          onClick={() => { setSection('projekti'); setTab('meritve') }}
         >
           <Ruler className="size-4 text-roksal-amber" aria-hidden />
           <span className="flex min-w-0 flex-col items-start">
@@ -386,7 +386,7 @@ function WorkOrderDetail ({ woId, onTransitioned }: {
         </Button>
         <Button
           variant="outline" className="h-11 justify-start gap-2"
-          onClick={() => { setSection('zajem'); setTab('foto') }}
+          onClick={() => { setSection('projekti'); setTab('foto') }}
         >
           <Camera className="size-4 text-roksal-amber" aria-hidden />
           <span className="flex min-w-0 flex-col items-start">

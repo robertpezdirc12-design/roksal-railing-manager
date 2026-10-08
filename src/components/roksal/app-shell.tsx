@@ -1,14 +1,16 @@
 'use client'
 
-// App ogrodje — IA po R429: DANES | PROJEKTI | ZAJEM | PISARNA | PROFIL
-// Desktop: stranska vrstica z zavihki. Mobile: spodnja navigacija (danes PRVI, R429) + tabletke zavihkov.
+// App ogrodje — ciljna IA po R448 (issue #7 §11): DANES | PRODAJA | PROJEKTI |
+// OPERATIVA | SKLADIŠČE | KATALOG | FINANCE | SERVIS | POROČILA | VARNOST | PROFIL.
+// Desktop: stranska vrstica z vsemi razpoložljivimi sekcijami (scroll).
+// Mobile: spodnja vrstica = prvih 4 razpoložljivih sekcij + gumb Več (Sheet z vsemi).
 // R433: globalno iskanje (Ctrl+K / gumb povečevala) — /api/search, obseg po pravicah.
 // R439 (issue #6): OfflineBadge v glavi + samodejna sinhronizacija (initOfflineSync)
 // + clearOfflineData ob odjavi (varnostna zahteva — vrsta NE sme preživeti odjave).
 
 import { useCallback, useEffect, useState } from 'react'
 import { useTheme } from 'next-themes'
-import { Bell, Cloud, CloudOff, LogOut, Moon, RefreshCw, Search, Sun, Ruler, X } from 'lucide-react'
+import { Bell, Cloud, CloudOff, LogOut, Moon, MoreHorizontal, RefreshCw, Search, Sun, Ruler, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -17,6 +19,7 @@ import {
   DropdownMenuSeparator, DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import {
   CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
 } from '@/components/ui/command'
@@ -49,6 +52,9 @@ export function AppShell () {
   const [searchQ, setSearchQ] = useState('')
   const [searchHits, setSearchHits] = useState<SearchGroup[]>([])
   const [searching, setSearching] = useState(false)
+
+  // ── R448 (§11): mobilni Sheet „Več" — seznam vseh razpoložljivih sekcij ──
+  const [moreOpen, setMoreOpen] = useState(false)
 
   useEffect(() => {
     function onKey (e: KeyboardEvent) {
@@ -126,6 +132,12 @@ export function AppShell () {
   const currentSection = SECTIONS.find((s) => s.id === section) ?? SECTIONS[0]
   const currentTab = currentSection.tabs.find((t) => t.id === tab)
   const initials = user.name.split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase()
+
+  // R448 (§11): razpoložljivost sekcij po pravicah — mobilna vrstica pokaže
+  // prvih 4 + gumb Več (Sheet z vsemi); če jih je ≤ 5, pokažemo vse brez Več.
+  const availableSections = SECTIONS.filter((sec) => sec.tabs.some((t) => tabVisible(user.perms, t)))
+  const barSections = availableSections.length > 5 ? availableSections.slice(0, 4) : availableSections
+  const needsMore = availableSections.length > 5
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
@@ -275,7 +287,7 @@ export function AppShell () {
       <div className="mx-auto flex w-full max-w-7xl flex-1 gap-6 px-3 pb-24 pt-4 sm:px-4 md:pb-8">
         {/* stranska vrstica — desktop */}
         <nav aria-label="Glavna navigacija" className="hidden w-60 shrink-0 md:block">
-          <div className="sticky top-20 max-h-[calc(100vh-9.375rem)] space-y-5 overflow-y-auto pr-1">
+          <div className="sticky top-20 max-h-[calc(100vh-9.375rem)] space-y-4 overflow-y-auto pr-1">
             {SECTIONS.map((sec) => {
               const tabs = sec.tabs.filter((t) => tabVisible(user.perms, t))
               if (tabs.length === 0) return null
@@ -347,18 +359,14 @@ export function AppShell () {
         © 2026 Roksal d.o.o. · Roksal Railing Manager — rekonstrukcija R431 · build {typeof window === 'undefined' ? '' : new Date().getFullYear()}
       </footer>
 
-      {/* spodnja navigacija — mobile (DANES prvi, R429) */}
+      {/* spodnja navigacija — mobile (R448 §11: prvih 4 razpoložljivih sekcij + Več) */}
       <nav
         aria-label="Navigacija sekcij" role="navigation"
         className="fixed inset-x-0 bottom-0 z-30 border-t bg-card/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden"
       >
         <div className="mx-auto grid max-w-lg grid-cols-5">
-          {SECTIONS.map((sec) => {
+          {barSections.map((sec) => {
             const Icon = SECTION_ICONS[sec.id]
-            const available = sec.tabs.some((t) => tabVisible(user.perms, t))
-            if (!available) {
-              return <div key={sec.id} className="flex items-center justify-center py-1" aria-disabled="true" />
-            }
             return (
               <button
                 key={sec.id} type="button" onClick={() => pickSection(sec.id)}
@@ -373,8 +381,59 @@ export function AppShell () {
               </button>
             )
           })}
+          {needsMore ? (
+            <button
+              type="button" onClick={() => setMoreOpen(true)}
+              className={cn(
+                'flex min-h-[56px] flex-col items-center justify-center gap-0.5 px-1 py-2 text-[10px] font-semibold transition',
+                availableSections.slice(4).some((s) => s.id === section)
+                  ? 'text-roksal-amber'
+                  : 'text-muted-foreground hover:text-foreground'
+              )}
+              aria-label="Več sekcij"
+              aria-haspopup="dialog"
+              aria-expanded={moreOpen}
+            >
+              <MoreHorizontal className="size-5" aria-hidden />
+              Več
+            </button>
+          ) : null}
         </div>
       </nav>
+
+      {/* R448 (§11): Sheet z vsemi razpoložljivimi sekcijami (mobilni „Več") */}
+      <Sheet open={moreOpen} onOpenChange={setMoreOpen}>
+        <SheetContent side="bottom" className="mx-auto max-w-lg rounded-t-2xl pb-[calc(env(safe-area-inset-bottom)+0.75rem)]">
+          <SheetHeader className="pb-0">
+            <SheetTitle className="text-base">Vse sekcije</SheetTitle>
+            <SheetDescription className="sr-only">Izberi sekcijo, na katero želiš preklopiti.</SheetDescription>
+          </SheetHeader>
+          <ul className="grid grid-cols-3 gap-2 px-4 pb-2 pt-3 sm:grid-cols-4" aria-label="Seznam sekcij">
+            {availableSections.map((sec) => {
+              const Icon = SECTION_ICONS[sec.id]
+              const active = section === sec.id
+              return (
+                <li key={sec.id}>
+                  <button
+                    type="button"
+                    onClick={() => { setMoreOpen(false); pickSection(sec.id) }}
+                    className={cn(
+                      'flex min-h-[64px] w-full flex-col items-center justify-center gap-1 rounded-xl border px-1 py-2 text-[11px] font-semibold transition',
+                      active
+                        ? 'border-roksal-amber bg-roksal-amber/10 text-roksal-amber'
+                        : 'border-border bg-background text-muted-foreground hover:border-roksal-amber/50 hover:text-foreground'
+                    )}
+                    aria-current={active ? 'page' : undefined}
+                  >
+                    <Icon className="size-5" aria-hidden />
+                    {sec.label}
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+        </SheetContent>
+      </Sheet>
     </div>
   )
 }
@@ -574,10 +633,17 @@ function OfflineBadge () {
   )
 }
 
+// Ikone sekcij po IA R448 (§11) — lucide poti, isti inline SVG stil.
 const SECTION_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   danes: (props) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M8 2v4" /><path d="M12 2v4" /><path d="M16 2v4" /><rect width="16" height="18" x="4" y="4" rx="2" /><path d="M8 10h.01M12 10h.01M16 10h.01M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01M16 18h.01" /></svg>,
+  prodaja: (props) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><circle cx="9" cy="21" r="1" /><circle cx="20" cy="21" r="1" /><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" /></svg>,
   projekti: (props) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M3 21h18" /><path d="M5 21V7l7-4 7 4v14" /><path d="M9 21v-6h6v6" /></svg>,
-  zajem: (props) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M4 8V6a2 2 0 0 1 2-2h2" /><path d="M20 8V6a2 2 0 0 0-2-2h-2" /><path d="M4 16v2a2 2 0 0 0 2 2h2" /><path d="M20 16v2a2 2 0 0 1-2 2h-2" /><path d="M12 8v8" /><path d="M8 12h8" /></svg>,
-  pisarna: (props) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M3 21h18" /><path d="M6 21V8l6-5 6 5v13" /><path d="M10 21v-4h4v4" /><path d="M9 10h.01M15 10h.01" /></svg>,
+  operativa: (props) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><rect width="8" height="4" x="8" y="2" rx="1" ry="1" /><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" /><path d="M12 11h4" /><path d="M12 16h4" /><path d="M8 11h.01" /><path d="M8 16h.01" /></svg>,
+  skladisce: (props) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M22 8.35V20a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8.35A2 2 0 0 1 3.26 6.5l8-3.2a2 2 0 0 1 1.48 0l8 3.2A2 2 0 0 1 22 8.35Z" /><path d="M6 18h12" /><path d="M6 14h12" /><rect width="12" height="12" x="6" y="6" /></svg>,
+  katalog: (props) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" /><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" /></svg>,
+  finance: (props) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z" /><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8" /><path d="M12 17.5v-11" /></svg>,
+  servis: (props) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" /></svg>,
+  porocila: (props) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M3 3v16a2 2 0 0 0 2 2h16" /><path d="M18 17V9" /><path d="M13 17V5" /><path d="M8 17v-3" /></svg>,
+  varnost: (props) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1 1 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z" /><path d="m9 12 2 2 4-4" /></svg>,
   profil: (props) => <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><circle cx="12" cy="8" r="4" /><path d="M6 21v-1a6 6 0 0 1 12 0v1" /></svg>,
 }
