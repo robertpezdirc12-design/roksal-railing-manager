@@ -113,6 +113,9 @@ export const SECTIONS: SectionDef[] = [
     label: 'Poročila',
     tabs: [
       { id: 'dashboard', label: 'Preglednica', gate: 'projects.read', desc: 'KPI in stanje portfelja (kokpit)' },
+      // R451 (issue #7 §16 P3): NAPREDNA POROČILA — trendi po mesecih za 4 tipe
+      // (prodaja/servis/zaloga/projekti); sklopi fail-closed po pravicah uporabnika.
+      { id: 'reports', label: 'Napredna poročila', gate: 'projects.read', desc: 'Trendi in analitika po mesecih' },
     ],
   },
   {

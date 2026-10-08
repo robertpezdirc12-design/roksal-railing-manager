@@ -13,6 +13,7 @@ import type { TabProps } from '@/components/roksal/modules/types'
 const MODULES: Record<string, () => Promise<{ default: ComponentType<TabProps> }>> = {
   danes: () => import('@/components/roksal/modules/danes'),
   dashboard: () => import('@/components/roksal/modules/dashboard'),
+  reports: () => import('@/components/roksal/modules/reports'), // R451: napredna poročila (issue #7 §16 P3)
   projekti: () => import('@/components/roksal/modules/projekti'),
   stranke: () => import('@/components/roksal/modules/stranke'),
   ponudbe: () => import('@/components/roksal/modules/ponudbe'),
