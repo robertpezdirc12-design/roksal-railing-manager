@@ -25,10 +25,23 @@
 //   • ročni popravek dolžine z obveznim razlogom — sledljivost (§1);
 //   • potrditev pošlje views/quality/confidence/manualOverride na strežnik,
 //     ki ji zapiše v params + verzijo + revizijo (issue #10 §5–§7).
+//
+// R457 (issue #12 — VRHUNSKI MERILNI ENGINE):
+//   • adaptivni načini izmere (§2): OGRAJA | KERAMIKA | STREHA | FASADA |
+//     STOPNICE | PROSTOR | SPLOSNO — vsak s svojim vodilom in pravili;
+//   • Smart Capture Guide (§3): ostrost/svetloba/nagib/referenca/pokritost —
+//     DOBRO / OPOZORILO / NEZADOSTNO (faza kalibracije);
+//   • profesionalna kalibracija (§4): 5 metod + referenčni objekt (meta v params);
+//   • zmogljivosti naprave (§16) + priporočena metoda (§18 provider-agnostic);
+//   • kanonična analiza engine-a v fazi PREVERJANJE (POST
+//     /api/measure-engine/analyze): geometrija + §14 validacija + §13 confidence
+//     + §8–§11 domenski paket (ograje/keramika/streha/fasada/stopnice/prostor);
+//   • potrditev nosi mode + engine rezultat (params.mode/params.engine);
+//   • izvoz CSV/JSON potrjene meritve (GET /api/measure-engine/export, §19).
 
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import {
-  Camera, Check, CloudUpload, Crosshair, Eraser, Grid3x3, Image as ImageIcon, Loader2, Lock, LockOpen,
+  Camera, Check, CloudUpload, Cpu, Crosshair, Eraser, FileJson, FileSpreadsheet, Grid3x3, Image as ImageIcon, Loader2, Lock, LockOpen,
   Redo2, Ruler, Sparkles, SquarePlus, Trash2, Undo2, WifiOff,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
@@ -41,6 +54,11 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { useToast } from '@/hooks/use-toast'
 import { apiPost, fmtDate, useApi } from '@/lib/api-client'
 import { getCachedNalogi, queuePhoto, useOnline } from '@/lib/offline'
+import { useAppStore } from '@/lib/store'
+import {
+  CALIB_METHODS, MEASURE_MODES, MODE_RULES, captureGuide, detectDeviceCaps, recommendMethod,
+  type AnalyzeResult, type CalibrationMethod, type DeviceCaps, type DomainOptions, type MeasureMode,
+} from '@/lib/measure-engine'
 import { EmptyState, ErrorBox } from '@/components/roksal/ui-bits'
 
 interface Pt { x: number; y: number; label?: string; src?: 'ROCNO' | 'PREDLOG' }
@@ -182,6 +200,70 @@ function calcView (view: View) {
   return { pts, segs, totalPx, totalCm, cmPerPx }
 }
 
+/** R457: domenski rezultat kot vrstice za prikaz/tabelo (§8–§11). */
+function domainRows (d: AnalyzeResult['domain']): [string, string][] {
+  switch (d.mode) {
+    case 'OGRAJA':
+      return [
+        ['Skupna dolžina', `${fmt1(d.totalLengthCm)} cm`],
+        ['Stebri', `${d.posts} kos (razmak ≤ ${d.spacingCm} cm)`],
+        ['Ročnik', `${fmt1(d.handrailM)} m`],
+        ['Površina polnila', `${fmt1(d.infillM2)} m²`],
+        ['Segmentov', String(d.segments.length)],
+      ]
+    case 'KERAMIKA':
+      return [
+        ['Bruto površina', `${fmt1(d.areaM2)} m²`],
+        ['Odprtine', `${fmt1(d.openingsM2)} m²`],
+        ['Neto površina', `${fmt1(d.netAreaM2)} m²`],
+        ['Ploščice', `${d.tileWcm}×${d.tileHcm} cm · ${d.pattern.toLowerCase()}`],
+        ['Razporeditev', `${d.rows} vrst × ${d.cols} stolpcev`],
+        ['Št. ploščic', `${d.tilesCount} kos (rezi ≈ ${d.cuts})`],
+        ['Odpad', `${d.wastePct} %`],
+        ['Lepak C2', `≈ ${d.adhesiveKg} kg`],
+        ['Fuga', `≈ ${d.fugueKg} kg`],
+      ]
+    case 'STREHA':
+      return [
+        ['Tloris ploskve', `${fmt1(d.footprintM2)} m²`],
+        ['Naklon', `${d.pitchDeg}°`],
+        ['Površina ploskve', `${fmt1(d.faceAreaM2)} m²`],
+        ['Slemen', `${fmt1(d.ridgeCm)} cm`],
+        ['Ostali robovi', `${fmt1(d.eaveCm)} cm`],
+        ['Material', `${d.material === 'KOVINSKA' ? 'kovinska' : 'betonska'} kritina · odpad ${d.wastePct} %`],
+        ['Material skupaj', `${fmt1(d.materialM2)} m²`],
+      ]
+    case 'FASADA':
+      return [
+        ['Bruto površina', `${fmt1(d.grossM2)} m²`],
+        ['Odprtine', `${fmt1(d.openingsM2)} m² (${d.openings.reduce((s, o) => s + o.count, 0)} kos)`],
+        ['Neto površina', `${fmt1(d.netM2)} m²`],
+        ['Obseg', `${fmt1(d.perimeterCm)} cm`],
+      ]
+    case 'STOPNICE':
+      return [
+        ['Nagibna dolžina', `${fmt1(d.slopeLengthCm)} cm`],
+        ['Višinska razlika', `${fmt1(d.heightDiffCm)} cm`],
+        ['Vodoravno', `${fmt1(d.horizontalCm)} cm`],
+        ['Nagib', `${d.angleDeg}°`],
+        ['Stopnic', String(d.steps)],
+        ['Vzpon × čežnost', `${fmt1(d.riseCm)} × ${fmt1(d.runCm)} cm`],
+      ]
+    case 'PROSTOR':
+      return [
+        ['Površina', `${fmt1(d.areaM2)} m²`],
+        ['Obseg', `${fmt1(d.perimeterCm)} cm`],
+        ...d.diagonals.map((x) => [`Diagonala ${x.i + 1}↔${x.j + 1}`, `${fmt1(x.lengthCm)} cm`] as [string, string]),
+        ...(d.rectangleOk != null ? ([[d.rectangleOk ? 'Pravokotnost' : 'Pravokotnost', d.rectangleOk ? 'DA — diagonali se ujemata' : 'NE — diagonali odstopata']] as [string, string][]) : []),
+      ]
+    default:
+      return [
+        ['Skupna dolžina', `${fmt1(d.totalLengthCm)} cm`],
+        ['Segmentov', String(d.segments.length)],
+      ]
+  }
+}
+
 export function KameraMeritevDialog ({ open, onClose, onSaved }: {
   open: boolean
   onClose: () => void
@@ -214,6 +296,28 @@ export function KameraMeritevDialog ({ open, onClose, onSaved }: {
   const [stairMode, setStairMode] = useState(false)
   const [serverLayout, setServerLayout] = useState<string | null>(null)
 
+  // ── R457 (issue #12): način izmere, kalibracijska metoda, engine analiza ──
+  const [mode, setMode] = useState<MeasureMode>('OGRAJA')
+  const [calibMethod, setCalibMethod] = useState<CalibrationMethod>('MARKER')
+  const [refObject, setRefObject] = useState('')
+  const [caps, setCaps] = useState<DeviceCaps | null>(null)
+  const [maxTilt, setMaxTilt] = useState<number | null>(null)
+  const [analysis, setAnalysis] = useState<AnalyzeResult | null>(null)
+  const [analyzing, setAnalyzing] = useState(false)
+  const [savedId, setSavedId] = useState<string | null>(null)
+  // domenske možnosti (§8–§11)
+  const [maxSpanS, setMaxSpanS] = useState('120')
+  const [tileW, setTileW] = useState('60')
+  const [tileH, setTileH] = useState('60')
+  const [jointMm, setJointMm] = useState('3')
+  const [pattern, setPattern] = useState<'PRAVOKOTNO' | 'DIAGONALNO'>('PRAVOKOTNO')
+  const [pitchDeg, setPitchDeg] = useState('35')
+  const [roofMaterial, setRoofMaterial] = useState<'BETONNA' | 'KOVINSKA'>('BETONNA')
+  const [stepsS, setStepsS] = useState('')
+  const [opW, setOpW] = useState('100')
+  const [opH, setOpH] = useState('120')
+  const [opCount, setOpCount] = useState('0')
+
   // faza 5: potrditev + R455 ročni popravek
   const [type, setType] = useState('OGRAJA')
   const [heightS, setHeightS] = useState('100')
@@ -244,6 +348,30 @@ export function KameraMeritevDialog ({ open, onClose, onSaved }: {
     if (!open) return
     void getCachedNalogi<CachedWoRow>().then((c) => { if (c) setCachedOrders(c.list) }).catch(() => {})
   }, [open])
+
+  // R457 (§16): zmogljivosti naprave ob odprtju pogovornega okna
+  useEffect(() => {
+    if (!open) return
+    void detectDeviceCaps().then(setCaps).catch(() => {})
+  }, [open])
+
+  // R457 (§2): način izmere določi priporočeni legacy tip + počisti analizo
+  useEffect(() => {
+    setType(MODE_RULES[mode].legacyType)
+    setStairMode(mode === 'STOPNICE')
+    setAnalysis(null)
+  }, [mode])
+
+  // R457 (§3): nagib naprave med živim predogledom (DeviceOrientation)
+  useEffect(() => {
+    if (!camActive) return
+    const h = (e: DeviceOrientationEvent): void => {
+      const t = Math.max(Math.abs(e.beta ?? 0), Math.abs(e.gamma ?? 0))
+      setMaxTilt((prev) => (prev === null || t > prev ? t : prev))
+    }
+    window.addEventListener('deviceorientation', h)
+    return () => window.removeEventListener('deviceorientation', h)
+  }, [camActive])
 
   /** Nalogi za izbor: online API, offline predpomnjeni. */
   const orderOptions = useMemo(
@@ -326,6 +454,7 @@ export function KameraMeritevDialog ({ open, onClose, onSaved }: {
   /** Nastavi sliko kot PRVI pogled in ponastavi označevanje + R455 kakovost. */
   async function acceptImage (url: string): Promise<void> {
     const quality = await analyzeQuality(url)
+    setSavedId(null) // R457: nov zajem — izvoz prejšnje meritve ni več aktualen
     const v: View = {
       key: viewKey.current++,
       photoId: null,
@@ -622,7 +751,7 @@ export function KameraMeritevDialog ({ open, onClose, onSaved }: {
     }
     setBusy(true)
     try {
-      await apiPost('/api/measurement/confirm', {
+      const res = await apiPost<{ data: { id: string } }>('/api/measurement/confirm', {
         photoId: views[0].photoId,
         type: stairMode ? 'NAGIB' : type,
         location: location.trim() || null,
@@ -639,7 +768,7 @@ export function KameraMeritevDialog ({ open, onClose, onSaved }: {
         projectId: projectId !== 'none' ? projectId : null,
         workOrderId: workOrderId !== 'none' ? workOrderId : null,
         points: calc.pts.map((p) => ({ x: p.x, y: p.y })),
-        calibration: view.calib ? { ...view.calib, imgW: Math.round(view.imgW), imgH: Math.round(view.imgH) } : null,
+        calibration: view.calib ? { ...view.calib, method: calibMethod, refObject: refObject.trim() || undefined, imgW: Math.round(view.imgW), imgH: Math.round(view.imgH) } : null,
         // R455: več pogledov (brez primarnega), kakovost, zaupanje, ročni popravek
         views: views.length > 1
           ? views.slice(1).map((v) => ({
@@ -661,7 +790,17 @@ export function KameraMeritevDialog ({ open, onClose, onSaved }: {
         manualOverride: overrideOn
           ? { computedLengthCm: multi.mean !== null && multi.lengths.length > 1 ? Math.round(multi.mean * 10) / 10 : calc.totalCm ?? 0, reason: overrideReason.trim() }
           : undefined,
+        // R457 (issue #12): način izmere + rezultat engine-a (§2, §7)
+        mode,
+        engine: analysis
+          ? {
+            domain: analysis.domain,
+            validation: analysis.validation,
+            confidence: analysis.confidence,
+          }
+          : undefined,
       })
+      setSavedId(res.data.id)
       toast({
         title: 'Meritev potrjena in shranjena.',
         description: `${fmt1(finalLengthCm / 100)} m · zaupanje ${multi.conf} % — uporabljena bo v konfiguratorju in BOM-u.`,
@@ -669,6 +808,7 @@ export function KameraMeritevDialog ({ open, onClose, onSaved }: {
       if (again) {
         setNote(''); setOverrideOn(false); setOverrideLen(''); setOverrideReason(''); setServerLayout(null)
         setViews((vs) => vs.map((v) => ({ ...v, points: [], calib: v.calibLocked ? v.calib : null })))
+        setAnalysis(null) // R457: nova meritev na isti fotografiji → nova analiza
         past.current = []; future.current = []
         setPhase(2)
       } else {
@@ -723,10 +863,124 @@ export function KameraMeritevDialog ({ open, onClose, onSaved }: {
   function resetAll (): void {
     setPhase(1); setViews([]); setActiveView(0)
     setCalibA(null); setCalibCm(''); setNote('')
-    setLocation(''); setServerLayout(null); setStairMode(false)
+    setLocation(''); setServerLayout(null); setStairMode(mode === 'STOPNICE')
     setProjectId('none'); setWorkOrderId('none')
     setOverrideOn(false); setOverrideLen(''); setOverrideReason('')
+    // R457: počisti analizo/nagib; savedId ostane (izvoz zadnje shranjene meritve)
+    setAnalysis(null); setMaxTilt(null)
     past.current = []; future.current = []
+  }
+
+  /** R457: domenske možnosti za engine (§8–§11) iz UI stanja. */
+  function buildOptions (): DomainOptions {
+    const n = (s: string): number | null => {
+      const v = Number(s.replace(',', '.'))
+      return Number.isFinite(v) && v > 0 ? v : null
+    }
+    const openings = (): DomainOptions['openings'] => {
+      const c = n(opCount)
+      const w = n(opW); const h = n(opH)
+      return c != null && c > 0 && w != null && h != null ? [{ wCm: w, hCm: h, count: Math.round(c) }] : undefined
+    }
+    switch (mode) {
+      case 'OGRAJA': {
+        const o: DomainOptions = {}
+        const ms = n(maxSpanS); if (ms != null) o.maxSpanCm = ms
+        const hh = n(heightS); if (hh != null) o.heightCm = hh
+        return o
+      }
+      case 'KERAMIKA': {
+        const o: DomainOptions = {}
+        const w = n(tileW); const hh = n(tileH); const j = Number(jointMm)
+        if (w != null) o.tileWcm = w
+        if (hh != null) o.tileHcm = hh
+        if (Number.isFinite(j) && j >= 0) o.jointMm = j
+        o.pattern = pattern
+        const op = openings(); if (op != null) o.openings = op
+        return o
+      }
+      case 'STREHA': {
+        const o: DomainOptions = {}
+        const p = n(pitchDeg); if (p != null) o.pitchDeg = p
+        o.roofMaterial = roofMaterial
+        return o
+      }
+      case 'FASADA': {
+        const o: DomainOptions = {}
+        const op = openings(); if (op != null) o.openings = op
+        return o
+      }
+      case 'STOPNICE': {
+        const o: DomainOptions = {}
+        const s = n(stepsS); if (s != null) o.steps = Math.round(s)
+        return o
+      }
+      default:
+        return {}
+    }
+  }
+
+  /** R457: kanonična analiza engine-a (POST /api/measure-engine/analyze). */
+  async function runEngine (): Promise<void> {
+    if (!view || !view.calib || calc.pts.length < 2) {
+      toast({ title: 'Potrebna sta kalibracija in vsaj 2 točki.', variant: 'destructive' })
+      return
+    }
+    setAnalyzing(true)
+    try {
+      const res = await apiPost<{ data: AnalyzeResult }>('/api/measure-engine/analyze', {
+        mode,
+        points: calc.pts.map((p) => ({ x: p.x, y: p.y })),
+        calibration: { ...view.calib, imgW: Math.round(view.imgW), imgH: Math.round(view.imgH), method: calibMethod, refObject: refObject.trim() || undefined },
+        options: buildOptions(),
+        quality: views[0].quality
+          ? {
+            brightness: views[0].quality.brightness,
+            blurScore: views[0].quality.blurScore,
+            dark: views[0].quality.dark,
+            bright: views[0].quality.bright,
+            blurry: views[0].quality.blurry,
+          }
+          : undefined,
+        tiltDeg: maxTilt,
+        viewAgreementPct: multi.lengths.length > 1 && multi.spreadPct !== null ? Math.max(0, 100 - multi.spreadPct) : null,
+        manualLengthCm: overrideOn && Number(overrideLen.replace(',', '.')) > 0 ? Number(overrideLen.replace(',', '.')) * 100 : null,
+      })
+      setAnalysis(res.data)
+      const errs = res.data.validation.filter((i) => i.severity === 'NAPAKA').length
+      toast({
+        title: errs > 0 ? `Analiza: ${errs} napak za popravilo.` : 'Analiza engine-a končana.',
+        description: `Zaupanje ${res.data.confidence.confidence} % (${res.data.confidence.band}) · način ${MODE_RULES[mode].label}.`,
+        variant: errs > 0 ? 'destructive' : undefined,
+      })
+    } catch (e) {
+      toast({ title: 'Analiza engine-a ni uspela', description: e instanceof Error ? e.message : undefined, variant: 'destructive' })
+    } finally { setAnalyzing(false) }
+  }
+
+  /** R457 (§19): prenos izvoza CSV/JSON potrjene meritve. */
+  async function downloadExport (fmt: 'csv' | 'json'): Promise<void> {
+    if (!savedId) return
+    try {
+      const token = useAppStore.getState().token
+      const res = await fetch(`/api/measure-engine/export?id=${savedId}&format=${fmt}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+      if (!res.ok) {
+        const d = (await res.json().catch(() => ({}))) as { error?: string }
+        throw new Error(d.error ?? `HTTP ${res.status}`)
+      }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `roksal-meritev-${savedId.slice(-8)}.${fmt}`
+      a.click()
+      URL.revokeObjectURL(url)
+      toast({ title: `Izvoz ${fmt.toUpperCase()} prenešen.`, description: 'Dokument vsebuje projekt, reference, mere, zaupanje in verzijo.' })
+    } catch (e) {
+      toast({ title: 'Izvoz ni uspel', description: e instanceof Error ? e.message : undefined, variant: 'destructive' })
+    }
   }
 
   const existingPhotos = useMemo(
@@ -739,7 +993,7 @@ export function KameraMeritevDialog ({ open, onClose, onSaved }: {
     views.length > 0, // ZAJEM
     Boolean(views[0]?.calib), // KALIBRACIJA
     rocnoCnt >= 2, // MERITEV
-    phase > 4 || (phase === 4 && serverLayout !== null), // PREVERJANJE
+    phase > 4 || (phase === 4 && (serverLayout !== null || analysis !== null)), // PREVERJANJE
     false, // POTRDITEV (izvedeno ob shranitvi)
   ]
 
@@ -770,9 +1024,55 @@ export function KameraMeritevDialog ({ open, onClose, onSaved }: {
         })}
       </ol>
 
+      {/* R457 (§19): izvoz zadnje shranjene meritve — viden v vseh fazah po potrditvi */}
+      {savedId ? (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-1.5 dark:border-emerald-900 dark:bg-emerald-950/30" role="status">
+          <span className="text-[11px] font-medium text-emerald-900 dark:text-emerald-200">Meritev shranjena ✓ — izvoz dokumenta:</span>
+          <Button size="sm" variant="outline" className="h-8" onClick={() => void downloadExport('csv')}><FileSpreadsheet className="size-3.5" aria-hidden /> CSV</Button>
+          <Button size="sm" variant="outline" className="h-8" onClick={() => void downloadExport('json')}><FileJson className="size-3.5" aria-hidden /> JSON</Button>
+        </div>
+      ) : null}
+
       {/* ══ FAZA 1: ZAJEM (fotografija + kakovost + vodila) ══ */}
       {phase === 1 ? (
         <div className="space-y-4">
+          {/* R457 (§2): adaptivni način izmere — izbor PRED zajemom */}
+          <div className="space-y-2">
+            <p className="flex items-center gap-1.5 text-sm font-semibold"><Ruler className="size-4 text-roksal-amber" aria-hidden /> Način izmere</p>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4" role="radiogroup" aria-label="Način izmere">
+              {MEASURE_MODES.map((m) => (
+                <button
+                  key={m} type="button" role="radio" aria-checked={mode === m}
+                  onClick={() => setMode(m)}
+                  className={`rounded-lg border p-2 text-left text-xs transition ${mode === m ? 'border-roksal-amber bg-amber-50 font-semibold text-amber-900 dark:bg-amber-950/40 dark:text-amber-200' : 'text-muted-foreground hover:border-foreground/30'}`}
+                >
+                  <span className="block">{MODE_RULES[m].label}</span>
+                  <span className="mt-0.5 block text-[10px] font-normal opacity-80">{MODE_RULES[m].desc}</span>
+                </button>
+              ))}
+            </div>
+            <p className="text-[11px] text-muted-foreground">💡 {MODE_RULES[mode].hint}</p>
+          </div>
+
+          {/* R457 (§16/§18): zmogljivosti naprave + priporočena metoda */}
+          {caps ? (
+            <Card>
+              <CardContent className="space-y-1.5 p-3">
+                <p className="flex items-center gap-1.5 text-sm font-semibold"><Cpu className="size-4 text-roksal-amber" aria-hidden /> Naprava in priporočena metoda</p>
+                <div className="flex flex-wrap gap-1.5 text-[11px]">
+                  <Badge variant={caps.camera ? 'secondary' : 'destructive'}>kamera {caps.camera ? '✓' : '✗'}</Badge>
+                  <Badge variant={caps.orientation ? 'secondary' : 'outline'}>žiroskop {caps.orientation ? '✓' : '—'}</Badge>
+                  <Badge variant={caps.gps ? 'secondary' : 'outline'}>GPS {caps.gps ? '✓' : '—'}</Badge>
+                  <Badge variant={caps.webgl ? 'secondary' : 'outline'}>WebGL {caps.webgl ? '✓' : '—'}</Badge>
+                  <Badge variant={caps.network ? 'secondary' : 'outline'}>{caps.network ? 'povezava ✓' : 'brez povezave'}</Badge>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Priporočena metoda: <strong className="text-foreground">{recommendMethod(caps).label}</strong> — {recommendMethod(caps).reason}
+                </p>
+              </CardContent>
+            </Card>
+          ) : null}
+
           <div className="grid gap-3 sm:grid-cols-2">
             <Button size="lg" className="h-12" onClick={() => void startCamera()} disabled={camActive}>
               <Camera className="size-5" aria-hidden /> Zajemi s kamero
@@ -897,6 +1197,36 @@ export function KameraMeritevDialog ({ open, onClose, onSaved }: {
             </p>
           ) : null}
 
+          {/* R457 (§3): Smart Capture Guide — DOBRO/OPOZORILO/NEZADOSTNO */}
+          {(() => {
+            const guide = captureGuide({
+              quality: view.quality,
+              tiltDeg: maxTilt,
+              calibPresent: view.calib !== null,
+              viewCount: views.length,
+            })
+            const tone = guide.status === 'DOBRO'
+              ? 'border-emerald-300 bg-emerald-50 dark:border-emerald-900 dark:bg-emerald-950/30'
+              : guide.status === 'OPOZORILO'
+                ? 'border-amber-300 bg-amber-50 dark:border-amber-900 dark:bg-amber-950/30'
+                : 'border-red-300 bg-red-50 dark:border-red-900 dark:bg-red-950/30'
+            return (
+              <div className={`rounded-lg border px-3 py-2 ${tone}`} role="status" aria-label="Vodnik kakovosti zajema">
+                <p className="text-xs font-semibold">
+                  Vodnik zajema: {guide.status === 'DOBRO' ? 'DOBRO — nadaljuj' : guide.status === 'OPOZORILO' ? 'OPOZORILO — dodaj posnetek' : 'NEZADOSTNO — meritev še ni pripravljena'}
+                </p>
+                <ul className="mt-1 space-y-0.5">
+                  {guide.checks.map((c) => (
+                    <li key={c.code} className="flex items-start gap-1.5 text-[11px]">
+                      <span aria-hidden>{c.state === 'DOBRO' ? '✓' : c.state === 'OPOZORILO' ? '⚠' : '✗'}</span>
+                      <span><strong>{c.label}:</strong> {c.detail}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )
+          })()}
+
           <div className="mx-auto inline-block max-w-full rounded-lg border bg-muted/40 p-1">
             <div className="relative inline-block cursor-crosshair" onClick={onImageClick} role="application" aria-label="Fotografija za kalibracijo — klik dodaja referenčni točki">
               <img src={view.dataUrl} alt="Teren za merjenje" className="block h-auto max-h-[380px] w-auto max-w-full select-none" draggable={false} />
@@ -950,6 +1280,22 @@ export function KameraMeritevDialog ({ open, onClose, onSaved }: {
                 ) : (
                   <span className="text-xs text-muted-foreground">izberite 2 točki + vnesite realno razdaljo</span>
                 )}
+              </div>
+              {/* R457 (§4): metoda kalibracije + referenčni objekt */}
+              <div className="grid gap-2 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <Label htmlFor="km-calib-method" className="text-xs">Metoda kalibracije (§4)</Label>
+                  <Select value={calibMethod} onValueChange={(v) => setCalibMethod(v as CalibrationMethod)}>
+                    <SelectTrigger id="km-calib-method" className="h-9" aria-label="Metoda kalibracije"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {CALIB_METHODS.map((m) => <SelectItem key={m.id} value={m.id}>{m.label} — {m.desc}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="km-calib-ref" className="text-xs">Referenčni objekt</Label>
+                  <Input id="km-calib-ref" className="h-9" value={refObject} onChange={(e) => setRefObject(e.target.value)} placeholder="npr. vrata 110 cm / marker 20 cm" />
+                </div>
               </div>
               {!view.calib ? (
                 <>
@@ -1029,6 +1375,11 @@ export function KameraMeritevDialog ({ open, onClose, onSaved }: {
             <input ref={fileViewRef} type="file" accept="image/*" capture="environment" className="hidden"
               onChange={(e) => { void onFileView(e.target.files?.[0]); e.target.value = '' }} aria-label="Dodaj fotografijo istega objekta" />
           </div>
+
+          {/* R457 (§2): vodilo načina za označevanje */}
+          <p className="rounded-lg bg-muted/60 px-3 py-1.5 text-[11px] text-muted-foreground" role="note">
+            <strong className="text-foreground">{MODE_RULES[mode].label}:</strong> {MODE_RULES[mode].hint}
+          </p>
 
           {/* R455: zavihki pogledov */}
           {views.length > 1 ? (
@@ -1305,6 +1656,159 @@ export function KameraMeritevDialog ({ open, onClose, onSaved }: {
             </CardContent>
           </Card>
 
+          {/* R457: domenske možnosti + kanonična analiza engine-a (§8–§11, §13–§15) */}
+          <Card>
+            <CardContent className="space-y-3 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-semibold">Merilni engine — {MODE_RULES[mode].label}</p>
+                <Button size="sm" onClick={() => void runEngine()} disabled={analyzing || !view.calib || calc.pts.length < 2}>
+                  {analyzing ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <Sparkles className="size-3.5" aria-hidden />}
+                  {analyzing ? 'Analiziram …' : 'Analiziraj (engine)'}
+                </Button>
+              </div>
+
+              {/* domenske možnosti po načinu (§8–§11) */}
+              {mode === 'OGRAJA' ? (
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <div className="space-y-1">
+                    <Label htmlFor="km-maxspan" className="text-xs">Razmak stebrov (cm)</Label>
+                    <Input id="km-maxspan" className="h-9" type="number" min="40" max="300" inputMode="numeric" value={maxSpanS} onChange={(e) => setMaxSpanS(e.target.value)} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="km-height-eng" className="text-xs">Višina polnila (cm)</Label>
+                    <Input id="km-height-eng" className="h-9" type="number" min="20" inputMode="numeric" value={heightS} onChange={(e) => setHeightS(e.target.value)} />
+                  </div>
+                </div>
+              ) : null}
+              {mode === 'KERAMIKA' ? (
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+                  <div className="space-y-1">
+                    <Label htmlFor="km-tilew" className="text-xs">Ploščica Š (cm)</Label>
+                    <Input id="km-tilew" className="h-9" type="number" min="1" inputMode="numeric" value={tileW} onChange={(e) => setTileW(e.target.value)} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="km-tileh" className="text-xs">Ploščica V (cm)</Label>
+                    <Input id="km-tileh" className="h-9" type="number" min="1" inputMode="numeric" value={tileH} onChange={(e) => setTileH(e.target.value)} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="km-joint" className="text-xs">Fuga (mm)</Label>
+                    <Input id="km-joint" className="h-9" type="number" min="0" max="30" inputMode="numeric" value={jointMm} onChange={(e) => setJointMm(e.target.value)} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="km-pattern" className="text-xs">Vzorec</Label>
+                    <Select value={pattern} onValueChange={(v) => setPattern(v as 'PRAVOKOTNO' | 'DIAGONALNO')}>
+                      <SelectTrigger id="km-pattern" className="h-9" aria-label="Vzorec polaganja"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="PRAVOKOTNO">Pravokotno</SelectItem>
+                        <SelectItem value="DIAGONALNO">Diagonalno</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="km-opcount" className="text-xs">Odprtine (Š×V, št.)</Label>
+                    <div className="flex gap-1">
+                      <Input id="km-opcount" className="h-9" type="number" min="0" inputMode="numeric" value={opCount} onChange={(e) => setOpCount(e.target.value)} />
+                      <Input aria-label="Širina odprtine" className="h-9 w-14" type="number" min="1" inputMode="numeric" value={opW} onChange={(e) => setOpW(e.target.value)} />
+                      <Input aria-label="Višina odprtine" className="h-9 w-14" type="number" min="1" inputMode="numeric" value={opH} onChange={(e) => setOpH(e.target.value)} />
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+              {mode === 'STREHA' ? (
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <div className="space-y-1">
+                    <Label htmlFor="km-pitch" className="text-xs">Naklon strehe (°)</Label>
+                    <Input id="km-pitch" className="h-9" type="number" min="0" max="84" inputMode="numeric" value={pitchDeg} onChange={(e) => setPitchDeg(e.target.value)} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="km-roofmat" className="text-xs">Kritina</Label>
+                    <Select value={roofMaterial} onValueChange={(v) => setRoofMaterial(v as 'BETONNA' | 'KOVINSKA')}>
+                      <SelectTrigger id="km-roofmat" className="h-9" aria-label="Kritina"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="BETONNA">Betonska (odpad 10 %)</SelectItem>
+                        <SelectItem value="KOVINSKA">Kovinska (odpad 7 %)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              ) : null}
+              {mode === 'FASADA' ? (
+                <div className="grid gap-2 sm:grid-cols-3">
+                  <div className="space-y-1">
+                    <Label htmlFor="km-opw-f" className="text-xs">Okna/vrata Š (cm)</Label>
+                    <Input id="km-opw-f" className="h-9" type="number" min="1" inputMode="numeric" value={opW} onChange={(e) => setOpW(e.target.value)} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="km-oph-f" className="text-xs">Okna/vrata V (cm)</Label>
+                    <Input id="km-oph-f" className="h-9" type="number" min="1" inputMode="numeric" value={opH} onChange={(e) => setOpH(e.target.value)} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="km-opcount-f" className="text-xs">Število odprtin</Label>
+                    <Input id="km-opcount-f" className="h-9" type="number" min="0" inputMode="numeric" value={opCount} onChange={(e) => setOpCount(e.target.value)} />
+                  </div>
+                </div>
+              ) : null}
+              {mode === 'STOPNICE' ? (
+                <div className="max-w-56 space-y-1">
+                  <Label htmlFor="km-steps" className="text-xs">Število stopnic (neobvezno — sicer ocena po 17 cm)</Label>
+                  <Input id="km-steps" className="h-9" type="number" min="1" inputMode="numeric" value={stepsS} onChange={(e) => setStepsS(e.target.value)} placeholder="npr. 14" />
+                </div>
+              ) : null}
+
+              {analysis ? (
+                <>
+                  {/* §14 geometrijska kontrola */}
+                  <div className="space-y-1">
+                    <p className="text-xs font-semibold">Geometrijska kontrola (§14)</p>
+                    {analysis.validation.length === 0 ? (
+                      <p className="flex items-center gap-1.5 text-[11px] text-emerald-700 dark:text-emerald-300"><Check className="size-3.5" aria-hidden /> Brez ugotovitev — geometrija v redu.</p>
+                    ) : (
+                      <ul className="space-y-1">
+                        {analysis.validation.map((iss, k) => (
+                          <li key={k} className={`flex items-start gap-1.5 text-[11px] ${iss.severity === 'NAPAKA' ? 'text-red-700 dark:text-red-300' : iss.severity === 'OPOZORILO' ? 'text-amber-800 dark:text-amber-300' : 'text-muted-foreground'}`}>
+                            <span aria-hidden>{iss.severity === 'NAPAKA' ? '✗' : iss.severity === 'OPOZORILO' ? '⚠' : 'ℹ'}</span>
+                            <span>{iss.message}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                  {/* §13 confidence */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge className={analysis.confidence.band === 'VISOK'
+                      ? 'border-transparent bg-emerald-100 text-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-300'
+                      : analysis.confidence.band === 'SREDNJI'
+                        ? 'border-transparent bg-amber-100 text-amber-900 dark:bg-amber-950/50 dark:text-amber-300'
+                        : 'border-transparent bg-red-100 text-red-900 dark:bg-red-950/50 dark:text-red-300'}>
+                      Engine zaupanje: {analysis.confidence.confidence} % · {analysis.confidence.band}
+                    </Badge>
+                    <span className="text-[11px] text-muted-foreground">{analysis.confidence.reasons.join(' · ')}</span>
+                  </div>
+                  {/* §8–§11 domenski rezultat */}
+                  <div>
+                    <p className="mb-1 text-xs font-semibold">Domenski izračun — {MODE_RULES[analysis.domain.mode].label}</p>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <tbody>
+                          {domainRows(analysis.domain).map(([k, v]) => (
+                            <tr key={k} className="border-b last:border-0">
+                              <td className="py-1 pr-3 text-muted-foreground">{k}</td>
+                              <td className="py-1 font-semibold">{v}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <p className="text-[11px] text-muted-foreground">
+                  Pritisnite »Analiziraj (engine)« za kanonično preverjeno analizo: geometrija, §14 validacija, zaupanje in domenski izračun ({MODE_RULES[mode].label}).
+                </p>
+              )}
+            </CardContent>
+          </Card>
+
           <div className="flex justify-between gap-2">
             <Button variant="ghost" onClick={() => setPhase(3)}><Undo2 className="size-4" aria-hidden /> Nazaj na točke</Button>
             <Button onClick={() => setPhase(5)}>Naprej — potrditev</Button>
@@ -1319,10 +1823,12 @@ export function KameraMeritevDialog ({ open, onClose, onSaved }: {
             <CardContent className="space-y-2 p-3 text-sm">
               <p className="font-semibold">Povzetek meritve</p>
               <div className="grid gap-x-4 gap-y-1 text-xs sm:grid-cols-2">
+                <span>Način: <strong className="text-foreground">{MODE_RULES[mode].label}</strong></span>
                 <span>Dolžina: <strong className="text-foreground">{finalLengthCm !== null ? `${fmt1(finalLengthCm / 100)} m` : '—'}</strong></span>
                 <span>Segmentov: <strong className="text-foreground">{calc.segs.length}</strong></span>
-                <span>Zaupanje: <strong className="text-foreground">{multi.conf} % ({multi.label})</strong></span>
+                <span>Zaupanje: <strong className="text-foreground">{multi.conf} % ({multi.label}){analysis ? ` · engine ${analysis.confidence.confidence} %` : ''}</strong></span>
                 <span>Pogledov: <strong className="text-foreground">{views.length}</strong></span>
+                <span>Analiza engine-a: <strong className="text-foreground">{analysis ? (analysis.validation.some((i) => i.severity === 'NAPAKA') ? '⚠ napake — preveri' : '✓ opravljena') : 'ni opravljena'}</strong></span>
                 <span>Fotografija: <strong className="text-foreground">{views[0].photoId ? `✓ (${rocnoCnt} točk)` : online ? 'ni shranjena' : 'shranila se bo ob sinhronizaciji'}</strong></span>
                 {multi.spreadPct !== null ? <span>Razpršenost: <strong className="text-foreground">{fmt1(multi.spreadPct)} %</strong></span> : null}
               </div>

@@ -17,12 +17,20 @@
 //     razlog je OBVEZEN (sledljivost ročnih sprememb, §1 issue #10).
 // Samodejni (VLM) predlogi NIKOLI niso potrjeni brez izrecnega dejanja uporabnika —
 // točke s src=PREDLOG odjemalec sprejme pred potrditvijo (tu prispejo kot navadne).
+//
+// R457 (issue #12 — VRHUNSKI MERILNI ENGINE) — aditivno:
+//   • mode — način izmere (OGRAJA | KERAMIKA | STREHA | FASADA | STOPNICE |
+//     PROSTOR | SPLOSNO, §2) — zapiše se v params.mode + revizijo;
+//   • engine — rezultat kanonične analize (POST /api/measure-engine/analyze):
+//     { domain?, validation?, confidence?, captureGuide? } — omejeno na 8 KB,
+//     zapisano v params.engine za revizijo/izvoz (§7 ena meritev — en vir resnice).
 
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { jsonError, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
 import { emitEvent } from '@/lib/notify'
+import { MEASURE_MODES } from '@/lib/measure-engine'
 
 const TYPES = ['OGRAJA', 'BALUSTRADA', 'NAGIB', 'OSTANEO']
 
@@ -160,6 +168,33 @@ export async function POST (req: NextRequest) {
     projectId = workOrder.projectId ?? projectId // samodejna povezava vsega s projektom
   }
 
+  // ── R457: način izmere (§2) + rezultat engine-a (§7) ──
+  let mode: string | null = null
+  if (body.mode !== undefined && body.mode !== null) {
+    if (typeof body.mode !== 'string' || !(MEASURE_MODES as string[]).includes(body.mode)) {
+      return jsonError(400, 'Neznan način izmere.', `Veljavni načini: ${MEASURE_MODES.join(', ')}.`)
+    }
+    mode = body.mode
+  }
+  let engine: Record<string, unknown> | null = null
+  if (body.engine !== undefined && body.engine !== null) {
+    if (typeof body.engine !== 'object' || Array.isArray(body.engine)) {
+      return jsonError(400, 'engine mora biti objekt.', 'Rezultat analize /api/measure-engine/analyze.')
+    }
+    const e = body.engine as Record<string, unknown>
+    const picked: Record<string, unknown> = {}
+    if (e.domain && typeof e.domain === 'object') picked.domain = e.domain
+    if (Array.isArray(e.validation)) picked.validation = e.validation.slice(0, 40)
+    if (e.confidence && typeof e.confidence === 'object') picked.confidence = e.confidence
+    if (e.captureGuide && typeof e.captureGuide === 'object') picked.captureGuide = e.captureGuide
+    if (Object.keys(picked).length === 0) {
+      return jsonError(400, 'engine je prazen.', 'Podajte vsaj enega od: domain, validation, confidence, captureGuide.')
+    }
+    const size = JSON.stringify(picked).length
+    if (size > 8000) return jsonError(400, 'Rezultat engine-a je prevelik (max 8 KB).')
+    engine = picked
+  }
+
   // points + calibration shranimo v params (zapis postopka za revizijo/ponovno izdelavo)
   // points: normalizirane koordinate 0..1; calibration dodatno nosi imgW/imgH za
   // pretvorbo v piksle pri ponovnem izračunu (GET /api/railing-layout?measurementId)
@@ -168,12 +203,15 @@ export async function POST (req: NextRequest) {
     const extra: Record<string, unknown> = { photoId, source: 'KAMERA' }
     if (Array.isArray(body.points)) extra.points = body.points.slice(0, 64)
     if (body.calibration && typeof body.calibration === 'object') {
-      const c = body.calibration as { px?: unknown; cm?: unknown; imgW?: unknown; imgH?: unknown }
+      const c = body.calibration as { px?: unknown; cm?: unknown; imgW?: unknown; imgH?: unknown; method?: unknown; refObject?: unknown }
       const cal: Record<string, unknown> = {}
       if (Number.isFinite(Number(c.px)) && Number(c.px) > 0) cal.px = Number(c.px)
       if (Number.isFinite(Number(c.cm)) && Number(c.cm) > 0) cal.cm = Number(c.cm)
       if (Number.isFinite(Number(c.imgW)) && Number(c.imgW) > 0) cal.imgW = Math.round(Number(c.imgW))
       if (Number.isFinite(Number(c.imgH)) && Number(c.imgH) > 0) cal.imgH = Math.round(Number(c.imgH))
+      // R457 (§4): metoda kalibracije + referenčni objekt (sledljivost reference)
+      if (typeof c.method === 'string' && ['MARKER', 'ZNANA_MERA', 'ZUNANJA_NAPRAVA', 'LIDAR', 'ROCNO'].includes(c.method)) cal.method = c.method
+      if (typeof c.refObject === 'string' && c.refObject.trim()) cal.refObject = c.refObject.trim().slice(0, 80)
       if (Object.keys(cal).length > 0) extra.calibration = cal
     }
     // R455: več pogledov, kakovost, zaupanje, ročni popravek — vse v params (revizija)
@@ -181,6 +219,9 @@ export async function POST (req: NextRequest) {
     if (quality) extra.quality = quality
     if (confidence !== null) extra.confidence = confidence
     if (manualOverride) extra.manualOverride = manualOverride
+    // R457: način izmere + rezultat engine-a (§7 — ena meritev, en vir resnice)
+    if (mode) extra.mode = mode
+    if (engine) extra.engine = engine
     params = JSON.stringify(extra)
   } catch { params = JSON.stringify({ photoId, source: 'KAMERA' }) }
 
@@ -213,6 +254,7 @@ export async function POST (req: NextRequest) {
   if (views) versionBits.push(`${views.length + 1} pogledov`)
   if (confidence !== null) versionBits.push(`zaupanje ${confidence} %`)
   if (manualOverride) versionBits.push('ročni popravek dolžine')
+  if (mode) versionBits.push(`način ${mode}`)
   await db.measurementVersion.create({
     data: {
       measurementId: measurement.id,
@@ -239,6 +281,9 @@ export async function POST (req: NextRequest) {
       ...(views ? { views: views.length } : {}),
       ...(quality ? { qualityFlags: Object.keys(quality) } : {}),
       ...(manualOverride ? { manualOverride } : {}),
+      // R457: način izmere + prisotnost engine rezultata (issue #12)
+      ...(mode ? { mode } : {}),
+      ...(engine ? { engine: Object.keys(engine) } : {}),
     },
   })
 
