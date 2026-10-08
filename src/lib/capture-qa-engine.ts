@@ -461,6 +461,8 @@ export interface GateSegment {
   angleDeg: number | null
   status: string
   hasGate: boolean // segment se konča z vrati
+  fromKind?: string // R462: vrsta začetnega vozlišča (STEBER/ZAČETEK/…)
+  toKind?: string // R462: vrsta končnega vozlišča (VOGAL/VRATA/STOPNISCE/…)
 }
 
 export interface MissingItem {
@@ -575,6 +577,8 @@ export interface TwinSnapshotData {
   fotoViz?: { id: string; variantLabel: string; engineVersion: string } | null
   bom?: { code: string; status: string; lines: number; qty: number; unit: string } | null
   spremembe?: { opis: string; odobril: string; ts: string }[] // §11 DESIGNED → CHANGE → APPROVED → PRODUCED
+  /** R462 §10: ključi segmentov z EKSPlicitNO odobrenimi spremembami mere — diff jih označi APPROVED_CHANGE */
+  producedOverrideKeys?: string[]
   montaža?: { notes: string[]; workOrderId: string | null; odkloni?: DiffRow[] } | null
   engineVersion: string
 }
@@ -752,11 +756,28 @@ export function buildAsProduced (args: {
   designed: TwinSnapshotData | null
   bom: { code: string; status: string; lines: number; qty: number; unit: string }
   spremembe: { opis: string; odobril: string; ts: string }[]
+  /** R462 (issue #17 §11): EKSPPLICITNI overridi mer po segmentih (ključi iz
+   *  designed-a) — odobrene spremembe se odrazijo v dejansko izdelani konfiguraciji. */
+  segmentOverrides?: { key: string; lengthCm?: number | null; heightCm?: number | null }[] | null
 }): TwinSnapshotData {
+  const ov = new Map((args.segmentOverrides ?? []).map((o) => [o.key, o]))
+  const segments = (args.designed?.segments ?? []).map((s) => {
+    const o = ov.get(s.key)
+    if (!o) return s
+    return {
+      ...s,
+      lengthCm: o.lengthCm != null ? o.lengthCm : s.lengthCm,
+      heightCm: o.heightCm != null ? o.heightCm : s.heightCm,
+    }
+  })
+  const total = segments.length > 0 ? Math.round(segments.reduce((a, s) => a + (s.lengthCm ?? 0), 0) * 10) / 10 : args.designed?.totalLengthCm ?? null
   return {
     kind: 'AS_PRODUCED',
-    totalLengthCm: args.designed?.totalLengthCm ?? null,
-    segments: args.designed?.segments ?? [],
+    totalLengthCm: total,
+    segments,
+    ...(args.segmentOverrides && args.segmentOverrides.length > 0
+      ? { producedOverrideKeys: args.segmentOverrides.map((o) => o.key) }
+      : {}),
     terrain: args.designed?.terrain ?? null,
     produkt: args.designed?.produkt ?? undefined,
     bom: args.bom,
@@ -912,6 +933,9 @@ export function parseTwinData (v: unknown): TwinSnapshotData | null {
     totalLengthCm: typeof v.totalLengthCm === 'number' ? v.totalLengthCm : null,
     segments,
     engineVersion: typeof v.engineVersion === 'string' ? v.engineVersion : CAPTURE_QA_VERSION,
+  }
+  if (Array.isArray(v.producedOverrideKeys)) {
+    out.producedOverrideKeys = v.producedOverrideKeys.filter((k): k is string => typeof k === 'string')
   }
   return out
 }

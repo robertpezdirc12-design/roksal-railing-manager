@@ -7,8 +7,8 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import {
-  Boxes, FileStack, GitCompareArrows, Hammer, Loader2, Plus, Ruler,
-  ScanLine, ShieldCheck, TriangleAlert,
+  Boxes, ClipboardCheck, Clock, FileStack, GitCompareArrows, Hammer, Loader2,
+  MousePointerClick, Plus, Ruler, ScanLine, ShieldCheck, TriangleAlert,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -24,6 +24,7 @@ import { apiGet, apiPost, useApi } from '@/lib/api-client'
 import { EmptyState, ErrorBox, LoadingRows, PageHeader } from '@/components/roksal/ui-bits'
 import { hasPerm } from '@/lib/permissions-core'
 import { TWIN_KINDS } from '@/lib/capture-qa-engine'
+import { DEVIATION_STATUSES, ELEMENT_STATES, LOOP_STATUSES, REG_QUALITY } from '@/lib/reality-r2p-engine'
 
 // ─── Tipi ───────────────────────────────────────────────────────────────────
 
@@ -67,6 +68,36 @@ interface DiffPayload {
 interface PackageOption { id: string; code: string; name: string; productId: string; variantId: string | null }
 interface BomOption { id: string; code: string; status: string }
 
+interface AsBuiltPayload {
+  stages: {
+    stage: string; label: string; available: boolean
+    from: { id: string; version: number } | null
+    to: { id: string; version: number } | null
+    rows: { key: string; label: string; metric: string; a: number | null; b: number | null; diff: number | null; unit: string; status: string; ruleKey: string }[]
+    summary: { compared: number; within: number; review: number; blocking: number; noRule: number }
+  }[]
+  provenance: { kaj: string; kdaj: string; kako: string; kdo: string; verzija: string; izpeljanoIz: string }[]
+  snapshotChain: { id: string; kind: string; version: number; reason: string; createdAt: string }[]
+  toleranceRulesDefined: { key: string; value: number; unit: string; label: string }[]
+  verdict: { asBuiltOk: boolean; blocking: number; review: number; message: string }
+  recapture: { sessions: { id: string; name: string; createdAt: string; geoCount: number; photoCount: number }[]; message: string }
+}
+
+interface TimelinePayload {
+  entries: { t: string; label: string; at: string | null; detail: string }[]
+}
+
+interface ElementProv {
+  key: string; label: string
+  photo: { zone: string; count: number } | null
+  meritev: { id: string; lengthCm: number | null; heightCm: number | null; source: string } | null
+  tekač: { id: string; name: string; status: string } | null
+  produkt: { ime: string | null; varianta: string | null; ral: string | null } | null
+  bom: { code: string; status: string; lines: number } | null
+  snapshots: { kind: string; version: number; value: number | null }[]
+  zgodovina: { opis: string; at: string }[]
+}
+
 const KIND_LABEL: Record<string, string> = {
   AS_MEASURED: 'AS-MEASURED',
   AS_DESIGNED: 'AS-DESIGNED',
@@ -99,7 +130,17 @@ export default function DvojcekModule () {
 
   const [createKind, setCreateKind] = useState<string | null>(null)
   const [diffOpen, setDiffOpen] = useState(false)
+  const [elementKey, setElementKey] = useState<string | null>(null)
   const reload = () => setRefresh((n) => n + 1)
+
+  const asBuilt = useApi<{ data: AsBuiltPayload }>(
+    projectId ? `/api/digital-twin/as-built?projectId=${projectId}&t=${refresh}` : null,
+    [projectId, refresh],
+  )
+  const timeline = useApi<{ data: TimelinePayload }>(
+    projectId ? `/api/digital-twin/timeline?projectId=${projectId}&t=${refresh}` : null,
+    [projectId, refresh],
+  )
 
   return (
     <div className="space-y-4">
@@ -235,12 +276,12 @@ export default function DvojcekModule () {
                   <>
                     <div className="space-y-1">
                       {od.consistency.rows.map((r) => (
-                        <div key={r.key} className="flex items-center gap-2 rounded-md border px-2.5 py-1.5 text-sm">
+                        <button key={r.key} type="button" onClick={() => setElementKey(r.key)} className="flex w-full items-center gap-2 rounded-md border px-2.5 py-1.5 text-left text-sm transition-colors hover:bg-muted">
                           <span className="min-w-0 flex-1 truncate">{r.label}</span>
                           {([['foto', r.photo], ['2D', r.sketch2d], ['3D', r.threeD], ['mer', r.measurement]] as const).map(([l, ok]) => (
                             <span key={l} className={`rounded px-1.5 py-0.5 text-xs ${ok ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-800'}`}>{l} {ok ? '✓' : '✗'}</span>
                           ))}
-                        </div>
+                        </button>
                       ))}
                     </div>
                     {od.consistency.warnings.length > 0 && (
@@ -256,6 +297,75 @@ export default function DvojcekModule () {
               </CardContent>
             </Card>
           </div>
+
+          {/* AS-BUILT QA poročilo (R462 §27) */}
+          <Card>
+            <CardContent className="space-y-3 p-4">
+              <p className="flex items-center gap-2 font-medium"><ClipboardCheck className="h-4 w-4" />AS-BUILT QA poročilo (R462)</p>
+              {asBuilt.data?.data ? (
+                <>
+                  <div className={`rounded-lg border p-3 text-sm font-medium ${asBuilt.data.data.verdict.asBuiltOk ? 'border-emerald-300 bg-emerald-50 text-emerald-800' : 'border-amber-300 bg-amber-50 text-amber-900'}`}>
+                    {asBuilt.data.data.verdict.message}
+                  </div>
+                  {asBuilt.data.data.toleranceRulesDefined.length === 0 && (
+                    <p className="rounded-md border border-gray-300 bg-gray-50 p-2 text-xs text-gray-700">
+                      NO VERIFIED TOLERANCE RULE — tolerance niso definirane (EngineeringRule: tol_dolzina_segmenta, tol_visina, …). Odstopanja so prikazana brez ocene (§12, brez ugibanj).
+                    </p>
+                  )}
+                  {asBuilt.data.data.stages.map((st) => (
+                    <div key={st.stage} className="rounded-lg border p-3">
+                      <p className="text-sm font-medium">{st.label}</p>
+                      {!st.available ? (
+                        <p className="mt-1 text-xs text-muted-foreground">Manjkajo snapshoti za to primerjavo.</p>
+                      ) : (
+                        <>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {st.summary.compared} mer · ✅ {st.summary.within} · ⚠ {st.summary.review} · 🔴 {st.summary.blocking} · bez pravila {st.summary.noRule}
+                          </p>
+                          <div className="mt-2 space-y-1">
+                            {st.rows.map((r) => (
+                              <div key={r.key} className="flex flex-wrap items-center gap-2 rounded-md border px-2.5 py-1.5 text-sm">
+                                <span className="min-w-0 flex-1 truncate">{r.label}</span>
+                                <span className="text-xs text-muted-foreground">
+                                  {r.a != null ? r.a.toFixed(1) : '—'} → {r.b != null ? r.b.toFixed(1) : '—'} {r.unit}
+                                </span>
+                                <span className={`rounded border px-1.5 py-0.5 text-xs font-medium ${DEVIATION_STATUSES[r.status as keyof typeof DEVIATION_STATUSES]?.cls ?? ''}`}>
+                                  {r.diff != null ? `${r.diff > 0 ? '+' : ''}${r.diff.toFixed(1)} ${r.unit} · ` : ''}{DEVIATION_STATUSES[r.status as keyof typeof DEVIATION_STATUSES]?.label ?? r.status}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  ))}
+                  {/* recapture (§16) */}
+                  <p className="text-xs text-muted-foreground">Recapture (§16): {asBuilt.data.data.recapture.message}</p>
+                </>
+              ) : asBuilt.loading ? <LoadingRows /> : <p className="text-sm text-muted-foreground">Poročilo ni na voljo.</p>}
+            </CardContent>
+          </Card>
+
+          {/* 4D timeline (R462 §15) */}
+          <Card>
+            <CardContent className="space-y-2 p-4">
+              <p className="flex items-center gap-2 font-medium"><Clock className="h-4 w-4" />4D timeline (T0–T6)</p>
+              {timeline.data?.data && timeline.data.data.entries.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {timeline.data.data.entries.map((e) => (
+                    <div key={e.t + e.label} className="min-w-36 flex-1 rounded-lg border p-2.5">
+                      <p className="text-xs font-bold text-muted-foreground">{e.t}</p>
+                      <p className="text-sm font-medium">{e.label}</p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">{e.detail}</p>
+                      {e.at && <p className="text-[10px] text-muted-foreground">{new Date(e.at).toLocaleDateString('sl-SI')}</p>}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">Ni časovnih vnosov — začnite z zajemom.</p>
+              )}
+            </CardContent>
+          </Card>
 
           {/* verzije snapshotov */}
           <Card>
@@ -297,6 +407,9 @@ export default function DvojcekModule () {
         onCreated={() => { setCreateKind(null); reload() }}
       />
 
+      {/* element provenance (R462 §13) */}
+      <ElementDialog projectId={projectId} elementKey={elementKey} onClose={() => setElementKey(null)} />
+
       {/* diff dialog */}
       <DiffDialog
         projectId={projectId}
@@ -305,6 +418,91 @@ export default function DvojcekModule () {
         snapshots={od?.snapshots ?? []}
       />
     </div>
+  )
+}
+
+// ─── Element provenance dialog (R462 §13) ───────────────────────────────────
+
+function ElementDialog ({ projectId, elementKey, onClose }: {
+  projectId: string
+  elementKey: string | null
+  onClose: () => void
+}) {
+  const [prov, setProv] = useState<ElementProv | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (!elementKey) return
+    let alive = true
+    const load = async () => {
+      setLoading(true)
+      setError(null)
+      try {
+        const r = await apiGet<{ data: ElementProv }>(`/api/digital-twin/element?projectId=${projectId}&key=${elementKey}`)
+        if (alive) setProv(r.data)
+      } catch (e) {
+        if (alive) setError((e as Error).message)
+      } finally {
+        if (alive) setLoading(false)
+      }
+    }
+    void load()
+    return () => { alive = false }
+  }, [projectId, elementKey])
+
+  if (!elementKey) return null
+
+  return (
+    <Dialog open onOpenChange={(o) => { if (!o) onClose() }}>
+      <DialogContent className="w-[min(640px,95vw)]">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2"><MousePointerClick className="h-5 w-5" />{elementKey} — provenance (§13)</DialogTitle>
+          <DialogDescription>Vsi povezani podatki elementa: foto/meritev/produkt/BOM/snapshoti/zgodovina.</DialogDescription>
+        </DialogHeader>
+        {loading && <LoadingRows />}
+        {error && <ErrorBox error={{ message: error }} />}
+        {prov && (
+          <div className="space-y-2 text-sm">
+            <div className="grid gap-1.5">
+              {([
+                ['Fotografije', prov.photo ? `${prov.photo.count} posnetkov v coni ${prov.photo.zone}` : 'ni posnetkov v coni'],
+                ['Meritev', prov.meritev ? `${(prov.meritev.lengthCm ?? 0).toFixed(1)} cm · vir ${prov.meritev.source}` : 'ni kanonične meritve'],
+                ['Tekač', prov.tekač ? `${prov.tekač.name} (${prov.tekač.status})` : '—'],
+                ['Produkt', prov.produkt ? `${prov.produkt.ime ?? '—'}${prov.produkt.varianta ? ' · ' + prov.produkt.varianta : ''}${prov.produkt.ral ? ' (' + prov.produkt.ral + ')' : ''}` : 'ni izbran'],
+                ['BOM', prov.bom ? `${prov.bom.code} (${prov.bom.status}, ${prov.bom.lines} vrstic)` : 'ni kosovnice'],
+              ] as const).map(([l, v]) => (
+                <div key={l} className="flex gap-2 rounded-md border px-2.5 py-1.5">
+                  <span className="w-24 shrink-0 text-muted-foreground">{l}</span>
+                  <span className="min-w-0 flex-1">{v}</span>
+                </div>
+              ))}
+            </div>
+            {prov.snapshots.length > 0 && (
+              <div>
+                <p className="mb-1 text-xs font-medium text-muted-foreground">Vrednost skozi snapshot-e:</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {prov.snapshots.map((s) => (
+                    <Badge key={s.kind + s.version} variant="outline">{s.kind} v{s.version}: {s.value != null ? (s.value / 100).toFixed(2) + ' m' : '—'}</Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+            {prov.zgodovina.length > 0 && (
+              <div>
+                <p className="mb-1 text-xs font-medium text-muted-foreground">Zgodovina sprememb:</p>
+                <ul className="space-y-0.5 text-xs text-muted-foreground">
+                  {prov.zgodovina.slice(-5).map((z, i) => <li key={i}>{new Date(z.at).toLocaleDateString('sl-SI')} — {z.opis}</li>)}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Zapri</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 

@@ -54,6 +54,9 @@ model User {
   captureSessions CaptureSession[] @relation("captureAuthor") // R461: zajemi avtorja (issue #16)
   captureRefs     CaptureReference[] @relation("captureOperator") // R461: operator referenc (issue #16 §4)
   twinSnapshots   DigitalTwinSnapshot[] @relation("twinSnapshots") // R461: avtorji dvojčkovih snapshotov (issue #16)
+  geoRefs         GeoReference[] @relation("geoOperator") // R462: operator georeferenc (issue #17 §1)
+  registrations   Registration[] @relation("regAuthor") // R462: avtorji registracij (issue #17 §3)
+  loopClosures    LoopClosure[] @relation("loopAuthor") // R462: avtorji loop checkov (issue #17 §5)
 }
 
 model Session {
@@ -1490,6 +1493,9 @@ model CaptureSession {
 
   references CaptureReference[]
   photos     CapturePhoto[]
+  geoRefs    GeoReference[] // R462: georeference zajema (issue #17 §1/§2)
+  registrations Registration[] // R462: verzionirane registracije (issue #17 §3)
+  loopClosures  LoopClosure[] // R462: preverjanja zanke (issue #17 §5)
 
   @@index([projectId, updatedAt])
 }
@@ -1562,4 +1568,92 @@ model DigitalTwinSnapshot {
 
   @@unique([projectId, kind, version])
   @@index([projectId, kind])
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// REALITY-TO-PRODUCTION (R462 — issue #17)
+// Georeferenca (§1/§2), 3-točkovna registracija (§3) in loop closure (§5)
+// kot nadstropje nad zajemi R461. Tolerance prihajajo IZKLJUČNO iz
+// EngineeringRule (tol_* ključi) — brez ugibanj (§12). RTK koordinata NIKOLI
+// samodejno ne postane proizvodna mera (§2). Vse verzionirano + audited.
+// ═══════════════════════════════════════════════════════════════════════════
+
+// GEOREFERENCA — sidro zajema v globalnem/polgeodetskem okviru (§1).
+// tier: BASIC (kamera+lokalna) | PROFESSIONAL (AR/LiDAR+fizične točke) |
+//       SURVEY (GNSS/RTK+referenčne točke).
+// source: GNSS_RTK | GNSS_FLOAT | GNSS_NONE | LASER | MARKER | MANUAL.
+// natančnost (hAccM/vAccM) je zgornja meja vira — brez lažne natančnosti.
+model GeoReference {
+  id              String   @id @default(cuid())
+  sessionId       String
+  session         CaptureSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  code            String // GEO-001, GEO-002, …
+  tier            String // BASIC | PROFESSIONAL | SURVEY
+  lat             Float // stopinje (WGS84 ali podano v coordinateSystem)
+  lon             Float
+  altM            Float? // nadmorska višina (m)
+  atCm            Float? // položaj ob teku (cm) — vezava na tekača
+  coordinateSystem String  @default("WGS84")
+  datum           String? // npr. ETRS89
+  geoid           String? // npr. SVS2010
+  hAccM           Float? // horizontalna natančnost (m) — ZGORNJA meja vira
+  vAccM           Float? // vertikalna natančnost (m)
+  source          String // GNSS_RTK | GNSS_FLOAT | GNSS_NONE | LASER | MARKER | MANUAL
+  rtkStatus       String? // FIX | FLOAT | NONE (samo za GNSS vire)
+  correctionAgeSec Float? // starost RTK korekcij (§2)
+  device          String?
+  operatorId      String?
+  operator        User?   @relation("geoOperator", fields: [operatorId], references: [id], onDelete: SetNull)
+  status          String  @default("AKTIVNA") // AKTIVNA | KONFLIKT | ZAVRACENA
+  note            String?
+  createdAt       DateTime @default(now())
+
+  @@unique([sessionId, code])
+  @@index([sessionId, atCm])
+}
+
+// REGISTRACIJA MODELA (§3) — 3-točkovna podobnostna transformacija
+// (translacija + rotacija + merilo). VERZIONIRANA: nova registracija = nova
+// vrstica (nikoli prepis). points = JSON [{ code, source:{x,y}, target:{x,y} }],
+// transform = JSON { tx, ty, rotationDeg, scale, orientation },
+// quality: GOOD (RMS ≤ 1 cm) | WARNING (≤ 3 cm) | INVALID.
+model Registration {
+  id         String   @id @default(cuid())
+  sessionId  String
+  session    CaptureSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  version    Int // zaporedna verzija registracije na zajemu
+  points     String // JSON 3 para točk (source → target)
+  transform  String // JSON { tx, ty, rotationDeg, scale, orientation }
+  rmsCm      Float // residual RMS (cm) — utemeljena kakovost ujemanja
+  quality    String // GOOD | WARNING | INVALID
+  userId     String?
+  user       User?    @relation("regAuthor", fields: [userId], references: [id], onDelete: SetNull)
+  note       String?
+  createdAt  DateTime @default(now())
+
+  @@index([sessionId, version])
+}
+
+// LOOP CLOSURE (§5) — preverjanje začetka proti koncu dolgega/krožnega zajema.
+// expectedCm = prijavljena razdalja (tek), measuredCm = zunanje merilo ob
+// povratku. FAILED: označi konflikt, zahtevaj novo referenco — starih potrjenih
+// meritev NE spreminjamo (§5), vse verzije ostanejo.
+model LoopClosure {
+  id            String   @id @default(cuid())
+  sessionId     String
+  session       CaptureSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  startCode     String // referenca na začetku (REF-/GEO- koda ali START)
+  endCode       String // referenji ob povratku
+  expectedCm    Float // prijavljena razdalja po teku
+  measuredCm    Float // zunanje izmerjena razdalja
+  heightDiffCm  Float? // višinsko odstopanje (če izmerjeno)
+  positionDiffCm Float // |measured − expected|
+  status        String // LOOP_CLOSED | LOOP_WARNING | LOOP_FAILED
+  userId        String?
+  user          User?    @relation("loopAuthor", fields: [userId], references: [id], onDelete: SetNull)
+  note          String?
+  createdAt     DateTime @default(now())
+
+  @@index([sessionId, createdAt])
 }
