@@ -8,7 +8,7 @@
 // Shranjevanje kot meritev (measurements.write) zdaj nosi params.konfigurator.
 
 import { useId, useMemo, useRef, useState, type ReactNode, type Ref } from 'react'
-import { Box, Download, FilePlus2, Loader2, Orbit, Ruler, Save, Sigma } from 'lucide-react'
+import { Box, Copy, Download, FilePlus2, FolderOpen, Loader2, Orbit, Ruler, Save, Sigma, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -18,8 +18,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useToast } from '@/hooks/use-toast'
 import { useAppStore } from '@/lib/store'
-import { apiPost, fmtEUR, useApi } from '@/lib/api-client'
-import { EmptyState, ErrorBox, PageHeader } from '@/components/roksal/ui-bits'
+import { apiDelete, apiPost, fmtEUR, useApi } from '@/lib/api-client'
+import { EmptyState, ErrorBox, LoadingRows, PageHeader } from '@/components/roksal/ui-bits'
 import { hasPerm } from '@/lib/permissions-core'
 import {
   RAL_COLORS, Railing3D, TIP_LABELS, TIP_SHORT, fmtM, fmtQty, izracunajCeno,
@@ -42,6 +42,20 @@ interface MeasurementRow {
   lengthCm: number | null; heightCm: number | null; posts: number | null
   segments: number | null; handrail: boolean | null; slopeDeg: number | null
   projectId: string | null; createdAt: string
+}
+
+/** R454: shranjen 3D projekt (GET/POST /api/viz/projects) — params = JSON konfiguratorja. */
+interface VizRow {
+  id: string
+  name: string
+  tip: string
+  params: string
+  note: string | null
+  projectId: string | null
+  createdAt: string
+  updatedAt: string
+  author?: { name: string; role: string } | null
+  project?: { code: string; title: string } | null
 }
 
 const toNum = (v: string, fallback: number, min: number, max: number): number => {
@@ -76,6 +90,12 @@ export default function VizModule () {
   const [fromMeasurement, setFromMeasurement] = useState('none')
   const [busy, setBusy] = useState(false)
   const [quoteBusy, setQuoteBusy] = useState(false)
+
+  // R454: shranjeni 3D projekti (napredni 3D — vztrajnost konfiguracij)
+  const [vizName, setVizName] = useState('')
+  const [vizBusy, setVizBusy] = useState(false)
+  const [vizRowBusy, setVizRowBusy] = useState<string | null>(null)
+  const vizProjects = useApi<{ data: VizRow[] }>('/api/viz/projects', [])
 
   const catalog = useApi<{ data: ProfileRow[] }>('/api/catalog', [])
   const projects = useApi<{ data: ProjectRow[] }>('/api/projects', [])
@@ -230,6 +250,116 @@ export default function VizModule () {
       toast({ title: 'Napaka pri ustvarjanju ponudbe', description: e instanceof Error ? e.message : undefined, variant: 'destructive' })
     } finally {
       setQuoteBusy(false)
+    }
+  }
+
+  // ── R454: shranjeni 3D projekti (POST /api/viz/projects) ──────────────────
+
+  /** Zapis celotne trenutne konfiguracije v params (raven format — isti ključi
+   *  kot params.konfigurator pri meritvi, plus segments/montaza/location). */
+  function currentParams (): string {
+    return JSON.stringify({
+      profileId: profile?.id ?? null,
+      sku: profile?.sku ?? null,
+      colorId,
+      tip,
+      lengthCm: Math.round(lengthCm * 10) / 10,
+      heightCm: Math.round(heightCm),
+      posts,
+      segments,
+      handrail,
+      slopeDeg: Math.round(slope * 100) / 100,
+      montaza,
+      material: profile?.material ?? null,
+    })
+  }
+
+  async function saveVizProject (): Promise<void> {
+    const name = vizName.trim()
+    if (!name) {
+      toast({ title: 'Vnesite ime projekta.', variant: 'destructive' })
+      return
+    }
+    setVizBusy(true)
+    try {
+      await apiPost('/api/viz/projects', {
+        name,
+        projectId: projectId !== 'none' ? projectId : null,
+        tip,
+        params: currentParams(),
+        note: location.trim() || null,
+      })
+      setVizName('')
+      void vizProjects.reload()
+      toast({
+        title: '3D projekt shranjen.',
+        description: `${name} · ${TIP_LABELS[tip]} · ${fmtM(lengthCm)} m × ${Math.round(heightCm)} cm`,
+      })
+    } catch (e) {
+      toast({ title: 'Shranjevanje ni uspelo.', description: e instanceof Error ? e.message : undefined, variant: 'destructive' })
+    } finally {
+      setVizBusy(false)
+    }
+  }
+
+  /** Naloži shranjen projekt nazaj v konfigurator (celotno stanje). */
+  function loadVizProject (row: VizRow): void {
+    let k: Record<string, unknown> | null = null
+    try {
+      const parsed = JSON.parse(row.params) as unknown
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) k = parsed as Record<string, unknown>
+    } catch { /* neveljaven JSON — ne naložimo */ }
+    if (!k) {
+      toast({ title: 'Konfiguracije ni bilo mogoče prebrati.', variant: 'destructive' })
+      return
+    }
+
+    if (typeof k.profileId === 'string' && profiles.some((p) => p.id === k.profileId)) setProfileId(k.profileId as string)
+    if (isColorId(k.colorId)) setColorId(k.colorId)
+    if (k.tip === 'BALUSTRADA' || k.tip === 'NAGIB' || k.tip === 'OGRAJA') setTip(k.tip)
+    const len = Number(k.lengthCm)
+    if (Number.isFinite(len) && len >= 20 && len <= 6000) setLengthM(String(Math.round(len) / 100))
+    const h = Number(k.heightCm)
+    if (Number.isFinite(h) && h >= 20 && h <= 400) setHeightCmS(String(Math.round(h)))
+    const p = Number(k.posts)
+    if (Number.isFinite(p) && p >= 1 && p <= 40) setPostsS(String(Math.round(p)))
+    const sg = Number(k.segments)
+    if (Number.isFinite(sg) && sg >= 1 && sg <= 40) setSegmentsS(String(Math.round(sg)))
+    if (typeof k.handrail === 'boolean') setHandrail(k.handrail)
+    const sl = Number(k.slopeDeg)
+    if (Number.isFinite(sl) && sl >= 0 && sl <= 60) setSlopeS(String(Math.round(sl * 10) / 10))
+    if (typeof k.montaza === 'boolean') setMontaza(k.montaza)
+    if (typeof row.projectId === 'string' && row.projectId) setProjectId(row.projectId)
+
+    toast({
+      title: `Projekt „${row.name}" naložen.`,
+      description: `${TIP_LABELS[tip]} · ${fmtM(lengthCm)} m × ${Math.round(heightCm)} cm · ${posts} stebrov`,
+    })
+  }
+
+  async function duplicateVizProject (id: string): Promise<void> {
+    setVizRowBusy(id)
+    try {
+      await apiPost(`/api/viz/projects/${id}/duplicate`)
+      void vizProjects.reload()
+      toast({ title: 'Projekt podvojen.', description: 'Kopija je na vrhu seznama.' })
+    } catch (e) {
+      toast({ title: 'Podvajanje ni uspelo.', description: e instanceof Error ? e.message : undefined, variant: 'destructive' })
+    } finally {
+      setVizRowBusy(null)
+    }
+  }
+
+  async function deleteVizProject (id: string): Promise<void> {
+    setVizRowBusy(id)
+    try {
+      await apiDelete(`/api/viz/projects/${id}`)
+      void vizProjects.reload()
+      toast({ title: '3D projekt izbrisan.' })
+    } catch (e) {
+      toast({ title: 'Brisanje ni uspelo.', description: e instanceof Error ? e.message : undefined, variant: 'destructive' })
+    } finally {
+      setVizRowBusy(null)
     }
   }
 
@@ -405,6 +535,74 @@ export default function VizModule () {
               <p className="border-t pt-3 text-center text-xs text-muted-foreground">
                 Za shranjevanje konfiguracije je potrebna pravica measurements.write.
               </p>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* R454: shranjeni 3D projekti (napredni 3D — vztrajnost konfiguracij) */}
+        <Card>
+          <CardContent className="space-y-3 p-4 sm:p-6">
+            <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-widest text-muted-foreground">
+              <FolderOpen className="size-4 text-roksal-amber" aria-hidden /> Shranjeni 3D projekti
+            </h2>
+
+            {canWrite ? (
+              <div className="flex gap-2">
+                <div className="min-w-0 flex-1 space-y-1">
+                  <Label htmlFor="viz-name" className="sr-only">Ime projekta</Label>
+                  <Input id="viz-name" value={vizName} onChange={(e) => setVizName(e.target.value)}
+                    placeholder="Ime konfiguracije, npr. Terasa Kos — sever" />
+                </div>
+                <Button className="h-11 shrink-0" onClick={() => void saveVizProject()} disabled={vizBusy}>
+                  {vizBusy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Save className="size-4" aria-hidden />}
+                  Shrani
+                </Button>
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">Za shranjevanje konfiguracij je potrebna pravica measurements.write.</p>
+            )}
+
+            {vizProjects.loading ? (
+              <LoadingRows rows={3} />
+            ) : vizProjects.error ? (
+              <ErrorBox error={vizProjects.error} />
+            ) : (vizProjects.data?.data ?? []).length === 0 ? (
+              <EmptyState
+                title="Ni shranjenih 3D projektov"
+                desc="Konfiguracijo shranite pod imenom — naložite jo lahko kadarkoli, podvojite ali izbrišete."
+              />
+            ) : (
+              <div className="max-h-96 space-y-2 overflow-y-auto pr-1">
+                {(vizProjects.data?.data ?? []).map((row) => (
+                  <div key={row.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">{row.name}</p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        {TIP_LABELS[row.tip as KonfigTip] ?? row.tip} · {row.project ? `${row.project.code} · ` : ''}
+                        {new Date(row.updatedAt).toLocaleDateString('sl-SI')}
+                        {row.author ? ` · ${row.author.name}` : ''}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <Button variant="outline" size="sm" className="h-9" onClick={() => loadVizProject(row)}>
+                        <FolderOpen className="size-4" aria-hidden /> Naloži
+                      </Button>
+                      {canWrite ? (
+                        <>
+                          <Button variant="ghost" size="icon" className="size-9" aria-label={`Podvoji ${row.name}`}
+                            onClick={() => void duplicateVizProject(row.id)} disabled={vizRowBusy === row.id}>
+                            {vizRowBusy === row.id ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Copy className="size-4" aria-hidden />}
+                          </Button>
+                          <Button variant="ghost" size="icon" className="size-9 text-destructive hover:text-destructive"
+                            aria-label={`Izbriši ${row.name}`} onClick={() => void deleteVizProject(row.id)} disabled={vizRowBusy === row.id}>
+                            <Trash2 className="size-4" aria-hidden />
+                          </Button>
+                        </>
+                      ) : null}
+                    </div>
+                  </div>
+                ))}
+              </div>
             )}
           </CardContent>
         </Card>

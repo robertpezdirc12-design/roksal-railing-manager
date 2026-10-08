@@ -43,6 +43,8 @@ model User {
   decidedCases    ServiceCase[] @relation("decidedCases") // R446: servisni primeri, ki jih je odločil
   catalogVersions CatalogVersion[] @relation("catalogVersions") // R449: verzije kataloga (issue #8)
   ruleVersions    RuleVersion[] @relation("ruleVersions") // R449: verzije inženirskih pravil (issue #8)
+  arSnapshots     ArSnapshot[] @relation("arSnapshots") // R454: AR posnetki avtorja (3D/AR P3)
+  vizProjects     VizProject[] @relation("vizProjects") // R454: shranjeni 3D projekti avtorja
 }
 
 model Session {
@@ -127,6 +129,8 @@ model Project {
   deliveries       Delivery[] // R445: dostave projekta (issue #7 §9)
   claims           Claim[] // R446: reklamacije vezane na projekt (issue #7 §10)
   serviceCases     ServiceCase[] // R446: servisni primeri projekta
+  arSnapshots      ArSnapshot[] // R454: AR posnetki projekta (3D/AR P3)
+  vizProjects      VizProject[] // R454: shranjene 3D konfiguracije
 }
 
 model Quote {
@@ -1144,4 +1148,48 @@ model Crew {
   createdAt    DateTime @default(now())
 
   workOrders WorkOrder[] @relation("crewWorkOrders")
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// NAPREDNI 3D + AR (R454 — issue #7 §16 P3, route-map §„3D vizualizacije & AR")
+// Vztrajnost AR zajemov (posnetek + VLM analiza prizora) in shranjenih 3D
+// konfiguracij vizualizacije (viz.tsx) — doslej sta bila modula brez strežniške
+// shrambe. Eksplicitne ID povezave na projekt in avtorja (§15).
+// ═══════════════════════════════════════════════════════════════════════════
+
+// AR POSNETEK — zajem iz AR predogleda (kamera/demo + ograja overlay)
+// + rezultat VLM analize prizora (POST /api/ar/analyze): opis prizora,
+// predlogi položaja ograje, ovire, reference za oceno mer.
+model ArSnapshot {
+  id        String   @id @default(cuid())
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  authorId  String?
+  author    User?    @relation("arSnapshots", fields: [authorId], references: [id], onDelete: SetNull)
+  scene     String? // kratek opis prizora (VLM), npr. „terasa z vhodnimi vrati"
+  analysis  String? // JSON { placement: [{label, where, estLenCm?, note?}], obstacles: [], references: [] }
+  params    String? // JSON { photo, posts, heightCm, scale, opacity, mode } — posnetek + nastavitve
+  note      String?
+  createdAt DateTime @default(now())
+
+  @@index([projectId, createdAt])
+}
+
+// SHRANJEN 3D PROJEKT — konfiguracija vizualizacije (viz.tsx) za ponovno
+// uporabo/podvajanje: tip, dimenzije, barva, profil, nagib … (params = JSON
+// konfiguratorja). Vezava na poslovni projekt je neobvezna.
+model VizProject {
+  id        String   @id @default(cuid())
+  name      String
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  authorId  String?
+  author    User?    @relation("vizProjects", fields: [authorId], references: [id], onDelete: SetNull)
+  tip       String   @default("OGRAJA") // OGRAJA | BALUSTRADA | NAGIB
+  params    String // JSON konfiguratorja (lengthCm, heightCm, posts, segments, handrail, colorId, profileId, slopeDeg, montaza …)
+  note      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([projectId, updatedAt])
 }
