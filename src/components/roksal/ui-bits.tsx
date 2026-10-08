@@ -30,7 +30,7 @@ export function StatCard ({ label, value, hint, icon: Icon, tone = 'default' }: 
     red: 'text-red-600 dark:text-red-400',
   }
   return (
-    <Card>
+    <Card className="min-w-0">
       <CardContent className="flex items-center gap-3 p-4">
         {Icon ? (
           <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-secondary text-roksal-amber">
@@ -39,7 +39,7 @@ export function StatCard ({ label, value, hint, icon: Icon, tone = 'default' }: 
         ) : null}
         <div className="min-w-0">
           <div className="truncate text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</div>
-          <div className={cn('text-lg font-bold leading-tight sm:text-xl', tones[tone])}>{value}</div>
+          <div className={cn('truncate text-lg font-bold leading-tight sm:text-xl', tones[tone])}>{value}</div>
           {hint ? <div className="truncate text-xs text-muted-foreground">{hint}</div> : null}
         </div>
       </CardContent>

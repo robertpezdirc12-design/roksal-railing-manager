@@ -59,6 +59,7 @@ const STATUSES = [
 
 export default function ProjektiModule () {
   const user = useAppStore((s) => s.user)
+  const setTab = useAppStore((s) => s.setTab)
   const [q, setQ] = useState('')
   const [status, setStatus] = useState<string>('all')
   const [selected, setSelected] = useState<string | null>(null)
@@ -138,7 +139,7 @@ export default function ProjektiModule () {
             </>
           ) : null}
           {detail.loading ? <LoadingRows rows={3} /> : detail.data ? (
-            <ProjectDetailDialog detail={detail.data.data} />
+            <ProjectDetailDialog detail={detail.data.data} onNavigate={(tab) => { setSelected(null); setTab(tab) }} />
           ) : <ErrorBox error={detail.error} />}
         </DialogContent>
       </Dialog>
@@ -155,7 +156,7 @@ export default function ProjektiModule () {
   )
 }
 
-function ProjectDetailDialog ({ detail }: { detail: ProjectDetail }) {
+function ProjectDetailDialog ({ detail, onNavigate }: { detail: ProjectDetail; onNavigate: (tab: string) => void }) {
   const [timelineOpen, setTimelineOpen] = useState(false)
   return (
     <>
@@ -178,6 +179,9 @@ function ProjectDetailDialog ({ detail }: { detail: ProjectDetail }) {
       </DialogHeader>
 
       {detail.note ? <p className="rounded-lg bg-secondary/60 p-3 text-sm">{detail.note}</p> : null}
+
+      {/* R456 (issue #11 §3/§10): poslovni tok + NASLEDNJI KORAK — sistem vodi uporabnika */}
+      <ProgressSection projectId={detail.id} onNavigate={onNavigate} />
 
       <div className="space-y-4">
         <section aria-label="Ponudbe">
@@ -253,6 +257,79 @@ function ProjectDetailDialog ({ detail }: { detail: ProjectDetail }) {
         <TimelineDialog projectId={detail.id} code={detail.code} />
       </Dialog>
     </>
+  )
+}
+
+/**
+ * R456 (issue #11 §3/§10): POSLOVNI TOK PROJEKTA + NASLEDNJI KORAK.
+ * 13 stopenj (POVPRAŠEVANJE → … → GARANCIJA) z vmesti/odprti stanjem,
+ * odstotkom in CTA »NADALJUJ: …«, ki uporabnika odpelje na pravi modul —
+ * uporabnik ne išče funkcije po menijih, sistem ve, kaj sledi.
+ */
+function ProgressSection ({ projectId, onNavigate }: { projectId: string; onNavigate: (tab: string) => void }) {
+  const prog = useApi<{ data: {
+    steps: { key: string; label: string; state: 'done' | 'todo'; detail: string | null }[]
+    done: number; total: number; pct: number
+    next: { key: string; label: string; targetTab: string; reason: string } | null
+  } }>(`/api/projects/${projectId}/progress`, [projectId])
+
+  if (prog.loading) {
+    return <div className="h-20 animate-pulse rounded-lg border bg-muted/40" aria-label="Nalaganje napredka projekta" />
+  }
+  if (prog.error || !prog.data) return null // napaka ne sme blokirati podrobnosti
+  const d = prog.data.data
+
+  return (
+    <section aria-label="Poslovni tok projekta" className="rounded-lg border p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest text-muted-foreground">
+          <ClipboardList className="size-4 text-roksal-amber" aria-hidden /> Poslovni tok
+        </h3>
+        <span className="text-xs font-semibold text-muted-foreground">
+          {d.done}/{d.total} ({d.pct} %)
+        </span>
+      </div>
+
+      {/* napredek */}
+      <div
+        className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted"
+        role="progressbar" aria-valuenow={d.pct} aria-valuemin={0} aria-valuemax={100}
+        aria-label={`Napredek projekta ${d.pct} %`}
+      >
+        <div className="h-full rounded-full bg-roksal-amber transition-all" style={{ width: `${d.pct}%` }} />
+      </div>
+
+      {/* 13 stopenj — vizualni indikator (§10) */}
+      <ol className="mt-2.5 flex flex-wrap gap-1" aria-label="Koraki poslovnega toka">
+        {d.steps.map((s) => (
+          <li
+            key={s.key}
+            title={`${s.label}: ${s.detail ?? ''}`}
+            className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-medium ${
+              s.state === 'done'
+                ? 'border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300'
+                : 'border-muted-foreground/25 text-muted-foreground'
+            }`}
+          >
+            <span aria-hidden>{s.state === 'done' ? '✓' : '○'}</span> {s.label}
+          </li>
+        ))}
+      </ol>
+
+      {/* NASLEDNJI KORAK (§3 workflow vodi uporabnika) */}
+      {d.next ? (
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-amber-50 p-2.5 dark:bg-amber-950/40">
+          <p className="min-w-0 flex-1 text-xs text-amber-900 dark:text-amber-200">{d.next.reason}</p>
+          <Button size="sm" className="h-9 shrink-0" onClick={() => onNavigate(d.next!.targetTab)}>
+            {d.next.label} →
+          </Button>
+        </div>
+      ) : (
+        <p className="mt-3 rounded-lg bg-emerald-50 p-2.5 text-xs font-medium text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300">
+          ✓ Celoten poslovni tok je zaključen — od povpraševanja do garancije.
+        </p>
+      )}
+    </section>
   )
 }
 
