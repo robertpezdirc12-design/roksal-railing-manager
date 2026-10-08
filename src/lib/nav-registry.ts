@@ -80,6 +80,9 @@ export const SECTIONS: SectionDef[] = [
     tabs: [
       { id: 'zaloga', label: 'Zaloga', gate: 'inventory.read', desc: 'Pregled/gibanja/picking + dobavitelji' },
       { id: 'material-v5', label: 'Kosovnice', gate: 'inventory.read', desc: 'BOM kosovnice z eksplicitnimi ID (R442)' },
+      // R452 (issue #7 §16 P3): AVTOMATSKI PREDLOG MATERIALA — povpraševanje
+      // odprtih kosovnic − razpoložljiva zaloga + dopolnitev nizke zaloge.
+      { id: 'predlogi', label: 'Predlogi naročila', gate: 'inventory.read', desc: 'Avtomatski predlog materiala iz povpraševanja' },
     ],
   },
   {

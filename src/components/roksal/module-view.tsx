@@ -26,6 +26,7 @@ const MODULES: Record<string, () => Promise<{ default: ComponentType<TabProps> }
   konfigurator: () => import('@/components/roksal/modules/konfigurator'), // R447: konfigurator po družinah (nadomestil kalkulator)
   signatura: () => import('@/components/roksal/modules/signatura'),
   'material-v5': () => import('@/components/roksal/modules/material-v5'),
+  predlogi: () => import('@/components/roksal/modules/predlogi'), // R452: avtomatski predlog materiala (issue #7 §16 P3)
   orodjarina: () => import('@/components/roksal/modules/orodjarina'),
   viz: () => import('@/components/roksal/modules/viz'),
   ar: () => import('@/components/roksal/modules/ar'),
