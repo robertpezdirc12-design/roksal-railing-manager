@@ -56,6 +56,9 @@ export const SECTIONS: SectionDef[] = [
       // tekačem (ZAČETEK → STEBER → SEGMENT → KONEC), terenom, produktnim
       // razporedom stebrov in VERIFIED preveritvami (zunanji merilnik).
       { id: 'ogradnja', label: 'Ogradnja', gate: 'measurements.read', desc: 'Vodena ograjna izmera — tekač (R460)' },
+      // R461 (issue #16): ZAJEM — reality capture QA (pokritost, drift,
+      // referenčna mreža, vodena ruta) nad tekačem; zaključek → AS-MEASURED.
+      { id: 'zajem', label: 'Zajem', gate: 'measurements.read', desc: 'Reality capture QA — pokritost/drift/reference (R461)' },
       { id: 'foto', label: 'Foto', gate: 'measurements.write', desc: 'Foto zajem na terenu' },
       { id: 'nagib', label: 'Nagib', gate: 'projects.read', desc: 'Kalkulator nagibov stopnišč' },
       // R447 (issue #7 §5): KONFIGURATOR — nadomešča stari Kalkulator (hardcoded
@@ -65,6 +68,9 @@ export const SECTIONS: SectionDef[] = [
       // R459 (issue #14): FOTO VIZUALIZACIJA — fotorealistična menjava ograje na
       // originalni fotografiji (PREJ/POTEM, variante A/B/C, izvoz/PDF).
       { id: 'foto-replace', label: 'Foto vizualizacija', gate: 'projects.read', desc: 'Realistic photo replacement (R459)' },
+      // R461 (issue #16): DIGITALNI DVOJČEK — AS-MEASURED → AS-DESIGNED →
+      // AS-PRODUCED → AS-INSTALLED, geometrijski diff + cross-check virov.
+      { id: 'dvojcek', label: 'Digitalni dvojček', gate: 'projects.read', desc: 'Digitalni dvojček projekta — AS-BUILT (R461)' },
       { id: 'ar', label: 'AR', gate: 'projects.read', desc: 'Dopolnjena resničnost na terenu' },
       { id: 'signatura', label: 'Signatura', gate: 'quotes.create', desc: 'Zajem podpisa stranke' },
       { id: 'dokumenti', label: 'Dokumenti', gate: 'documents.read', desc: 'Arhiv dokumentov' },

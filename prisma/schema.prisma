@@ -51,6 +51,9 @@ model User {
   photoVizVersions PhotoVisualizationVersion[] @relation("photoVizVersions") // R459: verzije, ki jih je zapisal uporabnik
   fenceRuns       FenceRun[] @relation("fenceRuns") // R460: ograjni tekači avtorja (issue #15)
   fenceRunVersions FenceRunVersion[] @relation("fenceRunVersions") // R460: verzije tekačev, ki jih je zapisal uporabnik
+  captureSessions CaptureSession[] @relation("captureAuthor") // R461: zajemi avtorja (issue #16)
+  captureRefs     CaptureReference[] @relation("captureOperator") // R461: operator referenc (issue #16 §4)
+  twinSnapshots   DigitalTwinSnapshot[] @relation("twinSnapshots") // R461: avtorji dvojčkovih snapshotov (issue #16)
 }
 
 model Session {
@@ -140,6 +143,8 @@ model Project {
   playbookRuns     PlaybookRun[] // R458: zagoni playbookov na projektu (issue #13)
   photoViz         PhotoVisualization[] // R459: foto-vizualizacije projekta (issue #14)
   fenceRuns        FenceRun[] // R460: ograjni tekači projekta (issue #15)
+  captureSessions  CaptureSession[] // R461: zajemi QA projekta (issue #16)
+  twinSnapshots    DigitalTwinSnapshot[] // R461: digitalni dvojček projekta (issue #16)
 }
 
 model Quote {
@@ -1390,6 +1395,7 @@ model FenceRun {
 
   segments FenceSegment[]
   versions FenceRunVersion[]
+  captureSessions CaptureSession[] // R461: QA zajemi nad tekačem (issue #16 — sloj, ne podvajanje)
 
   @@index([projectId, updatedAt])
 }
@@ -1440,4 +1446,120 @@ model FenceRunVersion {
   createdAt  DateTime @default(now())
 
   @@index([fenceRunId, version])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// REALITY CAPTURE QA + DIGITAL TWIN (R461 — issue #16)
+// QA, registracija, drift in verifikacijski sloj NAD obstoječim measurement
+// engine-om (R455–R460): tekač ostaja vir geometrije, zajem doda pokritost,
+// referenčno mrežo, drift kontrolo in AS-BUILT verifikacijo. Digitalni
+// dvojček = enoten verzirani model AS-MEASURED → AS-DESIGNED → AS-PRODUCED
+// → AS-INSTALLED z eksplicitnimi viri (§8/§21/§22). Brez runtime AI.
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ZAJEM (capture session) — vodena izmera z QA. Nadstropje nad tekačem
+// (mode FENCE_RUN) ali klasično kamero (mode KAMERA).
+// device = JSON §15: { tier: PREMIUM|STANDARD|BASIC, caps }
+// outdoor = JSON §16: { conditions: [], note }
+// plan = JSON §2: [{ id, kind, label, atCm?, critical }] — vodena ruta
+// state = JSON §17: { currentStopId, doneStops: [] } (prekinitev/nadaljevanje)
+// coverage = JSON §1: { zones: [{ stopId, label, state, photoCount }], gate }
+// drift = JSON §3: { samples: [{ offsetCm, atCm, ts }], status, lastRefCode }
+model CaptureSession {
+  id          String   @id @default(cuid())
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  workOrderId String?
+  fenceRunId  String?
+  fenceRun    FenceRun? @relation(fields: [fenceRunId], references: [id], onDelete: SetNull)
+  authorId    String?
+  author      User?    @relation("captureAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  name        String
+  status      String   @default("V_TEKU") // V_TEKU | ZAKLJUCEN | PREKINJEN
+  mode        String   @default("FENCE_RUN") // FENCE_RUN | KAMERA
+  device      String? // JSON §15 — zaznane zmožnosti naprave + izbrani režim
+  outdoor     String? // JSON §16 — zunanji pogoji zajema
+  plan        String? // JSON §2 — vodena ruta (postanki iz tekača/objekta)
+  state       String? // JSON §17 — trenutni korak + opravljeni postanki
+  coverage    String? // JSON §1 — živo stanje pokritosti (iz posnetkov)
+  drift       String? // JSON §3 — vzorci registra + status drifta
+  snapshotId  String? // AS-MEASURED snapshot, ustvarjen ob zaključku
+  note        String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  references CaptureReference[]
+  photos     CapturePhoto[]
+
+  @@index([projectId, updatedAt])
+}
+
+// REFERENČNA TOČKA (§4 multi-reference network) — veriga A → B → C → D.
+// atCm = prijavljeni položaj ob teku; measureCm = ZUNANJE izmerjena razdalja
+// od prejšnje aktivne reference. Engine preverja RELATIVNO skladnost verige;
+// konflikt je izrecen (status KONFLIKT), nikoli tiho rešen.
+model CaptureReference {
+  id         String         @id @default(cuid())
+  sessionId  String
+  session    CaptureSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  code       String // REF-001, REF-002, …
+  label      String?
+  atCm       Float // položaj ob teku (cm)
+  measureCm  Float // razdalja od prejšnje AKTIVNE reference (cm, zunanje merilo)
+  method     String // LASER | MICNIK | ZNANA_MERA | DRUGO
+  device     String?
+  operatorId String?
+  operator   User?          @relation("captureOperator", fields: [operatorId], references: [id], onDelete: SetNull)
+  status     String         @default("AKTIVNA") // AKTIVNA | KONFLIKT | ZAVRACENA
+  confidence Float? // 0..1 (iz metode, §4)
+  note       String?
+  createdAt  DateTime       @default(now())
+
+  @@unique([sessionId, code])
+  @@index([sessionId, atCm])
+}
+
+// POSNETEK ZAJEMA (§1/§24) — dokazilo pokritosti cone. BREZ blob-ov: same
+// metapodatke kakovosti + neobvezno sličico (≤ 120 KB) za galerijo; celotne
+// fotografije ostanejo tam, kjer že živijo (meritev/foto-vizualizacija).
+// clientKey = idempotentnost za offline sync (§17: brez podvojenih posnetkov).
+model CapturePhoto {
+  id         String         @id @default(cuid())
+  sessionId  String
+  session    CaptureSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  clientKey  String // idempotenten ključ odjemalca (offline vrsta)
+  zone       String // id postanka iz plan-a (cona pokritosti)
+  quality    String? // JSON { dark, bright, blurry, blurScore? }
+  offsetCm   Float? // odmik registra ob zajemu (drift vzorec, §3)
+  thumb      String? // data URL sličice (≤ 120 KB, §24)
+  capturedAt DateTime       @default(now())
+
+  @@unique([sessionId, clientKey])
+  @@index([sessionId, zone])
+}
+
+// SNAPSHOT DIGITALNEGA DVOJČKA (§8–§12/§22) — en model za vsa štiri stanja
+// (kind), verzioniran PO VRSTI s povezavo na prejšnjo verzijo + razlogom.
+// data = JSON struktiranega stanja objekta (segmenti/višine/koti/teren/
+// podlaga/fotografije/konfiguracija …); sources = JSON eksplicitnih virov
+// [{ vrsta, id, version? }] — vsak podatek ima jasen vir in sled.
+model DigitalTwinSnapshot {
+  id         String   @id @default(cuid())
+  projectId  String
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  kind       String // AS_MEASURED | AS_DESIGNED | AS_PRODUCED | AS_INSTALLED
+  version    Int // zaporedna verzija ZA VRSTO na projektu
+  parentSnapshotId String?
+  parentSnapshot DigitalTwinSnapshot? @relation("twinChain", fields: [parentSnapshotId], references: [id], onDelete: SetNull)
+  children   DigitalTwinSnapshot[] @relation("twinChain")
+  data       String // JSON struktiranega stanja
+  sources    String // JSON [{ vrsta, id, version? }]
+  reason     String // razlog nastanka/spremembe (§22 — obvezno)
+  createdFrom String? // captureSessionId | packageId | bomId | workOrderId
+  userId     String?
+  user       User?    @relation("twinSnapshots", fields: [userId], references: [id], onDelete: SetNull)
+  createdAt  DateTime @default(now())
+
+  @@unique([projectId, kind, version])
+  @@index([projectId, kind])
 }
