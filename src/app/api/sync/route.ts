@@ -21,6 +21,7 @@ import { db } from '@/lib/db'
 import { getSessionUser, jsonError, readsAllData, type SessionUser } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
 import { emitEvent } from '@/lib/notify'
+import { izvediAkcijo, type AkcijaVhod } from '@/lib/playbook-engine'
 
 // R439: terenski tok — VERBATIM iz /api/nalog/[id]/transition
 const FLOW: Record<string, { next: string; event: string; label: string }[]> = {
@@ -34,7 +35,7 @@ const FLOW: Record<string, { next: string; event: string; label: string }[]> = {
 }
 
 const TYPES = ['OGRAJA', 'BALUSTRADA', 'NAGIB', 'OSTANEO']
-const KINDS = ['meritev', 'foto', 'nalog-opomba', 'nalog-status', 'nalog-zakljucek'] as const
+const KINDS = ['meritev', 'foto', 'nalog-opomba', 'nalog-status', 'nalog-zakljucek', 'playbook-step'] as const
 type SyncKind = (typeof KINDS)[number]
 
 const MAX_OPS = 50
@@ -421,6 +422,34 @@ export async function POST (req: NextRequest) {
           if (!woId) outcome = { error: 'Manjka workOrderId.' }
           else if (!to) outcome = { error: 'Manjka ciljni status (to).' }
           else outcome = await opTransition(user, woId, to, null, false)
+        }
+      } else if (op.kind === 'playbook-step') {
+        // R458 (issue #13 §13): offline akcija nad korakom playbooka — ISTA
+        // logika kot /api/playbook/runs/[id]/action (sync je transport, ne nov sistem)
+        if (!user.perms.includes('nalog.write')) outcome = { error: 'Manjka pravica nalog.write.' }
+        else {
+          const runId = str(payload.runId)
+          const stepId = str(payload.stepId)
+          const akcija = str(payload.akcija)
+          if (!runId || !stepId || !akcija) {
+            outcome = { error: 'Manjka runId, stepId ali akcija.' }
+          } else {
+            const rez = await izvediAkcijo(user, {
+              runId, stepId,
+              akcija: akcija as AkcijaVhod['akcija'],
+              evidence: (payload.evidence && typeof payload.evidence === 'object'
+                ? payload.evidence as Record<string, unknown>
+                : null) as AkcijaVhod['evidence'],
+              razlog: typeof payload.razlog === 'string' ? payload.razlog : null,
+            })
+            if (rez.stanje) {
+              outcome = { data: { runId, stepId, akcija, napredek: rez.stanje.napredek, naslednji: rez.stanje.naslednji } }
+            } else if (rez.napake && rez.napake.length > 0) {
+              outcome = { error: rez.napake.join(' ') }
+            } else {
+              outcome = { error: rez.napaka ?? 'Napaka akcije nad korakom.' }
+            }
+          }
         }
       } else { // nalog-zakljucek
         if (!user.perms.includes('nalog.transition')) outcome = { error: 'Manjka pravica nalog.transition.' }

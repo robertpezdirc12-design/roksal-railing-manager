@@ -30,6 +30,10 @@ export const SECTIONS: SectionDef[] = [
     label: 'Danes',
     tabs: [
       { id: 'danes', label: 'Danes', gate: 'nalog.read', desc: 'Operativni vhod — terenski tok dneva' },
+      // R458 (issue #13): VODENI POSTOPEK — deterministični playbooki vodijo
+      // monterja skozi celoten postopek (SCRIPT → GUIDE → CAPTURE → VALIDATE →
+      // CONFIRM → HANDOFF) brez runtime AI.
+      { id: 'playbook', label: 'Vodeni postopek', gate: 'nalog.read', desc: 'Playbook vodena izvedba na terenu (R458)' },
     ],
   },
   {

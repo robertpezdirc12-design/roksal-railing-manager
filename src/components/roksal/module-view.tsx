@@ -12,6 +12,7 @@ import type { TabProps } from '@/components/roksal/modules/types'
 // mapa zavihek → modul (vsak modul je svoja datoteka v ./modules/)
 const MODULES: Record<string, () => Promise<{ default: ComponentType<TabProps> }>> = {
   danes: () => import('@/components/roksal/modules/danes'),
+  playbook: () => import('@/components/roksal/modules/playbook'), // R458: vodeni postopek (issue #13)
   dashboard: () => import('@/components/roksal/modules/dashboard'),
   reports: () => import('@/components/roksal/modules/reports'), // R451: napredna poročila (issue #7 §16 P3)
   projekti: () => import('@/components/roksal/modules/projekti'),
