@@ -1163,3 +1163,21 @@ Stage Summary:
 - issue #16 pokritost: §1–§25 vse ✓ (§6 VERIFIED/statusi že v tekaču R460 — sloj jih bere; §20 playbook integracija prek opravljenih korakov rutе + evidence modela R458)
 - stanje issues: #1–#16 zaprti po merge · odprti #17–#30 (naslednji po vrsti: #17 ROKSAL REALITY-TO-PRODUCTION)
 - opombe za prihodnje seje: (1) nov žeton glpat-c47P… (read_api+write_repository, BREZ api) je v git remote — za API OPERACIJE (MR merge, issue komentar/zaprtje) uporabljaj stari žeton iz .env.recovery (api scope, velja do 2026-11-06); (2) GitLab API POST/GET /merge-rows trenutno vrača 404/403 (Cloudflare) — MR ustvarjaj prek git push options, merge/comment poskusi po ohlajanju z retry; (3) useApi<T> vedno vrača { data: T } — dostopaj .data.data; (4) parse* helperji sprejemajo RAZČLENJEN objekt, nikoli JSON niz; (5) FenceSegment.order je 0-based
+
+---
+Task ID: R461-objava
+Agent: main (Z.ai Code)
+Task: R461 objava — merge MR !36, komentar, tag v1.19.0, DR kopija
+
+Work Log:
+- MR !36 ustvarjen prek git push options (API POST /merge-rows Cloudflare 404/403) → pipeline 2927921997 SUCCESS (~110 s)
+- MR !36 ZDRUŽEN prek GraphQL mutacije mergeRequestAccept (diffHeadSha c1d502b2) → merge commit f268025978b (2026-10-08T19:41:23Z); REST merge je bil blokiran
+- ISSUE #16 ZAPRT samodejno (»Closes #16« v MR opisu) — potrjeno prek GraphQL: state=closed
+- testna sonda #38 (PROBE-R461-brisat) izbrisana prek REST DELETE (204 po retry)
+- komentar na issue #16 (note 3980392053): tabela pokritosti §1–§25 + verifikacija + poštene meje (1D drift, ročni AS-INSTALLED vnosi)
+- tag v1.19.0 (annotated) potisnjen; lokalna veja r461-capture-qa pobrisana; lokalni main usklajen (pull f268025)
+- DR: ops/backup.sh → roksal-backup-20261008-194425-f2680259.rkb (2,6 MB, šifrirano, sha256 779de675…, 21 kosov + manifest off-site, 77 tabel / 1940 vrstic)
+
+Stage Summary:
+- R461 POPOLNOMA ZAKLJUČEN: #1–#16 zaprti · odprti #17–#30 (naslednji po vrsti: #17 ROKSAL REALITY-TO-PRODUCTION — RTK/GNSS, 3-točkovna registracija, loop closure, QA heatmap, AS-BUILT verifikacija)
+- ključna izkušnja: ko je REST /merge-rows blokiran (Cloudflare/GitLab 404 tudi z api scope), delata (1) git push -o merge_request.create za USTVARJANJE in (2) GraphQL mergeRequestAccept za ZLIVANJE; REST issues/notes deluje z retry
