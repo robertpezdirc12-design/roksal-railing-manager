@@ -52,6 +52,10 @@ export const SECTIONS: SectionDef[] = [
     tabs: [
       { id: 'projekti', label: 'Projekti', gate: 'projects.read', desc: 'Vsi projekti z statusi' },
       { id: 'meritve', label: 'Meritve', gate: 'measurements.read', desc: 'Merjenje ograj po terenu' },
+      // R460 (issue #15): OGRADNJA — specializirana ograjna izmera z voženim
+      // tekačem (ZAČETEK → STEBER → SEGMENT → KONEC), terenom, produktnim
+      // razporedom stebrov in VERIFIED preveritvami (zunanji merilnik).
+      { id: 'ogradnja', label: 'Ogradnja', gate: 'measurements.read', desc: 'Vodena ograjna izmera — tekač (R460)' },
       { id: 'foto', label: 'Foto', gate: 'measurements.write', desc: 'Foto zajem na terenu' },
       { id: 'nagib', label: 'Nagib', gate: 'projects.read', desc: 'Kalkulator nagibov stopnišč' },
       // R447 (issue #7 §5): KONFIGURATOR — nadomešča stari Kalkulator (hardcoded

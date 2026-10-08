@@ -49,6 +49,8 @@ model User {
   playbookRuns    PlaybookRun[] @relation("playbookUser") // R458: zagoni playbookov uporabnika
   photoViz        PhotoVisualization[] @relation("photoVizAuthor") // R459: foto-vizualizacije avtorja (issue #14)
   photoVizVersions PhotoVisualizationVersion[] @relation("photoVizVersions") // R459: verzije, ki jih je zapisal uporabnik
+  fenceRuns       FenceRun[] @relation("fenceRuns") // R460: ograjni tekači avtorja (issue #15)
+  fenceRunVersions FenceRunVersion[] @relation("fenceRunVersions") // R460: verzije tekačev, ki jih je zapisal uporabnik
 }
 
 model Session {
@@ -137,6 +139,7 @@ model Project {
   vizProjects      VizProject[] // R454: shranjene 3D konfiguracije
   playbookRuns     PlaybookRun[] // R458: zagoni playbookov na projektu (issue #13)
   photoViz         PhotoVisualization[] // R459: foto-vizualizacije projekta (issue #14)
+  fenceRuns        FenceRun[] // R460: ograjni tekači projekta (issue #15)
 }
 
 model Quote {
@@ -270,6 +273,7 @@ model Measurement {
 
   versions    MeasurementVersion[]
   packages    ProjectPackage[] @relation("packageMeasurements") // R442: paketi, vezani na to izmero
+  fenceRuns   FenceRun[] @relation("fenceRunMeasurements") // R460: tekači, potrjeni v to meritev (issue #15)
 }
 
 // Zgodovina verzij meritev — posnetek stanja ob vsaki spremembi (issue #1: zgodovina verzij)
@@ -810,6 +814,7 @@ model Product {
   packages      ProjectPackage[]
   priceRules    PriceRule[]      @relation("productPriceRules")
   photoViz      PhotoVisualization[] @relation("photoVizProduct") // R459: foto-vizualizacije tega izdelka
+  fenceRuns     FenceRun[] // R460: ograjni tekači v tem izdelku (issue #15)
 }
 
 // ─── Varianta produkta (barva/RAL, dimenzija; issue #7 §1) ──────────────────
@@ -834,6 +839,7 @@ model ProductVariant {
   packages ProjectPackage[]
   boms     Bom[]
   photoViz PhotoVisualization[] @relation("photoVizVariant") // R459: foto-vizualizacije v tej varianti
+  fenceRuns FenceRun[] // R460: ograjni tekači v tej varianti (issue #15)
 }
 
 // ─── Komponenta produkta (BOM PREDLOGA; issue #7 §2) ────────────────────────
@@ -1338,4 +1344,100 @@ model PlaybookStepRun {
   updatedAt       DateTime    @updatedAt
 
   @@unique([runId, stepId])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ULTIMATE MEASUREMENT ENGINE — OGRAJNI TEKAČ (R460 — issue #15)
+// Specializirana ograjna izmera po načelu ZAČETEK → STEBER → SEGMENT → … →
+// KONEC (§1). Vozlišča (stebri/vogali/vrata/stopnice) + višinski profil terena
+// (§12) dajo segmente z dolžino/padino/višinsko razliko; razpored vmesnih
+// stebrov je PRODUKTNO zaveden (§8/§11 — max razpon iz tech JSON izdelka).
+// Statusi dimenzij (§9): ESTIMATED → AUTO_SUGGESTED → MANUAL → CALIBRATED →
+// VERIFIED (zunanji merilnik, §10) → CONFIRMED. POTRDITEV (§20/§21) ustvari
+// kanonično Measurement + verzijo (+ neobvezen ProjectPackage) — en vir
+// resnice, brez ponovnega vnosa (§17). Brez runtime AI (§18).
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Ograjni tekač — vodena izmera ene ograje.
+// nodes  = JSON vozlišč: [{ kind, atCm, heightCm?, pritrditev?, podlaga?,
+//                          interiorDeg?, gateWcm?, note?, manual? }]
+// terrain = JSON višinske točke: [{ distCm, elevCm }] (§12 — linearna interpolacija)
+// calibration = JSON §4: { method, refObject?, refValueCm, device?,
+//                          capturedAt?, confidence?, algorithmVersion? }
+// quality = JSON §3 gate: { state, score, reasons[] } — posnetek ob potrditvi
+model FenceRun {
+  id            String         @id @default(cuid())
+  projectId     String
+  project       Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  workOrderId   String?
+  authorId      String?
+  author        User?          @relation("fenceRuns", fields: [authorId], references: [id], onDelete: SetNull)
+  name          String
+  status        String         @default("OSNUTEK") // OSNUTEK | PREGLED | POTRJEN | ARHIV
+  productId     String?
+  product       Product?       @relation(fields: [productId], references: [id], onDelete: SetNull)
+  variantId     String?
+  variant       ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  measurementId String? // kanonična meritev po potrditvi (§17/§21)
+  measurement   Measurement?   @relation("fenceRunMeasurements", fields: [measurementId], references: [id], onDelete: SetNull)
+  calibration   String? // JSON §4 — metoda + referenca + zaupanje
+  terrain       String? // JSON §12 — višinski profil
+  nodes         String? // JSON §1 — vozlišča tekača
+  quality       String? // JSON §3 — quality gate posnetek
+  note          String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  segments FenceSegment[]
+  versions FenceRunVersion[]
+
+  @@index([projectId, updatedAt])
+}
+
+// Segment tekača — IZPELJAN iz vozlišč + terena (strežniški izračun ob vsaki
+// spremembi). Vrstice se ohranijo (status/verifikacija), če se poziciji
+// fromAt/toCm geometricko ujemata (±1 cm) — sicer POŠTENO razveljavljene
+// (ESTIMATED v1, §19: sprememba geometrije razveljavi preveritev).
+model FenceSegment {
+  id           String    @id @default(cuid())
+  fenceRunId   String
+  fenceRun     FenceRun  @relation(fields: [fenceRunId], references: [id], onDelete: Cascade)
+  order        Int
+  fromKind     String // vrsta vozlišča na začetku segmenta
+  toKind       String // vrsta vozlišča na koncu segmenta
+  fromAtCm     Float // položaj začetka ob teku (cm)
+  toAtCm       Float // položaj konca ob teku (cm)
+  lengthCm     Float // 3D dolžina po terenu (cm)
+  heightCm     Float? // višina polnila (cm, če znana)
+  angleDeg     Float? // notranji kot v vogalu (samo pri VOGAL koncu)
+  slopeDeg     Float // padina segmenta (deg, −90..90)
+  heightDiffCm Float // višinska razlika konca (cm)
+  posts        Int // vmesni stebri znotraj segmenta (razpon ≤ maxSpan)
+  status       String    @default("ESTIMATED") // §9: ESTIMATED | AUTO_SUGGESTED | MANUAL | CALIBRATED | VERIFIED | CONFIRMED
+  verifiedCm   Float? // izmerjeno z zunanjim merilnikom (§10)
+  verifyMethod String? // LASER | MICNIK | DRUGO
+  verifyNote   String?
+  source       String    @default("ROCNO") // ROCNO | ENGINE
+  version      Int       @default(1) // števec sprememb segmenta
+  note         String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([fenceRunId, order])
+}
+
+// Zgodovina verzij tekača — posnetek CELEGA teka ob vsaki spremembi
+// (vzorec MeasurementVersion iz issue #1; §17 sledljivost).
+model FenceRunVersion {
+  id         String   @id @default(cuid())
+  fenceRunId String
+  fenceRun   FenceRun @relation(fields: [fenceRunId], references: [id], onDelete: Cascade)
+  version    Int
+  userId     String?
+  user       User?    @relation("fenceRunVersions", fields: [userId], references: [id])
+  data       String   // JSON posnetek: { nodes, terrain, calibration, segments, status, quality }
+  note       String?
+  createdAt  DateTime @default(now())
+
+  @@index([fenceRunId, version])
 }

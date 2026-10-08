@@ -22,6 +22,7 @@ const MODULES: Record<string, () => Promise<{ default: ComponentType<TabProps> }
   nalogi: () => import('@/components/roksal/modules/nalogi'),
   teren: () => import('@/components/roksal/modules/teren'),
   meritve: () => import('@/components/roksal/modules/meritve'),
+  ogradnja: () => import('@/components/roksal/modules/ogradnja'), // R460: ograjni tekač (issue #15)
   foto: () => import('@/components/roksal/modules/foto'),
   nagib: () => import('@/components/roksal/modules/nagib'),
   konfigurator: () => import('@/components/roksal/modules/konfigurator'), // R447: konfigurator po družinah (nadomestil kalkulator)
