@@ -53,7 +53,10 @@ export default function PredlogiModule () {
   // dobavitelje nalagamo samo, če uporabnik lahko ustvari naročilo
   const suppliers = useApi<{ data: SupplierRow[] }>(canWrite ? '/api/suppliers' : null)
 
-  const items = data?.data?.items ?? []
+  // stabilna referenca (useMemo): med nalaganjem data=null → ?? [] bi sicer
+  // ustvarilo NOVO prazno tabelo na vsakem renderu → useEffect [items] podvoji
+  // setState v zanko („Maximum update depth exceeded" ob počasnejšem nalaganju)
+  const items = useMemo(() => data?.data?.items ?? [], [data])
   const rules = data?.data?.rules
 
   const [selected, setSelected] = useState<Set<string>>(new Set())

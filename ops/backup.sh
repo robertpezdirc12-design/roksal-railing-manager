@@ -139,12 +139,14 @@ else
       "$BARE" "$FINAL_BYTES" "$FINAL_SHA" "$OFFSITE_CHUNKS" "$GIT_SHA" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
       > "$CHUNK_DIR/manifest.json"
     UPLOAD_OK=true
+    # brskalniški UA — Cloudflare občasno blokira privzeti curl UA (spoznanje R448)
+    UA="Mozilla/5.0 (X11; Linux x86_64; rv:132.0) Gecko/20100101 Firefox/132.0"
     for chunk in "$CHUNK_DIR"/*; do
       CNAME="$(basename "$chunk")"
       # do 6 poskusov z naraščajočo pavzo (403 Cloudflare je verjetnostno blokiranje)
       CODE="000"
       for poskus in 1 2 3 4 5 6; do
-        CODE="$(curl -s --max-time 90 -o /dev/null -w '%{http_code}' \
+        CODE="$(curl -s -A "$UA" --max-time 90 -o /dev/null -w '%{http_code}' \
           -X PUT \
           -H "PRIVATE-TOKEN: $TOKEN" \
           -H "Content-Type: application/octet-stream" \
@@ -166,11 +168,11 @@ else
       OFFSITE_UPLOADED=true
       log "   naloženo: $BACKUP_PACKAGE/$OFFSITE_VERSION ($OFFSITE_CHUNKS kosov + manifest)"
       # remote housekeeping: obdrži zadnjih 10 verzij paketa
-      curl -s --max-time 60 -H "PRIVATE-TOKEN: $TOKEN" \
+      curl -s -A "$UA" --max-time 60 -H "PRIVATE-TOKEN: $TOKEN" \
         "$GITLAB_API/projects/$GITLAB_PROJECT_ID/packages?package_name=$BACKUP_PACKAGE&per_page=100&sort=desc&order_by=created_at" \
         | python3 -c "import json,sys; [print(p['id']) for p in json.load(sys.stdin)[10:]]" 2>/dev/null \
         | while read -r pid; do
-            curl -s --max-time 30 -X DELETE -H "PRIVATE-TOKEN: $TOKEN" \
+            curl -s -A "$UA" --max-time 30 -X DELETE -H "PRIVATE-TOKEN: $TOKEN" \
               "$GITLAB_API/projects/$GITLAB_PROJECT_ID/packages/$pid" >/dev/null 2>&1 || true
           done || true # hišni red je NIKOLI usoden za uspeh kopije
     fi

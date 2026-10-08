@@ -71,6 +71,17 @@ def stock_row (item_id):
 # popravki gledo RAZPOLOŽLJIVO zalogo (fizična − globalno rezervirana),
 # saj reserveBom preverja ravno razpoložljivost
 detail = jget(f'/api/bom/{BOM}', admin)['data']
+
+# deterministična revizija INVENTORY_ADJUST: +1 nato −1 na prvem artiklu vrstice
+# (neto učinek na zalogo 0; na svežem seedu namreč noben popravek ni potreben,
+#  revizijski check spodaj pa zahteva vsaj en zapis INVENTORY_ADJUST)
+ADJ_ITEM = detail['lines'][0]['item']['id']
+s, b = call('PATCH', '/api/inventory', admin, {'id': ADJ_ITEM, 'delta': 1})
+assert s == 200, f'inventura +1: {s} {b}'
+s, b = call('PATCH', '/api/inventory', admin, {'id': ADJ_ITEM, 'delta': -1})
+assert s == 200, f'inventura −1: {s} {b}'
+ok('revizija INVENTORY_ADJUST deterministično zapisana (+1/−1)')
+
 for l in detail['lines']:
     miss = round(l['qty'] - l['available'] + 5, 2)
     if miss > 0:

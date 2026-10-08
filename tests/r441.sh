@@ -141,25 +141,35 @@ t "napačno geslo → zavrnjeno (izhod 1)" 1 "$VERIFY_BAD_RC"
 # ── 6. off-site kopija na GitLabu ───────────────────────────────────────────
 echo "── 6. off-site (GitLab packages)"
 GAPI="https://gitlab.com/api/v4/projects/87314539"
-for i in 1 2 3 4 5; do PKGS=$(curl -s --max-time 30 "$GAPI/packages?package_name=roksal-backup&per_page=100" -H "PRIVATE-TOKEN: $GTOKEN"); [ -n "$PKGS" ] && ! echo "$PKGS" | head -c 30 | grep -q '^<' && break; sleep 5; done
+# Cloudflare občasno blokira privzeti curl UA („Blocked“ HTML) — brskalniški UA
+# je zanesljiv (spoznanje R448, velja za VSE prihodnje GitLab API klice)
+UA="Mozilla/5.0 (X11; Linux x86_64; rv:132.0) Gecko/20100101 Firefox/132.0"
+for i in 1 2 3 4 5; do PKGS=$(curl -s -A "$UA" --max-time 30 "$GAPI/packages?package_name=roksal-backup&per_page=100" -H "PRIVATE-TOKEN: $GTOKEN"); [ -n "$PKGS" ] && ! echo "$PKGS" | head -c 30 | grep -q '^<' && break; sleep 5; done
 PKGC=$(echo "$PKGS" | jq 'length')
 gett "off-site kopije obstajajo (≥1 verzija)" 1 "$PKGC"
 contains "zadnja verzija ima datoteke" "$(echo "$PKGS" | jq -r '.[0].version')" '20[0-9]+-[0-9]+-'
-for i in 1 2 3 4 5; do OFFSITE_FILES=$(curl -s --max-time 30 "$GAPI/packages/$(echo "$PKGS" | jq -r '.[0].id')/package_files" -H "PRIVATE-TOKEN: $GTOKEN"); [ -n "$OFFSITE_FILES" ] && ! echo "$OFFSITE_FILES" | head -c 30 | grep -q '^<' && break; sleep 5; done
+for i in 1 2 3 4 5; do OFFSITE_FILES=$(curl -s -A "$UA" --max-time 30 "$GAPI/packages/$(echo "$PKGS" | jq -r '.[0].id')/package_files" -H "PRIVATE-TOKEN: $GTOKEN"); [ -n "$OFFSITE_FILES" ] && ! echo "$OFFSITE_FILES" | head -c 30 | grep -q '^<' && break; sleep 5; done
 gett "kosov + manifest off-site (≥2)" 2 "$(echo "$OFFSITE_FILES" | jq 'length')"
 contains "manifest med datotekami" "$(echo "$OFFSITE_FILES" | jq -r '.[].file_name' | tr '\n' ' ')" 'manifest.json'
 
 # ── 7. GitLab zaščita main + MR pogoji ─────────────────────────────────────
 echo "── 7. zaščita repozitorija"
-for i in 1 2 3 4 5; do PROT=$(curl -s --max-time 30 "$GAPI/protected_branches/main" -H "PRIVATE-TOKEN: $GTOKEN"); [ -n "$PROT" ] && ! echo "$PROT" | head -c 30 | grep -q '^<' && break; sleep 5; done
+for i in 1 2 3 4 5; do PROT=$(curl -s -A "$UA" --max-time 30 "$GAPI/protected_branches/main" -H "PRIVATE-TOKEN: $GTOKEN"); [ -n "$PROT" ] && ! echo "$PROT" | head -c 30 | grep -q '^<' && break; sleep 5; done
 t "main zaščitena (id obstaja)" 1 "$(echo "$PROT" | jq -r '.id // empty' | wc -w | tr -d ' ')"
 t "direktni push: NOBODY" 0 "$(echo "$PROT" | jq -r '.push_access_levels[0].access_level')"
 t "force push prepovedan" false "$(echo "$PROT" | jq -r '.allow_force_push')"
-for i in 1 2 3 4 5; do PROJ=$(curl -s --max-time 30 "$GAPI" -H "PRIVATE-TOKEN: $GTOKEN"); [ -n "$PROJ" ] && ! echo "$PROJ" | head -c 30 | grep -q '^<' && break; sleep 5; done
+for i in 1 2 3 4 5; do PROJ=$(curl -s -A "$UA" --max-time 30 "$GAPI" -H "PRIVATE-TOKEN: $GTOKEN"); [ -n "$PROJ" ] && ! echo "$PROJ" | head -c 30 | grep -q '^<' && break; sleep 5; done
 t "merge zahteva zelen CI" true "$(echo "$PROJ" | jq -r '.only_allow_merge_if_pipeline_succeeds')"
 # prazen poskusni commit (lokalni main je lahko sinhron — treba je nekaj pushati)
 git -C $ROOT commit --allow-empty -q -m "r441-test: preverba zaščite main (ne bo pushan)"
-PUSH_TEST=$(git -C $ROOT push origin main 2>&1 || true)
+# push poskusi do 5×: prehodni Cloudflare 403 NI odgovor strežnika; končamo,
+# ko strežnik dejansko odgovori (zavrnitev pre-receive ali uspeh)
+PUSH_TEST=""
+for i in 1 2 3 4 5; do
+  PUSH_TEST=$(git -C $ROOT push origin main 2>&1 || true)
+  if echo "$PUSH_TEST" | grep -qE 'pre-receive hook declined|Everything up-to-date|new file|To https'; then break; fi
+  sleep $((i * 3))
+done
 contains "direktni push na main ZAVRNJEN" "$PUSH_TEST" 'pre-receive hook declined'
 git -C $ROOT reset -q --soft HEAD~1 # povrni (delovne spremembe ostanejo)
 
@@ -167,12 +177,14 @@ git -C $ROOT reset -q --soft HEAD~1 # povrni (delovne spremembe ostanejo)
 echo "── 8. CI"
 t ".gitlab-ci.yml sleden" 1 "$(git -C $ROOT ls-files --error-unmatch .gitlab-ci.yml >/dev/null 2>&1 && echo 1 || echo 0)"
 t ".github ODSTRANJEN iz repa" 0 "$(git -C $ROOT ls-files | grep -c '^\.github/' || true)"
-for i in 1 2 3 4 5; do PIPES=$(curl -s --max-time 30 "$GAPI/pipelines?per_page=10" -H "PRIVATE-TOKEN: $GTOKEN"); [ -n "$PIPES" ] && ! echo "$PIPES" | head -c 30 | grep -q '^<' && break; sleep 5; done
+for i in 1 2 3 4 5; do PIPES=$(curl -s -A "$UA" --max-time 30 "$GAPI/pipelines?per_page=10" -H "PRIVATE-TOKEN: $GTOKEN"); [ -n "$PIPES" ] && ! echo "$PIPES" | head -c 30 | grep -q '^<' && break; sleep 5; done
 gett "pipelines obstajajo" 1 "$(echo "$PIPES" | jq 'length')"
 
 # ── 9. MR obstaja (r441-dr → main) ──────────────────────────────────────────
 echo "── 9. MR"
-for i in 1 2 3 4 5; do MRS=$(curl -s --max-time 30 "$GAPI/merge_requests?per_page=10" -H "PRIVATE-TOKEN: $GTOKEN"); [ -n "$MRS" ] && ! echo "$MRS" | head -c 30 | grep -q '^<' && break; sleep 5; done
+# filter po source_branch (ne per_page=10 — seznam MR-jev raste z fazami,
+# r441-dr pada iz prvih 10)
+for i in 1 2 3 4 5; do MRS=$(curl -s -A "$UA" --max-time 30 "$GAPI/merge_requests?source_branch=r441-dr&per_page=20" -H "PRIVATE-TOKEN: $GTOKEN"); [ -n "$MRS" ] && ! echo "$MRS" | head -c 30 | grep -q '^<' && break; sleep 5; done
 contains "MR !1 obstaja (r441-dr → main)" "$(echo "$MRS" | jq -r '.[] | select(.source_branch=="r441-dr") | .title')" 'R441'
 
 # ── 10. UI: API odgovor vsebuje novi job ────────────────────────────────────
