@@ -1,0 +1,186 @@
+// /api/fence-run/[id]/confirm — potrditev ograjnega tekača (R460 — issue #15 §20/§21/§25)
+// POST { handoff?: boolean } (measurements.write)
+// Quality gate (§3): 🔴 NEZADOSTNO → 409; validacija brez NAPAK (§19); vsi
+// segmenti ≥ MANUAL (brez ocen/predlogov — §19 „ne dovoljuj tihega ustvarjanja
+// navidezno natančnih meritev"). Uspeh:
+//   • segmenti → CONFIRMED, tekač → POTRJEN (+quality posnetek)
+//   • KANONIČNA meritev (type OGRAJA) + verzija v1 (§17 en vir resnice)
+//   • neobvezen handoff: ProjectPackage (status IZMERA) z istim produktom,
+//     varianto in meritev (§21: konfigurator/BOM/ponudba BREZ ponovnega vnosa)
+// Revizija FENCE_RUN_CONFIRM.
+
+import { NextRequest, NextResponse } from 'next/server'
+import { db } from '@/lib/db'
+import { jsonError, requirePermission } from '@/lib/auth'
+import { writeAudit } from '@/lib/audit'
+import { ENGINE_VERSION, SEGMENT_STATUSES } from '@/lib/fence-run-engine'
+import { analyzeContext, loadRunContext, snapshotVersion } from '@/lib/fence-run-service'
+import { fenceRunZaUporabnika } from '@/lib/fence-run-access'
+import { nextPackageCode } from '@/lib/product-core'
+
+type Params = { params: Promise<{ id: string }> }
+
+export async function POST (req: NextRequest, { params }: Params) {
+  const auth = await requirePermission(req, 'measurements.write')
+  if (auth instanceof NextResponse) return auth
+  const { user } = auth
+  const { id } = await params
+
+  const scope = await fenceRunZaUporabnika(user, id)
+  if (scope instanceof NextResponse) return scope
+  if (scope.run.status === 'POTRJEN') {
+    return jsonError(409, 'Tekač je že potrjen.', 'Izmera je že prenesena v kanonično meritev.')
+  }
+  if (scope.run.status === 'ARHIV') {
+    return jsonError(409, 'Arhiviranega tekača ni mogoče potrditi.', 'Obnovite status na PREGLED pred potrditvijo.')
+  }
+
+  const body = await req.json().catch(() => ({}))
+  if (!body || typeof body !== 'object') return jsonError(400, 'Neveljavno telo zahteve.')
+  const handoff = body.handoff === true
+
+  const ctx = await loadRunContext(id)
+  if (!ctx) return jsonError(404, 'Tekač ne obstaja.')
+  const analysis = analyzeContext(ctx)
+
+  // ── Quality gate (§3/§19): brez tihe potrditev ──
+  if (analysis.quality.state === 'NEZADOSTNO') {
+    return jsonError(409, 'Zajem ni zanesljiv — potrditev zavrnjena.', analysis.quality.reasons.join(' ') || 'Dopolnite zajem pred potrditvijo.')
+  }
+  const napake = analysis.validation.filter((v) => v.severity === 'NAPAKA')
+  if (napake.length > 0) {
+    return jsonError(409, 'Validacija je odkrila napake.', napake.map((n) => n.message).join(' '))
+  }
+  const slabi = ctx.segments.filter((s) => {
+    const order = SEGMENT_STATUSES[s.status as keyof typeof SEGMENT_STATUSES]?.order ?? 0
+    return order < SEGMENT_STATUSES.MANUAL.order
+  })
+  if (slabi.length > 0) {
+    return jsonError(409, 'Segmenti brez človeške preveritve.', `Segmenti ${slabi.map((s) => s.order + 1).join(', ')} so ocena/predlog — vsaka kritična dimenzija zahteva ročni vnos, kalibracijo ali preveritev (§19).`)
+  }
+
+  // ── Kanonična meritev (§17: en vir resnice, brez ponovnega vnosa §21) ──
+  const project = await db.project.findUnique({
+    where: { id: ctx.run.projectId },
+    select: { code: true, title: true, customer: { select: { name: true, email: true } } },
+  })
+  const heights = ctx.nodes.map((n) => n.heightCm).filter((h): h is number => h != null)
+  const maxHeight = heights.length > 0 ? Math.max(...heights) : null
+
+  const measurement = await db.measurement.create({
+    data: {
+      type: 'OGRAJA',
+      source: 'ROCNO',
+      projectId: ctx.run.projectId,
+      workOrderId: ctx.run.workOrderId,
+      authorId: user.id,
+      location: ctx.run.name,
+      lengthCm: analysis.summary.totalLengthCm,
+      heightCm: maxHeight,
+      posts: analysis.summary.postCount,
+      segments: analysis.summary.segmentCount,
+      handrail: true,
+      slopeDeg: analysis.summary.maxSlopeDeg,
+      params: JSON.stringify({
+        fenceRunId: id,
+        engine: ENGINE_VERSION,
+        source: 'FENCE_RUN',
+        calibration: ctx.calibration,
+        terrain: ctx.terrain,
+        nodes: ctx.nodes,
+        segments: ctx.segments.map((s) => ({
+          order: s.order, fromAtCm: s.fromAtCm, toAtCm: s.toAtCm,
+          lengthCm: s.lengthCm, slopeDeg: s.slopeDeg, status: s.status,
+          verifiedCm: s.verifiedCm,
+        })),
+        summary: analysis.summary,
+      }),
+      note: ctx.run.note,
+    },
+  })
+  await db.measurementVersion.create({
+    data: {
+      measurementId: measurement.id,
+      version: 1,
+      userId: user.id,
+      data: JSON.stringify({
+        type: 'OGRAJA', lengthCm: analysis.summary.totalLengthCm, heightCm: maxHeight,
+        posts: analysis.summary.postCount, segments: analysis.summary.segmentCount,
+        slopeDeg: analysis.summary.maxSlopeDeg, location: ctx.run.name, note: ctx.run.note,
+      }),
+      note: `Potrjeno iz ograjnega tekača (${ctx.segments.length} segmentov · ${analysis.summary.verifiedCount} preverjenih)`,
+    },
+  })
+
+  // ── Handoff: paket projekta z istim produktom/varianto (§21) ──
+  let pkg: { id: string; code: string } | null = null
+  if (handoff && ctx.run.productId) {
+    const product = await db.product.findUnique({
+      where: { id: ctx.run.productId },
+      select: { id: true, name: true, unit: true },
+    })
+    if (product) {
+      const variant = ctx.run.variantId
+        ? await db.productVariant.findUnique({ where: { id: ctx.run.variantId }, select: { id: true, name: true } })
+        : null
+      const code = await nextPackageCode(project?.code ?? 'P')
+      const created = await db.projectPackage.create({
+        data: {
+          code,
+          projectId: ctx.run.projectId,
+          productId: product.id,
+          variantId: variant?.id ?? null,
+          measurementId: measurement.id,
+          name: variant ? `${product.name} — ${variant.name}` : product.name,
+          qty: Math.round((analysis.summary.totalLengthCm / 100) * 100) / 100,
+          unit: product.unit === 'm' ? 'm' : 'm',
+          status: 'IZMERA',
+          note: `Iz ograjnega tekača (${ctx.run.name})`,
+        },
+      })
+      pkg = { id: created.id, code: created.code }
+    }
+  }
+
+  // ── Statusi: segmenti → CONFIRMED, tekač → POTRJEN ──
+  await db.fenceSegment.updateMany({ where: { fenceRunId: id }, data: { status: 'CONFIRMED' } })
+  await db.fenceRun.update({
+    where: { id },
+    data: {
+      status: 'POTRJEN',
+      measurementId: measurement.id,
+      quality: JSON.stringify(analysis.quality),
+    },
+  })
+  const version = await snapshotVersion(id, user.id, 'Potrjena izmera')
+
+  await writeAudit({
+    userId: user.id,
+    action: 'FENCE_RUN_CONFIRM',
+    entity: 'fenceRun',
+    entityId: id,
+    projectId: ctx.run.projectId,
+    detail: {
+      name: ctx.run.name,
+      measurementId: measurement.id,
+      totalLengthCm: analysis.summary.totalLengthCm,
+      posts: analysis.summary.postCount,
+      segments: analysis.summary.segmentCount,
+      verified: analysis.summary.verifiedCount,
+      quality: analysis.quality,
+      ...(pkg ? { package: pkg.code } : {}),
+      version,
+    },
+  })
+
+  return NextResponse.json({
+    data: {
+      runId: id,
+      status: 'POTRJEN',
+      version,
+      measurementId: measurement.id,
+      ...(pkg ? { package: pkg } : {}),
+      summary: analysis.summary,
+    },
+  }, { status: 201 })
+}
