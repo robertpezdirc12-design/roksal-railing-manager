@@ -103,8 +103,13 @@ export default function PlaybookModule () {
   const playbookRunId = useAppStore((s) => s.playbookRunId)
   const setPlaybookRunId = useAppStore((s) => s.setPlaybookRunId)
   const [aktivniRun, setAktivniRun] = useState<string | null>(playbookRunId)
-
-  useEffect(() => { if (playbookRunId) setAktivniRun(playbookRunId) }, [playbookRunId])
+  // ob preklopu iz Danes → Vodeni postopek: uskladi brez efekta
+  // (uradni vzorec »adjust state during render« — react.dev)
+  const [videnRunId, setVidenRunId] = useState<string | null>(playbookRunId)
+  if (videnRunId !== playbookRunId) {
+    setVidenRunId(playbookRunId)
+    if (playbookRunId) setAktivniRun(playbookRunId)
+  }
 
   const isAdmin = user?.role === 'ADMIN' || user?.role === 'VODJA'
   const [adminView, setAdminView] = useState(false)
@@ -304,7 +309,7 @@ function RunView ({ runId, onNazaj }: { runId: string; onNazaj: () => void }) {
   const [busy, setBusy] = useState(false)
   const [naprava, setNaprava] = useState<{ tier: NapravaTier; opis: string } | null>(null)
 
-  useEffect(() => { void preveriNapravo().then(setNapravo) }, [])
+  useEffect(() => { void preveriNapravo().then(setNaprava) }, [])
 
   async function nalozi () {
     try {
@@ -399,6 +404,7 @@ function RunView ({ runId, onNazaj }: { runId: string; onNazaj: () => void }) {
       {/* trenutni korak — EN ZASLON = EN GLAVNI CILJ (§3) */}
       {trenutni && !zakljucen ? (
         <TrenutniKorak
+          key={trenutni.id} // remount ob preklopu koraka → lokalni vnosi se ponastavijo
           stanje={stanje}
           korak={trenutni}
           busy={busy}
@@ -496,12 +502,8 @@ function TrenutniKorak ({ stanje, korak, busy, napravaTier, onAkcija }: {
   const [izjemaOdprta, setIzjemaOdprta] = useState(false)
   const [izjemaVrsta, setIzjemaVrsta] = useState<'NI_PRIMERNO' | 'BLOKIRANO'>('NI_PRIMERNO')
   const [razlog, setRazlog] = useState('')
-
-  useEffect(() => {
-    // ob preklopu koraka ponastavi lokalne vnose
-    setBesedilo(''); setFotoId(''); setMeasurementId(''); setPodpisId('')
-    setNaslov(''); setOdgovor(null); setTocke({}); setVrednosti({}); setRazlog('')
-  }, [korak.id])
+  // opomba: lokalni vnosi se ponastavijo samodejno — komponenta ima
+  // key={korak.id} v RunView (remount ob preklopu koraka)
 
   const vTehu = st?.status === 'IN_PROGRESS' || st?.status === 'NEUSPESNO'
   const tehnika = napravaTier ? NAPRAVA_TEHNIKA[napravaTier] : null

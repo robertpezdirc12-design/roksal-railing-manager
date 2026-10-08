@@ -201,7 +201,12 @@ export function sestaviStanje (
     ? (() => { try { return JSON.parse(run.context) as RunContext } catch { return { odgovori: {} } } })()
     : { odgovori: {} }
   if (!context.odgovori) context.odgovori = {}
-  const stanja: KorakStanje[] = run.steps.map((s) => ({
+  // koraki v VRSTNEM REDU DEFINICIJE (deterministični API odgovor — include brez
+  // orderBy vrstni red baze ni zajamčen)
+  const vrstniRed = new Map(def.steps.map((s, i) => [s.id, i]))
+  const stanja: KorakStanje[] = [...run.steps]
+    .sort((a, b) => (vrstniRed.get(a.stepId) ?? 999) - (vrstniRed.get(b.stepId) ?? 999))
+    .map((s) => ({
     stepId: s.stepId,
     status: s.status as KorakStanje['status'],
     attempts: s.attempts,
@@ -272,7 +277,12 @@ export async function izvediAkcijo (user: SessionUser, vhod: AkcijaVhod): Promis
   const { run, def } = nalozeno
   const err = await obseg(user, run)
   if (err) return { status: 403, napaka: err }
-  if (run.status !== 'V_TEKU') {
+  // PONOVNO je edina akcija, ki sme odpreti ZAKLJUČEN zagon (§16 recovery po
+  // prekinitvi); vse ostale akcije zahtevajo V_TEKU
+  const odprtostOK = vhod.akcija === 'PONOVNO'
+    ? run.status === 'V_TEKU' || run.status === 'ZAKLJUCEN'
+    : run.status === 'V_TEKU'
+  if (!odprtostOK) {
     return { status: 409, napaka: `Zagon je ${run.status === 'ZAKLJUCEN' ? 'zaključen' : 'prekinjen'} — akcije niso mogoče.` }
   }
 
