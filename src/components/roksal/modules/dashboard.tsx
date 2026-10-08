@@ -6,8 +6,9 @@
 // Prodajni lijak samo za vloge s crm.read.
 
 import {
-  AlertTriangle, Banknote, CalendarDays, FolderKanban, HardHat, PackageX, TrendingUp, Warehouse,
+  AlertTriangle, ArrowRight, Banknote, CalendarDays, FolderKanban, HardHat, ListChecks, PackageX, TrendingUp, Warehouse,
 } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { fmtEUR, useApi } from '@/lib/api-client'
 import { ErrorBox, LoadingRows, PageHeader, StatCard, StatusBadge } from '@/components/roksal/ui-bits'
@@ -32,11 +33,22 @@ interface DashData {
   pipeline: { value: number; count: number } | null
 }
 
+// R456: vrstica plošče »Naslednji koraki« (/api/projects/next-actions)
+interface NextActionRow {
+  id: string; code: string; title: string; status: string
+  done: number; total: number; pct: number
+  next: { key: string; label: string; targetTab: string; reason: string } | null
+}
+
 const DAY_SHORT = ['ned', 'pon', 'tor', 'sre', 'čet', 'pet', 'sob']
 
 export default function DashboardModule () {
   const user = useAppStore((s) => s.user)
+  const setTab = useAppStore((s) => s.setTab)
   const { data, loading, error } = useApi<{ data: DashData }>('/api/dashboard')
+
+  // R456 (issue #11 §2 NEXT BEST ACTION): naslednji koraki aktivnih projektov
+  const nextActions = useApi<{ data: NextActionRow[] }>('/api/projects/next-actions?limit=8', [])
 
   const fin = data?.data.finance ?? null
   const ops = data?.data.operations ?? null
@@ -65,6 +77,46 @@ export default function DashboardModule () {
             ) : null}
           </div>
 
+          {/* ─── R456 (issue #11 §2): NASLEDNJI KORAKI — sistem ve, kaj sledi ─── */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <ListChecks className="size-4 text-roksal-amber" aria-hidden /> Naslednji koraki
+                <span className="ml-auto text-xs font-normal text-muted-foreground">aktivni projekti</span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {nextActions.loading ? (
+                <p className="text-sm text-muted-foreground">Nalaganje …</p>
+              ) : nextActions.error ? (
+                <ErrorBox error={nextActions.error} />
+              ) : (nextActions.data?.data ?? []).length === 0 ? (
+                <p className="text-sm text-muted-foreground">Ni aktivnih projektov z odprtim korakom.</p>
+              ) : (
+                <ul className="max-h-96 space-y-2 overflow-y-auto pr-1">
+                  {(nextActions.data?.data ?? []).map((r) => (
+                    <li key={r.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-2.5">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-xs font-semibold text-roksal-amber">{r.code}</span>
+                          <StatusBadge status={r.status} />
+                          <span className="text-xs text-muted-foreground">{r.done}/{r.total}</span>
+                        </div>
+                        <div className="mt-0.5 truncate text-sm font-medium">{r.title}</div>
+                        <div className="text-xs text-muted-foreground">{r.next ? r.next.reason : 'Tok zaključen ✓'}</div>
+                      </div>
+                      {r.next ? (
+                        <Button size="sm" className="h-9 shrink-0" onClick={() => setTab(r.next!.targetTab)}>
+                          {r.next.label.replace('NADALJUJ: ', '')} <ArrowRight className="size-3.5" aria-hidden />
+                        </Button>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
+
           {/* ─── direktorski kokpit (SAMO invoices.read — API drugače vrne null) ─── */}
           {fin ? (
             <>
@@ -78,8 +130,9 @@ export default function DashboardModule () {
               </div>
 
               <div className="grid gap-4 lg:grid-cols-2">
-                {/* marže po projektih — top 5 iz kalkulacij paketov */}
-                <Card>
+                {/* marže po projektih — top 5 iz kalkulacij paketov (min-w-0: grid element
+                    se lahko skrči — mobile §16, R456) */}
+                <Card className="min-w-0">
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2 text-base">
                       <TrendingUp className="size-4 text-roksal-green" aria-hidden /> Marže po projektih (top 5)
@@ -111,7 +164,7 @@ export default function DashboardModule () {
 
                 {/* zamude — nalogi s terminom v preteklosti */}
                 {ops ? (
-                  <Card>
+                  <Card className="min-w-0">
                     <CardHeader>
                       <CardTitle className="flex items-center gap-2 text-base">
                         <AlertTriangle className="size-4 text-roksal-amber" aria-hidden /> Zamude nalogov
@@ -186,7 +239,7 @@ export default function DashboardModule () {
           ) : null}
 
           <div className="grid gap-4 lg:grid-cols-2">
-            <Card>
+            <Card className="min-w-0">
               <CardHeader><CardTitle className="text-base">Projekti po statusih</CardTitle></CardHeader>
               <CardContent className="space-y-2">
                 {Object.entries(data.data.projects.byStatus).map(([status, count]) => (
@@ -198,7 +251,7 @@ export default function DashboardModule () {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="min-w-0">
               <CardHeader><CardTitle className="text-base">Nalogi po statusih</CardTitle></CardHeader>
               <CardContent className="space-y-2">
                 {Object.entries(data.data.workOrders.byStatus).map(([status, count]) => (
@@ -224,10 +277,10 @@ export default function DashboardModule () {
                 <ul className="max-h-72 space-y-1.5 overflow-y-auto pr-1">
                   {data.data.lowStock.map((i) => (
                     <li key={i.id} className="flex items-center justify-between gap-2 text-sm">
-                      <span className="flex items-center gap-2">
-                        <PackageX className="size-4 shrink-0 text-muted-foreground" aria-hidden /> {i.name}
+                      <span className="flex min-w-0 items-center gap-2">
+                        <PackageX className="size-4 shrink-0 text-muted-foreground" aria-hidden /> <span className="truncate">{i.name}</span>
                       </span>
-                      <span className="font-mono text-red-600 dark:text-red-400">{i.qty} / {i.reorderAt} {i.unit}</span>
+                      <span className="shrink-0 font-mono text-red-600 dark:text-red-400">{i.qty} / {i.reorderAt} {i.unit}</span>
                     </li>
                   ))}
                 </ul>
