@@ -8,15 +8,34 @@
 // R439 (issue #6): brez signala — gumb 'Shrani (offline)' v fazi potrditve
 // (compressImage → photos shramba + op 'foto' z merilnimi podatki; izbor
 // nalogov pade na predpomnjene vrstice).
+//
+// R455 (issue #10 — PROFESIONALNE KAMERNE MERITVE):
+//   • 5-fazni profesionalni tok: ZAJEM → KALIBRACIJA → MERITEV → PREVERJANJE →
+//     POTRDITEV (jasen status na vsakem koraku, §4);
+//   • kakovost zajema: analiza svetlosti/ostrosti kadra (canvas) + opozorila
+//     DOBRO/OPOZORILO (§2, §4);
+//   • vodila v živem predogledu kamere (mreža + vodoravnica + središče, §4);
+//   • vlečenje točk (premik) + povečevalno steklo za natančno postavitev (§1, §4);
+//   • undo/redo celotnega urejanja (§4);
+//   • zaklep kalibracije (§4);
+//   • VLM predlogi točk so VIZUALNO LOČENI (PREDLOG) in ne štejejo v izračun,
+//     dokler jih monter ne sprejme — avtomatika je predlog, ne avtoriteta (§1, §2);
+//   • več pogledov (do 4 fotografije istega objekta) s primerjavo ocen,
+//     povprečjem, razpršenostjo in stopnjo zaupanja (§3);
+//   • ročni popravek dolžine z obveznim razlogom — sledljivost (§1);
+//   • potrditev pošlje views/quality/confidence/manualOverride na strežnik,
+//     ki ji zapiše v params + verzijo + revizijo (issue #10 §5–§7).
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Camera, Check, CloudUpload, Crosshair, Eraser, Image as ImageIcon, Loader2, Ruler, Sparkles, Trash2, Undo2, WifiOff } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import {
+  Camera, Check, CloudUpload, Crosshair, Eraser, Grid3x3, Image as ImageIcon, Loader2, Lock, LockOpen,
+  Redo2, Ruler, Sparkles, SquarePlus, Trash2, Undo2, WifiOff,
+} from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useToast } from '@/hooks/use-toast'
@@ -24,7 +43,7 @@ import { apiPost, fmtDate, useApi } from '@/lib/api-client'
 import { getCachedNalogi, queuePhoto, useOnline } from '@/lib/offline'
 import { EmptyState, ErrorBox } from '@/components/roksal/ui-bits'
 
-interface Pt { x: number; y: number; label?: string }
+interface Pt { x: number; y: number; label?: string; src?: 'ROCNO' | 'PREDLOG' }
 interface PhotoRow {
   id: string; type: string; location: string | null; params: string | null; createdAt: string
   project: { code: string } | null
@@ -34,7 +53,35 @@ interface WorkOrderOption { id: string; code: string; title: string }
 // R439: predpomnjena vrstica naloga (offline izbor v kameri)
 interface CachedWoRow { id: string; code: string; title: string }
 
+/** R455: kakovost zajema — izračun na odjemalcu (advisory, §2/§4). */
+interface Quality {
+  brightness: number // povprečna svetlost 0..255
+  blurScore: number // variacija Laplace-ovega jedra (višje = ostreje)
+  dark: boolean
+  bright: boolean
+  blurry: boolean
+  ok: boolean
+}
+
+/** R455: en pogled (fotografija istega objekta) s svojimi točkami in kalibracijo. */
+interface View {
+  key: number
+  photoId: string | null
+  dataUrl: string
+  imgW: number
+  imgH: number
+  quality: Quality | null
+  points: Pt[]
+  calib: { px: number; cm: number } | null
+  calibLocked: boolean
+}
+
 const MAX_IMG_W = 1600
+const MAX_VIEWS = 4
+/** Prag variacije Laplacea pod katerim sliko ocenimo kot mehko (iz prakse, advisory). */
+const BLUR_THRESHOLD = 45
+
+const PHASES = ['Zajem', 'Kalibracija', 'Meritev', 'Preverjanje', 'Potrditev'] as const
 
 /** Zmanjša sliko na max širino in vrne JPEG dataUrl. */
 async function shrinkToDataUrl (dataUrl: string): Promise<string> {
@@ -54,6 +101,55 @@ async function shrinkToDataUrl (dataUrl: string): Promise<string> {
   })
 }
 
+/**
+ * R455: analiza kakovosti kadra (§2/§4) — svetlost (povprečna luma) in ostrost
+ * (variacija Laplace-ovega jedra na pomanjšani sliki). Čisto odjemalčeva,
+ * advisory ocena: opozori na temo/presočje/mehkost, ne blokira toka.
+ */
+async function analyzeQuality (dataUrl: string): Promise<Quality | null> {
+  return await new Promise((resolve) => {
+    const img = new Image()
+    img.onload = () => {
+      try {
+        const w = 240
+        const h = Math.max(1, Math.round((img.naturalHeight / img.naturalWidth) * w)) || 1
+        const canvas = document.createElement('canvas')
+        canvas.width = w; canvas.height = h
+        const ctx = canvas.getContext('2d', { willReadFrequently: true })
+        if (!ctx) return resolve(null)
+        ctx.drawImage(img, 0, 0, w, h)
+        const d = ctx.getImageData(0, 0, w, h).data
+        const gray = new Float32Array(w * h)
+        let sum = 0
+        for (let i = 0; i < w * h; i++) {
+          const g = 0.299 * d[i * 4] + 0.587 * d[i * 4 + 1] + 0.114 * d[i * 4 + 2]
+          gray[i] = g; sum += g
+        }
+        const brightness = sum / (w * h)
+        // Laplace (4-sosed) variacija — standardna hevristika za ostrost
+        let lapSum = 0; let lapSq = 0; let n = 0
+        for (let y = 1; y < h - 1; y++) {
+          for (let x = 1; x < w - 1; x++) {
+            const i = y * w + x
+            const lap = 4 * gray[i] - gray[i - 1] - gray[i + 1] - gray[i - w] - gray[i + w]
+            lapSum += lap; lapSq += lap * lap; n++
+          }
+        }
+        const variance = n > 0 ? lapSq / n - (lapSum / n) ** 2 : 0
+        const blurScore = Math.max(0, Math.min(10000, Math.round(variance)))
+        const dark = brightness < 45
+        const bright = brightness > 225
+        const blurry = blurScore < BLUR_THRESHOLD
+        resolve({ brightness: Math.round(brightness), blurScore, dark, bright, blurry, ok: !dark && !bright && !blurry })
+      } catch {
+        resolve(null)
+      }
+    }
+    img.onerror = () => resolve(null)
+    img.src = dataUrl
+  })
+}
+
 function parsePhoto (params: string | null): string | null {
   if (!params) return null
   try {
@@ -64,6 +160,28 @@ function parsePhoto (params: string | null): string | null {
 
 const fmt1 = (n: number) => (Math.round(n * 10) / 10).toString().replace('.', ',')
 
+/** R455: izračun dolžin segmentov za en pogled (točke + kalibracija). */
+function calcView (view: View) {
+  const pts = view.points.filter((p) => p.src !== 'PREDLOG') // predlogi ne štejejo (§2)
+  const cmPerPx = view.calib ? view.calib.cm / view.calib.px : null
+  const segs: { i: number; j: number; pxLen: number; cmLen: number | null; angleDeg: number; dVCm: number | null }[] = []
+  for (let i = 0; i + 1 < pts.length; i++) {
+    const a = pts[i]; const b = pts[i + 1]
+    const dx = (b.x - a.x) * view.imgW; const dy = (b.y - a.y) * view.imgH
+    const pxLen = Math.hypot(dx, dy)
+    const angleDeg = Math.round((Math.atan2(dy, dx) * 180) / Math.PI * 10) / 10
+    segs.push({
+      i, j: i + 1, pxLen,
+      cmLen: cmPerPx !== null ? Math.round(pxLen * cmPerPx * 10) / 10 : null,
+      angleDeg,
+      dVCm: cmPerPx !== null ? Math.round(dy * cmPerPx * 10) / 10 : null,
+    })
+  }
+  const totalPx = segs.reduce((s, x) => s + x.pxLen, 0)
+  const totalCm = cmPerPx !== null ? Math.round(totalPx * cmPerPx * 10) / 10 : null
+  return { pts, segs, totalPx, totalCm, cmPerPx }
+}
+
 export function KameraMeritevDialog ({ open, onClose, onSaved }: {
   open: boolean
   onClose: () => void
@@ -71,35 +189,48 @@ export function KameraMeritevDialog ({ open, onClose, onSaved }: {
 }) {
   const { toast } = useToast()
 
-  // faza 1: fotografija + povezave
-  const [phase, setPhase] = useState<1 | 2 | 3>(1)
-  const [dataUrl, setDataUrl] = useState<string | null>(null)
-  const [photoId, setPhotoId] = useState<string | null>(null)
+  // faza 1..5 (R455: ZAJEM → KALIBRACIJA → MERITEV → PREVERJANJE → POTRDITEV)
+  const [phase, setPhase] = useState<1 | 2 | 3 | 4 | 5>(1)
   const [busy, setBusy] = useState(false)
   const [projectId, setProjectId] = useState('none')
   const [workOrderId, setWorkOrderId] = useState('none')
   const [location, setLocation] = useState('')
   const [camActive, setCamActive] = useState(false)
+  const [guides, setGuides] = useState(true) // R455: vodila v živem predogledu (§4)
 
-  // faza 2: točke + kalibracija
-  const [points, setPoints] = useState<Pt[]>([])
-  const [imgW, setImgW] = useState(1)
-  const [imgH, setImgH] = useState(1)
-  const [calib, setCalib] = useState<{ px: number; cm: number } | null>(null)
+  // R455: pogledi (fotografije istega objekta) + aktivni zavihek
+  const [views, setViews] = useState<View[]>([])
+  const [activeView, setActiveView] = useState(0)
+  const viewKey = useRef(1)
+
+  // R455: undo/redo (§4) — posnetki {views, activeView}
+  const past = useRef<{ views: View[]; activeView: number }[]>([])
+  const future = useRef<{ views: View[]; activeView: number }[]>([])
+  const [histTick, setHistTick] = useState(0) // rerender za omogočanje gumbov
+
   const [calibA, setCalibA] = useState<number | null>(null) // indeks prve točke kalibracije
   const [calibCm, setCalibCm] = useState('')
   const [detecting, setDetecting] = useState(false)
   const [stairMode, setStairMode] = useState(false)
   const [serverLayout, setServerLayout] = useState<string | null>(null)
 
-  // faza 3: potrditev
+  // faza 5: potrditev + R455 ročni popravek
   const [type, setType] = useState('OGRAJA')
   const [heightS, setHeightS] = useState('100')
   const [note, setNote] = useState('')
+  const [overrideOn, setOverrideOn] = useState(false)
+  const [overrideLen, setOverrideLen] = useState('')
+  const [overrideReason, setOverrideReason] = useState('')
 
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
+  const fileViewRef = useRef<HTMLInputElement>(null)
+
+  // R455: referenca na vlečenje — vključuje stanje pred vlečenjem (undo)
+  const dragRef = useRef<{ view: number; point: number; startX: number; startY: number; moved: boolean; preViews: View[] } | null>(null)
+  const [lens, setLens] = useState<{ x: number; y: number; view: number } | null>(null)
+  const imgBoxRef = useRef<HTMLDivElement>(null)
 
   const projects = useApi<{ data: ProjectOption[] }>(open ? '/api/projects' : null, [open])
   const orders = useApi<{ data: WorkOrderOption[] }>(open ? '/api/nalog?scope=open' : null, [open])
@@ -119,6 +250,31 @@ export function KameraMeritevDialog ({ open, onClose, onSaved }: {
     () => (orders.data?.data?.length ? orders.data.data : cachedOrders),
     [orders.data, cachedOrders]
   )
+
+  const view = views[activeView] ?? null
+
+  // ── R455: undo/redo pomočniki ──
+  function snapshot (): void {
+    past.current.push({ views: structuredClone(views), activeView })
+    if (past.current.length > 50) past.current.shift()
+    future.current = []
+    setHistTick((t) => t + 1)
+  }
+  function undo (): void {
+    const prev = past.current.pop()
+    if (!prev) return
+    future.current.push({ views: structuredClone(views), activeView })
+    setViews(prev.views); setActiveView(Math.min(prev.activeView, prev.views.length - 1))
+    setHistTick((t) => t + 1)
+  }
+  function redo (): void {
+    const next = future.current.pop()
+    if (!next) return
+    past.current.push({ views: structuredClone(views), activeView })
+    setViews(next.views); setActiveView(next.activeView)
+    setHistTick((t) => t + 1)
+  }
+  void histTick
 
   // priprava kamere
   const startCamera = useCallback(async () => {
@@ -154,7 +310,7 @@ export function KameraMeritevDialog ({ open, onClose, onSaved }: {
     canvas.getContext('2d')?.drawImage(video, 0, 0, canvas.width, canvas.height)
     const url = canvas.toDataURL('image/jpeg', 0.85)
     stopCamera()
-    acceptImage(url)
+    void acceptImage(url)
   }
 
   async function onFile (f: File | undefined): Promise<void> {
@@ -164,121 +320,257 @@ export function KameraMeritevDialog ({ open, onClose, onSaved }: {
       reader.onload = () => resolve(String(reader.result))
       reader.readAsDataURL(f)
     })
-    acceptImage(await shrinkToDataUrl(url))
+    await acceptImage(await shrinkToDataUrl(url))
   }
 
-  /** Nastavi sliko in ponastavi označevanje. */
-  function acceptImage (url: string): void {
-    setDataUrl(url)
-    setPoints([]); setCalib(null); setCalibA(null); setCalibCm(''); setServerLayout(null)
+  /** Nastavi sliko kot PRVI pogled in ponastavi označevanje + R455 kakovost. */
+  async function acceptImage (url: string): Promise<void> {
+    const quality = await analyzeQuality(url)
+    const v: View = {
+      key: viewKey.current++,
+      photoId: null,
+      dataUrl: url,
+      imgW: 1, imgH: 1,
+      quality,
+      points: [], calib: null, calibLocked: false,
+    }
     const img = new Image()
-    img.onload = () => { setImgW(img.naturalWidth); setImgH(img.naturalHeight) }
+    img.onload = () => {
+      setViews((vs) => vs.map((x) => (x.key === v.key ? { ...x, imgW: img.naturalWidth, imgH: img.naturalHeight } : x)))
+    }
     img.src = url
+    snapshot()
+    setViews([v])
+    setActiveView(0)
+    setCalibA(null); setCalibCm(''); setServerLayout(null)
     setPhase(2)
+    if (quality && !quality.ok) {
+      toast({
+        title: 'Opozorilo o kakovosti zajema.',
+        description: `${quality.dark ? 'Slika je temna. ' : ''}${quality.bright ? 'Slika je presočena. ' : ''}${quality.blurry ? 'Slika je mehka — točke postavljajte previdno ali posnemite znova. ' : ''}Meritev lahko vseeno nadaljujete.`,
+      })
+    }
+  }
+
+  /** R455: doda DODATEN pogled (fotografija istega objekta, §3). */
+  async function addView (url: string): Promise<void> {
+    if (views.length >= MAX_VIEWS) {
+      toast({ title: `Največ ${MAX_VIEWS} pogledov.`, variant: 'destructive' })
+      return
+    }
+    const quality = await analyzeQuality(url)
+    const v: View = {
+      key: viewKey.current++,
+      photoId: null,
+      dataUrl: url,
+      imgW: 1, imgH: 1,
+      quality,
+      points: [], calib: null, calibLocked: false,
+    }
+    const img = new Image()
+    img.onload = () => {
+      setViews((vs) => vs.map((x) => (x.key === v.key ? { ...x, imgW: img.naturalWidth, imgH: img.naturalHeight } : x)))
+    }
+    img.src = url
+    snapshot()
+    setViews((vs) => [...vs, v])
+    setActiveView(views.length)
+    setCalibA(null); setCalibCm('')
+    toast({ title: `Dodan pogled ${views.length + 1}/${MAX_VIEWS}.`, description: 'Kalibrirajte merilo in označite iste točke kot na prvem pogledu.' })
+  }
+
+  async function onFileView (f: File | undefined): Promise<void> {
+    if (!f) return
+    const url = await new Promise<string>((resolve) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(String(reader.result))
+      reader.readAsDataURL(f)
+    })
+    await addView(await shrinkToDataUrl(url))
   }
 
   /** Izbere obstoječo FOTO meritev. */
   function pickExisting (p: PhotoRow): void {
     const url = parsePhoto(p.params)
     if (!url) return
-    setPhotoId(p.id)
-    setLocation(p.location ?? '')
-    acceptImage(url)
+    void acceptImage(url)
   }
 
-  /** Naloži novo fotografijo (POST /api/measure/photo). */
+  /** Naloži fotografijo (POST /api/measure/photo) za AKTIVNI pogled. */
   async function uploadPhoto (): Promise<void> {
-    if (!dataUrl) return
+    if (!view) return
     setBusy(true)
     try {
       const res = await apiPost<{ data: { id: string } }>('/api/measure/photo', {
-        dataUrl,
+        dataUrl: view.dataUrl,
         location: location.trim() || null,
         projectId: projectId !== 'none' ? projectId : null,
         workOrderId: workOrderId !== 'none' ? workOrderId : null,
       })
-      setPhotoId(res.data.id)
-      toast({ title: 'Fotografija shranjena.', description: 'Zdaj označite merilne točke.' })
+      snapshot()
+      setViews((vs) => vs.map((v) => (v.key === view.key ? { ...v, photoId: res.data.id } : v)))
+      toast({ title: 'Fotografija shranjena.', description: 'Zdaj kalibrirajte merilo in označite točke.' })
     } catch (e) {
       toast({ title: 'Napaka pri nalaganju fotografije', description: e instanceof Error ? e.message : undefined, variant: 'destructive' })
     } finally { setBusy(false) }
   }
 
-  // klik na sliko → točka (normalizirano 0..1)
+  // klik na sliko → točka (normalizirano 0..1) — R455: v fazi KALIBRACIJA (2)
+  // označimo referenčni točki, v fazi MERITEV (3) merilne točke
   function onImageClick (e: React.MouseEvent<HTMLDivElement>): void {
+    if (!view || (phase !== 2 && phase !== 3)) return
     const rect = e.currentTarget.getBoundingClientRect()
     const x = (e.clientX - rect.left) / rect.width
     const y = (e.clientY - rect.top) / rect.height
     if (x < 0 || x > 1 || y < 0 || y > 1) return
-    setPoints((ps) => [...ps, { x, y }])
+    snapshot()
+    setViews((vs) => vs.map((v) => (v.key === view.key ? { ...v, points: [...v.points, { x, y, src: 'ROCNO' }] } : v)))
     setServerLayout(null)
   }
 
   function removePoint (i: number): void {
-    setPoints((ps) => ps.filter((_, k) => k !== i))
+    if (!view) return
+    snapshot()
+    setViews((vs) => vs.map((v) => (v.key === view.key ? { ...v, points: v.points.filter((_, k) => k !== i) } : v)))
     if (calibA === i) setCalibA(null)
     setServerLayout(null)
   }
 
+  // ── R455: vlečenje točk (premik) + povečevalno steklo (§1/§4) ──
+  function onPointDown (e: ReactPointerEvent<HTMLButtonElement>, i: number): void {
+    if (!view) return
+    e.stopPropagation()
+    try { e.currentTarget.setPointerCapture(e.pointerId) } catch { /* nekateri brskalniki */ }
+    // stanje PRED morebitnim vlečenjem — za undo (posnetek ob koncu vlečenja)
+    dragRef.current = {
+      view: activeView, point: i, startX: e.clientX, startY: e.clientY, moved: false,
+      preViews: structuredClone(views),
+    }
+    setLens({ x: e.clientX, y: e.clientY, view: activeView })
+  }
+
+  function onPointMove (e: ReactPointerEvent<HTMLButtonElement>): void {
+    const d = dragRef.current
+    if (!d) return
+    const box = imgBoxRef.current?.getBoundingClientRect()
+    if (!box) return
+    if (!d.moved && Math.hypot(e.clientX - d.startX, e.clientY - d.startY) < 6) {
+      setLens({ x: e.clientX, y: e.clientY, view: d.view })
+      return
+    }
+    d.moved = true
+    const x = Math.min(1, Math.max(0, (e.clientX - box.left) / box.width))
+    const y = Math.min(1, Math.max(0, (e.clientY - box.top) / box.height))
+    setViews((vs) => vs.map((v, vi) => {
+      if (vi !== d.view) return v
+      return { ...v, points: v.points.map((p, pi) => (pi === d.point ? { ...p, x, y } : p)) }
+    }))
+    setServerLayout(null)
+    setLens({ x: e.clientX, y: e.clientY, view: d.view })
+  }
+
+  function onPointUp (i: number): void {
+    const d = dragRef.current
+    setLens(null)
+    dragRef.current = null
+    if (!d) return
+    if (!d.moved) {
+      // premik pod pragom → tap = izbriši (ohranjeno vedenje iz prejšnjih verzij)
+      removePoint(i)
+      return
+    }
+    // posnetek stanja PRED vlečenjem — undo vrne točko na izhodišče (§4)
+    past.current.push({ views: d.preViews, activeView })
+    if (past.current.length > 50) past.current.shift()
+    future.current = []
+    setHistTick((t) => t + 1)
+  }
+
   /** Pikselska razdalja med dvema točkama (po dejanski resoluciji slike). */
-  const px = useCallback((a: Pt, b: Pt) => Math.hypot((b.x - a.x) * imgW, (b.y - a.y) * imgH), [imgW, imgH])
+  const px = useCallback((a: Pt, b: Pt) => {
+    if (!view) return 0
+    return Math.hypot((b.x - a.x) * view.imgW, (b.y - a.y) * view.imgH)
+  }, [view])
 
-  const cmPerPx = calib ? calib.cm / calib.px : null
+  /** R455: izračun v živo za AKTIVNI pogled. */
+  const calc = useMemo(() => (view ? calcView(view) : { pts: [] as Pt[], segs: [], totalPx: 0, totalCm: null, cmPerPx: null }), [view])
 
-  /** Izračun v živo: segmenti med zaporednimi točkami. */
-  const calc = useMemo(() => {
-    const segs = [] as { i: number; j: number; pxLen: number; cmLen: number | null; angleDeg: number; dVCm: number | null }[]
-    for (let i = 0; i + 1 < points.length; i++) {
-      const a = points[i]; const b = points[i + 1]
-      const dx = (b.x - a.x) * imgW; const dy = (b.y - a.y) * imgH
-      const pxLen = Math.hypot(dx, dy)
-      const angleDeg = Math.round((Math.atan2(dy, dx) * 180) / Math.PI * 10) / 10
-      segs.push({
-        i, j: i + 1, pxLen,
-        cmLen: cmPerPx !== null ? Math.round(pxLen * cmPerPx * 10) / 10 : null,
-        angleDeg,
-        dVCm: cmPerPx !== null ? Math.round(dy * cmPerPx * 10) / 10 : null,
-      })
-    }
-    const totalPx = segs.reduce((s, x) => s + x.pxLen, 0)
-    const totalCm = cmPerPx !== null ? Math.round(totalPx * cmPerPx * 10) / 10 : null
-    // stebri: razpon ≤ 120 cm (enako kot backend railing-layout)
-    const posts = cmPerPx !== null
-      ? Math.max(points.length >= 2 ? 2 : 0, segs.reduce((acc, s) => acc + Math.max(1, Math.ceil((s.cmLen ?? 0) / 120)) + 1, 0) - Math.max(0, segs.length - 1))
+  /** R455: primerjava vseh pogledov + zaupanje (§3). */
+  const multi = useMemo(() => {
+    const per = views.map((v) => ({ v, c: calcView(v) }))
+    const withCm = per.filter((x) => x.c.totalCm !== null && (x.c.totalCm ?? 0) > 0)
+    const lengths = withCm.map((x) => x.c.totalCm as number)
+    const mean = lengths.length > 0 ? lengths.reduce((a, b) => a + b, 0) / lengths.length : null
+    const spreadPct = lengths.length > 1 && mean
+      ? ((Math.max(...lengths) - Math.min(...lengths)) / mean) * 100
       : null
-    // stopnice: približno horizontalni segmenti + povprečna višina stopnice
-    let stairs = 0; let stairH: number | null = null
-    if (stairMode && cmPerPx !== null) {
-      const steps = segs.filter((s) => Math.abs(s.angleDeg) >= 20 && Math.abs(s.angleDeg) <= 75)
-      stairs = Math.max(1, steps.length)
-      const dvs = steps.map((s) => Math.abs(s.dVCm ?? 0)).filter((v) => v > 0)
-      if (dvs.length > 0) stairH = Math.round((dvs.reduce((a, b) => a + b, 0) / dvs.length) * 10) / 10
+    // zaupanje: kakovost + kalibracija + strinjanje pogledov (advisory, §3)
+    let conf = 85
+    const q0 = views[0]?.quality ?? null
+    if (q0?.blurry) conf -= 20
+    if (q0?.dark || q0?.bright) conf -= 10
+    if (!views[0]?.calib) conf -= 30
+    if (lengths.length > 1) {
+      if (spreadPct !== null && spreadPct <= 2) conf += 5
+      else if (spreadPct !== null && spreadPct > 5) conf -= 20
+    } else {
+      conf -= 5 // en sam pogled — manj kontrole
     }
-    const slope = segs.length === 1 ? Math.abs(segs[0].angleDeg) : null
-    return { segs, totalPx, totalCm, posts, stairs, stairH, slope }
-  }, [points, cmPerPx, imgW, imgH, stairMode])
+    conf = Math.max(5, Math.min(98, Math.round(conf)))
+    const label = conf >= 85 ? 'DOBRO' : conf >= 60 ? 'OPOZORILO' : 'NEZADOSTNO'
+    return { per, lengths, mean, spreadPct, conf, label }
+  }, [views])
 
-  /** VLM zaznava (POST /api/measurement/detect). */
+  const predlogi = useMemo(() => view?.points.filter((p) => p.src === 'PREDLOG') ?? [], [view])
+  const rocnoCnt = calc.pts.length
+
+  /** R455: sprejme VSE predloge (PREDLOG → ROCNO) na aktivnem pogledu. */
+  function acceptPredloge (): void {
+    if (!view) return
+    snapshot()
+    setViews((vs) => vs.map((v) => (v.key === view.key
+      ? { ...v, points: v.points.map((p) => (p.src === 'PREDLOG' ? { ...p, src: 'ROCNO' as const } : p)) }
+      : v)))
+    toast({ title: 'Predlogi sprejeti.', description: 'Točke so sedaj ročno potrjene in štejejo v izračun.' })
+  }
+
+  /** R455: zavrže VSE predloge na aktivnem pogledu. */
+  function rejectPredloge (): void {
+    if (!view) return
+    snapshot()
+    setViews((vs) => vs.map((v) => (v.key === view.key ? { ...v, points: v.points.filter((p) => p.src !== 'PREDLOG') } : v)))
+  }
+
+  /** VLM zaznava (POST /api/measurement/detect) — R455: točke kot PREDLOG (§2). */
   async function detect (): Promise<void> {
-    if (!photoId) {
-      toast({ title: 'Najprej shranite fotografijo.', description: 'V koraku 1 pritisnite »Naloži fotografijo«.', variant: 'destructive' })
+    if (!view) return
+    if (!view.photoId) {
+      toast({ title: 'Najprej shranite fotografijo.', description: 'Pritisnite »Naloži fotografijo«.', variant: 'destructive' })
       return
     }
     setDetecting(true)
     try {
       const res = await apiPost<{ data: { scene: string; points: Pt[]; refObjects: { x1: number; y1: number; x2: number; y2: number; estCm: number; label: string }[] } }>(
-        '/api/measurement/detect', { measurementId: photoId }
+        '/api/measurement/detect', { measurementId: view.photoId }
       )
       const d = res.data
-      setPoints((ps) => [...ps, ...d.points.map((p) => ({ x: p.x, y: p.y, label: p.label }))])
-      if (d.refObjects.length > 0) {
+      snapshot()
+      setViews((vs) => vs.map((v) => (v.key === view.key
+        ? { ...v, points: [...v.points, ...d.points.map((p) => ({ x: p.x, y: p.y, label: p.label, src: 'PREDLOG' as const }))] }
+        : v)))
+      // referenčni objekt → kalibracija (če še ni oz. ni zaklenjena)
+      let calibMsg = ''
+      if (d.refObjects.length > 0 && !view.calibLocked) {
         const r = d.refObjects[0]
-        const pxLen = Math.hypot((r.x2 - r.x1) * imgW, (r.y2 - r.y1) * imgH)
-        setCalib({ px: Math.round(pxLen), cm: r.estCm })
+        const pxLen = Math.hypot((r.x2 - r.x1) * view.imgW, (r.y2 - r.y1) * view.imgH)
+        if (pxLen > 0 && !view.calib) {
+          setViews((vs) => vs.map((v) => (v.key === view.key ? { ...v, calib: { px: Math.round(pxLen), cm: r.estCm } } : v)))
+          calibMsg = ` · kalibracija iz "${r.label}" (${r.estCm} cm)`
+        }
       }
       toast({
         title: 'Zaznava končana.',
-        description: `${d.points.length} točk${d.scene ? ` · ${d.scene}` : ''} — preglejte in po potrebi popravite.`,
+        description: `${d.points.length} predlogov točk${d.scene ? ` · ${d.scene}` : ''}${calibMsg} — predloge pregledajte, sprejmite ali popravite.`,
       })
     } catch (e) {
       toast({
@@ -289,17 +581,17 @@ export function KameraMeritevDialog ({ open, onClose, onSaved }: {
     } finally { setDetecting(false) }
   }
 
-  /** Preverjanje na strežniku (POST /api/railing-layout). */
+  /** Preverjanje na strežniku (POST /api/railing-layout) — primarni pogled. */
   async function verifyServer (): Promise<void> {
-    if (!calib || points.length < 2) {
+    if (!view || !view.calib || calc.pts.length < 2) {
       toast({ title: 'Potrebna sta kalibracija in vsaj 2 točki.', variant: 'destructive' })
       return
     }
     setBusy(true)
     try {
       const res = await apiPost<{ data: { totalLengthCm: number; posts: number; handrailM: number } }>('/api/railing-layout', {
-        points: points.map((p) => ({ x: p.x * imgW, y: p.y * imgH })),
-        calibration: calib,
+        points: calc.pts.map((p) => ({ x: p.x * view.imgW, y: p.y * view.imgH })),
+        calibration: view.calib,
       })
       setServerLayout(`Strežnik: ${fmt1(res.data.totalLengthCm / 100)} m · ${res.data.posts} stebrov · ročnik ${fmt1(res.data.handrailM)} m`)
     } catch (e) {
@@ -307,37 +599,78 @@ export function KameraMeritevDialog ({ open, onClose, onSaved }: {
     } finally { setBusy(false) }
   }
 
-  /** Potrditev in shranjevanje (POST /api/measurement/confirm). */
+  /** Končna dolžina: ročni popravek > povprečje pogledov > primarni pogled. */
+  const finalLengthCm = useMemo(() => {
+    if (overrideOn) {
+      const v = Number(overrideLen.replace(',', '.'))
+      return Number.isFinite(v) && v > 0 ? v : null
+    }
+    if (multi.mean !== null && multi.lengths.length > 1) return Math.round(multi.mean * 10) / 10
+    return calc.totalCm
+  }, [overrideOn, overrideLen, multi, calc])
+
+  /** Potrditev in shranjevanje (POST /api/measurement/confirm) — R455 razširjeno. */
   async function confirm (again: boolean): Promise<void> {
-    if (!photoId) return
-    const lengthCm = calc.totalCm
-    if (lengthCm === null || lengthCm <= 0) {
+    if (!view) return
+    if (finalLengthCm === null || finalLengthCm <= 0) {
       toast({ title: 'Manjka kalibracija ali točke.', description: 'Kalibrirajte merilo in označite vsaj 2 točki.', variant: 'destructive' })
+      return
+    }
+    if (overrideOn && overrideReason.trim().length < 3) {
+      toast({ title: 'Ročni popravek zahteva razlog.', description: 'Navedite razlog spremembe izračunane dolžine (sledljivost).', variant: 'destructive' })
       return
     }
     setBusy(true)
     try {
       await apiPost('/api/measurement/confirm', {
-        photoId,
+        photoId: views[0].photoId,
         type: stairMode ? 'NAGIB' : type,
         location: location.trim() || null,
-        lengthCm,
+        lengthCm: finalLengthCm,
         heightCm: Number(heightS.replace(',', '.')) > 0 ? Number(heightS.replace(',', '.')) : null,
-        slopeDeg: calc.slope !== null ? Math.round(calc.slope * 10) / 10 : null,
-        posts: calc.posts,
+        slopeDeg: calc.segs.length === 1 ? Math.round(calc.segs[0].angleDeg * 10) / 10 : null,
+        posts: calc.cmPerPx !== null
+          ? Math.max(calc.pts.length >= 2 ? 2 : 0, calc.segs.reduce((acc, s) => acc + Math.max(1, Math.ceil((s.cmLen ?? 0) / 120)) + 1, 0) - Math.max(0, calc.segs.length - 1))
+          : null,
         segments: calc.segs.length,
-        note: note.trim() || (stairMode && calc.stairs ? `${calc.stairs} stopnic × ${fmt1(calc.stairH ?? 0)} cm` : null),
+        note: note.trim() || (stairMode && calc.segs.length > 0 && calc.segs.every((s) => Math.abs(s.angleDeg) >= 20 && Math.abs(s.angleDeg) <= 75)
+          ? `${calc.segs.length} stopnic`
+          : null),
         projectId: projectId !== 'none' ? projectId : null,
         workOrderId: workOrderId !== 'none' ? workOrderId : null,
-        points: points.map((p) => ({ x: p.x, y: p.y })),
-        calibration: calib ? { ...calib, imgW: Math.round(imgW), imgH: Math.round(imgH) } : null,
+        points: calc.pts.map((p) => ({ x: p.x, y: p.y })),
+        calibration: view.calib ? { ...view.calib, imgW: Math.round(view.imgW), imgH: Math.round(view.imgH) } : null,
+        // R455: več pogledov (brez primarnega), kakovost, zaupanje, ročni popravek
+        views: views.length > 1
+          ? views.slice(1).map((v) => ({
+            photoId: v.photoId ?? undefined,
+            points: v.points.filter((p) => p.src !== 'PREDLOG').map((p) => ({ x: p.x, y: p.y })),
+            calibration: v.calib ? { ...v.calib, imgW: Math.round(v.imgW), imgH: Math.round(v.imgH) } : undefined,
+          }))
+          : undefined,
+        quality: views[0].quality
+          ? {
+            brightness: views[0].quality.brightness,
+            blurScore: views[0].quality.blurScore,
+            dark: views[0].quality.dark,
+            bright: views[0].quality.bright,
+            blurry: views[0].quality.blurry,
+          }
+          : undefined,
+        confidence: multi.conf,
+        manualOverride: overrideOn
+          ? { computedLengthCm: multi.mean !== null && multi.lengths.length > 1 ? Math.round(multi.mean * 10) / 10 : calc.totalCm ?? 0, reason: overrideReason.trim() }
+          : undefined,
       })
       toast({
         title: 'Meritev potrjena in shranjena.',
-        description: `${fmt1(lengthCm / 100)} m${calc.posts ? ` · ${calc.posts} stebrov` : ''} — povezano na ${projectId !== 'none' ? 'projekt' : 'fotografijo'}.`,
+        description: `${fmt1(finalLengthCm / 100)} m · zaupanje ${multi.conf} % — uporabljena bo v konfiguratorju in BOM-u.`,
       })
       if (again) {
-        setNote(''); setPoints([]); setCalibA(null); setServerLayout(null); setPhase(2)
+        setNote(''); setOverrideOn(false); setOverrideLen(''); setOverrideReason(''); setServerLayout(null)
+        setViews((vs) => vs.map((v) => ({ ...v, points: [], calib: v.calibLocked ? v.calib : null })))
+        past.current = []; future.current = []
+        setPhase(2)
       } else {
         await onSaved()
         resetAll()
@@ -354,26 +687,25 @@ export function KameraMeritevDialog ({ open, onClose, onSaved }: {
    * /api/sync ob vrnitvi signala (idempotentno — opId).
    */
   async function saveOffline (): Promise<void> {
-    if (!dataUrl) return
-    const lengthCm = calc.totalCm
+    if (!view) return
     setBusy(true)
     try {
       await queuePhoto({
-        dataUrl,
+        dataUrl: view.dataUrl,
         projectId: projectId !== 'none' ? projectId : null,
         workOrderId: workOrderId !== 'none' ? workOrderId : null,
-        note: note.trim() || (stairMode && calc.stairs ? `${calc.stairs} stopnic × ${fmt1(calc.stairH ?? 0)} cm` : null),
+        note: note.trim() || null,
         location: location.trim() || null,
         type: stairMode ? 'NAGIB' : type,
-        lengthCm: lengthCm !== null && lengthCm > 0 ? lengthCm : null,
+        lengthCm: finalLengthCm !== null && finalLengthCm > 0 ? finalLengthCm : null,
         heightCm: Number(heightS.replace(',', '.')) > 0 ? Number(heightS.replace(',', '.')) : null,
-        posts: calc.posts,
+        posts: null,
         segments: calc.segs.length,
-        slopeDeg: calc.slope !== null ? Math.round(calc.slope * 10) / 10 : null,
+        slopeDeg: calc.segs.length === 1 ? Math.round(calc.segs[0].angleDeg * 10) / 10 : null,
       })
       toast({
         title: 'Shranjeno lokalno — sinhroniziralo se bo samodejno',
-        description: `${lengthCm ? `Meritev ${fmt1(lengthCm / 100)} m in fotografija` : 'Fotografija'} bosta poslani, ko se signal vrne.`,
+        description: `${finalLengthCm ? `Meritev ${fmt1(finalLengthCm / 100)} m in fotografija` : 'Fotografija'} bosta poslani, ko se signal vrne.`,
       })
       resetAll()
       onClose()
@@ -389,16 +721,27 @@ export function KameraMeritevDialog ({ open, onClose, onSaved }: {
   }
 
   function resetAll (): void {
-    setPhase(1); setDataUrl(null); setPhotoId(null); setPoints([])
-    setCalib(null); setCalibA(null); setCalibCm(''); setNote('')
+    setPhase(1); setViews([]); setActiveView(0)
+    setCalibA(null); setCalibCm(''); setNote('')
     setLocation(''); setServerLayout(null); setStairMode(false)
     setProjectId('none'); setWorkOrderId('none')
+    setOverrideOn(false); setOverrideLen(''); setOverrideReason('')
+    past.current = []; future.current = []
   }
 
   const existingPhotos = useMemo(
     () => (photos.data?.data ?? []).filter((p) => parsePhoto(p.params) !== null).slice(0, 12),
     [photos.data]
   )
+
+  /** R455: statusni korak (5-fazni tok, §4) — izpeljan iz stanja. */
+  const stepDone = [
+    views.length > 0, // ZAJEM
+    Boolean(views[0]?.calib), // KALIBRACIJA
+    rocnoCnt >= 2, // MERITEV
+    phase > 4 || (phase === 4 && serverLayout !== null), // PREVERJANJE
+    false, // POTRDITEV (izvedeno ob shranitvi)
+  ]
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose() }}>
@@ -408,21 +751,26 @@ export function KameraMeritevDialog ({ open, onClose, onSaved }: {
           <Camera className="size-5 text-roksal-amber" aria-hidden /> Meritve s kamero
         </DialogTitle>
         <DialogDescription>
-          Fotografirajte teren, označite točke, kalibrirajte merilo — dolžine, koti in višine se izračunajo samodejno.
+          Fotografirajte teren, kalibrirajte merilo, označite točke — dolžine, koti in višine se izračunajo samodejno.
         </DialogDescription>
       </DialogHeader>
 
-      {/* indikator faz */}
-      <ol className="flex flex-wrap items-center gap-2 text-xs" aria-label="Koraki zajema">
-        {['Fotografija', 'Točke in kalibracija', 'Potrditev'].map((t, i) => (
-          <li key={t} className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 ${phase === i + 1 ? 'border-roksal-amber bg-amber-50 font-semibold text-amber-900 dark:bg-amber-950/40 dark:text-amber-200' : 'text-muted-foreground'}`}>
-            <span className={`flex size-4 items-center justify-center rounded-full text-[10px] ${phase > i + 1 ? 'bg-roksal-amber text-white' : 'bg-muted'}`} aria-hidden>{phase > i + 1 ? '✓' : i + 1}</span>
-            {t}
-          </li>
-        ))}
+      {/* R455: 5-fazni profesionalni status (§4) */}
+      <ol className="flex flex-wrap items-center gap-1.5 text-[11px]" aria-label="Status zajema">
+        {PHASES.map((t, i) => {
+          const st = phase === i + 1 ? 'active' : stepDone[i] ? 'done' : 'todo'
+          return (
+            <li key={t} className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 ${st === 'active' ? 'border-roksal-amber bg-amber-50 font-semibold text-amber-900 dark:bg-amber-950/40 dark:text-amber-200' : st === 'done' ? 'border-emerald-300 text-emerald-800 dark:border-emerald-900 dark:text-emerald-300' : 'text-muted-foreground'}`}>
+              <span className={`flex size-4 items-center justify-center rounded-full text-[10px] ${st === 'done' ? 'bg-emerald-500 text-white' : st === 'active' ? 'bg-roksal-amber text-white' : 'bg-muted'}`} aria-hidden>
+                {st === 'done' ? '✓' : i + 1}
+              </span>
+              {t.toUpperCase()}
+            </li>
+          )
+        })}
       </ol>
 
-      {/* ── FAZA 1: fotografija ── */}
+      {/* ══ FAZA 1: ZAJEM (fotografija + kakovost + vodila) ══ */}
       {phase === 1 ? (
         <div className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-2">
@@ -438,9 +786,25 @@ export function KameraMeritevDialog ({ open, onClose, onSaved }: {
 
           {camActive ? (
             <div className="space-y-2 overflow-hidden rounded-lg border bg-black">
-              <video ref={videoRef} autoPlay playsInline muted className="max-h-[360px] w-full object-contain" aria-label="Predogled kamere" />
-              <div className="flex gap-2 p-2">
+              <div className="relative">
+                <video ref={videoRef} autoPlay playsInline muted className="max-h-[360px] w-full object-contain" aria-label="Predogled kamere" />
+                {/* R455: vodila za vodenje zajema (§4) — mreža + vodoravnica + središče */}
+                {guides ? (
+                  <svg className="pointer-events-none absolute inset-0 size-full" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden>
+                    <line x1="33.33" y1="0" x2="33.33" y2="100" stroke="#ffffff88" strokeWidth="0.3" />
+                    <line x1="66.66" y1="0" x2="66.66" y2="100" stroke="#ffffff88" strokeWidth="0.3" />
+                    <line x1="0" y1="33.33" x2="100" y2="33.33" stroke="#ffffff88" strokeWidth="0.3" />
+                    <line x1="0" y1="66.66" x2="100" y2="66.66" stroke="#ffffff88" strokeWidth="0.3" />
+                    <line x1="0" y1="50" x2="100" y2="50" stroke="#f59e0bcc" strokeWidth="0.5" strokeDasharray="2 1.5" />
+                    <circle cx="50" cy="50" r="1.2" fill="none" stroke="#f59e0bcc" strokeWidth="0.4" />
+                  </svg>
+                ) : null}
+              </div>
+              <div className="flex flex-wrap gap-2 p-2">
                 <Button className="flex-1" onClick={capture}><Camera className="size-4" aria-hidden /> Zajemi</Button>
+                <Button variant="outline" onClick={() => setGuides((g) => !g)} aria-pressed={guides}>
+                  <Grid3x3 className="size-4" aria-hidden /> Vodila {guides ? 'vklop' : 'izklop'}
+                </Button>
                 <Button variant="outline" onClick={stopCamera}>Prekliči</Button>
               </div>
             </div>
@@ -497,59 +861,62 @@ export function KameraMeritevDialog ({ open, onClose, onSaved }: {
         </div>
       ) : null}
 
-      {/* ── FAZA 2: točke in kalibracija ── */}
-      {phase === 2 && dataUrl ? (
+      {/* ══ FAZA 2: KALIBRACIJA ══ */}
+      {phase === 2 && view ? (
         <div className="space-y-3">
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant="secondary" className="border-transparent bg-secondary text-secondary-foreground">
-              {photoId ? 'Fotografija shranjena ✓' : busy ? 'Nalaganje …' : 'Ni še shranjena'}
+              {view.photoId ? 'Fotografija shranjena ✓' : busy ? 'Nalaganje …' : 'Ni še shranjena'}
             </Badge>
-            {!photoId ? (
+            {view.quality ? (
+              <Badge className={view.quality.ok
+                ? 'border-transparent bg-emerald-100 text-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-300'
+                : 'border-transparent bg-amber-100 text-amber-900 dark:bg-amber-950/50 dark:text-amber-300'}>
+                Kakovost: {view.quality.ok ? 'DOBRO' : 'OPOZORILO'}
+                {view.quality.blurry ? ' · mehka' : ''}{view.quality.dark ? ' · temna' : ''}{view.quality.bright ? ' · presočena' : ''}
+              </Badge>
+            ) : null}
+            {!view.photoId ? (
               <Button size="sm" onClick={() => void uploadPhoto()} disabled={busy}>
                 {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null} Naloži fotografijo
               </Button>
             ) : null}
-            <Button size="sm" variant="outline" onClick={() => void detect()} disabled={detecting || !photoId}>
+            <Button size="sm" variant="outline" onClick={() => void detect()} disabled={detecting || !view.photoId}>
               {detecting ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Sparkles className="size-4" aria-hidden />}
-              {detecting ? 'VLM analizira (do 60 s) …' : 'Zaznaj točke samodejno'}
+              {detecting ? 'VLM analizira (do 60 s) …' : 'Zaznaj samodejno (VLM)'}
             </Button>
-            <Button size="sm" variant="outline" onClick={() => setPoints([])} disabled={points.length === 0}>
-              <Eraser className="size-4" aria-hidden /> Počisti točke
-            </Button>
-            <Button size="sm" variant="ghost" onClick={() => { setDataUrl(null); setPhotoId(null); setPhase(1) }}>
+            <Button size="sm" variant="ghost" onClick={() => { resetAll(); setPhase(1) }}>
               <Undo2 className="size-4" aria-hidden /> Druga fotografija
             </Button>
           </div>
 
+          {!online ? (
+            <p className="flex items-center gap-1.5 rounded-lg bg-amber-50 px-2 py-1.5 text-[11px] font-medium text-amber-900 dark:bg-amber-950/40 dark:text-amber-200" role="status">
+              <WifiOff className="size-3.5 shrink-0" aria-hidden />
+              Brez povezave — točke označite ročno, shranite z gumbom »Shrani (offline)« v koraku potrditve.
+            </p>
+          ) : null}
+
           <div className="mx-auto inline-block max-w-full rounded-lg border bg-muted/40 p-1">
-            {!online ? (
-              <p className="mb-2 flex items-center gap-1.5 rounded-lg bg-amber-50 px-2 py-1.5 text-[11px] font-medium text-amber-900 dark:bg-amber-950/40 dark:text-amber-200" role="status">
-                <WifiOff className="size-3.5 shrink-0" aria-hidden />
-                Brez povezave — točke označite ročno, shranite z gumbom »Shrani (offline)« v koraku potrditve.
-              </p>
-            ) : null}
-            <div className="relative inline-block cursor-crosshair" onClick={onImageClick} role="application" aria-label="Slika za označevanje merilnih točk — klik dodaja točko">
-              <img src={dataUrl} alt="Teren za merjenje" className="block h-auto max-h-[420px] w-auto max-w-full select-none" draggable={false} />
-              <svg viewBox="0 0 1 1" preserveAspectRatio="none" className="pointer-events-none absolute inset-0 size-full" aria-hidden>
-                {points.length > 1 ? (
+            <div className="relative inline-block cursor-crosshair" onClick={onImageClick} role="application" aria-label="Fotografija za kalibracijo — klik dodaja referenčni točki">
+              <img src={view.dataUrl} alt="Teren za merjenje" className="block h-auto max-h-[380px] w-auto max-w-full select-none" draggable={false} />
+              {view.points.length > 1 ? (
+                <svg viewBox="0 0 1 1" preserveAspectRatio="none" className="pointer-events-none absolute inset-0 size-full" aria-hidden>
                   <polyline
-                    points={points.map((p) => `${p.x},${p.y}`).join(' ')}
+                    points={view.points.filter((p) => p.src !== 'PREDLOG').map((p) => `${p.x},${p.y}`).join(' ')}
                     fill="none" stroke="#d97706" strokeWidth={2} vectorEffect="non-scaling-stroke"
                   />
-                ) : null}
-              </svg>
-              {points.map((p, i) => (
-                <button
+                </svg>
+              ) : null}
+              {view.points.map((p, i) => (
+                <span
                   key={`${i}-${p.x.toFixed(4)}`}
-                  type="button"
-                  title={p.label ?? `Točka ${i + 1} — klik za brisanje`}
-                  aria-label={`Točka ${i + 1}${p.label ? ` ${p.label}` : ''} — klik za brisanje`}
-                  onClick={(e) => { e.stopPropagation(); removePoint(i) }}
-                  className={`absolute size-6 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 text-[10px] font-bold leading-none ${calibA === i ? 'border-sky-500 bg-sky-500 text-white' : 'border-amber-600 bg-amber-500 text-white'}`}
+                  title={p.label ?? `Točka ${i + 1}`}
+                  className={`pointer-events-none absolute size-5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 text-[9px] font-bold leading-none ${p.src === 'PREDLOG' ? 'border-sky-600 border-dashed bg-sky-400/80 text-white' : calibA === i ? 'border-sky-500 bg-sky-500 text-white' : 'border-amber-600 bg-amber-500 text-white'}`}
                   style={{ left: `${p.x * 100}%`, top: `${p.y * 100}%` }}
                 >
                   <span className="flex size-full items-center justify-center">{i + 1}</span>
-                </button>
+                </span>
               ))}
             </div>
           </div>
@@ -560,46 +927,251 @@ export function KameraMeritevDialog ({ open, onClose, onSaved }: {
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="flex items-center gap-1.5 text-sm font-semibold">
                   <Crosshair className="size-4 text-roksal-amber" aria-hidden /> Kalibracija merila
-                </p>
-                {calib ? (
-                  <span className="text-xs text-muted-foreground">
-                    1 px = {fmt1(calib.cm / calib.px)} cm
-                    <Button size="sm" variant="ghost" className="ml-2 h-7 px-2" onClick={() => { setCalib(null); setCalibA(null) }}>
-                      <Trash2 className="size-3.5" aria-hidden /> ponastavi
+                  {/* R455: zaklep referenčne mere (§4) */}
+                  {view.calib ? (
+                    <Button
+                      size="sm" variant="ghost" className="h-7 px-2" aria-pressed={view.calibLocked}
+                      onClick={() => { snapshot(); setViews((vs) => vs.map((v) => (v.key === view.key ? { ...v, calibLocked: !v.calibLocked } : v))) }}
+                    >
+                      {view.calibLocked ? <Lock className="size-3.5" aria-hidden /> : <LockOpen className="size-3.5" aria-hidden />}
+                      {view.calibLocked ? 'zaklenjeno' : 'zakleni'}
                     </Button>
+                  ) : null}
+                </p>
+                {view.calib ? (
+                  <span className="text-xs text-muted-foreground">
+                    1 px = {fmt1(view.calib.cm / view.calib.px)} cm
+                    {!view.calibLocked ? (
+                      <Button size="sm" variant="ghost" className="ml-2 h-7 px-2" onClick={() => { snapshot(); setViews((vs) => vs.map((v) => (v.key === view.key ? { ...v, calib: null } : v))) }}>
+                        <Trash2 className="size-3.5" aria-hidden /> ponastavi
+                      </Button>
+                    ) : null}
                   </span>
                 ) : (
                   <span className="text-xs text-muted-foreground">izberite 2 točki + vnesite realno razdaljo</span>
                 )}
               </div>
-              {!calib ? (
+              {!view.calib ? (
+                <>
+                  <p className="text-[11px] text-muted-foreground">
+                    Najprej kliknite na sliko in označite 2 točki znane razdalje (npr. rob stopnice, širina vrat), nato ju izberite spodaj.
+                  </p>
+                  <div className="flex flex-wrap items-end gap-2">
+                    <div className="space-y-1">
+                      <Label htmlFor="km-calib-a" className="text-xs">1. točka</Label>
+                      <Select value={calibA !== null ? String(calibA) : 'none'} onValueChange={(v) => setCalibA(v === 'none' ? null : Number(v))}>
+                        <SelectTrigger id="km-calib-a" className="h-9 w-28" aria-label="Prva točka kalibracije"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">—</SelectItem>
+                          {view.points.map((p, i) => <SelectItem key={i} value={String(i)}>Točka {i + 1}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="km-calib-cm" className="text-xs">Realna razdalja (cm)</Label>
+                      <Input id="km-calib-cm" className="h-9 w-32" type="number" min="1" inputMode="decimal" value={calibCm} onChange={(e) => setCalibCm(e.target.value)} placeholder="npr. 110" />
+                    </div>
+                    <Button
+                      size="sm" className="h-9"
+                      disabled={calibA === null || !(Number(calibCm) > 0) || view.points.length < 2}
+                      onClick={() => {
+                        const a = view.points[calibA ?? 0]
+                        const b = view.points[calibA === view.points.length - 1 ? calibA - 1 : (calibA ?? 0) + 1]
+                        if (!a || !b) return
+                        const d = px(a, b)
+                        if (d > 0) {
+                          snapshot()
+                          setViews((vs) => vs.map((v) => (v.key === view.key ? { ...v, calib: { px: Math.round(d), cm: Number(calibCm) } } : v)))
+                        }
+                      }}
+                    >
+                      <Ruler className="size-4" aria-hidden /> Kalibriraj
+                    </Button>
+                  </div>
+                </>
+              ) : null}
+            </CardContent>
+          </Card>
+
+          <div className="flex justify-between gap-2">
+            <Button variant="ghost" onClick={onClose}>Prekliči</Button>
+            <Button onClick={() => setPhase(3)}>
+              Naprej — meritev {view.calib ? '' : '(brez kalibracije — dolžine v px)'}
+            </Button>
+          </div>
+        </div>
+      ) : null}
+
+      {/* ══ FAZA 3: MERITEV (točke + pogoji + predlogi + več pogledov) ══ */}
+      {phase === 3 && view ? (
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center gap-2">
+            {/* R455: undo/redo (§4) */}
+            <Button size="sm" variant="outline" onClick={undo} disabled={past.current.length === 0} aria-label="Razveljavi">
+              <Undo2 className="size-4" aria-hidden /> Razveljavi
+            </Button>
+            <Button size="sm" variant="outline" onClick={redo} disabled={future.current.length === 0} aria-label="Uveljavi">
+              <Redo2 className="size-4" aria-hidden /> Uveljavi
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => { snapshot(); setViews((vs) => vs.map((v) => (v.key === view.key ? { ...v, points: v.points.filter((p) => p.src !== 'PREDLOG') } : v))) }} disabled={rocnoCnt === 0}>
+              <Eraser className="size-4" aria-hidden /> Počisti točke
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => void detect()} disabled={detecting || !view.photoId}>
+              {detecting ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Sparkles className="size-4" aria-hidden />}
+              {detecting ? 'VLM …' : 'Zaznaj samodejno'}
+            </Button>
+            {/* R455: dodatni pogled (§3) */}
+            {views.length < MAX_VIEWS ? (
+              <Button size="sm" variant="outline" onClick={() => fileViewRef.current?.click()}>
+                <SquarePlus className="size-4" aria-hidden /> Dodaj pogled ({views.length}/{MAX_VIEWS})
+              </Button>
+            ) : null}
+            <input ref={fileViewRef} type="file" accept="image/*" capture="environment" className="hidden"
+              onChange={(e) => { void onFileView(e.target.files?.[0]); e.target.value = '' }} aria-label="Dodaj fotografijo istega objekta" />
+          </div>
+
+          {/* R455: zavihki pogledov */}
+          {views.length > 1 ? (
+            <div className="flex flex-wrap items-center gap-2" role="tablist" aria-label="Pogledi meritve">
+              {views.map((v, i) => (
+                <button
+                  key={v.key} type="button" role="tab" aria-selected={i === activeView}
+                  onClick={() => { setActiveView(i); setCalibA(null) }}
+                  className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition ${i === activeView ? 'border-roksal-amber bg-amber-50 text-amber-900 dark:bg-amber-950/40 dark:text-amber-200' : 'text-muted-foreground hover:border-foreground/30'}`}
+                >
+                  Pogled {i + 1}
+                  {v.calib ? ' ✓' : ' ⚠'}
+                  {i === 0 ? ' (glavni)' : ''}
+                </button>
+              ))}
+            </div>
+          ) : null}
+
+          {/* R455: predlogi VLM — vizualno ločeni, zahtevajo potrditev (§2) */}
+          {predlogi.length > 0 ? (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-sky-300 bg-sky-50 px-3 py-2 dark:border-sky-900 dark:bg-sky-950/40" role="status">
+              <p className="text-xs font-medium text-sky-900 dark:text-sky-200">
+                {predlogi.length} samodejnih predlogov točk — niso potrjeni in ne štejejo v izračun.
+              </p>
+              <div className="flex gap-2">
+                <Button size="sm" className="h-8" onClick={acceptPredloge}><Check className="size-3.5" aria-hidden /> Sprejmi vse</Button>
+                <Button size="sm" variant="outline" className="h-8" onClick={rejectPredloge}><Trash2 className="size-3.5" aria-hidden /> Zavrzi</Button>
+              </div>
+            </div>
+          ) : null}
+
+          <div className="mx-auto inline-block max-w-full rounded-lg border bg-muted/40 p-1">
+            <div
+              ref={imgBoxRef}
+              className="relative inline-block cursor-crosshair" onClick={onImageClick}
+              role="application" aria-label="Slika za označevanje merilnih točk — klik dodaja točko, vlečenje premika, klik na točko briše"
+            >
+              <img src={view.dataUrl} alt="Teren za merjenje" className="block h-auto max-h-[420px] w-auto max-w-full select-none" draggable={false} />
+              <svg viewBox="0 0 1 1" preserveAspectRatio="none" className="pointer-events-none absolute inset-0 size-full" aria-hidden>
+                {calc.pts.length > 1 ? (
+                  <polyline
+                    points={calc.pts.map((p) => `${p.x},${p.y}`).join(' ')}
+                    fill="none" stroke="#d97706" strokeWidth={2} vectorEffect="non-scaling-stroke"
+                  />
+                ) : null}
+              </svg>
+              {view.points.map((p, i) => (
+                <button
+                  key={`${i}-${p.x.toFixed(4)}`}
+                  type="button"
+                  title={p.src === 'PREDLOG' ? `PREDLOG: ${p.label ?? 'samodejna točka'} — sprejmite ali zavrzi` : `${p.label ?? `Točka ${i + 1}`} — klik za brisanje, vleci za premik`}
+                  aria-label={p.src === 'PREDLOG' ? `Predlog točke ${i + 1}${p.label ? ` ${p.label}` : ''}` : `Točka ${i + 1}${p.label ? ` ${p.label}` : ''} — klik za brisanje, vlečenje za premik`}
+                  onPointerDown={(e) => onPointDown(e, i)}
+                  onPointerMove={onPointMove}
+                  onPointerUp={() => onPointUp(i)}
+                  onPointerCancel={() => { dragRef.current = null; setLens(null) }}
+                  className={`absolute size-7 -translate-x-1/2 -translate-y-1/2 touch-none rounded-full border-2 text-[10px] font-bold leading-none ${p.src === 'PREDLOG'
+                    ? 'border-dashed border-sky-700 bg-sky-400/80 text-white'
+                    : calibA === i
+                      ? 'border-sky-500 bg-sky-500 text-white'
+                      : 'border-amber-600 bg-amber-500 text-white'}`}
+                  style={{ left: `${p.x * 100}%`, top: `${p.y * 100}%` }}
+                >
+                  <span className="flex size-full items-center justify-center">{i + 1}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* R455: povečevalno steklo med vlečenjem (§4) */}
+          {lens && view ? (
+            <div
+              className="pointer-events-none fixed z-50 size-28 rounded-full border-2 border-amber-500 bg-cover shadow-xl"
+              aria-hidden
+              style={{
+                left: `${Math.min(window.innerWidth - 120, lens.x + 24)}px`,
+                top: `${Math.max(8, lens.y - 130)}px`,
+                backgroundImage: `url(${view.dataUrl})`,
+                backgroundSize: `${(imgBoxRef.current?.clientWidth ?? 300) * 3}px auto`,
+                backgroundPosition: `${lens.x - (imgBoxRef.current?.getBoundingClientRect().left ?? 0) - 48}px ${lens.y - (imgBoxRef.current?.getBoundingClientRect().top ?? 0) - 48}px`,
+              }}
+            >
+              <span className="absolute inset-0 m-auto size-5 rounded-full border border-amber-600/70" />
+            </div>
+          ) : null}
+
+          {/* kalibracija pogleda (kompaktno — za dodatne poglede / popravke) */}
+          <Card>
+            <CardContent className="space-y-2 p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="flex items-center gap-1.5 text-sm font-semibold">
+                  <Crosshair className="size-4 text-roksal-amber" aria-hidden /> Kalibracija {views.length > 1 ? `— pogled ${activeView + 1}` : ''}
+                  {view.calib ? (
+                    <Button
+                      size="sm" variant="ghost" className="h-7 px-2" aria-pressed={view.calibLocked}
+                      onClick={() => { snapshot(); setViews((vs) => vs.map((v) => (v.key === view.key ? { ...v, calibLocked: !v.calibLocked } : v))) }}
+                    >
+                      {view.calibLocked ? <Lock className="size-3.5" aria-hidden /> : <LockOpen className="size-3.5" aria-hidden />}
+                      {view.calibLocked ? 'zaklenjeno' : 'zakleni'}
+                    </Button>
+                  ) : null}
+                </p>
+                {view.calib ? (
+                  <span className="text-xs text-muted-foreground">1 px = {fmt1(view.calib.cm / view.calib.px)} cm{!view.calibLocked ? (
+                    <Button size="sm" variant="ghost" className="ml-2 h-7 px-2" onClick={() => { snapshot(); setViews((vs) => vs.map((v) => (v.key === view.key ? { ...v, calib: null } : v))) }}>
+                      <Trash2 className="size-3.5" aria-hidden /> ponastavi
+                    </Button>
+                  ) : null}</span>
+                ) : (
+                  <span className="text-xs text-muted-foreground">označite 2 točki znane razdalje na sliki, ju izberite in kalibrirajte</span>
+                )}
+              </div>
+              {!view.calib ? (
                 <div className="flex flex-wrap items-end gap-2">
                   <div className="space-y-1">
-                    <Label htmlFor="km-calib-a" className="text-xs">1. točka</Label>
+                    <Label htmlFor="km-calib-a2" className="text-xs">1. točka</Label>
                     <Select value={calibA !== null ? String(calibA) : 'none'} onValueChange={(v) => setCalibA(v === 'none' ? null : Number(v))}>
-                      <SelectTrigger id="km-calib-a" className="h-9 w-28" aria-label="Prva točka kalibracije"><SelectValue /></SelectTrigger>
+                      <SelectTrigger id="km-calib-a2" className="h-9 w-28" aria-label="Prva točka kalibracije"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="none">—</SelectItem>
-                        {points.map((p, i) => <SelectItem key={i} value={String(i)}>Točka {i + 1}</SelectItem>)}
+                        {view.points.map((p, i) => <SelectItem key={i} value={String(i)}>Točka {i + 1}</SelectItem>)}
                       </SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-1">
-                    <Label htmlFor="km-calib-cm" className="text-xs">Realna razdalja (cm)</Label>
-                    <Input id="km-calib-cm" className="h-9 w-32" type="number" min="1" inputMode="decimal" value={calibCm} onChange={(e) => setCalibCm(e.target.value)} placeholder="npr. 110" />
+                    <Label htmlFor="km-calib-cm2" className="text-xs">Realna razdalja (cm)</Label>
+                    <Input id="km-calib-cm2" className="h-9 w-32" type="number" min="1" inputMode="decimal" value={calibCm} onChange={(e) => setCalibCm(e.target.value)} placeholder="npr. 110" />
                   </div>
                   <Button
                     size="sm" className="h-9"
-                    disabled={calibA === null || !(Number(calibCm) > 0) || points.length < 2}
+                    disabled={calibA === null || !(Number(calibCm) > 0) || view.points.length < 2}
                     onClick={() => {
-                      const a = points[calibA ?? 0]
-                      const b = points[calibA === points.length - 1 ? calibA - 1 : (calibA ?? 0) + 1]
+                      const a = view.points[calibA ?? 0]
+                      const b = view.points[calibA === view.points.length - 1 ? calibA - 1 : (calibA ?? 0) + 1]
                       if (!a || !b) return
                       const d = px(a, b)
-                      if (d > 0) setCalib({ px: Math.round(d), cm: Number(calibCm) })
+                      if (d > 0) {
+                        snapshot()
+                        setViews((vs) => vs.map((v) => (v.key === view.key ? { ...v, calib: { px: Math.round(d), cm: Number(calibCm) } } : v)))
+                      }
                     }}
                   >
-                    <Ruler className="size-4" aria-hidden /> Kalibriraj (točka {calibA !== null ? calibA + 1 : '—'} ↔ {calibA !== null && calibA < points.length - 1 ? calibA + 2 : calibA !== null ? calibA : '—'})
+                    <Ruler className="size-4" aria-hidden /> Kalibriraj
                   </Button>
                 </div>
               ) : null}
@@ -607,19 +1179,14 @@ export function KameraMeritevDialog ({ open, onClose, onSaved }: {
           </Card>
 
           {/* izračun */}
-          {points.length >= 2 ? (
+          {calc.pts.length >= 2 ? (
             <Card>
               <CardContent className="space-y-2 p-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-sm font-semibold">Izračun {cmPerPx ? '' : '(px — brez kalibracije)'}</p>
-                  <div className="flex flex-wrap gap-2">
-                    <Button size="sm" variant={stairMode ? 'default' : 'outline'} className="h-8" onClick={() => setStairMode((s) => !s)} aria-pressed={stairMode}>
-                      Stopnišče {stairMode ? 'vklop' : 'izklop'}
-                    </Button>
-                    <Button size="sm" variant="outline" className="h-8" onClick={() => void verifyServer()} disabled={!calib || busy}>
-                      {busy ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <Check className="size-3.5" aria-hidden />} Preveri na strežniku
-                    </Button>
-                  </div>
+                  <p className="text-sm font-semibold">Izračun {calc.cmPerPx ? '' : '(px — brez kalibracije)'}</p>
+                  <Button size="sm" variant={stairMode ? 'default' : 'outline'} className="h-8" onClick={() => setStairMode((s) => !s)} aria-pressed={stairMode}>
+                    Stopnišče {stairMode ? 'vklop' : 'izklop'}
+                  </Button>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-xs">
@@ -645,45 +1212,126 @@ export function KameraMeritevDialog ({ open, onClose, onSaved }: {
                 </div>
                 <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
                   <span>Skupaj: <strong className="text-foreground">{calc.totalCm !== null ? `${fmt1(calc.totalCm / 100)} m` : `${Math.round(calc.totalPx)} px`}</strong></span>
-                  {calc.posts !== null ? <span>Stebrov (≤ 120 cm): <strong className="text-foreground">{calc.posts}</strong></span> : null}
-                  {stairMode && calc.stairs > 0 ? <span>Stopnic: <strong className="text-foreground">{calc.stairs}{calc.stairH !== null ? ` × ${fmt1(calc.stairH)} cm` : ''}</strong></span> : null}
-                  {serverLayout ? <span className="text-muted-foreground">{serverLayout}</span> : null}
+                  {views.length > 1 && multi.mean !== null ? <span>Povprečje {views.length} pogledov: <strong className="text-foreground">{fmt1(multi.mean / 100)} m</strong></span> : null}
                 </div>
               </CardContent>
             </Card>
           ) : (
-            <EmptyState title="Označite točke" desc="Kliknite na sliko: vogali ograje, robovi stopnic, tla ob stebrih … Klik na točko jo izbriše." icon={Crosshair} />
+            <EmptyState
+              title={predlogi.length > 0 ? 'Sprejmite ali zavrzite predloge, ali označite točke' : 'Označite točke'}
+              desc="Kliknite na sliko: vogali ograje, robovi stopnic, tla ob stebrih … Klik na točko jo izbriše, vlečenje jo premika (s povečevalnim steklom)."
+              icon={Crosshair}
+            />
           )}
 
           <div className="flex justify-between gap-2">
-            <Button variant="ghost" onClick={onClose}>Prekliči</Button>
-            <Button onClick={() => setPhase(3)} disabled={points.length < 2}>
-              Naprej — potrditev
+            <Button variant="ghost" onClick={() => setPhase(2)}><Undo2 className="size-4" aria-hidden /> Nazaj na kalibracijo</Button>
+            <Button onClick={() => setPhase(4)} disabled={rocnoCnt < 2}>
+              Naprej — preverjanje
             </Button>
           </div>
         </div>
       ) : null}
 
-      {/* ── FAZA 3: potrditev ── */}
-      {phase === 3 && dataUrl ? (
+      {/* ══ FAZA 4: PREVERJANJE (primerjava pogledov + zaupanje + strežnik) ══ */}
+      {phase === 4 && view ? (
+        <div className="space-y-4">
+          <Card>
+            <CardContent className="space-y-3 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-sm font-semibold">Preverjanje meritve</p>
+                {/* R455: stopnja zaupanja (§3) */}
+                <Badge className={multi.label === 'DOBRO'
+                  ? 'border-transparent bg-emerald-100 text-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-300'
+                  : multi.label === 'OPOZORILO'
+                    ? 'border-transparent bg-amber-100 text-amber-900 dark:bg-amber-950/50 dark:text-amber-300'
+                    : 'border-transparent bg-red-100 text-red-900 dark:bg-red-950/50 dark:text-red-300'}>
+                  Zaupanje: {multi.conf} % · {multi.label}
+                </Badge>
+              </div>
+
+              {/* primerjava pogledov (§3) */}
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b text-left text-muted-foreground">
+                      <th scope="col" className="py-1.5 pr-3 font-medium">Pogled</th>
+                      <th scope="col" className="py-1.5 pr-3 font-medium">Dolžina</th>
+                      <th scope="col" className="py-1.5 pr-3 font-medium">Točk</th>
+                      <th scope="col" className="py-1.5 font-medium">Δ od povprečja</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {multi.per.map((x, i) => {
+                      const cm = x.c.totalCm
+                      const delta = cm !== null && multi.mean ? ((cm - multi.mean) / multi.mean) * 100 : null
+                      return (
+                        <tr key={x.v.key} className="border-b last:border-0">
+                          <td className="py-1.5 pr-3">{i + 1}{i === 0 ? ' (glavni)' : ''}</td>
+                          <td className="py-1.5 pr-3 font-semibold">{cm !== null ? `${fmt1(cm / 100)} m` : '— px'}</td>
+                          <td className="py-1.5 pr-3">{x.c.pts.length}</td>
+                          <td className="py-1.5">{delta !== null ? `${delta > 0 ? '+' : ''}${fmt1(delta)} %` : '—'}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {multi.lengths.length > 1 ? (
+                <p className="text-xs text-muted-foreground">
+                  Povprečje {fmt1((multi.mean ?? 0) / 100)} m · razpršenost {multi.spreadPct !== null ? `${fmt1(multi.spreadPct)} %` : '—'}
+                  {multi.spreadPct !== null && multi.spreadPct > 5
+                    ? ' — ⚠ ocene se preveč razlikujejo: preverite kalibracijo ali dodajte jasen pogled'
+                    : multi.spreadPct !== null && multi.spreadPct <= 2 ? ' — pogledi se odlično strinjajo' : ''}
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground">En sam pogled — za večjo zanesljivost dodajte še eno fotografijo istega objekta (v koraku Meritev).</p>
+              )}
+
+              {view.quality && !view.quality.ok ? (
+                <p className="rounded-lg bg-amber-50 px-2 py-1.5 text-[11px] font-medium text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+                  ⚠ Kakovost zajema: {view.quality.blurry ? 'mehka slika ' : ''}{view.quality.dark ? 'temna ' : ''}{view.quality.bright ? 'presočena ' : ''}
+                  — preverite točke na povečavi ali posnemite znova.
+                </p>
+              ) : null}
+
+              <div className="flex flex-wrap items-center gap-2">
+                <Button size="sm" variant="outline" onClick={() => void verifyServer()} disabled={!view.calib || busy}>
+                  {busy ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <Check className="size-3.5" aria-hidden />} Preveri na strežniku
+                </Button>
+                {serverLayout ? <span className="text-xs text-muted-foreground">{serverLayout}</span> : null}
+              </div>
+            </CardContent>
+          </Card>
+
+          <div className="flex justify-between gap-2">
+            <Button variant="ghost" onClick={() => setPhase(3)}><Undo2 className="size-4" aria-hidden /> Nazaj na točke</Button>
+            <Button onClick={() => setPhase(5)}>Naprej — potrditev</Button>
+          </div>
+        </div>
+      ) : null}
+
+      {/* ══ FAZA 5: POTRDITEV ══ */}
+      {phase === 5 && view ? (
         <div className="space-y-4">
           <Card>
             <CardContent className="space-y-2 p-3 text-sm">
               <p className="font-semibold">Povzetek meritve</p>
               <div className="grid gap-x-4 gap-y-1 text-xs sm:grid-cols-2">
-                <span>Dolžina: <strong className="text-foreground">{calc.totalCm !== null ? `${fmt1(calc.totalCm / 100)} m` : '—'}</strong></span>
+                <span>Dolžina: <strong className="text-foreground">{finalLengthCm !== null ? `${fmt1(finalLengthCm / 100)} m` : '—'}</strong></span>
                 <span>Segmentov: <strong className="text-foreground">{calc.segs.length}</strong></span>
-                <span>Stebrov: <strong className="text-foreground">{calc.posts ?? '—'}</strong></span>
-                {stairMode && calc.stairs > 0 ? <span>Stopnic: <strong className="text-foreground">{calc.stairs} × {fmt1(calc.stairH ?? 0)} cm</strong></span> : null}
-                {calc.slope !== null ? <span>Nagib: <strong className="text-foreground">{fmt1(calc.slope)}°</strong></span> : null}
-                <span>Fotografija: <strong className="text-foreground">{photoId ? `✓ (${points.length} točk)` : online ? 'ni shranjena' : 'shranila se bo ob sinhronizaciji'}</strong></span>
+                <span>Zaupanje: <strong className="text-foreground">{multi.conf} % ({multi.label})</strong></span>
+                <span>Pogledov: <strong className="text-foreground">{views.length}</strong></span>
+                <span>Fotografija: <strong className="text-foreground">{views[0].photoId ? `✓ (${rocnoCnt} točk)` : online ? 'ni shranjena' : 'shranila se bo ob sinhronizaciji'}</strong></span>
+                {multi.spreadPct !== null ? <span>Razpršenost: <strong className="text-foreground">{fmt1(multi.spreadPct)} %</strong></span> : null}
               </div>
-              {!photoId && online ? (
+              {!views[0].photoId && online ? (
                 <Button size="sm" variant="outline" onClick={() => void uploadPhoto()} disabled={busy}>
                   {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null} Najprej naloži fotografijo
                 </Button>
               ) : null}
-              {!photoId && !online ? (
+              {!views[0].photoId && !online ? (
                 <p className="text-[11px] text-muted-foreground">
                   Brez povezave — fotografija in meritev se shranita lokalno ter pošljeta ob sinhronizaciji.
                 </p>
@@ -715,23 +1363,48 @@ export function KameraMeritevDialog ({ open, onClose, onSaved }: {
             </div>
           </div>
 
+          {/* R455: ročni popravek dolžine z obveznim razlogom (§1 — sledljivost) */}
+          <Card>
+            <CardContent className="space-y-2 p-3">
+              <label className="flex items-center gap-2 text-sm font-medium">
+                <input
+                  type="checkbox" className="size-4 accent-amber-600" checked={overrideOn}
+                  onChange={(e) => { setOverrideOn(e.target.checked); if (e.target.checked && !overrideLen && finalLengthCm !== null) setOverrideLen((finalLengthCm / 100).toFixed(2)) }}
+                />
+                Ročno popravi dolžino (npr. iz merilnega traku)
+              </label>
+              {overrideOn ? (
+                <div className="grid gap-2 sm:grid-cols-[160px_1fr]">
+                  <div className="space-y-1">
+                    <Label htmlFor="km-override" className="text-xs">Dolžina (m)</Label>
+                    <Input id="km-override" type="number" min="0.1" step="any" inputMode="decimal" value={overrideLen} onChange={(e) => setOverrideLen(e.target.value)} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="km-override-reason" className="text-xs">Razlog (obvezen — sledljivost)</Label>
+                    <Input id="km-override-reason" value={overrideReason} onChange={(e) => setOverrideReason(e.target.value)} placeholder="npr. izmerjeno z laserjem na kraju samem" />
+                  </div>
+                </div>
+              ) : null}
+            </CardContent>
+          </Card>
+
           <DialogFooter className="flex-col gap-2 sm:flex-row sm:justify-between">
-            <Button variant="ghost" onClick={() => setPhase(2)}><Undo2 className="size-4" aria-hidden /> Nazaj na točke</Button>
+            <Button variant="ghost" onClick={() => setPhase(4)}><Undo2 className="size-4" aria-hidden /> Nazaj na preverjanje</Button>
             <div className="flex flex-wrap gap-2">
               {/* R439 (issue #6): brez signala — shrani v vrsto (foto + meritev) */}
               {!online ? (
                 <Button
                   variant="outline" className="border-amber-400 bg-amber-50 text-amber-900 hover:bg-amber-100 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200 dark:hover:bg-amber-950"
-                  onClick={() => void saveOffline()} disabled={busy || !dataUrl}
+                  onClick={() => void saveOffline()} disabled={busy || !view.dataUrl}
                 >
                   {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <CloudUpload className="size-4" aria-hidden />}
                   Shrani (offline)
                 </Button>
               ) : null}
-              <Button variant="outline" onClick={() => void confirm(true)} disabled={busy || !photoId || calc.totalCm === null}>
+              <Button variant="outline" onClick={() => void confirm(true)} disabled={busy || !views[0].photoId || finalLengthCm === null}>
                 Shrani in meri naprej na isti fotografiji
               </Button>
-              <Button onClick={() => void confirm(false)} disabled={busy || !photoId || calc.totalCm === null}>
+              <Button onClick={() => void confirm(false)} disabled={busy || !views[0].photoId || finalLengthCm === null}>
                 {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Check className="size-4" aria-hidden />}
                 Potrdi in shrani meritev
               </Button>

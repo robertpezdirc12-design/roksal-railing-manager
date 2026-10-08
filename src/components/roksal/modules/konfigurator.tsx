@@ -12,7 +12,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Calculator, CheckCircle2, Circle, ClipboardList, FolderKanban, Layers, Loader2,
+  Calculator, CheckCircle2, Circle, ClipboardList, Download, FolderKanban, Layers, Loader2,
   Package, Palette, Plus, RotateCcw, Ruler, Save, Trash2, TriangleAlert,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
@@ -26,7 +26,7 @@ import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { useToast } from '@/hooks/use-toast'
 import { useAppStore } from '@/lib/store'
-import { apiPost, fmtEUR, useApi } from '@/lib/api-client'
+import { apiGet, apiPost, fmtEUR, useApi } from '@/lib/api-client'
 import { EmptyState, ErrorBox, LoadingRows, PageHeader, StatusBadge } from '@/components/roksal/ui-bits'
 import { cn } from '@/lib/utils'
 
@@ -505,6 +505,7 @@ export default function KonfiguratorModule () {
                 formType={formType}
                 unit={product.unit}
                 segs2={segs2} setSegs2={setSegs2}
+                projectId={projectId}
                 segsM={segsM} setSegsM={setSegsM}
                 odbitki={odbitki} setOdbitki={setOdbitki}
                 podlaga={podlaga} setPodlaga={setPodlaga}
@@ -758,6 +759,7 @@ function StepMeritve (p: {
   familyCode: string
   formType: 'm2' | 'm' | 'kos'
   unit: string
+  projectId: string
   segs2: Seg2[]; setSegs2: (v: Seg2[]) => void
   segsM: SegM[]; setSegsM: (v: SegM[]) => void
   odbitki: Odb[]; setOdbitki: (v: Odb[]) => void
@@ -780,6 +782,45 @@ function StepMeritve (p: {
 }) {
   const { formType } = p
   const segLabel = formType === 'm' ? 'Segment ograje' : 'Segment površine'
+  const { toast } = useToast()
+  const [prefillBusy, setPrefillBusy] = useState(false)
+
+  /**
+   * R455 (issue #10 §5 — SAMODEJNI PRENOS PODATKOV): prevzeme POTRJENE meritve
+   * izbranega projekta (KAMERA + ROCNO, lengthCm > 0) in jih pretvori v segmente
+   * — brez ponovnega ročnega prepisovanja istih podatkov v drugem modulu.
+   */
+  async function prefillFromMeasurements (): Promise<void> {
+    if (!p.projectId) {
+      toast({ title: 'Najprej izberite projekt.', description: 'Meritve so vezane na projekt (1. korak).', variant: 'destructive' })
+      return
+    }
+    setPrefillBusy(true)
+    try {
+      const res = await apiGet<{ data: { id: string; type: string; source: string; lengthCm: number | null; heightCm: number | null; location: string | null }[] }>(
+        `/api/measurements?projectId=${p.projectId}`
+      )
+      const rows = (res.data ?? []).filter((m) => m.type !== 'FOTO' && (m.lengthCm ?? 0) > 0)
+      if (rows.length === 0) {
+        toast({ title: 'Ni potrjenih meritev.', description: 'Za ta projekt še ni potrdjenih meritev z dolžino — izmerite s kamero ali vnesite ročno.' })
+        return
+      }
+      const segs = rows.map((m) => ({
+        id: p.nextSegId(),
+        len: String(Math.round((m.lengthCm as number) / 10) / 100), // cm → m (2 dec.)
+        h: m.heightCm && m.heightCm > 0 ? String(Math.round(m.heightCm) / 100) : '',
+      }))
+      p.setSegsM(segs)
+      toast({
+        title: `Prevzetih ${rows.length} meritev iz projekta.`,
+        description: 'Segmenti so iz potrjenih meritev (kamera/ročno) — po potrebi jih prilagodite.',
+      })
+    } catch (e) {
+      toast({ title: 'Prevzem meritev ni uspel.', description: e instanceof Error ? e.message : undefined, variant: 'destructive' })
+    } finally {
+      setPrefillBusy(false)
+    }
+  }
 
   return (
     <section aria-label="Meritve po družini" className="space-y-4">
@@ -941,14 +982,24 @@ function StepMeritve (p: {
       {/* ── m: OGRAJA_PRECNA / OGRAJA_POKOCNA ── */}
       {formType === 'm' ? (
         <div className="space-y-2">
-          <div className="flex items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <h3 className="flex items-center gap-1.5 text-sm font-semibold"><Ruler className="size-4 text-roksal-amber" aria-hidden /> Segmenti ograje (dolžina × višina)</h3>
-            <Button
-              type="button" size="sm" variant="outline" className="h-11"
-              onClick={() => p.setSegsM([...p.segsM, { id: p.nextSegId(), len: '', h: '' }])}
-            >
-              <Plus className="size-4" aria-hidden /> Dodaj segment
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              {/* R455 (issue #10 §5): prevzem iz potrjene izmere — brez ponovnega vnosa */}
+              <Button
+                type="button" size="sm" variant="outline" className="h-11"
+                onClick={() => void prefillFromMeasurements()} disabled={prefillBusy}
+              >
+                {prefillBusy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Download className="size-4" aria-hidden />}
+                Prevzemi iz izmere
+              </Button>
+              <Button
+                type="button" size="sm" variant="outline" className="h-11"
+                onClick={() => p.setSegsM([...p.segsM, { id: p.nextSegId(), len: '', h: '' }])}
+              >
+                <Plus className="size-4" aria-hidden /> Dodaj segment
+              </Button>
+            </div>
           </div>
           <ul className="space-y-2">
             {p.segsM.map((g, i) => (
