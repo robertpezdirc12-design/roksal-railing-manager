@@ -59,3 +59,4 @@ agent-ctx/
 # orodni artefakti agenta (nikoli v repozitorij)
 /tool-results/
 /tmp-check/
+.issues/
