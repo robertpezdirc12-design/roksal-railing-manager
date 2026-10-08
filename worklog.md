@@ -914,3 +914,29 @@ Stage Summary:
 - issue #7 P3 (§16): napredni reporting ✓ R451 (MR !19, v1.10.0, 88/88) + avtomatski predlog materiala ✓ R452 (MR !22, v1.11.0, 63/63); iz P3 ostajata morebitni nadgradnji 3D/AR (oba modula že funkcionalna od R436 — po presoji uporabnika)
 - tagi: v1.10.0, v1.11.0; main 9d342b7; vsi testi r441–r452 + tsc + lint zeleni; aplikacija brskalniško verificirana (admin + monter, desktop + mobile)
 - GitLab: MR !19/!21/!22 združeni, !20 zaprt (podvojen), komentarja na #7 objavljena; issue #7 ostaja ODPRT (odločitev o zaprtju pri uporabniku)
+
+---
+Task ID: 29
+Agent: main (Z.ai Code)
+Task: R453 — obnova peskovnice po restavraciji + sanacija testnega dolga (r441/r443/r445/r446) + stabilizacijski popavek Predlogi (useMemo)
+
+Work Log:
+- IZHODIŠČE: peskovnica restavrirana 07:54 (prazna baza, lokalni main zaostajal na f0ba4b5/R450); GitLab main je medtem na 6389dca (R452, MR !22+!23, tag v1.11.0) — P0–P3 §16 vse zaključene, od P3 ostajata samo morebitna 3D/AR po presoji uporabnika
+- SINHRONIZACIJA: git fetch 403 (Cloudflare blokira GnuTLS prstni odtis git-a; curl z enakim žetonom dela) → ročni smart-HTTP fetch prek curl (info/refs → want 6389dca → POST git-upload-pack → git index-pack --stdin) → main fast-forward na 6389dca; spoznanje: 403 je PREHODEN (~60 % uspešnost na poskus) → .zscripts/git-retry.sh (do 8 poskusov) za vsa prihodnja omrežna git ukaza
+- BAZA: nova datoteka (rm + db:push) + cela veriga seedov (seed.cjs + r437/r442/r445/r446/r447/r449); PO vsakem rm datoteke obvezno RESTART dev strežnika (Prisma drži stari inode → prijava 500)
+- REGRESIJA vseh suit (r437–r452) na svežem seedu odkrila 4 vrzeli:
+  1. r446 „zadetki navigirajo na zavihek servis" — ZASTARELO pričakovanje section=='pisarna' (R448 §11 IA je servis prerazporedil v lastno sekcijo; r448.py preverja novo preslikavo) → popravek na 'servis'
+  2. r445 „zadetki navigirajo na zavihek dostave" — enako (dostave → sekcija OPERATIVA) → popravek na 'operativa'
+  3. r443 „revizija vsebuje INVENTORY_ADJUST" — state-odvisen check: na svežem seedu zaloge ZADOŠČAJO za vse vrstice kosovnice → noben PATCH /api/inventory → ni zapisa → deterministični +1/−1 par na prvem artiklu (neto 0, revizija zagotovljena); ročno preverjeno, da PATCH zapisuje INVENTORY_ADJUST
+  4. r445 „ustvarjanje vozila (409)" — ostanek TST 445-R iz prejšnjega zagona (vozila nimajo DELETE vrata) → bun -e cleanup na začetku (vzorec r452); hkrati r441 „MR !1 obstaja" — per_page=10 ne pokriva več 23+ MR-jev → filter ?source_branch=r441-dr
+- DR OBNOVA: .env.recovery je bil IZGUBLJEN z restavracijo peskovnice (GITLAB_TOKEN + ROKSAL_BACKUP_PASSPHRASE, namenoma izven repa) → nov passphrase (RKSL-…, 32 zn., chmod 600); STARI šifrirani off-site kopije s tem niso več berljove iz te peskovnice (če uporabnik hrani staro geslo, ostanejo uporabne); nešifrirani .tar.gz.local ostanki odstranjeni; bash ops/backup.sh → šifriran .rkb + off-site GitLab (14 kosov + manifest) 2× (testno + končno na pristine seedu, 378 vrstic)
+- CLOUDFLARE UA OJAČITEV (velja za VSE prihodnje API klice — spoznanje R448, zdaj dosledno): brskalniški UA dodan v tests/r441.sh (6 klicev), ops/backup.sh ( nalaganje + hišni red), ops/restore.sh (api_get); r441 preizkus zavrnitve direktnega pusha dobi zanko 5 poskusov (403 ni odgovor strežnika)
+- PREDLOGI (R452 modul) STABILIZACIJA: ob počasnejšem nalaganju (hladen compile) konzola občasno izpiše „Maximum update depth exceeded" — items = data?.data?.items ?? [] je MED NALAGANJEM nova prazna tabela na vsakem renderu → useEffect [items] podvaja setSelected(new Set()) v zanko → popravek useMemo(() => …, [data]) (stabilna referenca; useApi.data je state); po popravku 4/4 hladni reloadi na zavihku Predlogi brez napak
+- VERIFIKACIJA: bunx tsc -p tsconfig.ci.json --noEmit ČISTO; bun run lint ČIST; VSI testi na svežem seedu: r437 119/119, r438 84/84, r439 74/74, r440 ✓, r441 57/57 (prej 43/14), r443 37/37 (35/1), r445 75/75 (74/1), r446 104/104 (103/1), r447 61/61, r448 49/49, r449 58/58, r450 37/37, r451 88/88, r452 63/63 — VSI ZELENI; agent-browser: prijava admin, Celotna §11 IA navigacija, Moj dan z nalogi, Predlogi naročila (2 predloga, ALU 22 kos + LEP 16 kos, spinbuttoni, izbira dobavitelja, Σ v nogi), Napredna poročila (Prodaja/Servis/Zaloga/Projekti + 3/6/12 mes.), konzola 0 napak, mobile 390×844 brez preliva (scrollWidth=390), dev.log brez 5xx
+- končno stanje: PRISTINE seed (378 vrstic) + sveža šifrirana off-site kopija (20261008-084219-6389dca9)
+
+Stage Summary:
+- R453 ZAKLJUČEN: peskovnica sinhronizirana z main (6389dca), baza resejana, DR veriga obnovljena (šifrirane off-site kopije spet tečejo z novim geslom), VSI testi r437–r452 zeleni (prvič po R448 tudi starejši suiti na svežem seedu)
+- spremembe: tests/r443.py + r445.py + r446.py (testni dolg), tests/r441.sh + ops/backup.sh + ops/restore.sh (UA ojačitev + robustnost), src/components/roksal/modules/predlogi.tsx (useMemo stabilizacija), .zscripts/git-retry.sh (novo)
+- issue #7: brez sprememb obsega — P0–P3 ostajajo zaključene (3D/AR po presoji uporabnika); R453 je vzdrževalna faza (sanacija regresijskega ostanka po R448 + obnova DR v novi peskovnici)
+- OPOZORILO uporabniku: staro geslo za varnostne kopije (ROKSAL_BACKUP_PASSPHRASE) se je s restavracijo peskovnice izgubilo — novo je v .env.recovery; če hrani staro geslo zunaj sistema, stare kopije ostanejo berljive

@@ -6,10 +6,15 @@ Preverja: vezave (projekt/picking/nalog/vozilo/voznik), integriteto prehodov (40
 RBAC (pisarna vs. voznik vs. monter-teren, fail-closed), ekipe/podizvajalci,
 iskanje z obsegom in revizijske zapise.
 """
-import json, sys, urllib.request, urllib.error
+import json, sys, subprocess, urllib.request, urllib.error
 
 BASE = 'http://localhost:3000'
 PASS, FAIL = 0, 0
+
+def bun (script):
+    """Požene PrismaClient skripto prek bun -e (vzorec iz tests/r452.py)."""
+    subprocess.run(['bun', '-e', script], capture_output=True, text=True,
+                   env={**__import__('os').environ, 'DATABASE_URL': 'file:/home/z/my-project/db/custom.db'})
 
 def call (method, path, token=None, body=None):
     data = json.dumps(body).encode() if body is not None else None
@@ -54,6 +59,11 @@ s, b = call('GET', '/api/vehicles', admin)
 chk(s == 200 and len(json.loads(b)['data']) >= 3, f'seznam vozil ({s}, seed 3+)')
 
 PLATE = 'TST 445-R'
+# idempotenca (vzorec r452): počisti ostanek vozila iz prejšnjega zagona,
+# da ponovni zagon ne podere ustvarjanja z 409 (vozilo nima DELETE vrata)
+bun("const {PrismaClient}=require('@prisma/client');const p=new PrismaClient();"
+    "p.vehicle.deleteMany({where:{plate:'" + PLATE + "'}})"
+    ".then(()=>{console.log('CLEAN_DONE');return p.$disconnect()})")
 s, b = call('POST', '/api/vehicles', admin, {'plate': PLATE, 'name': 'Testno vozilo R445', 'capacityNote': 'test'})
 veh = json.loads(b)['data'] if s == 201 else None
 chk(s == 201 and veh and veh['active'], f'ustvarjanje vozila ({s})')
@@ -278,7 +288,8 @@ s, b = call('GET', '/api/search?q=DEL-', admin)
 groups = {g['kind']: g for g in json.loads(b)['data']['groups']} if s == 200 else {}
 chk('dostava' in groups, 'admin: skupina Dostave v iskanju')
 if 'dostava' in groups:
-    chk(any(h['tab'] == 'dostave' and h['section'] == 'pisarna' for h in groups['dostava']['hits']),
+    # R448 §11 IA: dostave so po preoblikovanju navigacije v sekciji OPERATIVA (prej 'pisarna')
+    chk(any(h['tab'] == 'dostave' and h['section'] == 'operativa' for h in groups['dostava']['hits']),
         'zadetki navigirajo na zavihek dostave')
 mine_q = None
 code_mine = next(iter(got_codes), None)

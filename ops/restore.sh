@@ -44,6 +44,8 @@ done
 api_get () { # $1 = pot (brez osnove), ostalo: curl zastavice — ponovi tudi ob PRAZNEM odgovoru
   local path="$1"; shift
   local t out target=""
+  # brskalniški UA — Cloudflare občasno blokira privzeti curl UA (spoznanje R448)
+  local ua="Mozilla/5.0 (X11; Linux x86_64; rv:132.0) Gecko/20100101 Firefox/132.0"
   t="$(gitlab_token)"
   [ -n "$t" ] || die "manjka GITLAB_TOKEN (okolje ali .env.recovery)"
   # zaznaj -o DATOTEKA (binarni prenosi) — uspešnost merimo po datoteki, ne stdout
@@ -58,11 +60,11 @@ api_get () { # $1 = pot (brez osnove), ostalo: curl zastavice — ponovi tudi ob
   for poskus in 1 2 3 4 5 6; do
     if [ -n "$target" ]; then
       rm -f "$target"
-      curl -s --max-time 90 -H "PRIVATE-TOKEN: $t" "$GITLAB_API$path" "$@" || true
+      curl -s -A "$ua" --max-time 90 -H "PRIVATE-TOKEN: $t" "$GITLAB_API$path" "$@" || true
       # uspeh: datoteka neprazna IN ni Cloudflare HTML blok strani
       if [ -s "$target" ] && ! head -c 64 "$target" | grep -q '^<'; then return 0; fi
     else
-      out="$(curl -s --max-time 60 -H "PRIVATE-TOKEN: $t" "$GITLAB_API$path" "$@" || true)"
+      out="$(curl -s -A "$ua" --max-time 60 -H "PRIVATE-TOKEN: $t" "$GITLAB_API$path" "$@" || true)"
       if [ -n "$out" ] && ! printf '%s' "$out" | head -c 64 | grep -q '^<'; then printf '%s' "$out"; return 0; fi
     fi
     log "   API ni odgovoril koristno ($path), poskus $poskus/6 čez 5s…"

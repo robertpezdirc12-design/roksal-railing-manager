@@ -344,7 +344,8 @@ s, b = call('GET', '/api/search?q=SRV-', admin)
 groups = {g['kind']: g for g in json.loads(b)['data']['groups']} if s == 200 else {}
 chk('servis' in groups, 'admin: skupina Reklamacije / Servis v iskanju')
 if 'servis' in groups:
-    chk(any(h['tab'] == 'servis' and h['section'] == 'pisarna' for h in groups['servis']['hits']),
+    # R448 §11 IA: servis je po preoblikovanju navigacije lastna sekcija (prej 'pisarna')
+    chk(any(h['tab'] == 'servis' and h['section'] == 'servis' for h in groups['servis']['hits']),
         'zadetki navigirajo na zavihek servis')
 s, b = call('GET', f"/api/search?q={claimA['code']}", admin)
 groups = {g['kind']: g for g in json.loads(b)['data']['groups']} if s == 200 else {}
