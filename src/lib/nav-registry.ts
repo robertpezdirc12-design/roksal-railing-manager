@@ -1,10 +1,14 @@
-// nav-registry — REKONSTRUKCIJA R431 (vir: R426 + R429 IA register)
+// nav-registry — REKONSTRUKCIJA R431 → IA R448 (issue #7 §11, ciljna struktura)
 // EN VIR navigacije. Čist client-safe lib — NIČ strežniških uvozov.
-// IA (R429): DANES | PROJEKTI | ZAJEM | PISARNA | PROFIL — izčrpna preslikava vseh zavihkov.
+// IA (R448 §11): DANES | PRODAJA | PROJEKTI | OPERATIVA | SKLADIŠČE | KATALOG |
+// FINANCE | SERVIS | POROČILA | VARNOST | PROFIL — 28 zavihkov v 11 sekcijah.
+// Zavihki (id + gate) so NEspremenjeni — spreminja se samo razvrstitev.
 
 import type { Permission } from './permissions-core'
 
-export type SectionId = 'danes' | 'projekti' | 'zajem' | 'pisarna' | 'profil'
+export type SectionId =
+  | 'danes' | 'prodaja' | 'projekti' | 'operativa' | 'skladisce' | 'katalog'
+  | 'finance' | 'servis' | 'porocila' | 'varnost' | 'profil'
 
 export interface TabDef {
   id: string
@@ -19,7 +23,7 @@ export interface SectionDef {
   tabs: TabDef[]
 }
 
-// MAIN (8) + MORE → 29 zavihkov v 5 sekcijah (R429: 27 → rekonstrukcija doda stranke/racuni kot prvorazredna)
+// 28 zavihkov v 11 sekcijah — ciljna poslovna IA (R448, issue #7 §11)
 export const SECTIONS: SectionDef[] = [
   {
     id: 'danes',
@@ -29,58 +33,94 @@ export const SECTIONS: SectionDef[] = [
     ],
   },
   {
-    id: 'projekti',
-    label: 'Projekti',
+    id: 'prodaja',
+    label: 'Prodaja',
     tabs: [
-      { id: 'dashboard', label: 'Preglednica', gate: 'projects.read', desc: 'KPI in stanje portfelja' },
-      { id: 'projekti', label: 'Projekti', gate: 'projects.read', desc: 'Vsi projekti z statusi' },
+      { id: 'crm', label: 'CRM', gate: 'crm.read', desc: 'Vodi in priložnosti' },
       { id: 'stranke', label: 'Stranke', gate: 'customers.read', desc: 'Seznam strank in kontakti' },
       { id: 'ponudbe', label: 'Ponudbe', gate: 'quotes.read', desc: 'Ponudbe s pozicijami in podpisi' },
-      { id: 'racuni', label: 'Računi', gate: 'invoices.read', desc: 'Računi in plačila (R425 ločitev)' },
-      { id: 'nalogi', label: 'Nalogi', gate: 'nalog.read', desc: 'Delovni nalogi — osrednji center' },
-      { id: 'teren', label: 'Teren', gate: 'projects.write', desc: 'Terenski pregled projektov' },
+      { id: 'postsig', label: 'PostSig', gate: 'deal.lock', desc: 'Zaklepanje posla po podpisu' },
     ],
   },
   {
-    id: 'zajem',
-    label: 'Zajem',
+    id: 'projekti',
+    label: 'Projekti',
     tabs: [
+      { id: 'projekti', label: 'Projekti', gate: 'projects.read', desc: 'Vsi projekti z statusi' },
       { id: 'meritve', label: 'Meritve', gate: 'measurements.read', desc: 'Merjenje ograj po terenu' },
       { id: 'foto', label: 'Foto', gate: 'measurements.write', desc: 'Foto zajem na terenu' },
       { id: 'nagib', label: 'Nagib', gate: 'projects.read', desc: 'Kalkulator nagibov stopnišč' },
       // R447 (issue #7 §5): KONFIGURATOR — nadomešča stari Kalkulator (hardcoded
       // poslovne cene — kršitev §15). Tok: produkt → izmera → izračun → paket/BOM/ponudba.
-      // Ciljna IA §11 pride v R448.
       { id: 'konfigurator', label: 'Konfigurator', gate: 'quotes.create', desc: 'Konfigurator produktov po družinah (R447)' },
-      { id: 'signatura', label: 'Signatura', gate: 'quotes.create', desc: 'Zajem podpisa stranke' },
-      { id: 'material-v5', label: 'Kosovnice', gate: 'inventory.read', desc: 'BOM kosovnice z eksplicitnimi ID (R442)' },
-      { id: 'orodjarina', label: 'Orodjarina', gate: 'equipment.read', desc: 'Merilna orodjarina' },
       { id: 'viz', label: 'Vizualizacija', gate: 'projects.read', desc: '3D vizualizacije ograj' },
       { id: 'ar', label: 'AR', gate: 'projects.read', desc: 'Dopolnjena resničnost na terenu' },
+      { id: 'signatura', label: 'Signatura', gate: 'quotes.create', desc: 'Zajem podpisa stranke' },
+      { id: 'dokumenti', label: 'Dokumenti', gate: 'documents.read', desc: 'Arhiv dokumentov' },
+      { id: 'pdf', label: 'PDF', gate: 'documents.generate', desc: 'Izvoz dokumentov v PDF' },
     ],
   },
   {
-    id: 'pisarna',
-    label: 'Pisarna',
+    id: 'operativa',
+    label: 'Operativa',
     tabs: [
-      { id: 'crm', label: 'CRM', gate: 'crm.read', desc: 'Vodi in priložnosti' },
-      { id: 'dokumenti', label: 'Dokumenti', gate: 'documents.read', desc: 'Arhiv dokumentov' },
-      { id: 'zaloga', label: 'Zaloga', gate: 'inventory.read', desc: 'Stanje zaloge in losi' },
-      { id: 'katalog', label: 'Katalog', gate: 'catalog.read', desc: 'Profili in izdelki' },
-      { id: 'logistika', label: 'Logistika', gate: 'production.manage', desc: 'Razpored in termini' },
+      { id: 'nalogi', label: 'Nalogi', gate: 'nalog.read', desc: 'Delovni nalogi — osrednji center' },
+      { id: 'teren', label: 'Teren', gate: 'projects.write', desc: 'Terenski pregled projektov' },
       // R445 (issue #7 §9): DOSTAVE — dostave, vozila, ekipe/podizvajalci.
-      // Ciljna IA §11 (sekcija OPERATIVA) pride s poznejšo restrukturacijo navigacije.
       { id: 'dostave', label: 'Dostave', gate: 'projects.read', desc: 'Dostave, vozila, ekipe (R445)' },
-      // R446 (issue #7 §10): SERVIS — garancije, reklamacije, servisni primeri.
-      // Monter vidi SAMO zavihek Servis (svoji primeri) — modul sama skrije ostala zavihka.
-      // Ciljna IA §11 pride v R448 — zavihek je ZA ZDAJ v sekciji pisarne.
-      { id: 'servis', label: 'Servis', gate: 'projects.read', desc: 'Garancije, reklamacije, servis (R446)' },
+      { id: 'logistika', label: 'Plan', gate: 'production.manage', desc: 'Razpored in termini (montaže)' },
       { id: 'proizvodnja', label: 'Proizvodnja', gate: 'production.read', desc: 'Proizvodni nalogi' },
       { id: 'galerija', label: 'Galerija', gate: 'gallery.read', desc: 'Galerija zaključenih del' },
-      { id: 'varnost', label: 'Varnost', gate: 'audit.read', desc: 'Revizijski dnevnik (R428)' },
-      { id: 'vodja-ekipa', label: 'Vodja / ekipa', gate: 'users.read', desc: 'Uporabniki in vloge' },
-      { id: 'pdf', label: 'PDF', gate: 'documents.generate', desc: 'Izvoz dokumentov v PDF' },
-      { id: 'postsig', label: 'PostSig', gate: 'deal.lock', desc: 'Zaklepanje posla po podpisu' },
+      { id: 'orodjarina', label: 'Orodjarina', gate: 'equipment.read', desc: 'Merilna orodjarina' },
+    ],
+  },
+  {
+    id: 'skladisce',
+    label: 'Skladišče',
+    tabs: [
+      { id: 'zaloga', label: 'Zaloga', gate: 'inventory.read', desc: 'Pregled/gibanja/picking + dobavitelji' },
+      { id: 'material-v5', label: 'Kosovnice', gate: 'inventory.read', desc: 'BOM kosovnice z eksplicitnimi ID (R442)' },
+    ],
+  },
+  {
+    id: 'katalog',
+    label: 'Katalog',
+    tabs: [
+      // Izdelki | Ceniki sta zavihka znotraj modula; družine (terase, ograje,
+      // fasade, pregrade, napušči, komponente) so hitri filter na Izdelkih.
+      { id: 'katalog', label: 'Katalog', gate: 'catalog.read', desc: 'Izdelki po družinah in ceniki' },
+    ],
+  },
+  {
+    id: 'finance',
+    label: 'Finance',
+    tabs: [
+      // Računi + plačila + terjatve so zavihki znotraj modula racuni.
+      { id: 'racuni', label: 'Računi', gate: 'invoices.read', desc: 'Računi, plačila in terjatve (R425)' },
+    ],
+  },
+  {
+    id: 'servis',
+    label: 'Servis',
+    tabs: [
+      // Garancije | Reklamacije | Servis so zavihki znotraj modula (R446).
+      // Monter vidi SAMO zavihek Servis (svoji primeri) — modul sama skrije ostala zavihka.
+      { id: 'servis', label: 'Servis', gate: 'projects.read', desc: 'Garancije, reklamacije, servis (R446)' },
+    ],
+  },
+  {
+    id: 'porocila',
+    label: 'Poročila',
+    tabs: [
+      { id: 'dashboard', label: 'Preglednica', gate: 'projects.read', desc: 'KPI in stanje portfelja (kokpit)' },
+    ],
+  },
+  {
+    id: 'varnost',
+    label: 'Varnost',
+    tabs: [
+      { id: 'varnost', label: 'Revizija', gate: 'audit.read', desc: 'Revizijski dnevnik (R428)' },
+      { id: 'vodja-ekipa', label: 'Uporabniki in vloge', gate: 'users.read', desc: 'Uporabniki in vloge' },
     ],
   },
   {

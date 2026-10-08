@@ -3,6 +3,8 @@
 // KATALOG — produktni model po družinah (R442, issue #7 P0)
 // Zavihka: IZDELKI (družine → izdelki → podrobnost z BOM predlogo + kalkulatorjem)
 // in CENIKI (PriceList/PriceRule — poslovne cene NISO hardcoded).
+// R448 (§11): hitri filter po družini na Izdelkih — vodoravno drseče tablete
+// s preslikavo ProductFamily.code v slovenska imena.
 // Profile (stari railing katalog) ostaja v /api/catalog za konfigurator/viz.
 
 import { useMemo, useState } from 'react'
@@ -78,6 +80,24 @@ interface PriceListRow {
   rules: PriceRuleRow[]
 }
 
+// ── R448 (issue #7 §11): preslikava kod družin v slovenska imena hitrega filtra ──
+const FAMILY_LABELS: Record<string, string> = {
+  TERASA: 'Terase',
+  OGRAJA_PRECNA: 'Ograje prečne',
+  OGRAJA_POKOCNA: 'Ograje pokončne',
+  FASADA: 'Fasade',
+  PREGRADA: 'Pregrade',
+  NAPUSC: 'Napušči',
+  STROP: 'Stropi',
+  STOPNICE: 'Stopnice',
+  VRTNA_RESITEV: 'Vrtne rešitve',
+  KOMPONENTA: 'Komponente',
+}
+
+function familyLabel (code: string, fallback: string): string {
+  return FAMILY_LABELS[code] ?? fallback
+}
+
 // ─── glavni modul ────────────────────────────────────────────────────────────
 
 export default function KatalogModule () {
@@ -124,7 +144,10 @@ function ProductsTab () {
   const canCalc = hasPerm(user?.perms, 'quotes.create')
   const canWrite = hasPerm(user?.perms, 'catalog.write')
 
-  const familyName = useMemo(() => famRows.find((f) => f.code === family)?.name ?? 'Vse družine', [famRows, family])
+  const familyName = useMemo(() => {
+    const f = famRows.find((x) => x.code === family)
+    return f ? familyLabel(f.code, f.name) : 'Vse družine'
+  }, [famRows, family])
 
   return (
     <div className="space-y-4">
@@ -143,28 +166,31 @@ function ProductsTab () {
         ) : null}
       </div>
 
-      {/* izbira družine — kokarde */}
-      <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Produktne družine">
+      {/* hitri filter po družini — vodoravno drseče tablete (R448 §11) */}
+      <div
+        className="-mx-1 flex snap-x gap-1.5 overflow-x-auto px-1 pb-1"
+        role="tablist" aria-label="Hitri filter po družini"
+      >
         <button
           role="tab" aria-selected={family === 'all'}
           onClick={() => setFamily('all')}
           className={cn(
-            'rounded-full border px-3 py-1.5 text-xs font-medium transition',
+            'shrink-0 snap-start rounded-full border px-3 py-1.5 text-xs font-medium transition',
             family === 'all' ? 'border-roksal-amber bg-roksal-amber/10 text-roksal-amber' : 'border-border bg-background text-muted-foreground hover:border-roksal-amber/50'
           )}
         >
-          Vse ({famRows.reduce((s, f) => s + f.productCount, 0)})
+          Vsi ({famRows.reduce((s, f) => s + f.productCount, 0)})
         </button>
         {famRows.map((f) => (
           <button
             key={f.code} role="tab" aria-selected={family === f.code}
             onClick={() => setFamily(f.code)}
             className={cn(
-              'rounded-full border px-3 py-1.5 text-xs font-medium transition',
+              'shrink-0 snap-start rounded-full border px-3 py-1.5 text-xs font-medium transition',
               family === f.code ? 'border-roksal-amber bg-roksal-amber/10 text-roksal-amber' : 'border-border bg-background text-muted-foreground hover:border-roksal-amber/50'
             )}
           >
-            {f.name} ({f.productCount})
+            {familyLabel(f.code, f.name)} ({f.productCount})
           </button>
         ))}
       </div>
