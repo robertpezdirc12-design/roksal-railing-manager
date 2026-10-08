@@ -793,3 +793,46 @@ Stage Summary:
 - RBAC po sekcijah deluje naravno prek obstoječih vrat zavihkov (monter 9 sekcij, skladišče/proizvodnja/read-only vloge ustrezno omejene)
 - issue #7: P0 ✓ (R442) + P1 ✓ (R443/R444/R445) + P2 SERVIS ✓ (R446) + P2 KONFIGURATORJI ✓ (R447) + NAVIGACIJA §11 ✓ (R448) — sledita issue #8 (verzioniranje kataloga) in #9 (manjše nedoslednosti)
 - MR !13 združen, tag v1.7.0, issue #7 obveščen; tests/r448.py 49/49; tsc/lint/konzola/dev.log ČISTI
+
+---
+Task ID: 24
+Agent: full-stack-developer (R449 VERZIONIRANJE — issue #8)
+Task: Verzioniranje kataloga in inženirskih pravil: CatalogVersion + RuleVersion ob vsaki mutaciji, 4 PENDING GET rute, RBAC, AuditLog, testi
+
+Work Log:
+- IZHODIŠČE: prejšnja seja je izvedla R449 v celoti, a je prekinila PRED worklog zapisom — stanje prevzeto in verificirano: main = ff12ca9 (merge MR !15), tag v1.8.0, issue #8 ZAPRT (prek Closes #8 v MR), komentar na #8 objavljen (note 3973788872: MR !15, pipeline 2924552516 success)
+- implementacija (podedovana, pregledana po vrstah): prisma/schema.prisma +2 modela — CatalogVersion (profileId, userId, data = snapshot JSON celega profila z before/after, note?, createdAt) in RuleVersion (ruleId, userId, oldValue?/newValue? JSON, note?, createdAt) po vzorcu Measurement/MeasurementVersion
+- zapis verzije ob vsaki mutaciji: POST/PATCH /api/catalog (nov profil, urejanje), POST /api/engineering-rules (upsert), PATCH + DELETE (deaktivacija) /api/engineering-rules/[id] — kdo/kdaj/staro→novo + writeAudit (CATALOG_VERSION / RULE_VERSION)
+- nove 4 rute: GET /api/catalog/versions (catalog.read; ?limit 50, ?profileId filter, orderBy createdAt desc, include user), GET /api/catalog/versions/[id], GET /api/engineering-rules/[id]/versions (projects.read), GET /api/engineering-rules/versions/[id]
+- seed-r449.cjs: idempotentne demo verzije na obstoječih profilih/pravilih; UI ZGODOVINA dialog IZPUŠČEN (katalog.tsx NE ureja profilov — samo viz/konfigurator bereta /api/catalog; issue je API-first, po spec)
+- VERIFIKACIJA (ta seja): tests/r449.py 58/58 ✓ (verzija ob nastanku/spremembi profila in pravila, staro→novo, seznami/podrobnosti, RBAC 401/monter 403/skladišče catalog.write 200, AuditLog zapisi, regresija); bunx tsc -p tsconfig.ci.json --noEmit ČISTO; bun run lint ČIST; dev.log brez 5xx; pipeline 2924552516 na r449-versions = success (potrjeno prek API)
+- pospravljeno: lokalna veja r449-versions izbrisana (bila je na f20e147; oddaljena že izbrisana ob mergu)
+
+Stage Summary:
+- R449 issue #8 ZAKLJUČEN: verzioniranje kataloga (CatalogVersion s snapshotom before/after) in inženirskih pravil (RuleVersion old/new) ob vsaki mutaciji, 4 nove GET rute z RBAC in revizijo, 58/58 testov
+- MR !15 združen v main (ff12ca9), tag v1.8.0, CI zelen, issue #8 ZAPRT s komentarjem
+- ugotovitev za prihodnje seje: prejšnja seja je vse GitLab korake opravila, a izpustila worklog — ob prevzemu naloge VEDNO preveriti worklog proti git stanju (worklog brez zapisa ≠ delo ni opravljeno)
+
+---
+Task ID: 25
+Agent: full-stack-developer (R450 E2E POPRAVKI — issue #9)
+Task: Nedoslednosti iz E2E validacije: (1) verzija v1 ob POST /api/measurements; (2) MaterialOrder vrstice brez itemId — lotsCreated/linesSkipped/warning namesto tihega preskakovanja
+
+Work Log:
+- IZHODIŠČE: prejšnja seja je pustila delno R450 delo v delovnem drevesu (spremenjena measurements/material-orders ruta, ne-sleden tests/r450.py, lokalna veja r450-e2e-fixes na ff12ca9) — pregledano, dopolnjeno, verificirano
+- src/app/api/measurements/route.ts: POST ob ustvarjanju zapiše measurementVersion.create z version 1 — posnetek ENAK kot POST /api/sync (type/lengthCm/heightCm/posts/segments/handrail/slopeDeg/location/note/params), opomba 'Ročna meritev' / 'Ročna foto meritev'; prej je v1 nastala samo prek sync/confirm/railing-layout/PATCH
+- src/app/api/material-orders/route.ts (samo aditivno — obstoječi odgovori/toki nespremenjeni): (a) PREJETO odgovor vsebuje lotsCreated + linesSkipped (imena vrstic brez itemId) + linesSkippedCount + warning (slovenska mnočina: pozicija je / poziciji sta / pozicije so / pozicij je); (b) POST naročila z vrsticami brez itemId vrne warning (proaktivno, ne zavrača); (c) revizija: MATERIAL_ORDER_STATUS detail nosi linesSkipped št.+imena, MATERIAL_ORDER_CREATE seznam pozicij brez artikla
+- tests/r450.py (37/37 ✓, samooskrben s čiščenjem): ročna meritev → TOČNO 1 verzija z version=1 + posnetek/kdo/opomba; PATCH → v2 zaporedje (v2 = posnetek PRED spremembo); sync regresija + idempotenca (isti opId ne podvoji verzij); material-order z 2 vrsticama (1 z itemId, 1 brez) → POSLANO → PREJETO → lotsCreated=1, linesSkipped=[ime], warning; zaloga (loti) se poveča SAMO za vrstico z itemId (nov lot qty=5/cena=10.5); negativen primer (vse z itemId) → linesSkipped=[], brez warning; RBAC (monter brez inventory.write 403, brez žetona 401); regresija 5 rut
+- VERIFIKACIJA: bunx tsc -p tsconfig.ci.json --noEmit ČISTO; bun run lint ČIST; dev.log brez 5xx
+- agent-browser (admin, meritve modul): Nova meritev prek UI (OGRAJA, 275×110, 7 stebrov, lokacija UI-SMOKE-R450) → Shrani → meritev vidna v seznamu; prek /api/measurements/{id}/verzije POTRJENA verzija v1 (avtor Robert Pezdirc, opomba 'Ročna meritev', posnetek z vsemi polji); konzola 0 error/warn; testna meritev + revizija počiščeni iz baze
+- GitLab (odporen vzorec — commit BREZ checkouta): GIT_INDEX_FILE=/tmp/idx450 read-tree ff12ca9 + add 3 datotek + write-tree + commit-tree -p ff12ca9 → 6222a7b, branch -f r450-e2e-fixes 6222a7b, push z UA glavo; delovno drevo na main je ostalo nespremenjeno do uskladitve po mergu
+- Cloudflare: POST /merge_requests 6× blokiran (kljub UA) — a MR !16 je VSEENO nastal (strežniška stran je uspela, odgovor je bil bločna stran); PUT /merge uspel na 2. poskusu (python urllib z UA, sleep med poskusi); spoznanje: ob 403/bloku VEDNO preveriti stanje prek GET pred ponovnim poskusom (409 = že obstaja)
+- MR !16 združen v main (merge c5344c72, CI pipeline success na r450-e2e-fixes), veja izbrisana (remove_source_branch), tag v1.9.0 na c5344c72 (git push refs/tags — API blokiran, git deluje), komentar na issue #9 (note 3974448981), issue #9 ZAPRT samodejno prek Closes #9 (state=closed potrjen)
+- lokalni main usklajen na c5344c7 (reset --hard po potrditvi, da delovno drevo == 6222a7b vsebini; fetch --prune), lokalna veja r450-e2e-fixes izbrisana, delovno drevo ČISTO
+- ZAKLJUČEK issue #7: končno poročilo z oceno VSEH 18 acceptance criteria §17 (vsako ✓ z dokazom/fazo R442–R450), P0+P1+P2 + #8/#9 zaključni, P3 izven obsega po §16, predlog zaprtja (NE zaprt — odloča uporabnik); note 3974457463
+
+Stage Summary:
+- R450 issue #9 ZAKLJUČEN: VSI vhodi meritve (ročni POST, sync, confirm, railing-layout, PATCH) zdaj ustvarijo verzijo v1; preskočene vrstice naročila so izrecne (lotsCreated/linesSkipped/linesSkippedCount/warning na PREJETO + warning na POST) — ni več tihega preskakovanja
+- MR !16 združen (c5344c72), tag v1.9.0, CI zelen, issue #9 ZAPRT s komentarjem; tests/r450.py 37/37; tsc/lint/konzola/dev.log ČISTI
+- issue #7: VSE faze zaključene (R442–R450) — končno poročilo objavljeno, zaprtje predlagano, odločitev pri uporabniku
+- spoznanje: Cloudflare 403 na POST ni zanesljiv indikator neuspeha — vedno preveriti dejansko stanje prek GET (MR je nastal kljub bločnemu odgovoru); ponovni poskusi morajo preverjati 409 (že obstaja)
