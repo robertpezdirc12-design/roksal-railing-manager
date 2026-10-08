@@ -6,7 +6,8 @@ import { hasPerm } from '@/lib/permissions-core'
 // /api/search — globalno iskanje po entitetah (route-map: GET/POST /api/search)
 // Obseg rezultatov strogo po pravicah prijavljenega uporabnika (fail-closed).
 // Vrača skupine: projekti, stranke, ponudbe, računi, nalogi, dostave,
-// reklamacije/servis (R446 — samo pisarna), zaloga, izdelki, uporabniki — z navigacijskimi podatki.
+// reklamacije/servis (R446 — samo pisarna), zaloga, izdelki, uporabniki — z
+// navigacijskimi podatki po ciljni IA R448 (section = poslovna sekcija §11).
 
 type Hit = {
   id: string
@@ -43,7 +44,7 @@ export async function GET (req: NextRequest) {
     })
     if (customers.length) groups.push({
       kind: 'stranka', label: 'Stranke',
-      hits: customers.map((c) => ({ id: c.id, label: c.name, sub: c.city ?? '—', section: 'projekti', tab: 'stranke', kind: 'stranka' })),
+      hits: customers.map((c) => ({ id: c.id, label: c.name, sub: c.city ?? '—', section: 'prodaja', tab: 'stranke', kind: 'stranka' })),
     })
   }
 
@@ -54,7 +55,7 @@ export async function GET (req: NextRequest) {
     })
     if (quotes.length) groups.push({
       kind: 'ponudba', label: 'Ponudbe',
-      hits: quotes.map((x) => ({ id: x.id, label: x.code, sub: `${x.customer?.name ?? '—'} · ${(x.total ?? 0).toLocaleString('sl-SI', { style: 'currency', currency: 'EUR' })}`, section: 'projekti', tab: 'ponudbe', kind: 'ponudba' })),
+      hits: quotes.map((x) => ({ id: x.id, label: x.code, sub: `${x.customer?.name ?? '—'} · ${(x.total ?? 0).toLocaleString('sl-SI', { style: 'currency', currency: 'EUR' })}`, section: 'prodaja', tab: 'ponudbe', kind: 'ponudba' })),
     })
   }
 
@@ -65,7 +66,7 @@ export async function GET (req: NextRequest) {
     })
     if (invoices.length) groups.push({
       kind: 'racun', label: 'Računi',
-      hits: invoices.map((x) => ({ id: x.id, label: x.code, sub: `${x.project?.customer?.name ?? '—'} · ${(x.total ?? 0).toLocaleString('sl-SI', { style: 'currency', currency: 'EUR' })}`, section: 'projekti', tab: 'racuni', kind: 'racun' })),
+      hits: invoices.map((x) => ({ id: x.id, label: x.code, sub: `${x.project?.customer?.name ?? '—'} · ${(x.total ?? 0).toLocaleString('sl-SI', { style: 'currency', currency: 'EUR' })}`, section: 'finance', tab: 'racuni', kind: 'racun' })),
     })
   }
 
@@ -76,7 +77,7 @@ export async function GET (req: NextRequest) {
     })
     if (wos.length) groups.push({
       kind: 'nalog', label: 'Delovni nalogi',
-      hits: wos.map((w) => ({ id: w.id, label: `${w.code} — ${w.title}`, sub: w.status, section: 'projekti', tab: 'nalogi', kind: 'nalog' })),
+      hits: wos.map((w) => ({ id: w.id, label: `${w.code} — ${w.title}`, sub: w.status, section: 'operativa', tab: 'nalogi', kind: 'nalog' })),
     })
   }
 
@@ -97,7 +98,7 @@ export async function GET (req: NextRequest) {
       hits: deliveries.map((d) => ({
         id: d.id, label: d.code,
         sub: `${d.project?.code ?? 'brez projekta'} · ${d.status}`,
-        section: 'pisarna', tab: 'dostave', kind: 'dostava',
+        section: 'operativa', tab: 'dostave', kind: 'dostava',
       })),
     })
   }
@@ -120,12 +121,12 @@ export async function GET (req: NextRequest) {
       ...claims.map((c) => ({
         id: c.id, label: `${c.code} — ${c.title}`,
         sub: `reklamacija · ${c.customer.name} · ${c.status}`,
-        section: 'pisarna', tab: 'servis', kind: 'reklamacija',
+        section: 'servis', tab: 'servis', kind: 'reklamacija',
       })),
       ...cases.map((c) => ({
         id: c.id, label: `${c.code} — ${c.title}`,
         sub: `servis · ${c.project.code} · ${c.status}`,
-        section: 'pisarna', tab: 'servis', kind: 'servis',
+        section: 'servis', tab: 'servis', kind: 'servis',
       })),
     ]
     if (hits.length) groups.push({ kind: 'servis', label: 'Reklamacije / Servis', hits })
@@ -138,7 +139,7 @@ export async function GET (req: NextRequest) {
     })
     if (items.length) groups.push({
       kind: 'zaloga', label: 'Zaloga',
-      hits: items.map((i) => ({ id: i.id, label: i.name, sub: `${i.sku} · ${i.qty} ${i.unit}`, section: 'pisarna', tab: 'zaloga', kind: 'zaloga' })),
+      hits: items.map((i) => ({ id: i.id, label: i.name, sub: `${i.sku} · ${i.qty} ${i.unit}`, section: 'skladisce', tab: 'zaloga', kind: 'zaloga' })),
     })
   }
 
@@ -152,7 +153,7 @@ export async function GET (req: NextRequest) {
       kind: 'izdelek', label: 'Izdelki',
       hits: products.map((p) => ({
         id: p.id, label: p.name, sub: `${p.sku} · ${p.family.name} · ${p.salePrice} €/${p.unit}`,
-        section: 'pisarna', tab: 'katalog', kind: 'izdelek',
+        section: 'katalog', tab: 'katalog', kind: 'izdelek',
       })),
     })
   }
@@ -164,7 +165,7 @@ export async function GET (req: NextRequest) {
     })
     if (users.length) groups.push({
       kind: 'uporabnik', label: 'Uporabniki',
-      hits: users.map((u) => ({ id: u.id, label: u.name, sub: `${u.email} · ${u.role}`, section: 'pisarna', tab: 'vodja-ekipa', kind: 'uporabnik' })),
+      hits: users.map((u) => ({ id: u.id, label: u.name, sub: `${u.email} · ${u.role}`, section: 'varnost', tab: 'vodja-ekipa', kind: 'uporabnik' })),
     })
   }
 
