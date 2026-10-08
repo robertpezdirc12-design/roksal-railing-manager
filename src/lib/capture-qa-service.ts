@@ -80,6 +80,7 @@ export async function loadCaptureContext (sessionId: string): Promise<CaptureCon
           order: seg.order, fromAtCm: seg.fromAtCm, toAtCm: seg.toAtCm,
           lengthCm: seg.lengthCm, heightCm: seg.heightCm, slopeDeg: seg.slopeDeg,
           angleDeg: seg.angleDeg, status: seg.status, hasGate: seg.toKind === 'VRATA',
+          fromKind: seg.fromKind, toKind: seg.toKind,
         })),
       }
     }
@@ -355,6 +356,7 @@ export async function segmentsZaProjekt (projectId: string): Promise<{ segments:
         order: seg.order, fromAtCm: seg.fromAtCm, toAtCm: seg.toAtCm,
         lengthCm: seg.lengthCm, heightCm: seg.heightCm, slopeDeg: seg.slopeDeg,
         angleDeg: seg.angleDeg, status: seg.status, hasGate: seg.toKind === 'VRATA',
+        fromKind: seg.fromKind, toKind: seg.toKind,
       })),
       measurementId: run.measurementId,
       totalCm: round1(run.segments.reduce((a, s) => a + s.lengthCm, 0)),
@@ -370,7 +372,7 @@ export async function segmentsZaProjekt (projectId: string): Promise<{ segments:
       segments: [{
         order: 0, fromAtCm: 0, toAtCm: m.lengthCm, lengthCm: m.lengthCm,
         heightCm: m.heightCm, slopeDeg: m.slopeDeg ?? 0, angleDeg: null,
-        status: 'MANUAL', hasGate: false,
+        status: 'MANUAL', hasGate: false, fromKind: 'ZACETEK', toKind: 'KONEC',
       }],
       measurementId: m.id,
       totalCm: m.lengthCm,
@@ -459,6 +461,8 @@ export async function buildProducedSnapshot (args: {
   spremembe: { opis: string; odobril: string }[]
   reason: string
   userId: string
+  /** R462 §11: eksplicitni overridi mer (ključi seg-N iz AS-DESIGNED) */
+  segmentOverrides?: { key: string; lengthCm?: number | null; heightCm?: number | null }[] | null
 }): Promise<
   | { ok: true; snapshotId: string; version: number }
   | { ok: false; status: number; error: string; detail?: string }
@@ -478,10 +482,14 @@ export async function buildProducedSnapshot (args: {
   if (!designed || !designed.data) {
     return { ok: false, status: 409, error: 'Manjka AS-DESIGNED snapshot.', detail: '§11: proizvodnja se primerja z načrtom — najprej ustvarite AS-DESIGNED.' }
   }
+  // §11: overridi veljajo SAMO na ključih iz designed-a (brez fuzzy matchinga)
+  const designedKeys = new Set(designed.data.segments.map((s) => s.key))
+  const overrides = (args.segmentOverrides ?? []).filter((o) => designedKeys.has(o.key))
   const data = buildAsProduced({
     designed: designed.data,
     bom: { code: bom.code, status: bom.status, lines: bom.lines.length, qty: bom.qty, unit: bom.unit },
     spremembe: args.spremembe.map((c) => ({ opis: c.opis, odobril: c.odobril, ts: new Date().toISOString() })),
+    segmentOverrides: overrides.length > 0 ? overrides : null,
   })
   const snap = await createTwinSnapshotRow({
     projectId: args.projectId,
@@ -599,6 +607,7 @@ export async function twinOverview (projectId: string): Promise<TwinOverview> {
         order: seg.order, fromAtCm: seg.fromAtCm, toAtCm: seg.toAtCm,
         lengthCm: seg.lengthCm, heightCm: seg.heightCm, slopeDeg: seg.slopeDeg,
         angleDeg: seg.angleDeg, status: seg.status, hasGate: seg.toKind === 'VRATA',
+        fromKind: seg.fromKind, toKind: seg.toKind,
       })),
       hasCalibration: run.calibration != null,
       hasTerrain: terrain != null && terrain.length > 0,

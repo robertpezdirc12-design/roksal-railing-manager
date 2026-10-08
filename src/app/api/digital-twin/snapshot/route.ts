@@ -114,7 +114,18 @@ export async function POST (req: NextRequest) {
       ? spremembeRaw.filter((c): c is { opis: string; odobril: string } =>
           typeof c === 'object' && c !== null && typeof (c as { opis?: unknown }).opis === 'string' && typeof (c as { odobril?: unknown }).odobril === 'string')
       : []
-    result = await buildProducedSnapshot({ projectId, bomId, spremembe, reason, userId: user.id })
+    // §11: eksplicitni overridi mer (ključi seg-N iz AS-DESIGNED)
+    const ovRaw = body.segmentOverrides
+    const segmentOverrides = Array.isArray(ovRaw)
+      ? ovRaw.filter((o): o is { key: string; lengthCm?: number | null; heightCm?: number | null } =>
+          typeof o === 'object' && o !== null && typeof (o as { key?: unknown }).key === 'string')
+          .map((o) => ({
+            key: o.key,
+            lengthCm: typeof o.lengthCm === 'number' ? o.lengthCm : null,
+            heightCm: typeof o.heightCm === 'number' ? o.heightCm : null,
+          }))
+      : null
+    result = await buildProducedSnapshot({ projectId, bomId, spremembe, reason, userId: user.id, segmentOverrides })
   } else {
     // AS_INSTALLED
     const finalRaw = body.finalSegments
