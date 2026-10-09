@@ -5,15 +5,17 @@
 //  • odpoved obvestil NIKOLI ne sme vreči napake v poslovni tok (emitEvent je ognjevaren);
 //  • dedup po `key` (upsert) + @@unique([eventId, channel, userId]) na dostavi — retry varen;
 //  • IN_APP piše v obstoječi model Notification (zvonec app-shell ostaja);
-//  • EMAIL = LOG ADAPTER (console.log + status SENT) — produkcijsko zamenljivo s SMTP
-//    providerjem prek adapter vtičnika (vstavitev sendEmail() brez spremembe klicev);
-//  • SMS/WHATSAPP = adapter NI konfiguriran → dostava SKIPPED (poslovni tok se nadaljuje).
+//  • R464 (GitHub issue #1, sklop 7): zunanji kanali gredo prek ADAPTER PLASTI
+//    (src/lib/notify-providers.ts) — provider se izbere prek okolja (NOTIFY_*_PROVIDER);
+//    privzeto vedenje ostaja: EMAIL = log adapter (SENT), SMS/WHATSAPP = kanal
+//    ni konfiguriran (SKIPPED oz. FAILED ob poskusu). Poslovni klici se NE spreminjajo.
 
 import { db } from '@/lib/db'
 import {
   NOTIFICATION_EVENT_TYPES,
   type NotificationEventType,
 } from '@/lib/notify-events'
+import { providerConfigured, resolveProvider, type ProviderDelivery } from '@/lib/notify-providers'
 
 // ─── Vhod emitEvent ──────────────────────────────────────────────────────────
 
@@ -83,27 +85,52 @@ async function prefEnabled (userId: string, event: string, channel: string): Pro
 
 /**
  * Izvede eno dostavo po kanalu in posodobi njen status.
- * IN_APP → vrstica v obstoječem modelu Notification; EMAIL → log adapter;
- * SMS/WHATSAPP → napaka 'kanal ni konfiguriran' (adapter plast).
+ * IN_APP → vrstica v obstoječem modelu Notification (notranja dostava, brez providerja);
+ * EMAIL/SMS/WHATSAPP → R464 adapter plast: provider iz okolja (privzeto EMAIL=log,
+ * SMS/WHATSAPP=nekonfiguriran kanal). Neuspešna dostava NE podre poslovnega toka —
+ * dostava dobi status FAILED, ponovni poskus prek joba obvestila-retry.
  */
 async function sendDelivery (
   deliveryId: string,
   channel: string,
   userId: string | null,
   recipient: string | null,
-  payload: EventPayload
+  payload: EventPayload,
+  ev: { key: string; type: string },
 ): Promise<'SENT' | 'FAILED'> {
   try {
     if (channel === 'IN_APP') {
       if (!userId) throw new Error('IN_APP dostava zahteva uporabnika.')
       await db.notification.create({ data: { userId, title: payload.title, body: payload.body } })
-    } else if (channel === 'EMAIL') {
-      // R438: LOG ADAPTER — produkcijsko zamenljivo s SMTP providerjem (SendGrid/SES/…)
-      // prek adapter vtičnika: sendEmail({ to, subject: title, text: body }).
-      console.log(`[notify:EMAIL] → ${recipient ?? '?'} · ${payload.title}`)
     } else {
-      // SMS/WHATSAPP: adapter ni konfiguriran (Issue #5: kanal obstaja, pošiljanje ne)
-      throw new Error('kanal ni konfiguriran')
+      const provider = resolveProvider(channel)
+      if (!provider) throw new Error('kanal ni konfiguriran')
+      // realni dostavni cilj (SAMO providerju): EMAIL uporabnika iz profila,
+      // sicer e-pošta stranke iz payloada; SMS/WHATSAPP nima številke v modelu.
+      let address: string | null = null
+      if (channel === 'EMAIL') {
+        if (userId) {
+          const u = await db.user.findUnique({ where: { id: userId }, select: { email: true } })
+          address = u?.email ?? null
+        } else {
+          address = payload.customerEmail ?? null
+        }
+      }
+      const outcome = await provider.deliver({
+        channel,
+        recipient, // prikriti naslov — edini, ki se zapisuje v dostavo/dnevnik
+        address,
+        userId,
+        title: payload.title,
+        body: payload.body,
+        eventKey: ev.key,
+        eventType: ev.type,
+        customerName: payload.customerName ?? null,
+      } satisfies ProviderDelivery)
+      if (!outcome.ok) throw new Error(outcome.error ?? `dostava prek ${provider.name} spodletela`)
+      if (outcome.providerId) {
+        console.log(`[notify] ${channel} dostavljena prek ${provider.name} (${outcome.providerId}) · ${recipient ?? '?'} · ${payload.title}`)
+      }
     }
     await db.notificationDelivery.update({
       where: { id: deliveryId },
@@ -128,7 +155,8 @@ async function createAndAttempt (
   userId: string | null,
   recipient: string | null,
   enabled: boolean,
-  payload: EventPayload
+  payload: EventPayload,
+  ev: { key: string; type: string },
 ): Promise<void> {
   // @@unique([eventId, channel, userId]) ščiti pred podvajanjem iste dostave
   const delivery = await db.notificationDelivery.create({
@@ -142,7 +170,7 @@ async function createAndAttempt (
     })
     return
   }
-  await sendDelivery(delivery.id, channel, userId, recipient, payload)
+  await sendDelivery(delivery.id, channel, userId, recipient, payload, ev)
 }
 
 // ─── emitEvent (ognjevaren) ──────────────────────────────────────────────────
@@ -196,18 +224,24 @@ export async function emitEvent (input: EmitEventInput): Promise<void> {
     // 4) dostave za uporabnike: IN_APP vedno (prek prefs), EMAIL prek prefs (privzeto IZKLOPLJEN)
     for (const uid of userEmails.keys()) {
       const inAppOn = await prefEnabled(uid, input.type, 'IN_APP')
-      await createAndAttempt(event.id, 'IN_APP', uid, null, inAppOn, payload)
+      await createAndAttempt(event.id, 'IN_APP', uid, null, inAppOn, payload, { key: event.key, type: event.type })
       const emailOn = await prefEnabled(uid, input.type, 'EMAIL')
-      await createAndAttempt(event.id, 'EMAIL', uid, emailOn ? maskEmail(userEmails.get(uid) ?? '') : null, emailOn, payload)
+      await createAndAttempt(event.id, 'EMAIL', uid, emailOn ? maskEmail(userEmails.get(uid) ?? '') : null, emailOn, payload, { key: event.key, type: event.type })
     }
 
-    // 5) zunanji prejemnik (stranka): EMAIL (maskiran naslov) + SMS/WHATSAPP SKIPPED
+    // 5) zunanji prejemnik (stranka): EMAIL + SMS/WHATSAPP prek adapter plasti —
+    //    nekonfiguriran kanal ostane SKIPPED (R438), konfiguriran provider pa se poskusi
     if (input.customerEmail) {
-      await createAndAttempt(event.id, 'EMAIL', null, maskEmail(input.customerEmail), true, payload)
+      await createAndAttempt(event.id, 'EMAIL', null, maskEmail(input.customerEmail), true, payload, { key: event.key, type: event.type })
       for (const ch of ['SMS', 'WHATSAPP'] as const) {
-        await db.notificationDelivery.create({
-          data: { eventId: event.id, channel: ch, userId: null, recipient: null, status: 'SKIPPED', error: 'kanal ni konfiguriran' },
-        }).catch(() => {}) // unique spamet → ne prekini toka
+        if (providerConfigured(ch)) {
+          await createAndAttempt(event.id, ch, null, maskEmail(input.customerEmail), true, payload, { key: event.key, type: event.type })
+            .catch(() => {}) // unique spamet → ne prekini toka
+        } else {
+          await db.notificationDelivery.create({
+            data: { eventId: event.id, channel: ch, userId: null, recipient: null, status: 'SKIPPED', error: 'kanal ni konfiguriran' },
+          }).catch(() => {}) // unique spamet → ne prekini toka
+        }
       }
     }
   } catch (err) {
@@ -243,7 +277,7 @@ export async function retryPending (limit = 50): Promise<{ processed: number; se
       data: { attempts: { increment: 1 } },
     })
     const payload = parsePayload(d.event.payload)
-    const result = await sendDelivery(d.id, d.channel, d.userId, d.recipient, payload)
+    const result = await sendDelivery(d.id, d.channel, d.userId, d.recipient, payload, { key: d.event.key, type: d.event.type })
     if (result === 'SENT') sent++
     else failed++
   }
