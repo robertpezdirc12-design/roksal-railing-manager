@@ -1221,3 +1221,23 @@ Stage Summary:
 - GitLab ostaja blokiran (tudi za branje); edini razpoložljivi oddaljeni repozitorij je GitHub
 - odprta delovna naloga: GitHub issue #1 PRODUCTION HARDENING (enoten pricing source-of-truth — odstranitev hardcoded cen iz viz-3d.tsx itd.)
 - worklog veje (r454-, r458-, r459-, r462-worklog) na GitLabu so nedosegljive za branje, a njihova vsebina je 100 % v main (preverjeno z rev-list) — ni izgube podatkov
+
+---
+Task ID: R464
+Agent: main (Z.ai Code) + podagenti 3-a/3-c/3-d/3-e/3-f
+Task: GitHub issue #1 — PRODUCTION HARDENING (P0+P1+P2, vseh 8 sklopov)
+
+Work Log:
+- §1 P0 KONFIG CENE (podagent 3-a): vse cene iz viz/3D UI v pricing core (product-core calcKonfigCena + PriceRule KONFIG:* pravila); viz-3d čista geometrija; POST /api/price-lists/calculate; test r464-pricing 93/93; sprememba cenika se pozna v izračunu
+- §4 P1 KONKURENČNOST (3-c + main): runStockTx (interaktivna transakcija + procesna ključavnica + retry P2034/P1008/P2024/SQLITE_BUSY); atomarne pogojne posodobitve z WHERE invariantami; vrstične ključavnice (no-op increment, sortirano — brez deadlockov, sqlite+PG); REVIZIJA V TRANSAKCIJI (writeAudit sprejme tx klienta — prej je bila izven in je pod neurjem povzročala P1008/500); test r464-concurrency 56/56 (neurje 10 vzporednih rezervacij, dvojna sprostitev/zaključek, OD scenariji)
+- §7 P2 NOTIFIKACIJE (3-d): adapter plast emitEvent() → resolveProvider(channel) ← okolje (NOTIFY_EMAIL_PROVIDER=log|smtp|webhook|none, NOTIFY_SMS/WHATSAPP_PROVIDER, NOTIFY_WEBHOOK_URL, SMTP_* stub); webhook provider (global fetch, timeout, maskirani prejemniki v dnevnikih); dedup/retry/prefs ohranjeni; neuspešna dostava ne podre poslovnega toka; test r464-notifications 53/53
+- §5 P1 DECIMAL FINANCE (3-e + main): 21 denarnih polj Decimal(12,2); Prisma.Decimal.toJSON → number (JSON meja ostane številska); .toNumber() na aritmetičnih mejah (pdf, eSLOG, dashboard, reconciliation, reports…); poslovni rezultati identični
+- §2 P0 POSTGRESQL: provider postgresql; veriga migracij 20261009000000_r464_init (80 tabel, from-empty); produkcija IZKLJUČNO prisma migrate deploy; db:push zavrne z opozorilom (db:push:force za razvoj/recovery); embedded-postgres 18 za razvoj (scripts/dev-db.mjs, db:up/db:down, ICU60 knjižnice); vsi testi provider-agnostični (TEST_DB_URL); backup/DR provider-agnostičen (3-f: ops/export-db.mjs prek Prisma, PG-NOTES, restore --verify, r441 53/53); popravljeni 3 pravi hrošči: shallow klon (git fetch --unshallow), uhod GitHub PAT na GitLab API, backup root v standalone
+- §6 P1 BUILD: ignoreBuildErrors ODKRIT (next build pade ob TS napaki); standalone build zagnan + testiran
+- §3 P0 CI: .github/workflows/ci.yml — quality (tsc+lint) + build (strog) + migrations (svež PG izključno iz repota+migracij+seed) + regression (5 grup, 27 suite-ov, PostgreSQL service); tests/run-all.sh + tests/ci-matrix.sh
+- POPESTVEK PostgreSQL specifika: contains → mode insensitive (PG je case-sensitive, SQLite ni bil — iskanja); NAR številčenje → trajni Setting counter z FOR UPDATE zaklepom + inicializacija iz obstoječih+revizijskih kod (recikliranje kod dokumentov je bilo poslovna napaka)
+- REGRESIJA FINAL: 27/27 suite-ov zelenih, 1445 kontrol, 0 padlih (produkcijski build, PostgreSQL, sveža baza iz migracij + 7 seedov); tsc 0 napak; lint čisto
+
+Stage Summary:
+- Issue #1 POPOLNOMA izveden: P0 (1,2,3) + P1 (4,5,6) + P2 (7) ✓; P2 §8 (distributed rate limiting) = sprejeta strategija: Vercel hobby = ena regija/en proces → process-local limiter učinkovit; za multi-instanco je centralizacija na infrastrukturi (documented in DEPLOYMENT.md)
+- Deliveroti: v1.21.0 · dokumentacija DEPLOYMENT.md + RECOVERY.md §9 · CI z obveznim regression gateom
