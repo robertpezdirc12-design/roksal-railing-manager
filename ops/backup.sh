@@ -1,11 +1,16 @@
 #!/usr/bin/env bash
-# ops/backup.sh — varnostna kopija Roksal Manager (R441 / issue #3, točki 2–4).
+# ops/backup.sh — varnostna kopija Roksal Manager (R441 / issue #3, točki 2–4;
+# R464: provider-agnostično — PostgreSQL primarni, SQLite združljivost ohranjena).
 #
 # Kaj vsebuje ena kopija (šifrirani .rkb = tar.gz):
 #   • git.bundle   — CEL repozitorij: vsa zgodovina, veje, tagi, Prisma migrations, CI
-#   • db/custom.db — dosleden posnetek baze (SQLite online backup API — varno ob delujoči aplikaciji)
-#   • export/*.json — strojno berljiv export vseh tabel (brez baze obnovljivi podatki)
-#   • manifest.json — časi, SHA-256 kontrolne vsote, števci vrstic, prstni odtis sheme
+#   • db/          — SQLite: dosleden posnetek custom.db (online backup API)
+#                    PostgreSQL: PG-NOTES.txt (razlaga — pg_dump ni na voljo,
+#                    nosilec podatkov je export/*.json) + schema.prisma (pri obeh)
+#   • export/*.json — strojno berljiv export VSEH modelov po Prisma shemi
+#                    (ops/export-db.mjs — deluje za PG in SQLite)
+#   • manifest.json — časi, SHA-256 kontrolne vsote, števci vrstic, prstni odtis
+#                     sheme (sha256 prisma/schema.prisma), provider
 #
 # Šifriranje: AES-256-CBC + PBKDF2 (200 000 iteracij). Geslo IZKLJUČNO iz okolja
 # ROKSAL_BACKUP_PASSPHRASE ali .env.recovery (gitignored) — brez gesla je kopija neuporabna.
@@ -14,6 +19,8 @@
 # z istim žetonom; brez gesla neuporabna — geslo hranimo ločeno, glej docs/SECRETS.md).
 #
 # Uporaba:  ops/backup.sh [--local-only] [--keep N]
+#          (baza se izbere iz ROKSAL_DATABASE_URL oz. DATABASE_URL;
+#           brez URL-ja zgodovinska privzeta SQLite pot db/custom.db)
 # Izhod (stdout): JSON povzetek (za dnevnik joba varnostna-kopija)
 
 set -euo pipefail
@@ -32,7 +39,18 @@ done
 
 T0="$(date +%s)"
 TS="$(date +%Y%m%d-%H%M%S)"
-[ -f "$DB_PATH" ] || die "baza ne obstaja: $DB_PATH"
+
+# ── R464: izbira baze iz okolja — provider-agnostično ────────────────────────
+#   1) ROKSAL_DATABASE_URL, 2) DATABASE_URL, 3) zgodovinska SQLite pot.
+DB_URL="${ROKSAL_DATABASE_URL:-${DATABASE_URL:-}}"
+if [ -z "$DB_URL" ]; then
+  DB_URL="file:${ROKSAL_DB_PATH:-$ROOT_DIR/db/custom.db}"
+fi
+case "$DB_URL" in
+  postgres://*|postgresql://*) DB_PROVIDER="postgresql" ;;
+  file:*) DB_PROVIDER="sqlite"; DB_PATH="${DB_URL#file:}" ;;
+  *) die "nepodprt DATABASE_URL (pričakovan postgresql:// ali file:): ${DB_URL%%\?*}" ;;
+esac
 mkdir -p "$BACKUP_DIR"
 
 GIT_SHA="$(git -C "$ROOT_DIR" rev-parse HEAD)"
@@ -46,9 +64,16 @@ mkdir -p "$STAGE/git"
 git -C "$ROOT_DIR" bundle create "$STAGE/git/git.bundle" --all --quiet
 BUNDLE_SHA="$(sha256_of "$STAGE/git/git.bundle")"
 
-log "2/6 posnetek baze (SQLite online backup — varen med delovanjem)…"
+log "2/6 posnetek baze (provider: $DB_PROVIDER)…"
 mkdir -p "$STAGE/db"
-python3 - "$DB_PATH" "$STAGE/db/custom.db" << 'PYEOF'
+# Prisma shema arhiviramo pri OBEH providerjih: (a) kontrolna vsota prstnega
+# odtisa v manifestu se nanaša natančno nanjo (git bundle vsebuje le commite,
+# delovno drevo pa je ob kopiranju lahko pred commitom), (b) je pri obnovi
+# PG baze natančen vir resnice za `prisma migrate deploy` / `db push`.
+cp "$ROOT_DIR/prisma/schema.prisma" "$STAGE/db/schema.prisma"
+if [ "$DB_PROVIDER" = "sqlite" ]; then
+  [ -f "$DB_PATH" ] || die "baza ne obstaja: $DB_PATH"
+  python3 - "$DB_PATH" "$STAGE/db/custom.db" << 'PYEOF'
 import sqlite3, sys
 src, dst = sys.argv[1], sys.argv[2]
 s = sqlite3.connect(f"file:{src}?mode=ro", uri=True)
@@ -57,28 +82,66 @@ with d:
     s.backup(d)  # dosleden posnetek tudi ob vzporednih pisanjih
 d.close(); s.close()
 PYEOF
-DB_SHA="$(sha256_of "$STAGE/db/custom.db")"
-DB_BYTES="$(stat -c%s "$STAGE/db/custom.db")"
+  DB_SHA="$(sha256_of "$STAGE/db/custom.db")"
+  DB_BYTES="$(stat -c%s "$STAGE/db/custom.db")"
+  DB_BLOCK="{ \"provider\": \"sqlite\", \"bytes\": $DB_BYTES, \"sha256\": \"$DB_SHA\""
+else
+  # PostgreSQL: pg_dump NI na voljo v peskovnici → RAW posnetek izpuščamo.
+  # Nosilec podatkov je export/*.json (korak 3); PG-NOTES.txt razloži obnovo.
+  # URL zapišemo SANITIZIRANO (geslo nikoli v manifest — ta ostaja tudi v
+  # nešifriranih --local-only kopijah).
+  SAN_DB_URL="$(printf '%s' "$DB_URL" | sed -E 's#(postgres(ql)?://[^:/@]+):[^@]*@#\1:***@#')"
+  cat > "$STAGE/db/PG-NOTES.txt" << EOF
+PostgreSQL kopija — RAW posnetek baze NI vključen.
 
-log "3/6 strojno berljiv JSON export vseh tabel…"
+V peskovniku (in minimalnih CI okoljih) orodje pg_dump ni na voljo, zato ta
+paket ne vsebuje binarnega/neposrednega posnetka baze. Nosilec PODATKOV je:
+
+  export/<Model>.json  — vse vrstice vseh modelov po Prisma shemi
+                         (izvozio jih je ops/export-db.mjs prek PrismaClient)
+  db/schema.prisma     — natančna shema, iz katere je bil izvoz narejen
+                         (SHA-256 = manifest.db.schemaFingerprint)
+  git/git.bundle       — cel repozitorij vključno s Prisma migracijami
+
+Obnova (GLEJ docs/RECOVERY.md, razdelek R464):
+  1. git clone iz git/git.bundle
+  2. bun install && DATABASE_URL=<ciljni-PG> bunx prisma migrate deploy
+     (ali: bunx prisma db push db/schema.prisma — enaka vsebina kot v repu)
+  3. uvoz export/*.json prek Prisma (vsak model: createMany po vrstnem redu
+     brez odvisnosti — ali namenski uvozni skript)
+
+Izdelano: $(date -u +%Y-%m-%dT%H:%M:%SZ) · git $GIT_SHA ($GIT_BRANCH)
+DATABASE_URL ob izdelavi (sanitiziran): $SAN_DB_URL
+EOF
+  DB_BLOCK="{ \"provider\": \"postgresql\", \"databaseUrl\": \"$SAN_DB_URL\""
+fi
+
+log "3/6 strojno berljiv JSON export vseh tabel ($DB_PROVIDER)…"
 mkdir -p "$STAGE/export"
-EXPORT_META="$(python3 "$OPS_DIR/export-db.py" "$STAGE/db/custom.db" "$STAGE/export")"
+EXPORT_SUMMARY="$(DATABASE_URL="$DB_URL" bun "$OPS_DIR/export-db.mjs" "$STAGE/export")"
+[ -f "$STAGE/export/_meta.json" ] || die "export-db.mjs ni ustvaril _meta.json"
+log "   $(printf '%s' "$EXPORT_SUMMARY" | python3 -c "
+import json, sys
+m = json.load(sys.stdin)
+print(f\"{m['tableCount']} tabel, {sum(m['rowCounts'].values())} vrstic (provider: {m['provider']})\")")"
 
 log "4/6 manifest s kontrolnimi vsotami…"
 SCHEMA_SHA="$(sha256_of "$ROOT_DIR/prisma/schema.prisma")"
-EXPORT_SHA="$( (cd "$STAGE/export" && sha256sum -- *) | sha256sum | cut -d' ' -f1)"
+# agregat exporta: sha256sum vrstic, sortiranih po C kolaciji (deterministično
+# ne glede na locale lupine) — isto formulo preverja restore.sh
+EXPORT_SHA="$( (cd "$STAGE/export" && sha256sum -- * | LC_ALL=C sort) | sha256sum | cut -d' ' -f1)"
 cat > "$STAGE/manifest.json" << EOF
 {
   "created": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
   "host": "$(hostname -s)",
   "app": { "name": "Roksal Railing Manager", "version": "0.2.1" },
   "git": { "sha": "$GIT_SHA", "branch": "$GIT_BRANCH", "bundleSha256": "$BUNDLE_SHA" },
-  "db": { "bytes": $DB_BYTES, "sha256": "$DB_SHA", "schemaPrismaSha256": "$SCHEMA_SHA" },
+  "db": $DB_BLOCK, "schemaPrismaSha256": "$SCHEMA_SHA" },
   "export": { "aggregateSha256": "$EXPORT_SHA" },
   "retention": { "localKeep": $KEEP }
 }
 EOF
-# števci vrstic iz export _meta (isti posnetek kot custom.db)
+# števci vrstic + prstni odtis sheme iz export _meta (isti posnetek kot baza)
 python3 - "$STAGE" << 'PYEOF'
 import json, sys
 stage = sys.argv[1]
@@ -129,7 +192,7 @@ else
     OFFSITE_NOTE="izpuščeno — manjka GITLAB_TOKEN"
   else
     OFFSITE_VERSION="$TS-$SHORT_SHA"
-    # Cloudflare občasno blokira IP peskovnice glede na velikost zahteve —
+    # Cloudflare občasno blokira IP peskovnine glede na velikost zahteve —
     # zato kopijo naložimo v kosih po 128 KiB z ročnimi poskusi ponovitve
     # + stranski manifest za ponovno sestavljanje (brez skrivnosti).
     CHUNK_DIR="$(mktemp -d)"
@@ -203,7 +266,13 @@ python3 -c "
 import json
 m = json.load(open('$STAGE/manifest.json'))
 s = json.load(open('$BACKUP_DIR/last-backup.json'))
-s['manifest'] = { 'dbBytes': m['db']['bytes'], 'tableCount': m['db']['tableCount'],
-                  'totalRows': sum(m['db']['rowCounts'].values()) }
+db = m['db']
+man = { 'provider': db.get('provider', 'sqlite'), 'tableCount': db['tableCount'],
+        'totalRows': sum(db['rowCounts'].values()) }
+if 'bytes' in db: man['dbBytes'] = db['bytes']  # le SQLite (RAW posnetek)
+s['manifest'] = man
+# povzetek shranimo TUDI v datoteko (status za operativne preverbe/teste)
+with open('$BACKUP_DIR/last-backup.json', 'w', encoding='utf-8') as fh:
+    json.dump(s, fh, ensure_ascii=False, indent=2)
 print(json.dumps(s, ensure_ascii=False))
 "

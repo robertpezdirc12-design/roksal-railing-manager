@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ops/restore.sh — obnova/preverba varnostne kopije (R441 / issue #3).
+# ops/restore.sh — obnova/preverba varnostne kopije (R441 / issue #3; R464: PG).
 #
 # Načini:
 #   ops/restore.sh --list-remote
@@ -9,12 +9,22 @@
 #       OBNOVA V IZOLACIJO + preverba (brez dotika delujoče aplikacije):
 #         1. dešifriranje (zahteva ROKSAL_BACKUP_PASSPHRASE)
 #         2. kontrolne vsote SHA-256 iz manifest.json
+#            (git.bundle + export agregat + db/custom.db za SQLite kopije)
 #         3. git clone iz git.bundle → fsck + ujemanje HEAD SHA
-#         4. baza: prstni odtis sheme + števci vrstic proti manifestu
+#         4. baza: prstni odtis sheme + števci vrstic
+#              SQLite (zgodovinske kopije): iz db/custom.db (sqlite_master)
+#              PostgreSQL (R464): export/_meta.json + DEJANSKO preštete vrstice
+#                v export/*.json, prstni odtis = sha256(db/schema.prisma);
+#                če je živa baza dosegljiva, se izvede še informativno
+#                navzkrižno preverbo prek ops/export-db.mjs (v temp)
 #       Izhod: JSON { ok, checks: [...], durationSec } + izhodna koda 0/1.
 #
 #   ops/restore.sh --target-dir DIR [--file KOPIJA.rkb]
-#       DEJANSKA obnova v podano mapo (baza + izvorna koda iz bundle).
+#       DEJANSKA obnova v podano mapo:
+#         SQLite: baza (custom.db) + izvorna koda iz bundle
+#         PostgreSQL (R464): export/*.json + schema.prisma + manifest
+#         (PostgreSQL se nato obnovi z `prisma migrate deploy` + uvozom JSON —
+#          docs/RECOVERY.md, razdelek R464)
 #
 # Privzeta kopija: zadnja lokalna (db/backups/*.rkb). Brez lokalne: --remote.
 
@@ -198,7 +208,7 @@ mkdir -p "$WORK/vsebina"
 tar -xzf "$WORK/kopija.tar.gz" -C "$WORK/vsebina"
 [ -f "$WORK/vsebina/manifest.json" ] || die "manjka manifest.json — kopija ni veljavna"
 python3 - "$WORK/vsebina" << 'PYEOF' || die "kontrolne vsote SE NE UJEMAJO"
-import hashlib, json, sys
+import hashlib, json, os, sys
 base = sys.argv[1]
 def sha(p):
     h = hashlib.sha256()
@@ -209,8 +219,21 @@ def sha(p):
 m = json.load(open(f"{base}/manifest.json", encoding="utf-8"))
 checks = [
     ("git.bundle", sha(f"{base}/git/git.bundle") == m["git"]["bundleSha256"]),
-    ("db/custom.db", sha(f"{base}/db/custom.db") == m["db"]["sha256"]),
 ]
+# R464: export/*.json je pri PostgreSQL nosilec podatkov — agregatna kontrolna
+# vsota (ista deterministična formula kot v backup.sh: sha256sum vrstic,
+# sortiranih po C kolaciji, spet zloženih skozi sha256)
+if "export" in m and "aggregateSha256" in m["export"] and os.path.isdir(f"{base}/export"):
+    names = sorted(n for n in os.listdir(f"{base}/export") if not n.startswith("."))
+    lines = sorted(f"{sha(f'{base}/export/{n}')}  {n}" for n in names)  # sort vrstic = LC_ALL=C sort
+    agg = hashlib.sha256(("\n".join(lines) + "\n").encode()).hexdigest()
+    checks.append(("export/*.json (agregat)", agg == m["export"]["aggregateSha256"]))
+# zgodovinske SQLite kopije: posnetek custom.db
+if os.path.isfile(f"{base}/db/custom.db") and "sha256" in m["db"]:
+    checks.append(("db/custom.db", sha(f"{base}/db/custom.db") == m["db"]["sha256"]))
+# R464: arhivirana Prisma shema (pri obeh providerjih od R464)
+if os.path.isfile(f"{base}/db/schema.prisma") and "schemaPrismaSha256" in m["db"]:
+    checks.append(("db/schema.prisma", sha(f"{base}/db/schema.prisma") == m["db"]["schemaPrismaSha256"]))
 ok = all(c[1] for c in checks)
 for name, passed in checks:
     print(f"   {'OK ' if passed else '✗  '} {name}")
@@ -221,7 +244,7 @@ PYEOF
 log "3/4 git obnova (clone iz bundle) + fsck…"
 GIT_HEAD_SHA="$(python3 -c "import json; print(json.load(open('$WORK/vsebina/manifest.json'))['git']['sha'])")"
 git clone -q --mirror "$WORK/vsebina/git/git.bundle" "$WORK/obnovljeni-repo.git" 2>/dev/null \
-  || git clone -q "$WORK/vsebina/git/git.bundle" "$WORK/obnovljeni-repo" 
+  || git clone -q "$WORK/vsebina/git/git.bundle" "$WORK/obnovljeni-repo"
 if [ -d "$WORK/obnovljeni-repo.git" ]; then
   RESTORED_SHA="$(git -C "$WORK/obnovljeni-repo.git" rev-parse HEAD 2>/dev/null || echo "")"
   git -C "$WORK/obnovljeni-repo.git" fsck --full --no-progress >/dev/null 2>&1 || die "git fsck je odkril napake v zgodovini"
@@ -238,7 +261,9 @@ log "   HEAD $RESTORED_SHA ✓ · $BRANCH_COUNT vej · $TAG_COUNT tagov"
 
 # ── 4. preverba baze ────────────────────────────────────────────────────────
 log "4/4 preverba baze (prstni odtis sheme + števci vrstic)…"
-python3 - "$WORK/vsebina" << 'PYEOF' || die "preverba baze JE SPODLETELA"
+if [ -f "$WORK/vsebina/db/custom.db" ]; then
+  # ZGODOVINSKE (SQLite) kopije: prstni odtis iz sqlite_master posnetka.
+  python3 - "$WORK/vsebina" << 'PYEOF' || die "preverba baze JE SPODLETELA"
 import hashlib, json, sqlite3, sys
 base = sys.argv[1]
 m = json.load(open(f"{base}/manifest.json", encoding="utf-8"))
@@ -249,7 +274,7 @@ rows = conn.execute(
 ).fetchall()
 fp = hashlib.sha256("\n".join(r[2] for r in rows).encode()).hexdigest()
 ok = fp == m["db"]["schemaFingerprint"]
-print(f"   {'OK ' if ok else '✗  '} prstni odtis sheme")
+print(f"   {'OK ' if ok else '✗  '} prstni odtis (sqlite_master)")
 for table, expected in sorted(m["db"]["rowCounts"].items()):
     n = conn.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone()[0]
     passed = n == expected
@@ -260,6 +285,75 @@ print(f"   {sum(m['db']['rowCounts'].values())} vrstic v {m['db']['tableCount']}
 conn.close()
 sys.exit(0 if ok else 1)
 PYEOF
+else
+  # R464 (PostgreSQL): nosilec podatkov je export/*.json — preverimo ga NE glede
+  # na db/custom.db datoteko:
+  #   (a) prstni odtis: manifest.schemaFingerprint (sha256 prisma/schema.prisma,
+  #       ki ga je zapisal export/_meta.json) se mora ujemati s sha256 arhivirane
+  #       db/schema.prisma (notranja skladnost celotne kopije) in z _meta.json;
+  #   (b) števci: DEJANSKO preštejemo vrstice vsakega export/<Model>.json in
+  #       jih primerjamo z manifest.rowCounts (iz export/_meta.json).
+  python3 - "$WORK/vsebina" << 'PYEOF' || die "preverba baze JE SPODLETELA"
+import hashlib, json, sys
+base = sys.argv[1]
+m = json.load(open(f"{base}/manifest.json", encoding="utf-8"))
+meta = json.load(open(f"{base}/export/_meta.json", encoding="utf-8"))
+def sha(p):
+    h = hashlib.sha256()
+    with open(p, "rb") as f:
+        for c in iter(lambda: f.read(1 << 20), b""):
+            h.update(c)
+    return h.hexdigest()
+checks = [("manifest ↔ export/_meta.json", m["db"].get("schemaFingerprint") == meta.get("schemaFingerprint"))]
+try:
+    checks.append(("sha256(db/schema.prisma) iz kopije", sha(f"{base}/db/schema.prisma") == m["db"]["schemaFingerprint"]))
+except FileNotFoundError:
+    print("   ✗   manjka db/schema.prisma — kopija ni popolna")
+    checks.append(("sha256(db/schema.prisma) iz kopije", False))
+ok = all(c[1] for c in checks)
+for name, passed in checks:
+    print(f"   {'OK ' if passed else '✗  '} prstni odtis — {name}")
+for table, expected in sorted(m["db"]["rowCounts"].items()):
+    try:
+        with open(f"{base}/export/{table}.json", encoding="utf-8") as fh:
+            n = len(json.load(fh))
+    except FileNotFoundError:
+        n = -1
+    if n != expected:
+        ok = False
+        print(f"   ✗   {table}: {n} vrstic v exportu, manifest pravi {expected}")
+print(f"   {sum(m['db']['rowCounts'].values())} vrstic v {m['db']['tableCount']} tabelah — vsi števci se ujemajo")
+sys.exit(0 if ok else 1)
+PYEOF
+
+  # Informativna navzkrižna preverba proti ŽIVI bazi (če je dosegljiva):
+  # export-db.mjs v temp nam da trenutni prstni odtis + števce, ki jih primerjamo
+  # z manifestom. NEUSPEH TUKAJ NE POGREŠI kopije — živa baza se po zaključku
+  # kopiranja zakonito spreminja (dnevnik JobRun + revizija se zapišeta ŠTEVILKO
+  # PO koncu backupa, seje prijav rastejo …); gre samo za zaznavo odmika sheme.
+  LIVE_DB_URL="${ROKSAL_DATABASE_URL:-${DATABASE_URL:-}}"
+  if [ -n "$LIVE_DB_URL" ] && command -v bun >/dev/null 2>&1; then
+    LIVE_TMP="$(mktemp -d)"
+    if DATABASE_URL="$LIVE_DB_URL" timeout 120 bun "$OPS_DIR/export-db.mjs" "$LIVE_TMP" >/dev/null 2>&1; then
+      # INFORMATIVNO (brez vpliva na izhodno kodo): živa baza se po zaključku
+      # kopiranja zakonito spreminja — primerjamo le odmik, ne usodnost.
+      python3 - "$WORK/vsebina" "$LIVE_TMP" << 'PYEOF' || log "   navzkrižna preverba žive baze ni uspela (neusodno)"
+import json, sys
+arch = json.load(open(f"{sys.argv[1]}/export/_meta.json", encoding="utf-8"))
+live = json.load(open(f"{sys.argv[2]}/_meta.json", encoding="utf-8"))
+same = arch.get("schemaFingerprint") == live.get("schemaFingerprint")
+print(f"   {'OK  prstni odtis — živa baza se ujema' if same else '⚠   živa shema se je od kopije razvila (kopija je samozadostna)'}")
+a, l = arch["rowCounts"], live.get("rowCounts", {})
+diff = {t: l.get(t, 0) - a.get(t, 0) for t in set(a) | set(l) if l.get(t, 0) != a.get(t, 0)}
+razlike = ", ".join(f"{t} {'+' if d > 0 else ''}{d}" for t, d in sorted(diff.items())) or "brez"
+print(f"   živa baza: {sum(l.values())} vrstic (kopija: {sum(a.values())}; spremembe po zaključku kopiranja: {razlike})")
+PYEOF
+    else
+      log "   živa baza ni dosegljiva — navzkrižna preverba izpuščena (kopija je samozadostna)"
+    fi
+    rm -rf "$LIVE_TMP"
+  fi
+fi
 
 T1="$(date +%s)"
 DURATION=$((T1 - T0))
@@ -267,8 +361,18 @@ DURATION=$((T1 - T0))
 if [ "$MODE" = target ]; then
   [ -n "$TARGET_DIR" ] || die "--target-dir zahteva pot"
   mkdir -p "$TARGET_DIR"
-  cp "$WORK/vsebina/db/custom.db" "$TARGET_DIR/custom.db"
-  log "baza obnovljena v: $TARGET_DIR/custom.db"
+  if [ -f "$WORK/vsebina/db/custom.db" ]; then
+    cp "$WORK/vsebina/db/custom.db" "$TARGET_DIR/custom.db"
+    log "baza obnovljena v: $TARGET_DIR/custom.db"
+  else
+    # R464 (PostgreSQL): podatki + shema + manifest (brez RAW posnetka)
+    mkdir -p "$TARGET_DIR/export"
+    cp "$WORK/vsebina/export/"*.json "$TARGET_DIR/export/"
+    cp "$WORK/vsebina/db/schema.prisma" "$TARGET_DIR/schema.prisma"
+    cp "$WORK/vsebina/manifest.json" "$TARGET_DIR/manifest.json"
+    log "PostgreSQL kopija razpakirana v: $TARGET_DIR (export/*.json + schema.prisma)"
+    log "obnova PG: git clone iz bundle → prisma migrate deploy → uvoz export/*.json (docs/RECOVERY.md — R464)"
+  fi
   if [ -d "$WORK/obnovljeni-repo" ]; then
     cp -r "$WORK/obnovljeni-repo" "$TARGET_DIR/repo"
   else

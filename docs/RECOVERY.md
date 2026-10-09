@@ -25,7 +25,8 @@
 **Ena kopija = ena šifrirana datoteka `.rkb`** (AES-256-CBC, PBKDF2 200 000 iteracij), ki vsebuje:
 
 - `git/git.bundle` — CEL repozitorij (zgodovina, vse veje, tagi, migrations, CI);
-- `db/custom.db` — dosleden posnetek baze (SQLite online backup API — varen tudi med delovanjem aplikacije);
+- `db/custom.db` — dosleden posnetek baze (SQLite online backup API — varen tudi med delovanjem aplikacije) — **samo SQLite kopije** (glej §9: R464);
+- `db/schema.prisma` — natančna Prisma shema, iz katere je bil izvoz (R464);
 - `export/<tabela>.json` — strojno berljiv export vsake tabule posebej (+ `_meta.json` s števci);
 - `manifest.json` — SHA-256 kontrolne vsote vseh komponent, prstni odtis sheme, števci vrstic, git SHA.
 
@@ -140,3 +141,64 @@ postopek ostane enak:
 Vsaka sprememba sheme (Prisma) v produkciji: `prisma migrate` (aditivno) po
 potrjenem backupu; kontrola: `schemaPrismaSha256` v manifestu kopije se mora
 ujemati s `sha256(prisma/schema.prisma)` obnovljene kode.
+
+## 9. R464: PostgreSQL — backup/DR brez pg_dump
+
+Aplikacija je prešla s SQLite na **PostgreSQL** (Prisma provider `postgresql`,
+denarna polja `Decimal(12,2)`). Backup/DR je zdaj **provider-agnostičen**:
+
+**Kaj se je spremenilo**
+
+- `ops/backup.sh` se po providerju odloči prek `ROKSAL_DATABASE_URL` /
+  `DATABASE_URL` (nazadnje zgodovinska pot `db/custom.db`):
+  - **PostgreSQL:** `pg_dump` v peskovnici NI na voljo, zato kopija NE vsebuje
+    RAW posnetka baze. Namesto `db/custom.db` je v tar-u `db/PG-NOTES.txt`
+    (razlaga) — **nosilec podatkov je `export/<Model>.json`** (vsi modeli po
+    Prisma shemi, izvoženi z `ops/export-db.mjs` prek PrismaClient).
+  - **SQLite:** pot do zdaj (python online backup) ostane za nujne primere.
+- `ops/export-db.mjs` (novo, bun + PrismaClient) nadomešča `ops/export-db.py`
+  kot primarni export — deluje za PG IN SQLite; Decimal → number (lastni
+  inline patch), modeli se odkrijejo iz `prisma/schema.prisma`.
+- Pri obeh providerjih se v kopijo shrani še `db/schema.prisma` — git bundle
+  vsebuje le commite, delovna kopija sheme ob kopiranju pa je lahko pred
+  commitom.
+- `manifest.json`: novo polje `db.provider` (+ `db.databaseUrl` sanitiziran,
+  brez gesla — pri PG); `bytes`/`sha256` samo še za SQLite posnetek.
+  `schemaFingerprint` = **SHA-256 vsebine `prisma/schema.prisma`** (iz
+  `export/_meta.json`) — ne odvisen od sqlite_master več.
+- `ops/restore.sh --verify` (PG kopije): kontrolne vsote git.bundle +
+  **agregat export/*.json** + `db/schema.prisma`; prstni odtis primerja z
+  arhivirano shemo, števce vrstic pa **dejansko prešteje v vsakem
+  `export/<Model>.json`** (ne odpira več `db/custom.db`). Zgodovinske SQLite
+  kopije se še vedno preverijo po stari poti. Če je živa baza dosegljiva, se
+  izvede še informativna navzkrižna preverba (`export-db.mjs` v temp):
+  prstni odtis + odmik številcev (živa baza se po zaključku kopiranja
+  zakonito spreminja — JobRun/revizija se zapišeta po koncu backupa).
+- `src/lib/backup.ts`: job posreduje `DATABASE_URL` izrecno procesu
+  `ops/backup.sh`.
+- `ops/lib.sh`: žeton se iz remote URL izpogoni LE, če je remote gitlab.com
+  (origin je zdaj GitHub — njegov PAT nikoli ne sme iti kot PRIVATE-TOKEN na
+  gitlab.com).
+- Off-site nalaganje na GitLab ostaja — žeton `GITLAB_TOKEN` (okolje /
+  `.env.recovery`); če manjka, kopija ostane lokalno z zapisanim razlogom
+  (`last-backup.json` → `offsite.note`).
+
+**Kako obnoviti PostgreSQL iz `.rkb`**
+
+```bash
+# 1. dešifriraj + preveri (geslo: okolje / .env.recovery — glej SECRETS.md)
+ROKSAL_BACKUP_PASSPHRASE=… bash ops/restore.sh --verify --file kopija.rkb
+# 2. izvorna koda + migracije iz bundle
+bash ops/restore.sh --target-dir ~/obnova   # export/*.json + schema.prisma + repo
+cd ~/obnova/repo && bun install
+# 3. ciljna baza: migracije na ciljni PG (DATABASE_URL!)
+DATABASE_URL=postgresql://… bunx prisma migrate deploy
+#    (rezerva: bunx prisma db push --schema ~/obnova/schema.prisma)
+# 4. uvoz podatkov: export/<Model>.json prek Prisma (createMany po modelih,
+#    vrstni red brez odvisnosti; po vsakem modelu kontroliraj števce proti
+#    manifest.json → db.rowCounts)
+# 5. zagon + health: DATABASE_URL=… bun run dev → GET /api/health == 200
+```
+
+V produkciji (Vercel + Neon) je primarni DB backup `pg_dump`/PITR ponudnika;
+ta kopija je neodvisen, šifriran drugi vir (glej §8).

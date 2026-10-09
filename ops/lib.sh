@@ -20,13 +20,20 @@ secrets_get () { # $1 = ime spremenljivke
   sed -n "s/^$1=//p" "$SECRETS_FILE" | tail -n 1
 }
 
-# Žeton GitLab: 1) okolje GITLAB_TOKEN, 2) .env.recovery, 3) zaledni vir PAT iz remote URL
-# (remote ostaja lokalno v .git/config — ni del repozitorija in ne potuje v git bundle).
+# Žeton GitLab: 1) okolje GITLAB_TOKEN, 2) .env.recovery, 3) zaledni vir PAT iz
+# remote URL — vendar SAMO, če je remote dejansko gitlab.com (R464: origin je
+# zdaj GitHub; njegov PAT kot PRIVATE-TOKEN na gitlab.com ne deluje in nikoli
+# ne sme zapustiti stroja v tujo roko).
 gitlab_token () {
   local t="${GITLAB_TOKEN:-$(secrets_get GITLAB_TOKEN)}"
   if [ -z "$t" ]; then
-    t="$(git -C "$ROOT_DIR" remote get-url origin 2>/dev/null \
-      | sed -n 's#.*://\([^@]*\)@.*#\1#p' | sed 's/^oauth2://')"
+    local url
+    url="$(git -C "$ROOT_DIR" remote get-url origin 2>/dev/null || true)"
+    case "$url" in
+      *gitlab.com*)
+        t="$(printf '%s' "$url" | sed -n 's#.*://\([^@]*\)@.*#\1#p' | sed 's/^oauth2://')"
+        ;;
+    esac
   fi
   printf '%s' "$t"
 }
