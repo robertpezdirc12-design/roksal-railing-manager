@@ -21,7 +21,7 @@ Preverja, da viz/3D konfigurator NIČ več ne nosi poslovnih cen:
   H) Čiščenje: vsa 6 KONFIG pravila povrnjena na semenske vrednosti in
      končni izračun enak izhodiščnemu (idempotentno).
 """
-import json, os, sqlite3, sys, urllib.request, urllib.error
+import json, os, sys, urllib.request, urllib.error
 
 BASE = os.environ.get('BASE_URL', 'http://localhost:3000')
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -255,17 +255,17 @@ chk(s == 200 and dfin and abs(dfin['skupaj'] - round((4 * 85 + 5 * 45 + 4 * 15) 
 
 # v bazi ostane natanko 6 KONFIG pravil v prodajnem ceniku (brez podvajanj)
 try:
-    con = sqlite3.connect(os.environ.get('TEST_DB_URL', 'file:' + REPO + '/db/roksal.db').replace('file:', ''))
-    cur = con.cursor()
-    cur.execute("SELECT COUNT(*) FROM PriceRule WHERE note LIKE 'KONFIG:%'")
-    n_all = cur.fetchone()[0]
-    cur.execute(
-        "SELECT COUNT(*) FROM PriceRule pr JOIN PriceList pl ON pr.priceListId = pl.id "
-        "WHERE pl.type = 'PRODAJNA' AND pr.active = 1 AND pr.productId IS NULL AND pr.itemId IS NULL "
-        "AND pr.note LIKE 'KONFIG:%'")
-    n_prod = cur.fetchone()[0]
-    con.close()
-    chk(n_all == 6 and n_prod == 6, f'db: natanko 6 aktivnih KONFIG pravil ({n_all}/{n_prod})')
+    import subprocess
+    r = subprocess.run(['bun', '-e', """
+const {PrismaClient}=require('@prisma/client');const p=new PrismaClient();
+(async()=>{const nAll=await p.priceRule.count({where:{note:{contains:'KONFIG:'}}});
+const nProd=await p.priceRule.count({where:{note:{contains:'KONFIG:'},active:true,productId:null,itemId:null,priceList:{is:{type:'PRODAJNA'}}}});
+console.log(JSON.stringify({nAll,nProd}));await p.$disconnect();})();
+"""], capture_output=True, text=True, cwd=REPO,
+                       env={**os.environ, 'DATABASE_URL': os.environ.get('TEST_DB_URL', '')})
+    assert r.returncode == 0, r.stderr[:300]
+    st = json.loads(r.stdout.strip().splitlines()[-1])
+    chk(st['nAll'] == 6 and st['nProd'] == 6, f"db: natanko 6 aktivnih KONFIG pravil ({st['nAll']}/{st['nProd']})")
 except Exception as e:
     bad(f'db preverba ni uspela: {e}')
 

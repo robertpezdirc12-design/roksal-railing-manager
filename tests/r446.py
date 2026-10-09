@@ -399,28 +399,28 @@ for path, tok, expect in [
 
 # ══ 10. ČIŠČENJE: testni entitete (naslov z 'R446 e2e') odstranimo iz baze ════
 # (API nima DELETE rut; finalna stanja so končna — edina možnost je neposreden
-#  izbris SQLite. Revizijski dnevnik ostane nemutabilen, kot je treba.)
+#  neposreden izbris prek Prisma. Revizijski dnevnik ostane nemutabilen, kot je treba.)
 print('── čiščenje testnih podatkov ──')
 try:
-    import sqlite3
-    con = sqlite3.connect(os.environ.get('TEST_DB_URL', 'file:' + REPO + '/db/roksal.db').replace('file:', ''))
-    cur = con.cursor()
-    cur.execute("SELECT id FROM ServiceCase WHERE title LIKE 'R446 e2e%'")
-    case_ids = [r[0] for r in cur.fetchall()]
-    cur.execute("SELECT id FROM Claim WHERE title LIKE 'R446 e2e%'")
-    claim_ids = [r[0] for r in cur.fetchall()]
-    n_visits = 0
-    for cid in case_ids:
-        cur.execute('DELETE FROM ServiceVisit WHERE caseId = ?', (cid,))
-        n_visits += cur.rowcount
-    q = ','.join('?' * len(case_ids)) if case_ids else None
-    if q: cur.execute(f'DELETE FROM ServiceCase WHERE id IN ({q})', case_ids)
-    qc = ','.join('?' * len(claim_ids)) if claim_ids else None
-    if qc: cur.execute(f'DELETE FROM Claim WHERE id IN ({qc})', claim_ids)
-    cur.execute("DELETE FROM WarrantyVisit WHERE note LIKE 'R446 e2e%'")
-    n_war_visits = cur.rowcount
-    con.commit(); con.close()
-    ok(f'počiščeno: {len(claim_ids)} reklamacij, {len(case_ids)} primerov, {n_visits} obiskov, {n_war_visits} regresijskih obiskov garancije')
+    # R464: provider-agnostično (Prisma — deluje na PostgreSQL in SQLite)
+    r = subprocess.run(['bun', '-e', r'''
+const {PrismaClient}=require('@prisma/client');const p=new PrismaClient();
+(async()=>{
+  const cases=await p.serviceCase.findMany({where:{title:{contains:'R446 e2e'}},select:{id:true}});
+  const claims=await p.claim.findMany({where:{title:{contains:'R446 e2e'}},select:{id:true}});
+  let nVisits=0;
+  for (const c of cases) nVisits+=await p.serviceVisit.deleteMany({where:{caseId:c.id}});
+  const nCases=await p.serviceCase.deleteMany({where:{id:{in:cases.map(x=>x.id)}}});
+  const nClaims=await p.claim.deleteMany({where:{id:{in:claims.map(x=>x.id)}}});
+  const nWar=await p.warrantyVisit.deleteMany({where:{note:{contains:'R446 e2e'}}});
+  console.log(JSON.stringify({claims:nClaims.count,cases:nCases.count,visits:nVisits,war:nWar.count}));
+  await p.$disconnect();
+})().catch(e=>{console.error(e);process.exit(1)});
+'''], capture_output=True, text=True, cwd=REPO,
+                       env={**os.environ, 'DATABASE_URL': os.environ.get('TEST_DB_URL', '')})
+    assert r.returncode == 0, r.stderr[:300]
+    st = json.loads(r.stdout.strip().splitlines()[-1])
+    ok(f"počiščeno: {st['claims']} reklamacij, {st['cases']} primerov, {st['visits']} obiskov, {st['war']} regresijskih obiskov garancije")
 except Exception as e:
     bad(f'čiščenje ni uspelo: {e}')
 

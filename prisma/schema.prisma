@@ -1,6 +1,6 @@
 // Roksal Railing Manager — REKONSTRUKCIJA (R431)
 // Vir: blueprint iz GitLab recovery repo (route-map, RBAC katalog R425–R428, IA register R429)
-// Original: Next.js 16 + Prisma (PostgreSQL/Neon) — tu: SQLite (sandbox)
+// R464: PostgreSQL (produkcija + razvoj prek embedded-postgres / CI service) — SQLite obdobje končano
 // SPORAZUM: ta shema je EN VIR — module (subagenti) NE spreminjajo sheme!
 
 generator client {
@@ -8,7 +8,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -108,7 +108,7 @@ model Opportunity {
   lead         Lead?     @relation(fields: [leadId], references: [id])
   title        String
   stage        String    @default("KVALIFIKACIJA") // KVALIFIKACIJA | PONUDBA | POGAJANJA | ZMAGOVALNA | IZGUBLJENA
-  value        Float     @default(0)
+  value        Decimal @db.Decimal(12,2) @default(0)
   probability  Int       @default(50)
   expectedClose DateTime?
   note         String?
@@ -158,9 +158,9 @@ model Quote {
   customerId String?
   customer   Customer? @relation(fields: [customerId], references: [id])
   status     String    @default("OSNUTEK") // OSNUTEK | POSLAN | SPREJET | ZAVRNJEN | ZAKLENJEN
-  subtotal   Float     @default(0)
-  vat        Float     @default(0)
-  total      Float     @default(0)
+  subtotal   Decimal @db.Decimal(12,2) @default(0)
+  vat        Decimal @db.Decimal(12,2) @default(0)
+  total      Decimal @db.Decimal(12,2) @default(0)
   note       String?
   signature  String? // podpis stranke (data URL)
   signedAt   DateTime?
@@ -177,8 +177,8 @@ model QuoteLine {
   quote       Quote  @relation(fields: [quoteId], references: [id], onDelete: Cascade)
   description String
   qty         Float
-  unitPrice   Float
-  total       Float
+  unitPrice   Decimal @db.Decimal(12,2)
+  total       Decimal @db.Decimal(12,2)
 }
 
 model Invoice {
@@ -189,10 +189,10 @@ model Invoice {
   quoteId   String?
   quote     Quote?    @relation(fields: [quoteId], references: [id])
   status    String    @default("IZDAN") // OSNUTEK | IZDAN | DELNO_PLACAN | PLACAN | ZAPRT
-  subtotal  Float     @default(0)
-  vat       Float     @default(0)
-  total     Float     @default(0)
-  paid      Float     @default(0)
+  subtotal  Decimal @db.Decimal(12,2) @default(0)
+  vat       Decimal @db.Decimal(12,2) @default(0)
+  total     Decimal @db.Decimal(12,2) @default(0)
+  paid      Decimal @db.Decimal(12,2) @default(0)
   dueDate   DateTime?
   note      String?
   createdAt DateTime  @default(now())
@@ -204,7 +204,7 @@ model Payment {
   id        String   @id @default(cuid())
   invoiceId String
   invoice   Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-  amount    Float
+  amount    Decimal @db.Decimal(12,2)
   method    String   @default("NAKAZNICA") // NAKAZNICA | GOTOVINA | KARTICA
   reference String?
   createdAt DateTime @default(now())
@@ -307,7 +307,7 @@ model Profile {
   name        String
   material    String  @default("ALU") // ALU | INOX | KOVANO ŽELEZO | STIKLO
   type        String  @default("OGRAJA") // OGRAJA | BALUSTRADA | NAGIBNA
-  pricePerM   Float   @default(0)
+  pricePerM   Decimal @db.Decimal(12,2) @default(0)
   description String?
   active      Boolean @default(true)
 
@@ -362,7 +362,7 @@ model StockLot {
   itemId      String
   item        InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
   qty         Float
-  unitCost    Float    @default(0)
+  unitCost    Decimal @db.Decimal(12,2) @default(0)
   supplierId  String?
   deliveredAt DateTime @default(now())
 }
@@ -380,7 +380,7 @@ model MaterialPrice {
   itemId     String?
   item       InventoryItem? @relation(fields: [itemId], references: [id])
   supplierId String?
-  price      Float
+  price      Decimal @db.Decimal(12,2)
   createdAt  DateTime      @default(now())
 }
 
@@ -685,7 +685,7 @@ model MaterialOrderLine {
   itemName  String // denormalizirano ime (artikel lahko izgine)
   qty       Float
   unit      String  @default("m")
-  unitPrice Float   @default(0)
+  unitPrice Decimal @db.Decimal(12,2) @default(0)
 }
 
 // ─── Prisotnost (R437: /api/punch iz route-mape izvirnika) ──────────────────
@@ -807,8 +807,8 @@ model Product {
   // tehnične lastnosti (JSON): material, ral, obremenitev, toplotna prevodnost …
   tech           String?
   // osnovni ceni (nabavna/prodajna na enoto); veljavne cene razrešuje PriceList
-  costPrice      Float         @default(0)
-  salePrice      Float         @default(0)
+  costPrice      Decimal @db.Decimal(12,2)       @default(0)
+  salePrice      Decimal @db.Decimal(12,2)       @default(0)
   warrantyMonths Int           @default(24)
   active         Boolean       @default(true)
   validFrom      DateTime      @default(now())
@@ -838,8 +838,8 @@ model ProductVariant {
   widthMm   Int?
   heightMm  Int?
   // override ceni (null = podeduje produkt)
-  costPrice Float?
-  salePrice Float?
+  costPrice Decimal? @db.Decimal(12,2)
+  salePrice Decimal? @db.Decimal(12,2)
   tech      String? // JSON dopolnilne tehnične lastnosti
   active    Boolean  @default(true)
   sortOrder Int      @default(0)
@@ -932,10 +932,10 @@ model PriceRule {
   product     Product?      @relation("productPriceRules", fields: [productId], references: [id], onDelete: Cascade)
   itemId      String?
   item        InventoryItem? @relation("itemPriceRules", fields: [itemId], references: [id], onDelete: Cascade)
-  price       Float
+  price       Decimal @db.Decimal(12,2)
   unit        String        @default("m2")
   discountPct Float         @default(0)
-  minPrice    Float? // najnižja dovoljena cena
+  minPrice    Decimal? @db.Decimal(12,2) // najnižja dovoljena cena
   seasonFrom  String? // MM-DD (sezonska cena)
   seasonTo    String? // MM-DD
   note        String?

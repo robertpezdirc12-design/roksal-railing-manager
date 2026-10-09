@@ -1,0 +1,133 @@
+name: CI
+
+# R464 (issue #1 §3): CI izvaja CEL regresijski suite na PostgreSQL —
+# zelena pipa je pogoj za production-ready. Poleg tega:
+#   quality     — tsc --noEmit + eslint (isti standard kot build)
+#   build       — next build (BREZ ignoreBuildErrors — TS napaka pade build)
+#   migrations  — SVEŽA PostgreSQL baza izključno iz repozitorija + migracij
+#   regression  — celoten poslovni testni suite (r437–r464) proti migrirani bazi
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Kvaliteta (tsc + lint)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - run: bunx prisma generate
+      - run: bunx tsc --noEmit
+      - run: bun run lint
+
+  build:
+    name: Production build (strog TS)
+    runs-on: ubuntu-latest
+    needs: quality
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - run: bunx prisma generate
+      - run: DATABASE_URL="postgresql://ci:ci@localhost:5432/roksal" bunx next build
+        env:
+          DATABASE_URL: postgresql://ci:ci@localhost:5432/roksal
+
+  migrations:
+    name: Migracije na sveži PostgreSQL
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: roksal
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - name: migrate deploy (sveža baza izključno iz repozitorija + migracij)
+        run: |
+          bunx prisma migrate deploy
+          bunx prisma migrate status
+        env:
+          DATABASE_URL: postgresql://ci:ci@localhost:5432/roksal
+      - name: seed (isti vir kot lokalno — dokaz popolne obnovljivosti)
+        run: node prisma/seed.cjs && node prisma/seed-r442.cjs
+        env:
+          DATABASE_URL: postgresql://ci:ci@localhost:5432/roksal
+
+  regression:
+    name: Regresija (${{ matrix.grupa }})
+    runs-on: ubuntu-latest
+    needs: migrations
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - grupa: r437-r445
+          - grupa: r446-r452
+          - grupa: r454-r458
+          - grupa: r459-r462
+          - grupa: r464
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: roksal
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/roksal
+      TEST_DB_URL: postgresql://ci:ci@localhost:5432/roksal
+      BASE_URL: http://localhost:3000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - name: priprava baze (migrate + seed)
+        run: |
+          bunx prisma migrate deploy
+          node prisma/seed.cjs
+          node prisma/seed-r442.cjs
+      - name: zagon aplikacije
+        run: |
+          bunx next dev -p 3000 > dev.log 2>&1 &
+          for i in $(seq 1 60); do
+            sleep 2
+            if curl -sf http://localhost:3000/api/public/health > /dev/null; then
+              echo "aplikacija pripravljena"; exit 0
+            fi
+          done
+          echo "aplikacija se ni zagnala"; cat dev.log | tail -30; exit 1
+      - name: izvedba regresijskih testov
+        run: bash tests/ci-matrix.sh "${{ matrix.grupa }}"
+      - name: povzetek napak (če so)
+        if: failure()
+        run: for f in /tmp/reg-*.log; do echo "── $f:"; tail -20 "$f"; done
+
+  # SKUPNI REZULTAT: vsi jobi morajo biti zeleni, da je MR production-ready.
+  # Branch protection na GitHubu naj ima zahtevane checke: quality, build,
+  # migrations, regression (vseh 5 grup).

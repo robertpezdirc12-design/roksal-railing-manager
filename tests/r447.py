@@ -65,13 +65,19 @@ tmpl = sorted(detail_terasa['components'], key=lambda c: c['sortOrder'])
 print('── plan: dry-run izračun (brez pisanja) ──')
 QTY_T = 30.0  # terasa: 6×4 + 3×2 = 30 m²
 
-import sqlite3
+import subprocess
+
 def counts ():
-    con = sqlite3.connect(os.environ.get('TEST_DB_URL', 'file:' + REPO + '/db/roksal.db').replace('file:', '')); cur = con.cursor()
-    cur.execute('SELECT COUNT(*) FROM ProjectPackage'); pk = cur.fetchone()[0]
-    cur.execute('SELECT COUNT(*) FROM Bom'); bm = cur.fetchone()[0]
-    con.close()
-    return pk, bm
+    # R464: provider-agnostično (Prisma — PostgreSQL in SQLite)
+    r = subprocess.run(['bun', '-e', r'''
+const {PrismaClient}=require('@prisma/client');const p=new PrismaClient();
+(async()=>{const pk=await p.projectPackage.count();const bm=await p.bom.count();
+console.log(JSON.stringify({pk,bm}));await p.$disconnect();})();
+'''], capture_output=True, text=True, cwd=REPO,
+                       env={**os.environ, 'DATABASE_URL': os.environ.get('TEST_DB_URL', '')})
+    assert r.returncode == 0, r.stderr[:300]
+    d = json.loads(r.stdout.strip().splitlines()[-1])
+    return d['pk'], d['bm']
 
 before = counts()
 
@@ -275,28 +281,33 @@ chk('PACKAGE_CREATE' in actions and 'BOM_GENERATE' in actions, 'revizija PACKAGE
 # ══ 6. ČIŠČENJE testnih podatkov (SQLite; revizija ostane nemutabilna) ═══════
 print('── čiščenje testnih podatkov ──')
 try:
-    con = sqlite3.connect(os.environ.get('TEST_DB_URL', 'file:' + REPO + '/db/roksal.db').replace('file:', ''))
-    cur = con.cursor()
-    cur.execute("SELECT id FROM ProjectPackage WHERE note LIKE 'R447 e2e%' OR name LIKE 'R447 e2e%'")
-    pkg_ids = [r[0] for r in cur.fetchall()]
-    n_lines = n_boms = 0
-    for pid in pkg_ids:
-        cur.execute('SELECT id FROM Bom WHERE packageId = ?', (pid,))
-        bom_ids = [r[0] for r in cur.fetchall()]
-        for bid in bom_ids:
-            cur.execute('DELETE FROM StockReservation WHERE bomId = ?', (bid,))
-            cur.execute('DELETE FROM BomLine WHERE bomId = ?', (bid,))
-            n_lines += cur.rowcount
-            cur.execute('DELETE FROM Bom WHERE id = ?', (bid,))
-            n_boms += 1
-        cur.execute('DELETE FROM ProjectPackage WHERE id = ?', (pid,))
-    cur.execute("SELECT id FROM Quote WHERE note LIKE 'R447 e2e%'")
-    q_ids = [r[0] for r in cur.fetchall()]
-    for qid in q_ids:
-        cur.execute('DELETE FROM QuoteLine WHERE quoteId = ?', (qid,))
-        cur.execute('DELETE FROM Quote WHERE id = ?', (qid,))
-    con.commit(); con.close()
-    ok(f'počiščeno: {len(pkg_ids)} paketov, {n_boms} kosovnic ({n_lines} vrstic), {len(q_ids)} ponudb')
+    r = subprocess.run(['bun', '-e', r'''
+const {PrismaClient}=require('@prisma/client');const p=new PrismaClient();
+(async()=>{
+  const pkgs=await p.projectPackage.findMany({where:{OR:[{note:{contains:'R447 e2e'}},{name:{contains:'R447 e2e'}}]},select:{id:true}});
+  let nBoms=0,nLines=0;
+  for (const pkg of pkgs){
+    const boms=await p.bom.findMany({where:{packageId:pkg.id},select:{id:true}});
+    for (const b of boms){
+      await p.stockReservation.deleteMany({where:{bomId:b.id}});
+      const dl=await p.bomLine.deleteMany({where:{bomId:b.id}});
+      nLines+=dl.count;nBoms++;
+    }
+    await p.projectPackage.delete({where:{id:pkg.id}});
+  }
+  const quotes=await p.quote.findMany({where:{note:{contains:'R447 e2e'}},select:{id:true}});
+  for (const q of quotes){
+    await p.quoteLine.deleteMany({where:{quoteId:q.id}});
+    await p.quote.delete({where:{id:q.id}});
+  }
+  console.log(JSON.stringify({pkgs:pkgs.length,boms:nBoms,lines:nLines,quotes:quotes.length}));
+  await p.$disconnect();
+})().catch(e=>{console.error(e);process.exit(1)});
+'''], capture_output=True, text=True, cwd=REPO,
+                       env={**os.environ, 'DATABASE_URL': os.environ.get('TEST_DB_URL', '')})
+    assert r.returncode == 0, r.stderr[:300]
+    st = json.loads(r.stdout.strip().splitlines()[-1])
+    ok(f"počiščeno: {st['pkgs']} paketov, {st['boms']} kosovnic ({st['lines']} vrstic), {st['quotes']} ponudb")
 except Exception as e:
     bad(f'čiščenje ni uspelo: {e}')
 

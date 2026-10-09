@@ -7,9 +7,17 @@
     "build": "next build && cp -r .next/static .next/standalone/.next/ && cp -r public .next/standalone/",
     "start": "NODE_ENV=production bun .next/standalone/server.js 2>&1 | tee server.log",
     "lint": "eslint .",
-    "db:push": "prisma db push --accept-data-loss",
-    "db:generate": "prisma generate",
+    "typecheck": "tsc --noEmit",
+    "db:up": "bun scripts/dev-db.mjs up",
+    "db:down": "bun scripts/dev-db.mjs down",
     "db:migrate": "prisma migrate dev",
+    "db:migrate:deploy": "prisma migrate deploy",
+    "db:migrate:status": "prisma migrate status",
+    "db:migrate:diff": "prisma migrate diff --from-schema-datasource prisma/schema.prisma --to-schema-datamodel prisma/schema.prisma --script --shadow-database-url",
+    "db:push": "echo '[db:push] OPOZORILO: prisma db push --accept-data-loss je RAZVOJNO/RECOVERY orodje \u2014 produkcija uporablja db:migrate:deploy. Za nadaljevanje po\u017eeni: bunx prisma db push --accept-data-loss' && exit 1",
+    "db:push:force": "prisma db push --accept-data-loss",
+    "db:generate": "prisma generate",
+    "db:seed": "node prisma/seed.cjs && node prisma/seed-r442.cjs",
     "db:reset": "prisma migrate reset"
   },
   "dependencies": {
@@ -85,6 +93,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "bun-types": "^1.3.4",
+    "embedded-postgres": "18.4.0-beta.17",
     "eslint": "^9",
     "eslint-config-next": "^16.1.1",
     "tailwindcss": "^4",
@@ -95,6 +104,8 @@
     "@prisma/client",
     "@prisma/engines",
     "prisma",
-    "sharp"
+    "sharp",
+    "embedded-postgres",
+    "@embedded-postgres/linux-x64"
   ]
 }

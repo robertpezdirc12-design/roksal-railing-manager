@@ -61,3 +61,5 @@ agent-ctx/
 /tmp-check/
 .issues/
 env.sh
+.pgdata/
+.icu-libs
