@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import os
 """tests/r454.py — R454 NAPREDNI 3D + AR e2e (issue #7 §16 P3, route-map
 §„3D vizualizacije & AR")
 
@@ -25,7 +26,7 @@ Preverja:
 """
 import base64, json, os, subprocess, sys, time, urllib.request, urllib.error
 
-BASE = 'http://localhost:3000'
+BASE = os.environ.get('BASE_URL', 'http://localhost:3000')
 TAG = 'R454-TEST'
 HERE = os.path.dirname(os.path.abspath(__file__))
 PASS, FAIL = 0, 0

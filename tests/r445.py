@@ -6,9 +6,9 @@ Preverja: vezave (projekt/picking/nalog/vozilo/voznik), integriteto prehodov (40
 RBAC (pisarna vs. voznik vs. monter-teren, fail-closed), ekipe/podizvajalci,
 iskanje z obsegom in revizijske zapise.
 """
-import json, sys, subprocess, urllib.request, urllib.error
+import json, os, sys, subprocess, urllib.request, urllib.error
 
-BASE = 'http://localhost:3000'
+BASE = os.environ.get('BASE_URL', 'http://localhost:3000')
 PASS, FAIL = 0, 0
 
 def bun (script):

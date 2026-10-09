@@ -34,7 +34,7 @@ Preverja:
 """
 import json, os, subprocess, sys, urllib.request, urllib.error
 
-BASE = 'http://localhost:3000'
+BASE = os.environ.get('BASE_URL', 'http://localhost:3000')
 TAG = 'R461-TEST'
 PASS, FAIL = 0, 0
 

@@ -16,9 +16,9 @@ Preverja:
      /api/dashboard ostanejo 200.
   F) Idempotentno (samo bralne rute — ni čiščenja potrebnega).
 """
-import json, sys, urllib.request, urllib.error
+import json, os, sys, urllib.request, urllib.error
 
-BASE = 'http://localhost:3000'
+BASE = os.environ.get('BASE_URL', 'http://localhost:3000')
 PASS, FAIL = 0, 0
 
 def call (method, path, token=None, body=None, timeout=30):

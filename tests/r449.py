@@ -8,9 +8,9 @@ catalog.write na mutaciji 403 ampak read OK; skladišče IMA catalog.write;
 proizvodnja IMA production.manage) in revizijski dnevnik (CATALOG_VERSION /
 RULE_VERSION). Regresija: catalog/engineering-rules rute delujejo naprej.
 Po vzoru tests/r446.py."""
-import json, sys, urllib.request, urllib.error
+import json, os, sys, urllib.request, urllib.error
 
-BASE = 'http://localhost:3000'
+BASE = os.environ.get('BASE_URL', 'http://localhost:3000')
 PASS, FAIL = 0, 0
 TAG = 'R449T'  # marker testnih entitet
 

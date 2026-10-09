@@ -4,7 +4,7 @@
 # deliveries RBAC, prefs validacija, job obvestila-retry, obstoječe rute nedotaknjene.
 # Uporaba: bash tests/r438.sh  (dev strežnik mora teči na :3000)
 set -u
-BASE="http://localhost:3000"
+BASE="${BASE_URL:-http://localhost:3000}"
 DB_URL="file:/home/z/my-project/db/custom.db"
 PASS=0; FAIL=0
 CODE=""; BODY=""

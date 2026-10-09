@@ -5,9 +5,9 @@ Tok: BOM → rezervacija → picking (delni pobir) → izdaja → vračilo.
 Preverja invarianto FIZIČNA ≠ REZERVIRANA ≠ RAZPOLOŽLJIVA, integriteto
 statusnih prehodov in RBAC (monter/skladišče/brez žetona).
 """
-import json, sys, urllib.request, urllib.error
+import json, os, sys, urllib.request, urllib.error
 
-BASE = 'http://localhost:3000'
+BASE = os.environ.get('BASE_URL', 'http://localhost:3000')
 PASS, FAIL = 0, 0
 
 def call (method, path, token=None, body=None):

@@ -9,9 +9,9 @@
    ustvari SAMO za vrstice s povezavo na artikel.
 Regresija: sync/offline meritev še dela (smoke), PATCH meritve še dela.
 Po vzoru tests/r449.py."""
-import json, sys, urllib.request, urllib.error, uuid
+import json, os, sys, urllib.request, urllib.error, uuid
 
-BASE = 'http://localhost:3000'
+BASE = os.environ.get('BASE_URL', 'http://localhost:3000')
 PASS, FAIL = 0, 0
 TAG = 'R450T'  # marker testnih entitet
 

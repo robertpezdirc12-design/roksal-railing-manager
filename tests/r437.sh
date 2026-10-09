@@ -2,7 +2,7 @@
 # tests/r437.sh — R437 (Task 11-a, GitLab issue #2): testi 10 novih API rut
 # Uporaba: bash tests/r437.sh  (dev strežnik mora teči na :3000)
 set -u
-BASE="http://localhost:3000"
+BASE="${BASE_URL:-http://localhost:3000}"
 DB_URL="file:/home/z/my-project/db/custom.db"
 PASS=0; FAIL=0
 CODE=""; BODY=""

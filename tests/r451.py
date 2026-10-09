@@ -10,10 +10,10 @@ konzistentnost agregatov z izvornimi API-ji (/api/invoices, /api/payments,
 /api/projects, /api/claims — brez ustvarjanja testnih entitet = nič za počistiti)
 in regresijo (/api/dashboard, /api/quotes, /api/stock).
 """
-import json, sys, urllib.request, urllib.error
+import json, os, sys, urllib.request, urllib.error
 from datetime import datetime
 
-BASE = 'http://localhost:3000'
+BASE = os.environ.get('BASE_URL', 'http://localhost:3000')
 PASS, FAIL = 0, 0
 
 def call (method, path, token=None, body=None):

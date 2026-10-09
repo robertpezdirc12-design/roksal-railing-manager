@@ -8,9 +8,9 @@ iskanja (brez računov/uporabnikov/reklamacij) in regresijo ključnih API rut
 (projekti, zaloga, kosovnice, servis, dostave, katalog, izdelki, družine).
 Zavihki (id + gate) so NEspremenjeni — spreminja se samo razvrstitev sekcij.
 """
-import json, sys, urllib.request, urllib.error
+import json, os, sys, urllib.request, urllib.error
 
-BASE = 'http://localhost:3000'
+BASE = os.environ.get('BASE_URL', 'http://localhost:3000')
 PASS, FAIL = 0, 0
 
 def call (method, path, token=None, body=None):

@@ -5,7 +5,7 @@
 # (main brez direktnega push, MR pogoj, off-site paket), CI pipeline, RBAC.
 # Uporaba: bash tests/r441.sh  (dev strežnik mora teči na :3000)
 set -u
-BASE="http://localhost:3000"
+BASE="${BASE_URL:-http://localhost:3000}"
 ROOT="/home/z/my-project"
 DB_URL="file:$ROOT/db/custom.db"
 GTOKEN="$(sed -n 's/^GITLAB_TOKEN=//p' $ROOT/.env.recovery 2>/dev/null | tail -n1)"

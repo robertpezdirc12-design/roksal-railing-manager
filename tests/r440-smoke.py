@@ -8,7 +8,7 @@ Nalaga docs/E2E-MATRIX.json (statična analiza) in za vsak endpoint:
 Izhod: docs/E2E-RESULTS.json (strojno berljivi rezultati po endpointih).
 Statusi: PASS | PASS_VALIDATION (4xx po pričakovanju validacije) | EXPECTED_DENY | BROKEN | SKIPPED_SAFE
 """
-import json
+import json, os
 import re
 import sys
 import urllib.request
@@ -16,7 +16,7 @@ import urllib.error
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-BASE = 'http://localhost:3000'
+BASE = os.environ.get('BASE_URL', 'http://localhost:3000')
 ROLES = [
     ('ADMIN', 'admin@roksal.si', 'Admin123!'),
     ('VODJA', 'vodja@roksal.si', 'Vodja123!'),

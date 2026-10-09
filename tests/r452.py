@@ -13,10 +13,10 @@ ustvarjanja naročila prek obstoječe /api/material-orders (201, koda NAR-leto,
 vrstice, revizija MATERIAL_ORDER_CREATE), monter 403 na POST, regresijo in
 samočiščenje (testni BOM + lot + naročila se pobrišejo — idempotentno).
 """
-import json, subprocess, sys, urllib.request, urllib.error
+import json, os, subprocess, sys, urllib.request, urllib.error
 from datetime import datetime
 
-BASE = 'http://localhost:3000'
+BASE = os.environ.get('BASE_URL', 'http://localhost:3000')
 TAG = 'R452-TEST'
 PASS, FAIL = 0, 0
 
