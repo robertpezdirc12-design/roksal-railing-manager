@@ -75,6 +75,10 @@ const STATUS_MAP: Record<string, { label: string; cls: string }> = {
   V_IZDELAVI: { label: 'V izdelavi', cls: 'bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300' },
   DOKONCAN: { label: 'Dokončan', cls: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' },
   ODPOSLAN: { label: 'Odposlan', cls: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' },
+  // prefab elementi (R465)
+  REZANJE: { label: 'Rezanje', cls: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300' },
+  IZDELAVA: { label: 'Izdelava', cls: 'bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300' },
+  POVRSINA: { label: 'Površina', cls: 'bg-violet-100 text-violet-800 dark:bg-violet-950 dark:text-violet-300' },
   // CRM
   NOV: { label: 'Nov', cls: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300' },
   KONTAKTIRAN: { label: 'Kontaktiran', cls: 'bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300' },

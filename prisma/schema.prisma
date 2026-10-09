@@ -57,6 +57,7 @@ model User {
   geoRefs         GeoReference[] @relation("geoOperator") // R462: operator georeferenc (issue #17 §1)
   registrations   Registration[] @relation("regAuthor") // R462: avtorji registracij (issue #17 §3)
   loopClosures    LoopClosure[] @relation("loopAuthor") // R462: avtorji loop checkov (issue #17 §5)
+  productionElements ProductionElement[] @relation("productionElements") // R465: zadnji spreminjalci prefab elementov (issue #4)
 }
 
 model Session {
@@ -429,6 +430,37 @@ model ProductionOrder {
   createdAt DateTime  @default(now())
 
   qcChecks QcCheck[]
+  elements ProductionElement[] // R465: prefab elementi iz AS-PRODUCED dvojčka (issue #4)
+}
+
+// ─── PREFAB ENGINE (R465 — issue #4 §3) ─────────────────────────────────────
+// Enota proizvodnje = SEGMENT digitalnega dvojčka (ključ seg-N iz snapshot-a).
+// Mere/stebri/RAL so DENORMALIZIRAN posnetek AS-PRODUCED snapshot-a
+// (proizvodni listič): snapshot ostaja verzioniran vir resnice (§22), element
+// je delovni listič na proizvodni tekmi. ID snapshot-a se hrani kot navadno
+// besedilo (enaka konvencija kot CaptureSession.snapshotId) — brisanje
+// dvojčka ne sme izbrisati proizvodnje.
+model ProductionElement {
+  id                String   @id @default(cuid())
+  productionOrderId String
+  productionOrder   ProductionOrder @relation(fields: [productionOrderId], references: [id], onDelete: Cascade)
+  sourceSnapshotId  String // AS-PRODUCED DigitalTwinSnapshot.id (vir mer)
+  key               String // seg-N iz snapshot-a (stabilen ključ segmenta)
+  label             String
+  lengthCm          Float?
+  heightCm          Float?
+  posts             Int?
+  ral               String?
+  produkt           String? // izdelek/varianta iz snapshot-a
+  status            String   @default("NAVRTEN") // NAVRTEN | REZANJE | IZDELAVA | POVRSINA | DOKONCAN
+  note              String?
+  userId            String?
+  user              User?    @relation("productionElements", fields: [userId], references: [id], onDelete: SetNull)
+  createdAt         DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@unique([productionOrderId, key])
+  @@index([productionOrderId])
 }
 
 // ─── Kontrola kakovosti (R434 — vir: /api/qc iz ROUTE-MAP) ──────────────────

@@ -13,12 +13,19 @@
 //   • ZGODOVINA AR POSNETKOV — GET /api/ar-snapshots (metapodatki), ogled
 //     podrobnosti s fotografijo (GET /api/ar-snapshots/[id]) in brisanje
 //     (DELETE, measurements.write).
+// R465 (issue #4 §1 — FIELD AR):
+//   • VIR GEOMETRIJE: „ročno“ (stebri/višina) ALI „iz tekača projekta“ —
+//     overlay se nariše IZ segmentov tekača (dolžine, višine, stebri, vrata,
+//     vogali) → več segmentov v živo, po realni geometriji (R460 engine).
+//   • STABILIZACIJA: povlek z nizkofrekvenčnim glajenjem (rAF low-pass) +
+//     ZAKLEP položaja (prepreči nerodni pomik ob zajemu).
+//   • IZVOZ ZAJEMA: prenos PNG (zadnji zajem + zgodovina) — data URL → a[download].
 // Monter (measurements.write) vidi vse; skladiščnik/proizvodnja samo zgodovino.
 
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type Ref } from 'react'
 import {
-  Camera, CameraOff, History, ImageIcon, Lightbulb, Loader2, Move, ScanLine,
-  Save, Sparkles, Trash2, Video, X,
+  Camera, CameraOff, Download, History, ImageIcon, Lightbulb, Loader2, Lock, LockOpen, Move, ScanLine,
+  Save, Sparkles, Trash2, Video, Waypoints, X,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -41,6 +48,23 @@ const DEMO_GRAD = 'linear-gradient(160deg, #e7e5e4 0%, #a8a29e 55%, #78716c 100%
 type Mode = 'off' | 'on' | 'demo'
 
 interface ProjectRow { id: string; code: string; title: string }
+
+/** R465: tekač projekta za vir geometrije overlayja (GET /api/fence-run). */
+interface RunOption { id: string; name: string; status: string; totalLengthCm: number; segmentCount: number }
+
+/** R465: segment tekača (GET /api/fence-run/[id] → data.segments). */
+interface RunSegmentRow {
+  order: number
+  fromKind: string
+  toKind: string
+  fromAtCm: number
+  toAtCm: number
+  lengthCm: number
+  heightCm: number | null
+  angleDeg: number | null
+  posts: number
+  status: string
+}
 
 /** R454: rezultat VLM analize prizora (POST /api/ar/analyze). */
 interface ArAnalysis {
@@ -68,6 +92,16 @@ function loadImage (src: string): Promise<HTMLImageElement> {
     img.onerror = () => reject(new Error('Slike ni bilo mogoče odpreti.'))
     img.src = src
   })
+}
+
+/** R465: prenos data URL kot PNG (a[download] — brez strežniškega kroga). */
+function downloadPng (dataUrl: string, name: string): void {
+  const a = document.createElement('a')
+  a.href = dataUrl
+  a.download = name
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
 }
 
 function parseAnalysis (raw: string | null | undefined): ArAnalysis | null {
@@ -105,6 +139,17 @@ export default function ArModule () {
   const [note, setNote] = useState('')
   const [lastShot, setLastShot] = useState<string | null>(null)
 
+  // R465: vir geometrije (ročno | tekač) + stabilizacija (zaklep + glajenje)
+  const [vir, setVir] = useState<'rocno' | 'tekac'>('rocno')
+  const [runId, setRunId] = useState('none')
+  const [runSegs, setRunSegs] = useState<RunSegmentRow[] | null>(null)
+  const [runLoading, setRunLoading] = useState(false)
+  const [locked, setLocked] = useState(false)
+
+  const posRef = useRef({ x: 0, y: 20 })
+  const targetRef = useRef({ x: 0, y: 20 })
+  const rafRef = useRef<number | null>(null)
+
   // R454: AI analiza prizora
   const [analysis, setAnalysis] = useState<ArAnalysis | null>(null)
   const [analyzing, setAnalyzing] = useState(false)
@@ -117,14 +162,33 @@ export default function ArModule () {
 
   const projects = useApi<{ data: ProjectRow[] }>('/api/projects', [])
 
+  // R465: tekači projekta (samo ko je vir „iz tekača“ + projekt izbran)
+  const runs = useApi<{ data: RunOption[] }>(
+    vir === 'tekac' && projectId !== 'none' ? `/api/fence-run?projectId=${projectId}` : null,
+    [vir, projectId],
+  )
+
+  // R465: segmenti izbranega tekača (geometrija overlayja)
+  useEffect(() => {
+    if (vir !== 'tekac' || runId === 'none') { setRunSegs(null); return }
+    let alive = true
+    setRunLoading(true)
+    apiGet<{ data: { segments: RunSegmentRow[] } }>(`/api/fence-run/${runId}`)
+      .then((res) => { if (alive) setRunSegs(Array.isArray(res.data?.segments) ? res.data.segments : []) })
+      .catch(() => { if (alive) setRunSegs(null) })
+      .finally(() => { if (alive) setRunLoading(false) })
+    return () => { alive = false }
+  }, [vir, runId])
+
   const posts = Math.min(20, Math.max(2, Math.round(Number(postsS) || 5)))
   const heightCm = Math.min(250, Math.max(40, Math.round(Number(heightS) || 110)))
 
-  // POČIŠČENJE: ob odklopu ustavi vse steze kamere
+  // POČIŠČENJE: ob odklopu ustavi vse steze kamere + morebitni rAF glajenja
   useEffect(() => {
     return () => {
       streamRef.current?.getTracks().forEach((t) => t.stop())
       streamRef.current = null
+      if (rafRef.current != null) cancelAnimationFrame(rafRef.current)
     }
   }, [])
 
@@ -158,15 +222,35 @@ export default function ArModule () {
     }
   }
 
-  // ── vlečenje overlayja ──
+  // ── vlečenje overlayja (R465: glajenje low-pass + zaklep) ──
   function onPointerDown (e: ReactPointerEvent<HTMLDivElement>): void {
-    dragRef.current = { startX: e.clientX, startY: e.clientY, baseX: pos.x, baseY: pos.y }
+    if (locked) return // zaklenjen položaj — zajem brez nerodnega pomika
+    dragRef.current = { startX: e.clientX, startY: e.clientY, baseX: posRef.current.x, baseY: posRef.current.y }
     try { e.currentTarget.setPointerCapture(e.pointerId) } catch { /* nekateri brskalniki */ }
   }
   function onPointerMove (e: ReactPointerEvent<HTMLDivElement>): void {
     const d = dragRef.current
-    if (!d) return
-    setPos({ x: d.baseX + (e.clientX - d.startX), y: d.baseY + (e.clientY - d.startY) })
+    if (!d || locked) return
+    // ciljna točka iz povleka; dejanski položaj ji sledi z glajenjem (stabilizacija)
+    targetRef.current = { x: d.baseX + (e.clientX - d.startX), y: d.baseY + (e.clientY - d.startY) }
+    if (rafRef.current == null) {
+      const tick = () => {
+        const t = targetRef.current
+        const p = posRef.current
+        const nx = p.x + (t.x - p.x) * 0.3
+        const ny = p.y + (t.y - p.y) * 0.3
+        posRef.current = { x: nx, y: ny }
+        setPos({ x: nx, y: ny })
+        if (Math.abs(t.x - nx) > 0.25 || Math.abs(t.y - ny) > 0.25) {
+          rafRef.current = requestAnimationFrame(tick)
+        } else {
+          posRef.current = { ...t }
+          setPos({ ...t })
+          rafRef.current = null
+        }
+      }
+      rafRef.current = requestAnimationFrame(tick)
+    }
   }
   function onPointerUp (): void { dragRef.current = null }
 
@@ -245,12 +329,18 @@ export default function ArModule () {
     setBusy(true)
     try {
       const photo = await captureFrame(true)
+      const sourceInfo = vir === 'tekac' && runSegs
+        ? { source: { vir: 'tekac', runId, segments: runSegs.length, totalCm: Math.round(runSegs.reduce((a, s) => a + s.lengthCm, 0)) } }
+        : {}
+      const runLabel = vir === 'tekac' && runSegs
+        ? ` — tekač: ${runSegs.length} segmentov, ${(runSegs.reduce((a, s) => a + s.lengthCm, 0) / 100).toFixed(1).replace('.', ',')} m`
+        : ''
       await apiPost('/api/measurements', {
         type: 'FOTO',
         projectId: projectId !== 'none' ? projectId : null,
         location: 'AR predogled',
         params: JSON.stringify({ photo, ar: true }),
-        note: note.trim() || `AR predogled — ${posts} stebrov, ${heightCm} cm`,
+        note: note.trim() || `AR predogled — ${vir === 'tekac' && runSegs ? `${runSegs.length} seg. tekača` : `${posts} stebrov, ${heightCm} cm`}`,
       })
 
       // R454: vztrajnost AR posnetka (fotografija + nastavitve + morebitna analiza)
@@ -260,8 +350,8 @@ export default function ArModule () {
           projectId: projectId !== 'none' ? projectId : null,
           scene: analysis?.scene ?? null,
           analysis: analysis ? JSON.stringify(analysis) : null,
-          params: JSON.stringify({ photo, posts, heightCm, scale, opacity, mode }),
-          note: note.trim() || null,
+          params: JSON.stringify({ photo, posts, heightCm, scale, opacity, mode, ...sourceInfo }),
+          note: (note.trim() || null) as string | null,
         })
         snapSaved = true
       } catch {
@@ -272,7 +362,7 @@ export default function ArModule () {
       setLastShot(photo)
       toast({
         title: 'AR posnetek shranjen.',
-        description: `Meritev FOTO · ${posts} stebrov × ${heightCm} cm${projectId !== 'none' ? ' · povezano s projektom' : ''}${snapSaved ? ' · shranjeno v zgodovino AR' : ''}`,
+        description: `Meritev FOTO${runLabel}${projectId !== 'none' ? ' · povezano s projektom' : ''}${snapSaved ? ' · shranjeno v zgodovino AR' : ''}`,
       })
     } catch (e) {
       toast({ title: 'Zajem ni uspel.', description: e instanceof Error ? e.message : undefined, variant: 'destructive' })
@@ -331,18 +421,63 @@ export default function ArModule () {
               <ScanLine className="size-4 text-roksal-amber" aria-hidden /> Nastavitve
             </h2>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <Label htmlFor="ar-posts">Št. stebrov</Label>
-                <Input id="ar-posts" type="number" min="2" max="20" inputMode="numeric"
-                  value={postsS} onChange={(e) => setPostsS(e.target.value)} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="ar-height">Višina (cm)</Label>
-                <Input id="ar-height" type="number" min="40" max="250" inputMode="numeric"
-                  value={heightS} onChange={(e) => setHeightS(e.target.value)} />
-              </div>
+            {/* R465: vir geometrije overlayja */}
+            <div className="space-y-2">
+              <Label htmlFor="ar-vir">Vir geometrije</Label>
+              <Select value={vir} onValueChange={(v) => { setVir(v as 'rocno' | 'tekac'); setRunId('none') }}>
+                <SelectTrigger id="ar-vir" aria-label="Vir geometrije ograje">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="rocno">Ročno (stebri + višina)</SelectItem>
+                  <SelectItem value="tekac">Iz tekača projekta (segmenti)</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
+
+            {vir === 'rocno' ? (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label htmlFor="ar-posts">Št. stebrov</Label>
+                  <Input id="ar-posts" type="number" min="2" max="20" inputMode="numeric"
+                    value={postsS} onChange={(e) => setPostsS(e.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="ar-height">Višina (cm)</Label>
+                  <Input id="ar-height" type="number" min="40" max="250" inputMode="numeric"
+                    value={heightS} onChange={(e) => setHeightS(e.target.value)} />
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Label htmlFor="ar-run">Tekač projekta</Label>
+                <Select value={runId} onValueChange={setRunId} disabled={projectId === 'none'}>
+                  <SelectTrigger id="ar-run" aria-label="Izberi ograjnega tekača">
+                    <SelectValue placeholder={projectId === 'none' ? 'Najprej izberite projekt' : runs.loading ? 'Nalagam …' : 'Izberite tekača'} />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-48">
+                    <SelectItem value="none">Brez tekača</SelectItem>
+                    {(runs.data?.data ?? []).map((r) => (
+                      <SelectItem key={r.id} value={r.id}>
+                        {r.name} — {r.segmentCount} seg. · {(r.totalLengthCm / 100).toFixed(1).replace('.', ',')} m
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {projectId === 'none' ? (
+                  <p className="text-xs text-muted-foreground">Izberite projekt zgoraj — tekači so vezani na projekt.</p>
+                ) : runLoading ? (
+                  <p className="text-xs text-muted-foreground">Nalagam segmente tekača …</p>
+                ) : runSegs ? (
+                  <p className="text-xs text-muted-foreground">
+                    Vir: {runSegs.length} segmentov · {(runSegs.reduce((a, s) => a + s.lengthCm, 0) / 100).toFixed(1).replace('.', ',')} m ·
+                    {' '}{runSegs.filter((s) => s.toKind === 'VRATA').length} vrat · stebrov {runSegs.reduce((a, s) => a + s.posts, 0) + runSegs.length + 1}
+                  </p>
+                ) : (
+                  <ErrorBox error={runs.error} />
+                )}
+              </div>
+            )}
 
             <div className="space-y-2">
               <Label htmlFor="ar-scale">Velikost ({scale.toFixed(2).replace('.', ',')}×)</Label>
@@ -367,6 +502,27 @@ export default function ArModule () {
                 </SelectContent>
               </Select>
               <ErrorBox error={projects.error} />
+            </div>
+
+            <div className="space-y-2 border-t pt-4">
+              <div className="flex items-center justify-between gap-2">
+                <Label htmlFor="ar-lock">Zaklep položaja (stabilizacija)</Label>
+                <Button
+                  id="ar-lock"
+                  size="sm"
+                  variant={locked ? 'default' : 'outline'}
+                  aria-pressed={locked}
+                  onClick={() => setLocked((l) => !l)}
+                >
+                  {locked ? <Lock className="size-3.5" aria-hidden /> : <LockOpen className="size-3.5" aria-hidden />}
+                  {locked ? 'Zaklenjeno' : 'Odklenjeno'}
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {locked
+                  ? 'Položaj ograje je zaklenjen — povlek je izklopljen (varno zajemanje).'
+                  : 'Povlek je glajen (nizkofrekvenčno) — pred zajemom položaj zaklenite.'}
+              </p>
             </div>
 
             {canWrite ? (
@@ -403,6 +559,14 @@ export default function ArModule () {
               <figure className="space-y-1.5 border-t pt-3">
                 <figcaption className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
                   <ImageIcon className="size-3.5 text-roksal-amber" aria-hidden /> Zadnji zajem
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="ml-auto h-7 px-2 text-xs"
+                    onClick={() => downloadPng(lastShot, `ar-zajem-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}.png`)}
+                  >
+                    <Download className="size-3.5" aria-hidden /> PNG
+                  </Button>
                 </figcaption>
                 <img src={lastShot} alt="Zadnji AR zajem z ograjo" className="w-full rounded-lg border" />
               </figure>
@@ -421,6 +585,8 @@ export default function ArModule () {
                 <div className="flex flex-wrap items-center gap-2">
                   {mode === 'on' ? <Badge className="border-transparent bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">Kamera aktivna</Badge> : null}
                   {mode === 'demo' ? <Badge className="border-transparent bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">Demo ozadje</Badge> : null}
+                  {locked && mode !== 'off' ? <Badge className="border-transparent bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200">Zaklenjeno</Badge> : null}
+                  {vir === 'tekac' && mode !== 'off' ? <Badge className="border-transparent bg-secondary text-secondary-foreground">Tekač: {runSegs?.length ?? 0} seg.</Badge> : null}
                   {mode !== 'off' ? (
                     <Button variant="outline" size="sm" onClick={stopCamera}>
                       <CameraOff className="size-4" aria-hidden /> Izklopi kamero
@@ -472,9 +638,12 @@ export default function ArModule () {
                     prekrivati gumbov Zaženi kamero / Demo ozadje) */}
                 {mode !== 'off' ? (
                   <div
-                    className="absolute left-1/2 top-1/2 cursor-grab touch-none active:cursor-grabbing"
+                    className={`touch-none ${locked ? 'cursor-default' : 'cursor-grab active:cursor-grabbing'}`}
                     style={{
                       opacity,
+                      position: 'absolute',
+                      left: '50%',
+                      top: '50%',
                       width: OVERLAY_W,
                       height: OVERLAY_H,
                       transform: `translate(-50%, -50%) translate(${pos.x}px, ${pos.y}px) scale(${scale})`,
@@ -484,12 +653,24 @@ export default function ArModule () {
                     onPointerUp={onPointerUp}
                     onPointerCancel={onPointerUp}
                     role="img"
-                    aria-label={`Predogled ograje: ${posts} stebrov, višina ${heightCm} centimetrov — povlecite za premik`}
+                    aria-label={vir === 'tekac'
+                      ? `Predogled ograje iz tekača: ${runSegs?.length ?? 0} segmentov${locked ? ' — položaj zaklenjen' : ' — povlecite za premik'}`
+                      : `Predogled ograje: ${posts} stebrov, višina ${heightCm} centimetrov${locked ? ' — položaj zaklenjen' : ' — povlecite za premik'}`}
                     tabIndex={0}
                   >
-                    <ArRailingSvg ref={svgRef} posts={posts} heightCm={heightCm} />
+                    {vir === 'tekac' && runSegs && runSegs.length > 0 ? (
+                      <ArRunRailingSvg ref={svgRef} segments={runSegs} fallbackHeightCm={heightCm} />
+                    ) : vir === 'tekac' ? (
+                      <div className="flex h-full flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-white/70 bg-black/35 p-4 text-center text-[11px] font-medium text-white">
+                        <Waypoints className="size-5" aria-hidden />
+                        {runLoading ? 'Nalagam segmente tekača …' : 'Izberite tekača (levo) za predogled realne geometrije'}
+                      </div>
+                    ) : (
+                      <ArRailingSvg ref={svgRef} posts={posts} heightCm={heightCm} />
+                    )}
                     <span className="pointer-events-none absolute -top-6 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-full bg-black/55 px-2 py-0.5 text-[10px] font-medium text-white">
-                      <Move className="size-3" aria-hidden /> povleci
+                      {locked ? <Lock className="size-3" aria-hidden /> : <Move className="size-3" aria-hidden />}
+                      {locked ? 'zaklenjeno' : 'povleci'}
                     </span>
                   </div>
                 ) : null}
@@ -608,7 +789,17 @@ export default function ArModule () {
                   {detail?.row.id === row.id ? (
                     <div className="grid gap-3 border-t p-3 md:grid-cols-[minmax(0,320px)_minmax(0,1fr)]">
                       {detail.photo ? (
-                        <img src={detail.photo} alt={`AR posnetek — ${row.scene ?? 'brez opisa'}`} className="w-full rounded-lg border" />
+                        <div className="space-y-1.5">
+                          <img src={detail.photo} alt={`AR posnetek — ${row.scene ?? 'brez opisa'}`} className="w-full rounded-lg border" />
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 w-full text-xs"
+                            onClick={() => downloadPng(detail.photo as string, `ar-posnetek-${row.id.slice(0, 8)}.png`)}
+                          >
+                            <Download className="size-3.5" aria-hidden /> Prenesi PNG
+                          </Button>
+                        </div>
                       ) : (
                         <p className="self-center text-xs text-muted-foreground">Posnetek ne vsebuje fotografije.</p>
                       )}
@@ -697,6 +888,106 @@ function ArRailingSvg ({ ref, posts, heightCm }: { ref?: Ref<SVGSVGElement>; pos
       ))}
       {/* ročnik */}
       <rect x={x0 - 5} y={baseY - hPx - 8} width={x1 - x0 + 10} height="8" fill={ANTHRACITE} rx="3" />
+    </svg>
+  )
+}
+
+// ─── SVG ograja IZ TEKAČA (R465 — več segmentov po realni geometriji) ──────
+// Segmenti (R460 engine) se narišejo sorazmerno dolžinam; višine, stebri,
+// vrata (toKind=VRATA) in vogali (toKind=VOGAL) iz segmentnih podatkov.
+// Eksplicitne barve — samostojen data URL za zajem na canvas.
+
+function ArRunRailingSvg ({ ref, segments, fallbackHeightCm }: {
+  ref?: Ref<SVGSVGElement>
+  segments: RunSegmentRow[]
+  fallbackHeightCm: number
+}) {
+  const baseY = 200
+  const postW = 9
+  const x0 = 14
+  const x1 = OVERLAY_W - 14
+  const usable = x1 - x0
+  const totalCm = Math.max(1, segments.reduce((a, s) => a + Math.max(1, s.lengthCm), 0))
+  const segWidth = (s: RunSegmentRow): number => Math.max(8, (Math.max(1, s.lengthCm) / totalCm) * usable)
+
+  // razporeditev segmentov po dolžini (sorazmerno) — brez mutacij
+  const drawn = segments.map((s, i) => ({
+    s,
+    x: x0 + segments.slice(0, i).reduce((a, p) => a + segWidth(p), 0),
+    w: segWidth(s),
+  }))
+
+  return (
+    <svg
+      ref={ref}
+      viewBox={`0 0 ${OVERLAY_W} ${OVERLAY_H}`}
+      width={OVERLAY_W}
+      height={OVERLAY_H}
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <title>AR ograja — segmenti tekača</title>
+      {/* mehka senca */}
+      <ellipse cx={OVERLAY_W / 2} cy={baseY + 5} rx={usable / 2 + 6} ry="7" fill="rgba(0,0,0,0.28)" />
+      {drawn.map(({ s, x: sx, w }, i) => {
+        const hPx = Math.min(158, Math.max(48, (s.heightCm ?? fallbackHeightCm) * 0.72))
+        const jeVrata = s.toKind === 'VRATA'
+        const posts = Math.max(2, Math.max(0, s.posts) + 2) // robna stebra + vmesni
+        const postXs = Array.from({ length: posts }, (_, j) => sx + (j * (w - postW)) / (posts - 1))
+        return (
+          <g key={`seg-${i}`}>
+            {/* polnilo — navpične palice (ob vratah pusti odprtino na koncu) */}
+            {postXs.slice(0, -1).map((px, j) => {
+              const nx = postXs[j + 1]
+              const gateGap = jeVrata && j >= postXs.length - 3
+              const barW = nx - px - postW - 2
+              if (gateGap || barW <= 3) return null
+              const count = Math.max(2, Math.round(barW / 11))
+              return (
+                <g key={`b-${i}-${j}`}>
+                  {Array.from({ length: count }).map((_, k) => (
+                    <rect
+                      key={k}
+                      x={px + postW + 1 + (k * (barW - 3)) / Math.max(1, count - 1)}
+                      y={baseY - hPx + 13}
+                      width="3.5"
+                      height={hPx - 21}
+                      fill={ANTHRACITE}
+                      opacity="0.92"
+                      rx="1"
+                    />
+                  ))}
+                </g>
+              )
+            })}
+            {/* srednja palica + ročnik po višini segmenta */}
+            <rect x={sx} y={baseY - hPx * 0.55} width={w} height="5" fill={ANTHRACITE} rx="2" />
+            <rect x={sx - 1} y={baseY - hPx - 8} width={w + 2} height="8" fill={ANTHRACITE} rx="3" />
+            {/* stebri */}
+            {postXs.map((px, j) => (
+              <rect key={`p-${i}-${j}`} x={px} y={baseY - hPx} width={postW} height={hPx} fill={ANTHRACITE} rx="2" />
+            ))}
+            {/* vrata: odprtina z lokom */}
+            {jeVrata ? (
+              <g>
+                <path
+                  d={`M ${sx + w - 26} ${baseY - hPx - 4} A 22 22 0 0 1 ${sx + w - 2} ${baseY - hPx - 4}`}
+                  fill="none"
+                  stroke="#f5f5f4"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                />
+                <text x={sx + w - 14} y={baseY - hPx - 10} textAnchor="middle" fontSize="8" fontWeight="700" fill="#f5f5f4">VRATA</text>
+              </g>
+            ) : null}
+            {/* vogal: oznaka kota */}
+            {s.toKind === 'VOGAL' ? (
+              <text x={sx + w - 3} y={baseY + 14} textAnchor="end" fontSize="7.5" fontWeight="700" fill="#f5f5f4">
+                {s.angleDeg != null ? `${Math.round(s.angleDeg)}°` : 'vogal'}
+              </text>
+            ) : null}
+          </g>
+        )
+      })}
     </svg>
   )
 }

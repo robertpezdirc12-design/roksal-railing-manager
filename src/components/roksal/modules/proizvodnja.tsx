@@ -8,7 +8,7 @@
 // ostajata v Zaloga → Kosovnice).
 
 import { useMemo, useState } from 'react'
-import { AlertTriangle, ArrowRight, BadgeCheck, ClipboardCheck, Factory, Package, Plus } from 'lucide-react'
+import { AlertTriangle, ArrowRight, BadgeCheck, ClipboardCheck, Factory, Layers, Package, Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
@@ -59,6 +59,29 @@ const QC_CLS: Record<string, string> = {
   V_TEKU: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300',
 }
 const QC_RESULTS = ['OK', 'NOK', 'NA', 'V_TEKU'] as const
+
+// Prefab elementi (R465): statusni tok lističa — linearno, brez preskakovanja
+const ELEMENT_FLOW = ['NAVRTEN', 'REZANJE', 'IZDELAVA', 'POVRSINA', 'DOKONCAN'] as const
+const ELEMENT_NEXT_LABEL: Record<string, string> = {
+  NAVRTEN: 'V rezanje',
+  REZANJE: 'V izdelavo',
+  IZDELAVA: 'Na površino',
+  POVRSINA: 'Dokončaj',
+}
+
+interface ElementRow {
+  id: string; key: string; label: string
+  lengthCm: number | null; heightCm: number | null; posts: number | null
+  ral: string | null; produkt: string | null
+  status: string; note: string | null; updatedAt: string; user: string | null
+}
+
+interface ElementsPayload {
+  order: { id: string; code: string; title: string; status: string; projectId: string | null }
+  sourceSnapshotId: string | null; snapshotVersion: number | null
+  progress: { total: number; done: number; pct: number }
+  elements: ElementRow[]
+}
 
 export default function ProizvodnjaModule () {
   const user = useAppStore((s) => s.user)
@@ -178,6 +201,9 @@ export default function ProizvodnjaModule () {
                   {qcFor.project ? ` · ${qcFor.project.code}` : ''}
                 </DialogDescription>
               </DialogHeader>
+
+              {/* Prefab elementi iz AS-PRODUCED dvojčka (R465, issue #4 §3) */}
+              <PrefabSection order={qcFor} canManage={canManage} />
 
               {/* Priprava materiala — kosovnice projekta (R444, issue #7 §8 PROIZVODNJA) */}
               {canSeeBom ? (
@@ -339,6 +365,126 @@ function QcAddForm ({ orderId, onSaved }: { orderId: string; onSaved: () => Prom
           <BadgeCheck className="size-4" aria-hidden /> {busy ? 'Zapisujem …' : 'Zabeleži kontrolo'}
         </Button>
       </div>
+    </div>
+  )
+}
+
+/** Prefab elementi (R465 — issue #4 §3) — proizvodni lističi iz AS-PRODUCED dvojčka.
+ *  Enota proizvodnje = segment (seg-N); mere so posnetek snapshot-a (vir: verzionirani dvojček). */
+function PrefabSection ({ order, canManage }: { order: ProductionRow; canManage: boolean }) {
+  const { toast } = useToast()
+  const elements = useApi<{ data: ElementsPayload }>(`/api/production/${order.id}/elements`, [order.id])
+  const [busy, setBusy] = useState<string | null>(null) // id elementa | 'generate'
+
+  async function generate () {
+    setBusy('generate')
+    try {
+      const res = await apiPost<{ data: { elements: { key: string }[]; snapshotVersion: number } }>('/api/production/from-twin', {
+        productionOrderId: order.id,
+        reason: `Prefab iz AS-PRODUCED — ${order.code}`,
+      })
+      toast({
+        title: 'Prefab elementi ustvarjeni.',
+        description: `${res.data.elements.length} lističev iz AS-PRODUCED dvojčka (v${res.data.snapshotVersion}).`,
+      })
+      await elements.reload()
+    } catch (e) {
+      toast({ title: 'Prefab ni mogoč.', description: e instanceof Error ? e.message : undefined, variant: 'destructive' })
+    } finally { setBusy(null) }
+  }
+
+  async function advanceEl (el: ElementRow) {
+    const idx = ELEMENT_FLOW.indexOf(el.status as (typeof ELEMENT_FLOW)[number])
+    const next = idx >= 0 && idx < ELEMENT_FLOW.length - 1 ? ELEMENT_FLOW[idx + 1] : null
+    if (!next) return
+    setBusy(el.id)
+    try {
+      await apiPatch(`/api/production/elements/${el.id}`, { status: next })
+      await elements.reload()
+    } catch (e) {
+      toast({ title: 'Napaka pri prehodu', description: e instanceof Error ? e.message : undefined, variant: 'destructive' })
+    } finally { setBusy(null) }
+  }
+
+  if (!order.project) {
+    return (
+      <div className="rounded-xl border bg-secondary/40 p-3">
+        <h4 className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-muted-foreground">
+          <Layers className="size-4 text-roksal-amber" aria-hidden /> Prefab elementi
+        </h4>
+        <p className="mt-1 text-sm text-muted-foreground">Nalog ni vezan na projekt — prefab izhaja iz AS-PRODUCED dvojčka projekta.</p>
+      </div>
+    )
+  }
+
+  const rows = elements.data?.data.elements ?? []
+  const progress = elements.data?.data.progress
+
+  return (
+    <div className="rounded-xl border bg-secondary/40 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h4 className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-muted-foreground">
+          <Layers className="size-4 text-roksal-amber" aria-hidden /> Prefab elementi — {order.project.code}
+        </h4>
+        {canManage && rows.length === 0 ? (
+          <Button size="sm" variant="outline" onClick={() => void generate()} disabled={busy === 'generate'}>
+            <Plus className="size-3.5" aria-hidden /> {busy === 'generate' ? 'Ustvarjam …' : 'Ustvari iz dvojčka'}
+          </Button>
+        ) : null}
+      </div>
+
+      <ErrorBox error={elements.error} />
+      {elements.loading ? (
+        <LoadingRows rows={1} />
+      ) : !elements.error && rows.length === 0 ? (
+        <p className="mt-1 text-sm text-muted-foreground">
+          {canManage
+            ? 'Nalog še nima proizvodnih lističev — ustvarite jih iz zadnjega AS-PRODUCED snapshot-a digitalnega dvojčka.'
+            : 'Nalog še nima proizvodnih lističev (ustvari jih vodja/proizvodnja z pravico production.manage).'}
+        </p>
+      ) : !elements.error ? (
+        <>
+          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+            <span>Vir: AS-PRODUCED dvojček{elements.data?.data.snapshotVersion ? ` v${elements.data.data.snapshotVersion}` : ''}</span>
+            <span> napredek: {progress?.done ?? 0}/{progress?.total ?? rows.length} dokončanih</span>
+          </div>
+          <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted" role="progressbar" aria-valuenow={progress?.pct ?? 0} aria-valuemin={0} aria-valuemax={100} aria-label="Napredek prefab proizvodnje">
+            <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${progress?.pct ?? 0}%` }} />
+          </div>
+          <ul className="mt-2 max-h-64 divide-y overflow-y-auto rounded-lg border bg-background/60">
+            {rows.map((el) => {
+              const idx = ELEMENT_FLOW.indexOf(el.status as (typeof ELEMENT_FLOW)[number])
+              const hasNext = idx >= 0 && idx < ELEMENT_FLOW.length - 1
+              return (
+                <li key={el.id} className="flex flex-wrap items-center gap-2.5 px-3 py-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-mono text-xs font-semibold text-muted-foreground">{el.key}</span>
+                      <span className="truncate text-sm font-medium">{el.label}</span>
+                    </div>
+                    <div className="mt-0.5 flex flex-wrap gap-x-3 text-[11px] text-muted-foreground">
+                      {el.lengthCm != null ? <span>{(el.lengthCm / 100).toLocaleString('sl-SI', { maximumFractionDigits: 2 })} m</span> : null}
+                      {el.heightCm != null ? <span>višina {Math.round(el.heightCm)} cm</span> : null}
+                      {el.posts != null ? <span>{el.posts} stebrov</span> : null}
+                      {el.ral ? <span>RAL {el.ral}</span> : null}
+                      {el.produkt ? <span className="truncate">{el.produkt}</span> : null}
+                    </div>
+                  </div>
+                  <StatusBadge status={el.status} />
+                  {canManage && hasNext ? (
+                    <Button size="sm" variant="outline" className="h-8 shrink-0" onClick={() => void advanceEl(el)} disabled={busy === el.id}>
+                      <ArrowRight className="size-3" aria-hidden /> {ELEMENT_NEXT_LABEL[el.status]}
+                    </Button>
+                  ) : null}
+                </li>
+              )
+            })}
+          </ul>
+          <p className="mt-2 text-[11px] leading-snug text-muted-foreground">
+            Lističi so posnetek mer AS-PRODUCED dvojčka — vir resnice ostaja verzionirani snapshot (Dvojček). Material rezervirate prek kosovnic v Zaloga.
+          </p>
+        </>
+      ) : null}
     </div>
   )
 }
