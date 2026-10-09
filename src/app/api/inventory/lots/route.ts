@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { jsonError, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
+import { runStockTx } from '@/lib/stock-core'
 
 // GET /api/inventory/lots — vsi losi z artiklom in dobaviteljem (inventory.read)
 export async function GET (req: NextRequest) {
@@ -47,22 +48,32 @@ export async function POST (req: NextRequest) {
     if (!supplier) return jsonError(404, 'Dobavitelj ne obstaja.')
   }
 
-  // lot + povečanje količine artikla + evidenca cene + DNEVNIK GIBANJA (R443) v isti transakciji
-  const [lot] = await db.$transaction([
-    db.stockLot.create({ data: { itemId, qty, unitCost, supplierId } }),
-    db.inventoryItem.update({ where: { id: itemId }, data: { qty: { increment: qty } } }),
-    db.materialPrice.create({ data: { itemId, supplierId, price: unitCost } }),
-    db.stockMovement.create({
+  // lot + povečanje količine artikla + evidenca cene + DNEVNIK GIBANJA (R443)
+  // v isti transakciji (R464: interaktivna transakcija pod procesno ključavnico —
+  // sočasni sprejmi pošiljk se brez izgubljenih posodobitev seštejejo)
+  const lot = await runStockTx(async (tx) => {
+    // atomarno povečanje (WHERE id preveri obstoj; increment je komutativen)
+    const upd = await tx.inventoryItem.updateMany({
+      where: { id: itemId },
+      data: { qty: { increment: qty } },
+    })
+    if (upd.count !== 1) return null // artikel je bil medtem izbrisan → prazna transakcija
+    const created = await tx.stockLot.create({ data: { itemId, qty, unitCost, supplierId } })
+    await tx.materialPrice.create({ data: { itemId, supplierId, price: unitCost } })
+    await tx.stockMovement.create({
       data: {
         itemId, qty, type: 'PREVZEM', userId: auth.user.id,
         refType: 'stockLot', note: `Sprejem pošiljke${supplierId ? ' (dobavitelj)' : ''}`,
       },
-    }),
-  ])
-
-  await writeAudit({
-    userId: auth.user.id, action: 'STOCK_LOT_ADD', entity: 'inventoryItem', entityId: itemId,
-    detail: { sku: item.sku, name: item.name, qty, unitCost, supplierId, lotId: lot.id },
+    })
+    // R464: revizija V isti transakciji (atomarna s sprejemom)
+    await writeAudit({
+      userId: auth.user.id, action: 'STOCK_LOT_ADD', entity: 'inventoryItem', entityId: itemId,
+      detail: { sku: item.sku, name: item.name, qty, unitCost, supplierId, lotId: created.id },
+    }, tx)
+    return created
   })
+  if (!lot) return jsonError(404, 'Artikel ne obstaja več.')
+
   return NextResponse.json({ data: lot }, { status: 201 })
 }
