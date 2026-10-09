@@ -38,25 +38,30 @@ export interface BackupResult {
 }
 
 /**
- * Najde ops/backup.sh od zagona aplikacije navzgor.
- * R464: standalone strežnik (next start / server.js) zamenja cwd v
- * .next/standalone — relativna pot 'ops/backup.sh' zato ne zadošča;
- * iščemo do 5 nivojev navzgor (dev: repo root; standalone: .next/standalone → repo root).
- * Na serverless namestitvi (Vercel) ops/ ni del outputa → jasna napaka
+ * Najde ops/backup.sh od zagona aplikacije navzgor — PRESKOKI kopije iz
+ * Next standalone file-tracinga (te vsebujejo samo backup.sh brez lib.sh
+ * in ostalih skript → neuporabne).
+ * R464: standalone strežnik zamenja cwd v .next/standalone; pravi koren
+ * prepoznamo po ops/backup.sh + ops/lib.sh + package.json skupaj.
+ * Na serverless namestitvi (Vercel) celotnega ops/ ni → jasna napaka
  * (DR za takšno namestitev teče prek zunanjega cron klica/neon PITR — docs/DEPLOYMENT.md).
  */
 function resolveOpsRoot (): string {
   let dir = process.cwd()
-  for (let i = 0; i < 5; i++) {
-    const candidate = join(dir, 'ops', 'backup.sh')
+  for (let i = 0; i < 6; i++) {
+    const backup = join(dir, 'ops', 'backup.sh')
+    const lib = join(dir, 'ops', 'lib.sh')
+    const pkg = join(dir, 'package.json')
     try {
-      accessSync(candidate)
+      accessSync(backup)
+      accessSync(lib)
+      accessSync(pkg)
       return dir
     } catch {
       dir = dirname(dir)
     }
   }
-  throw new Error('ops/backup.sh ni na voljo v tej namestitvi (serverless?) — varnostne kopije poganja zunanji cron ali skrbnik (glej docs/DEPLOYMENT.md).')
+  throw new Error('ops/ (backup.sh + lib.sh) ni na voljo v tej namestitvi (serverless?) — varnostne kopije poganja zunanji cron ali skrbnik (glej docs/DEPLOYMENT.md).')
 }
 
 /**

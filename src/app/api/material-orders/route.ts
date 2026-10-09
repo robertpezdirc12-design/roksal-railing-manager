@@ -25,13 +25,19 @@ function brezArtiklaFraza (n: number, imena: string[], kontekst: 'prejeto' | 'us
 
 async function nextCode (): Promise<string> {
   const year = new Date().getFullYear()
-  const count = await db.materialOrder.count()
-  // številčenje znotraj leta: NAR-<leto>-<zaporedna>
-  const yearCount = await db.materialOrder.count({
+  // R464: številčenje po NAJVIŠJI obstoječi številki (ne števec vrstic) —
+  // brisanje naročila ne sme reciklirati kode dokumenta (revizija/revizija
+  // se nanaša na enolično kodo). Deluje tudi čez prelom 999.
+  const rows = await db.materialOrder.findMany({
     where: { code: { startsWith: `NAR-${year}-` } },
+    select: { code: true },
+    take: 500,
   })
-  const seq = Math.max(count === 0 ? 0 : yearCount, yearCount) + 1
-  return `NAR-${year}-${String(seq).padStart(3, '0')}`
+  const maxSeq = rows.reduce((m, r) => {
+    const n = Number(r.code.split('-')[2])
+    return Number.isFinite(n) && n > m ? n : m
+  }, 0)
+  return `NAR-${year}-${String(maxSeq + 1).padStart(3, '0')}`
 }
 
 export async function GET (req: NextRequest) {
