@@ -80,6 +80,21 @@ interface PriceListRow {
   rules: PriceRuleRow[]
 }
 
+// ── R464 (GitHub issue #1): generična konfiguracijska pravila (KONFIG:<ključ>,
+// brez produkta/artikla) — ocene viz/3D konfiguratorja, ki živijo v ceniku.
+const KONFIG_RULE_LABELS: Record<string, string> = {
+  'KONFIG:STEBER': 'Steber (konfigurator) — ocena',
+  'KONFIG:ROCNIK': 'Ročnik na meter (konfigurator)',
+  'KONFIG:STEKLO': 'Steklena plošča na m² (konfigurator)',
+  'KONFIG:MONTAZA': 'Montaža na meter (konfigurator)',
+  'KONFIG:PRIPRAVA': 'Priprava in rezerva % (konfigurator)',
+  'KONFIG:PROFIL_OCENA': 'Profil — ocena na meter (konfigurator)',
+}
+const konfigLabel = (r: PriceRuleRow | null): string | null =>
+  r?.note != null && r.note.startsWith('KONFIG:')
+    ? (KONFIG_RULE_LABELS[r.note] ?? r.note)
+    : null
+
 // ── R448 (issue #7 §11): preslikava kod družin v slovenska imena hitrega filtra ──
 const FAMILY_LABELS: Record<string, string> = {
   TERASA: 'Terase',
@@ -525,10 +540,16 @@ function PriceListsTab () {
                         {l.rules.map((r) => (
                           <TableRow key={r.id}>
                             <TableCell className="max-w-64 pl-4">
-                              <span className="font-mono text-xs text-muted-foreground">{r.product?.sku ?? r.item?.sku}</span>
-                              <span className="ml-2 font-medium">{r.product?.name ?? r.item?.name}</span>
+                              {konfigLabel(r) ? (
+                                <span className="font-medium">{konfigLabel(r)}</span>
+                              ) : (
+                                <>
+                                  <span className="font-mono text-xs text-muted-foreground">{r.product?.sku ?? r.item?.sku}</span>
+                                  <span className="ml-2 font-medium">{r.product?.name ?? r.item?.name}</span>
+                                </>
+                              )}
                             </TableCell>
-                            <TableCell className="text-right font-bold">{fmtEUR(r.price)}<span className="text-xs font-normal text-muted-foreground"> / {r.product?.unit ?? r.item?.unit ?? r.unit}</span></TableCell>
+                            <TableCell className="text-right font-bold">{r.unit === '%' ? `${r.price} %` : fmtEUR(r.price)}<span className="text-xs font-normal text-muted-foreground"> / {r.product?.unit ?? r.item?.unit ?? r.unit}</span></TableCell>
                             <TableCell className="text-right">{r.discountPct > 0 ? `${r.discountPct} %` : '—'}</TableCell>
                             <TableCell className="hidden text-xs text-muted-foreground sm:table-cell">
                               {r.seasonFrom && r.seasonTo ? `${r.seasonFrom} → ${r.seasonTo}` : '—'}
@@ -585,15 +606,22 @@ function EditRuleDialog ({ ctx, onClose, onSaved }: {
     const p = Number(price)
     if (!Number.isFinite(p) || p < 0) { toast({ title: 'Cena mora biti veljavno število.', variant: 'destructive' }); return }
     const d = Number(discount)
+    // generično konfiguracijsko pravilo prenesemo kot key (note = KONFIG:<ključ>)
+    const konfigKey = ctx.rule?.note?.startsWith('KONFIG:')
+      ? ctx.rule.note.slice('KONFIG:'.length)
+      : null
     try {
       await apiPost(`/api/price-lists/${ctx.listId}/rules`, {
         productId: ctx.rule?.product?.id ?? null,
         itemId: ctx.rule?.item?.id ?? null,
+        key: konfigKey,
         price: p,
         discountPct: Number.isFinite(d) ? d : 0,
-        unit: ctx.rule?.product?.unit ?? ctx.rule?.item?.unit ?? 'm2',
+        unit: ctx.rule?.product?.unit ?? ctx.rule?.item?.unit ?? ctx.rule?.unit ?? 'm2',
       })
-      toast({ title: 'Pravilo shranjeno.', description: ctx.rule ? `${ctx.rule.product?.name ?? ctx.rule.item?.name}: ${fmtEUR(p)}` : undefined })
+      toast({ title: 'Pravilo shranjeno.', description: konfigKey
+        ? `${konfigLabel(ctx.rule) ?? konfigKey}: ${p}`
+        : ctx.rule ? `${ctx.rule.product?.name ?? ctx.rule.item?.name}: ${fmtEUR(p)}` : undefined })
       await onSaved()
     } catch (e) {
       toast({ title: 'Napaka pri shranjevanju', description: e instanceof Error ? e.message : undefined, variant: 'destructive' })
@@ -601,7 +629,7 @@ function EditRuleDialog ({ ctx, onClose, onSaved }: {
   }
 
   if (!ctx) return null
-  const target = ctx.rule?.product?.name ?? ctx.rule?.item?.name ?? ''
+  const target = konfigLabel(ctx.rule) ?? (ctx.rule?.product?.name ?? ctx.rule?.item?.name ?? '')
   return (
     <DialogContent>
       <DialogHeader>

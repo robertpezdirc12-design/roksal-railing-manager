@@ -375,6 +375,24 @@ async function main () {
     exists = await db.priceRule.findFirst({ where: { priceListId: montazaId, productId: prod.id } })
     if (!exists && MONTAZA[p.sku] > 0) { await db.priceRule.create({ data: { priceListId: montazaId, productId: prod.id, price: MONTAZA[p.sku], unit: p.unit } }); nRule++ }
   }
+
+  // ── R464 (GitHub issue #1): generična konfiguracijska pravila ocen ─────────
+  // viz/3D konfigurator ocenjuje ceno iz cenika (note = 'KONFIG:<ključ>',
+  // brez produkta/artikla). Vrednosti so naslednice prej hardcoded konstant
+  // iz viz-3d.tsx — od sedaj jih ureja pooblaščena oseba v ceniku.
+  const KONFIG_RULES = [
+    { key: 'STEBER', price: 45, unit: 'kos' },       // € / steber
+    { key: 'ROCNIK', price: 15, unit: 'm' },         // € / m ročnika
+    { key: 'STEKLO', price: 85, unit: 'm2' },        // € / m² stekla (balustrada)
+    { key: 'MONTAZA', price: 35, unit: 'm' },        // € / m montaže
+    { key: 'PRIPRAVA', price: 15, unit: '%' },       // priprava in rezerva (%)
+    { key: 'PROFIL_OCENA', price: 85, unit: 'm' },   // profil € / m, če ni izbran
+  ]
+  for (const r of KONFIG_RULES) {
+    const note = 'KONFIG:' + r.key
+    const exists = await db.priceRule.findFirst({ where: { priceListId: prodajnaId, productId: null, itemId: null, note } })
+    if (!exists) { await db.priceRule.create({ data: { priceListId: prodajnaId, note, price: r.price, unit: r.unit } }); nRule++ }
+  }
   console.log('[seed-r442] ceniki: 3 · nova pravila:', nRule)
 
   // ── projektni paketi + 1 demo BOM ──────────────────────────────────────────

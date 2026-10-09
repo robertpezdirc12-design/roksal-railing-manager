@@ -93,6 +93,208 @@ export async function resolveMontaza (productId: string): Promise<ResolvedPrice 
   return resolvePrice({ type: 'MONTAZA', productId })
 }
 
+// ─── Konfigurator ograj — ocena cene (R464, issue #1 P0 §1) ─────────────────
+// VIZ/3D konfigurator ocenjuje ceno iz geometrije (dolžina/višina/stebri/
+// ročnik/steklo/montaža). Do R463 so bile cene hardcoded v viz-3d.tsx —
+// zdaj ŽIVIJO IZKLJUČNO tukaj, v pricing core-u, kot PriceRule pravila:
+//  - pravilo brez produkta/artikla (productId=null, itemId=null),
+//  - note = "KONFIG:<KLJUČ>" (stroga konvencija ključa),
+//  - price = vrednost, unit = fizična enota ('kos'|'m'|'m2'|'%').
+// PRIPRAVA: price v % (npr. 15 → 15 %). PROFIL_OCENA: padec, če profil NI
+// izbran (izbran profil vedno uporabi Profile.pricePerM iz kataloga).
+
+export const KONFIG_PRICE_KEYS = [
+  'STEBER', 'ROCNIK', 'STEKLO', 'MONTAZA', 'PRIPRAVA', 'PROFIL_OCENA',
+] as const
+export type KonfigPriceKey = (typeof KONFIG_PRICE_KEYS)[number]
+
+export const konfigRuleNote = (key: KonfigPriceKey): string => `KONFIG:${key}`
+
+/** Veljavno generično konfiguracijsko pravilo (KONFIG:<ključ>) v aktivnem PRODAJNA ceniku. */
+export async function resolveKonfigRule (
+  key: KonfigPriceKey,
+  date?: Date,
+): Promise<{ price: number; priceListName: string } | null> {
+  const now = date ?? new Date()
+  const rule = await db.priceRule.findFirst({
+    where: {
+      active: true,
+      productId: null,
+      itemId: null,
+      note: konfigRuleNote(key),
+      priceList: {
+        active: true, type: 'PRODAJNA',
+        validFrom: { lte: now }, OR: [{ validTo: null }, { validTo: { gte: now } }],
+      },
+      OR: [{ validTo: null }, { validTo: { gte: now } }],
+    },
+    orderBy: { updatedAt: 'desc' },
+    include: { priceList: { select: { name: true } } },
+  })
+  if (!rule) return null
+  return { price: rule.price, priceListName: rule.priceList.name }
+}
+
+export interface KonfigCenaPostavka {
+  key: string
+  label: string
+  qty: number
+  qtyUnit: string
+  unitPrice: number
+  total: number
+}
+
+export interface KonfigCenaVhod {
+  tip: 'OGRAJA' | 'BALUSTRADA' | 'NAGIB'
+  lengthCm: number
+  heightCm: number
+  posts: number
+  handrail: boolean
+  montaza: boolean
+  profileId?: string | null
+  colorLabel?: string
+}
+
+export interface KonfigCenaRezultat {
+  postavke: KonfigCenaPostavka[]
+  skupaj: number
+  dolzinaM: number
+  /** od kod cene (cenik / katalog profilov / delno brez pravil) */
+  priceSource: string
+  /** razrešene vrednosti KONFIG pravil (za prikaz v UI; PRIPRAVA kot ulomek) */
+  unitPrices: Partial<Record<KonfigPriceKey, number>>
+}
+
+const TIP_SHORT_SRV: Record<KonfigCenaVhod['tip'], string> = {
+  OGRAJA: 'ograja', BALUSTRADA: 'balustrada', NAGIB: 'stopniški nagib',
+}
+
+const fmtMSrv = (cm: number): string => {
+  const m = cm / 100
+  return m.toFixed(m % 1 === 0 ? 0 : 2).replace('.', ',')
+}
+
+/**
+ * Izračun ocene cene konfiguracije ograje — IZKLJUČNO iz cenikov (PriceRule)
+ * in kataloga profilov (Profile.pricePerM). Brez hardcoded poslovnih cen:
+ * manjkajoče pravilo → postavka se IZPUSTI (cena je odgovornost cenika).
+ */
+export async function calcKonfigCena (v: KonfigCenaVhod): Promise<KonfigCenaRezultat> {
+  const m = v.lengthCm / 100
+  const postavke: KonfigCenaPostavka[] = []
+  const unitPrices: Partial<Record<KonfigPriceKey, number>> = {}
+  const color = v.colorLabel ?? ''
+
+  // profil: izbran profil iz kataloga → Profile.pricePerM; sicer cenik (ocena)
+  let profilCena: number | null = null
+  let skuOznaka = 'Profil (ocena)'
+  let izKataloga = false
+  if (v.profileId) {
+    const profile = await db.profile.findUnique({ where: { id: v.profileId } })
+    if (profile) {
+      profilCena = profile.pricePerM
+      skuOznaka = profile.sku
+      izKataloga = true
+    }
+  }
+  if (profilCena == null) {
+    const ocena = await resolveKonfigRule('PROFIL_OCENA')
+    if (ocena) {
+      profilCena = ocena.price
+      unitPrices.PROFIL_OCENA = ocena.price
+    }
+  }
+  if (profilCena != null) {
+    postavke.push({
+      key: 'profil',
+      label: `${skuOznaka} — ${TIP_SHORT_SRV[v.tip]}, ${fmtMSrv(v.lengthCm)} m${color ? `, ${color}` : ''}`,
+      qty: m, qtyUnit: 'm', unitPrice: profilCena, total: profilCena * m,
+    })
+  }
+
+  // stebri × cenik
+  const steber = await resolveKonfigRule('STEBER')
+  if (steber) {
+    unitPrices.STEBER = steber.price
+    postavke.push({
+      key: 'stebri',
+      label: `Stebri ${v.posts} kos`,
+      qty: v.posts, qtyUnit: 'kos', unitPrice: steber.price, total: steber.price * v.posts,
+    })
+  }
+
+  // ročnik × m (izklop s toggle)
+  if (v.handrail) {
+    const rocnik = await resolveKonfigRule('ROCNIK')
+    if (rocnik) {
+      unitPrices.ROCNIK = rocnik.price
+      postavke.push({
+        key: 'rocnik',
+        label: `Ročnik — ${fmtMSrv(v.lengthCm)} m${color ? ` (${color})` : ''}`,
+        qty: m, qtyUnit: 'm', unitPrice: rocnik.price, total: rocnik.price * m,
+      })
+    }
+  }
+
+  // steklene plošče (samo balustrada) × m²
+  if (v.tip === 'BALUSTRADA') {
+    const steklo = await resolveKonfigRule('STEKLO')
+    if (steklo) {
+      unitPrices.STEKLO = steklo.price
+      const povrsina = m * (v.heightCm / 100)
+      postavke.push({
+        key: 'steklo',
+        label: `Steklene plošče — ${povrsina.toLocaleString('sl-SI', { maximumFractionDigits: 2 })} m²`,
+        qty: povrsina, qtyUnit: 'm²', unitPrice: steklo.price, total: steklo.price * povrsina,
+      })
+    }
+  }
+
+  // priprava in rezerva — odstotek vmesne vsote (price v % → ulomek)
+  const priprava = await resolveKonfigRule('PRIPRAVA')
+  if (priprava) {
+    const pct = Math.min(Math.max(priprava.price, 0), 100) / 100
+    if (pct > 0) {
+      unitPrices.PRIPRAVA = pct
+      const sub = postavke.reduce((s, p) => s + p.total, 0)
+      postavke.push({
+        key: 'priprava',
+        label: `Priprava in rezerva (${Math.round(pct * 100)} %)`,
+        qty: 1, qtyUnit: 'kos', unitPrice: sub * pct, total: sub * pct,
+      })
+    }
+  }
+
+  // montaža × m (izklop s toggle)
+  if (v.montaza) {
+    const montaza = await resolveKonfigRule('MONTAZA')
+    if (montaza) {
+      unitPrices.MONTAZA = montaza.price
+      postavke.push({
+        key: 'montaza',
+        label: `Montaža — ${fmtMSrv(v.lengthCm)} m`,
+        qty: m, qtyUnit: 'm', unitPrice: montaza.price, total: montaza.price * m,
+      })
+    }
+  }
+
+  const rounded = postavke.map((p) => ({
+    ...p,
+    qty: Math.round(p.qty * 100) / 100,
+    unitPrice: Math.round(p.unitPrice * 100) / 100,
+    total: Math.round(p.total * 100) / 100,
+  }))
+  const skupaj = Math.round(rounded.reduce((s, p) => s + p.total, 0) * 100) / 100
+  const nPravil = Object.keys(unitPrices).length
+  const priceSource = izKataloga
+    ? `katalog profilov + cenik (${nPravil} pravil)`
+    : nPravil > 0
+      ? `cenik (${nPravil} pravil)`
+      : 'brez veljavnih pravil'
+
+  return { postavke: rounded, skupaj, dolzinaM: m, priceSource, unitPrices }
+}
+
 // ─── Generacija BOM (issue #7 §2: izključno eksplicitne ID povezave) ────────
 
 export interface BomPlanLine {

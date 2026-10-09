@@ -6,8 +6,11 @@
 // 3D pogled (viz-3d.tsx — lastna perspektivna projekcija) in 2D tehnična risba
 // (tloris + stranski pogled, merilo 1:1, izvoz SVG) — ohranjeni.
 // Shranjevanje kot meritev (measurements.write) zdaj nosi params.konfigurator.
+// R464 (GitHub issue #1): izračun cene NI VEČ klienten — teče strežniško
+// (POST /api/price-lists/calculate → product-core calcKonfigCena) iz cenikov
+// (PriceRule KONFIG:* pravila + Profile.pricePerM); UI samo prikaže rezultat.
 
-import { useId, useMemo, useRef, useState, type ReactNode, type Ref } from 'react'
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode, type Ref } from 'react'
 import { Box, Copy, Download, FilePlus2, FolderOpen, Loader2, Orbit, Ruler, Save, Sigma, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -18,11 +21,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useToast } from '@/hooks/use-toast'
 import { useAppStore } from '@/lib/store'
-import { apiDelete, apiPost, fmtEUR, useApi } from '@/lib/api-client'
+import { ApiError, apiDelete, apiPost, fmtEUR, useApi } from '@/lib/api-client'
 import { EmptyState, ErrorBox, LoadingRows, PageHeader } from '@/components/roksal/ui-bits'
 import { hasPerm } from '@/lib/permissions-core'
 import {
-  RAL_COLORS, Railing3D, TIP_LABELS, TIP_SHORT, fmtM, fmtQty, izracunajCeno,
+  RAL_COLORS, Railing3D, TIP_LABELS, TIP_SHORT, fmtM, fmtQty,
   isColorId, parseKonfigurator, ralLabel,
   type ColorId, type KonfigTip,
 } from './viz-3d'
@@ -62,6 +65,24 @@ const toNum = (v: string, fallback: number, min: number, max: number): number =>
   const n = Number(v.replace(',', '.'))
   if (!Number.isFinite(n)) return fallback
   return Math.min(max, Math.max(min, n))
+}
+
+// ── R464: ocena cene iz strežniškega pricing core-a (brez klientnih cen) ──
+
+interface CenaPostavka {
+  key: string
+  label: string
+  qty: number
+  qtyUnit: string
+  unitPrice: number
+  total: number
+}
+interface CenaRezultat {
+  postavke: CenaPostavka[]
+  skupaj: number
+  dolzinaM: number
+  priceSource: string
+  unitPrices: Partial<Record<string, number>>
 }
 
 export default function VizModule () {
@@ -222,19 +243,49 @@ export default function VizModule () {
 
   const measurableRows = (measurements.data?.data ?? []).filter((m) => m.lengthCm != null)
 
-  /** Izračun cene iz trenutne konfiguracije (povezava s ponudbo). */
-  const cena = izracunajCeno({
-    tip,
-    lengthCm,
-    heightCm,
-    posts,
-    handrail,
-    montaza,
-    profile: profile ? { sku: profile.sku, name: profile.name, pricePerM: profile.pricePerM } : null,
-    colorLabel: color.label,
-  })
+  // ── R464 (issue #1): izračun cene iz cenika — strežniško (debounce 300 ms) ──
+  // Vhodi konfiguracije se pošljejo na POST /api/price-lists/calculate; pricing
+  // core razreši cene iz aktivnega cenika (PriceRule KONFIG:*) in kataloga
+  // profilov (Profile.pricePerM). V UI NIČ poslovnih cen in formul.
+  const [cena, setCena] = useState<CenaRezultat | null>(null)
+  const [cenaBusy, setCenaBusy] = useState(false)
+  const [cenaError, setCenaError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let alive = true
+    const t = setTimeout(() => {
+      setCenaBusy(true)
+      apiPost<{ data: CenaRezultat }>('/api/price-lists/calculate', {
+        tip,
+        lengthCm: Math.round(lengthCm * 10) / 10,
+        heightCm: Math.round(heightCm),
+        posts,
+        handrail,
+        montaza,
+        profileId: profile?.id ?? null,
+        colorLabel: color.label,
+      })
+        .then((res) => {
+          if (!alive) return
+          setCena(res.data)
+          setCenaError(null)
+        })
+        .catch((e: unknown) => {
+          if (!alive) return
+          setCena(null)
+          setCenaError(e instanceof ApiError || e instanceof Error ? e.message : 'Izračun cene ni uspel.')
+        })
+        .finally(() => { if (alive) setCenaBusy(false) })
+    }, 300)
+    return () => { alive = false; clearTimeout(t) }
+  }, [tip, lengthCm, heightCm, posts, handrail, montaza, profile?.id, color.label])
+
+  const montazaLabel = cena?.unitPrices.MONTAZA != null
+    ? `Montaža (${fmtEUR(cena.unitPrices.MONTAZA)}/m)`
+    : 'Montaža'
 
   async function ustvariPonudbo (): Promise<void> {
+    if (!cena) return
     setQuoteBusy(true)
     try {
       const res = await apiPost<{ data: { code: string; total: number } }>('/api/quotes', {
@@ -607,43 +658,60 @@ export default function VizModule () {
           </CardContent>
         </Card>
 
-        {/* izračun (povezava konfiguracije s ponudbo) */}
+        {/* izračun (povezava konfiguracije s ponudbo) — R464: strežniško iz cenika */}
         <Card>
           <CardContent className="space-y-3 p-4 sm:p-6">
             <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-widest text-muted-foreground">
               <Sigma className="size-4 text-roksal-amber" aria-hidden /> Izračun
             </h2>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="h-8">Postavka</TableHead>
-                  <TableHead className="h-8 text-right">Količina</TableHead>
-                  <TableHead className="h-8 text-right">Cena</TableHead>
-                  <TableHead className="h-8 text-right">Skupaj</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {cena.postavke.map((p) => (
-                  <TableRow key={p.key}>
-                    <TableCell className="py-1.5 text-xs">{p.label}</TableCell>
-                    <TableCell className="py-1.5 text-right text-xs whitespace-nowrap tabular-nums">{fmtQty(p.qty)} {p.qtyUnit}</TableCell>
-                    <TableCell className="py-1.5 text-right text-xs whitespace-nowrap tabular-nums">{fmtEUR(p.unitPrice)}</TableCell>
-                    <TableCell className="py-1.5 text-right text-xs font-medium whitespace-nowrap tabular-nums">{fmtEUR(p.total)}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-            <div className="flex items-center justify-between border-t pt-2">
-              <span className="text-sm font-semibold">Skupaj (brez DDV)</span>
-              <span className="text-lg font-bold tabular-nums text-roksal-amber">{fmtEUR(cena.skupaj)}</span>
-            </div>
-            <p className="text-[11px] text-muted-foreground">Ocena iz konfiguracije — DDV 22 % se obračuna v ponudbi.</p>
+            {cenaError ? (
+              <ErrorBox error={{ message: cenaError }} />
+            ) : !cena ? (
+              cenaBusy ? (
+                <LoadingRows rows={3} />
+              ) : (
+                <EmptyState title="Izračun ni na voljo" desc="Preverite vnosne parametre in poskusite znova." icon={Sigma} />
+              )
+            ) : (
+              <>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="h-8">Postavka</TableHead>
+                      <TableHead className="h-8 text-right">Količina</TableHead>
+                      <TableHead className="h-8 text-right">Cena</TableHead>
+                      <TableHead className="h-8 text-right">Skupaj</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {cena.postavke.map((p) => (
+                      <TableRow key={p.key}>
+                        <TableCell className="py-1.5 text-xs">{p.label}</TableCell>
+                        <TableCell className="py-1.5 text-right text-xs whitespace-nowrap tabular-nums">{fmtQty(p.qty)} {p.qtyUnit}</TableCell>
+                        <TableCell className="py-1.5 text-right text-xs whitespace-nowrap tabular-nums">{fmtEUR(p.unitPrice)}</TableCell>
+                        <TableCell className="py-1.5 text-right text-xs font-medium whitespace-nowrap tabular-nums">{fmtEUR(p.total)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                <div className="flex items-center justify-between border-t pt-2">
+                  <span className="text-sm font-semibold">Skupaj (brez DDV)</span>
+                  <span className="flex items-center gap-2">
+                    {cenaBusy ? <Loader2 className="size-4 animate-spin text-muted-foreground" aria-hidden /> : null}
+                    <span className="text-lg font-bold tabular-nums text-roksal-amber">{fmtEUR(cena.skupaj)}</span>
+                  </span>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Ocena iz konfiguracije — vir: {cena.priceSource} · DDV 22 % se obračuna v ponudbi.
+                </p>
+              </>
+            )}
             <div className="flex items-center justify-between rounded-lg border px-3 py-2">
-              <Label htmlFor="viz-montaza" className="cursor-pointer">Montaža (35 €/m)</Label>
+              <Label htmlFor="viz-montaza" className="cursor-pointer">{montazaLabel}</Label>
               <Switch id="viz-montaza" checked={montaza} onCheckedChange={setMontaza} />
             </div>
             {canQuote ? (
-              <Button className="w-full" onClick={() => void ustvariPonudbo()} disabled={quoteBusy}>
+              <Button className="w-full" onClick={() => void ustvariPonudbo()} disabled={quoteBusy || !cena}>
                 {quoteBusy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <FilePlus2 className="size-4" aria-hidden />}
                 Ustvari ponudbo iz konfiguracije
               </Button>

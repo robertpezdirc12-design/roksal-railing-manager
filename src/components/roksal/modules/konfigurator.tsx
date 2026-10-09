@@ -6,7 +6,8 @@
 // Osnova je produktno jedro R442 (planBom iz predlog ProductComponent, cene iz cenikov)
 // — NIČ hardcoded poslovnih cen (issue #7 §15). 3D vizualizacija (viz-3d.tsx) ostaja
 // ločen modul; ta konfigurator pokriva vse družine brez 3D zahteve.
-// NADOMEŠČA stari "Kalkulator" (imel je hardcoded POST_PRICE/MONTAZA_PRICE — kršitev §15).
+// NADOMEŠČA stari "Kalkulator" (ta je imel hardcoded poslovne cene — kršitev §15;
+// R464: tudi viz/3D ocene so odstranjene iz UI kode in živijo v ceniku).
 // Vrata: quotes.create (pisarna ADMIN/VODJA) — monter zavihka sploh ne vidi.
 // Ciljna IA §11 (preselitev iz sekcije ZAJEM) pride z R448.
 

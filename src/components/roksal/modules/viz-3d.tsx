@@ -4,8 +4,11 @@
 // LASTA perspektivna projekcija v čistem TypeScriptu (BREZ three.js):
 //   točka (x, y, z) v cm → rotacija yaw (okoli Y) + pitch (okoli X) →
 //   perspektiva s = f / (f − z'), f ≈ 700 → SVG viewBox 640×400.
-// Datoteko delita viz.tsx (konfigurator + izračun cene) in projekti.tsx
+// Datoteko delita viz.tsx (konfigurator + prikaz cene iz API-ja) in projekti.tsx
 // (3D predogled shranjene konfiguracije na projektu).
+// R464 (GitHub issue #1): ČISTA geometrija/prikaz/interakcija — NO cene, NO
+// cenovne formule. Ocena cene teče izključno strežniško v pricing core-u
+// (src/lib/product-core.ts, calcKonfigCena) prek POST /api/price-lists/calculate.
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { RotateCw } from 'lucide-react'
@@ -96,7 +99,7 @@ export function parseKonfigurator (params: string | null | undefined): KonfigPar
   }
 }
 
-// ─── oblikovanje števil ──────────────────────────────────────────────────────
+// ─── oblikovanje števil (čisti prikaz — brez poslovnih vrednosti) ────────────
 
 export const fmtM = (cm: number): string => {
   const m = cm / 100
@@ -132,118 +135,11 @@ function shadeColor (hex: string, f: number): string {
   return `#${[m(r), m(g), m(b)].map((c) => c.toString(16).padStart(2, '0')).join('')}`
 }
 
-// ─── izračun cene konfiguracije ──────────────────────────────────────────────
-
-export const POST_PRICE = 45        // € / steber
-export const ROCNIK_PRICE_M = 15    // € / m
-export const STEKLO_PRICE_M2 = 85   // € / m²
-export const MONTAZA_PRICE_M = 35   // € / m
-export const PRIPRAVA_PCT = 0.15    // 15 % priprava in rezerva
-export const PROFIL_OCENA_M = 85    // ocena, če profil ni izbran
-
-export interface CenaPostavka {
-  key: string
-  label: string
-  qty: number
-  qtyUnit: string
-  unitPrice: number
-  total: number
-}
-
-export interface CenaVhod {
-  tip: KonfigTip
-  lengthCm: number
-  heightCm: number
-  posts: number
-  handrail: boolean
-  montaza: boolean
-  profile: { sku: string; name: string; pricePerM: number } | null
-  colorLabel: string
-}
-
-export interface IzracunCene {
-  postavke: CenaPostavka[]
-  skupaj: number
-  dolzinaM: number
-}
-
-const round2 = (n: number): number => Math.round(n * 100) / 100
-
-/**
- * Razčlenitev cene iz konfiguracije:
- * profil × m + stebri × 45 € + ročnik 15 €/m + steklo 85 €/m² (balustrada)
- * + 15 % priprava/rezerva + montaža 35 €/m (toggle).
- */
-export function izracunajCeno (v: CenaVhod): IzracunCene {
-  const m = v.lengthCm / 100
-  const postavke: CenaPostavka[] = []
-
-  const profilCena = v.profile?.pricePerM ?? PROFIL_OCENA_M
-  const skuOznaka = v.profile ? v.profile.sku : 'Profil (ocena)'
-  postavke.push({
-    key: 'profil',
-    label: `${skuOznaka} — ${TIP_SHORT[v.tip]}, ${fmtM(v.lengthCm)} m, ${v.colorLabel}`,
-    qty: round2(m),
-    qtyUnit: 'm',
-    unitPrice: profilCena,
-    total: round2(m * profilCena),
-  })
-
-  postavke.push({
-    key: 'stebri',
-    label: `Stebri ${v.posts} kos`,
-    qty: v.posts,
-    qtyUnit: 'kos',
-    unitPrice: POST_PRICE,
-    total: round2(v.posts * POST_PRICE),
-  })
-
-  if (v.handrail) {
-    postavke.push({
-      key: 'rocnik',
-      label: `Ročnik — ${fmtM(v.lengthCm)} m (${v.colorLabel})`,
-      qty: round2(m),
-      qtyUnit: 'm',
-      unitPrice: ROCNIK_PRICE_M,
-      total: round2(m * ROCNIK_PRICE_M),
-    })
-  }
-
-  if (v.tip === 'BALUSTRADA') {
-    const povrsina = round2(m * (v.heightCm / 100))
-    postavke.push({
-      key: 'steklo',
-      label: `Steklene plošče — ${fmtQty(povrsina)} m²`,
-      qty: povrsina,
-      qtyUnit: 'm²',
-      unitPrice: STEKLO_PRICE_M2,
-      total: round2(povrsina * STEKLO_PRICE_M2),
-    })
-  }
-
-  const sub = postavke.reduce((s, p) => s + p.total, 0)
-  postavke.push({
-    key: 'priprava',
-    label: 'Priprava in rezerva (15 %)',
-    qty: 1,
-    qtyUnit: 'kos',
-    unitPrice: round2(sub * PRIPRAVA_PCT),
-    total: round2(sub * PRIPRAVA_PCT),
-  })
-
-  if (v.montaza) {
-    postavke.push({
-      key: 'montaza',
-      label: `Montaža — ${fmtM(v.lengthCm)} m`,
-      qty: round2(m),
-      qtyUnit: 'm',
-      unitPrice: MONTAZA_PRICE_M,
-      total: round2(m * MONTAZA_PRICE_M),
-    })
-  }
-
-  return { postavke, skupaj: round2(postavke.reduce((s, p) => s + p.total, 0)), dolzinaM: m }
-}
+// ─── izračun cene: R464 (GitHub issue #1) ─────────────────────────────────
+// Vse poslovne cene in formule so IZSEL iz UI/3D kode. Ocena cene teče
+// strežniško: POST /api/price-lists/calculate → src/lib/product-core.ts
+// (calcKonfigCena) — PriceRule pravila cenika + Profile.pricePerM.
+// Ta datoteka ostane ČISTA geometrija/prikaz/interakcija.
 
 // ─── 3D projekcija ───────────────────────────────────────────────────────────
 
