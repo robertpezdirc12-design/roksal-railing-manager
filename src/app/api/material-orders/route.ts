@@ -68,7 +68,7 @@ export async function GET (req: NextRequest) {
     supplierId: o.supplierId,
     supplierName: o.supplierId ? supplierName.get(o.supplierId) ?? null : null,
     createdByName: o.createdBy ? userName.get(o.createdBy) ?? null : null,
-    total: o.lines.reduce((sum, l) => sum + l.qty * l.unitPrice, 0),
+    total: o.lines.reduce((sum, l) => sum + l.qty * l.unitPrice.toNumber(), 0),
     linesCount: o.lines.length,
     lines: o.lines,
     createdAt: o.createdAt,

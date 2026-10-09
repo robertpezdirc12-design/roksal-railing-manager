@@ -64,8 +64,8 @@ export async function POST (req: NextRequest) {
   })
 
   // ponovni izračun iz VSEH plačil tega računa (robustno)
-  const paid = round2([...invoice.payments, payment].reduce((s, p) => s + p.amount, 0))
-  const status = paid + 0.005 >= invoice.total ? 'PLACAN' : 'DELNO_PLACAN'
+  const paid = round2([...invoice.payments, payment].reduce((s, p) => s + p.amount.toNumber(), 0))
+  const status = paid + 0.005 >= invoice.total.toNumber() ? 'PLACAN' : 'DELNO_PLACAN'
 
   const updated = await db.invoice.update({
     where: { id: invoiceId },

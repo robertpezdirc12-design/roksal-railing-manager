@@ -24,13 +24,13 @@ export async function GET (req: NextRequest) {
   // zadnja cena po artiklu (najnovejši MaterialPrice)
   const lastPriceByItem = new Map<string, number>()
   for (const p of prices) {
-    if (p.itemId && !lastPriceByItem.has(p.itemId)) lastPriceByItem.set(p.itemId, p.price)
+    if (p.itemId && !lastPriceByItem.has(p.itemId)) lastPriceByItem.set(p.itemId, p.price.toNumber())
   }
 
   const data = items.map((item) => {
     const lotsPositive = item.lots.filter((l) => l.qty > 0)
     const qtySum = lotsPositive.reduce((s, l) => s + l.qty, 0)
-    const costSum = lotsPositive.reduce((s, l) => s + l.qty * l.unitCost, 0)
+    const costSum = lotsPositive.reduce((s, l) => s + l.qty * l.unitCost.toNumber(), 0)
     const avgPrice = qtySum > 0 ? costSum / qtySum : 0
     const lastPrice = lastPriceByItem.get(item.id) ?? (item.lots[0]?.unitCost ?? 0)
     const lots = item.lots.map(({ supplierId, ...lot }) => ({

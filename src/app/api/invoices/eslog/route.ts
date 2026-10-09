@@ -69,12 +69,12 @@ export async function GET (req: NextRequest) {
     '  <cac:InvoiceLine>',
     `    <cbc:ID>${i + 1}</cbc:ID>`,
     `    <cbc:InvoicedQuantity unitCode="MTR">${(ln.qty ?? 1).toFixed(2)}</cbc:InvoicedQuantity>`,
-    `    <cbc:LineExtensionAmount currencyID="EUR">${dec2(ln.total)}</cbc:LineExtensionAmount>`,
+    `    <cbc:LineExtensionAmount currencyID="EUR">${dec2(ln.total.toNumber())}</cbc:LineExtensionAmount>`,
     '    <cac:Item>',
     `      <cbc:Name>${esc(ln.description)}</cbc:Name>`,
     '    </cac:Item>',
     '    <cac:Price>',
-    `      <cbc:PriceAmount currencyID="EUR">${dec2(ln.unitPrice)}</cbc:PriceAmount>`,
+    `      <cbc:PriceAmount currencyID="EUR">${dec2(ln.unitPrice.toNumber())}</cbc:PriceAmount>`,
     '    </cac:Price>',
     '  </cac:InvoiceLine>',
   ].join('\n')).join('\n')
@@ -132,10 +132,10 @@ export async function GET (req: NextRequest) {
     <cbc:PaymentID>${esc(ref)}</cbc:PaymentID>
   </cac:PaymentMeans>
   <cac:TaxTotal>
-    <cbc:TaxAmount currencyID="EUR">${dec2(invoice.vat)}</cbc:TaxAmount>
+    <cbc:TaxAmount currencyID="EUR">${dec2(invoice.vat.toNumber())}</cbc:TaxAmount>
     <cac:TaxSubtotal>
-      <cbc:TaxableAmount currencyID="EUR">${dec2(invoice.subtotal)}</cbc:TaxableAmount>
-      <cbc:TaxAmount currencyID="EUR">${dec2(invoice.vat)}</cbc:TaxAmount>
+      <cbc:TaxableAmount currencyID="EUR">${dec2(invoice.subtotal.toNumber())}</cbc:TaxableAmount>
+      <cbc:TaxAmount currencyID="EUR">${dec2(invoice.vat.toNumber())}</cbc:TaxAmount>
       <cac:TaxCategory>
         <cbc:Percent>22.00</cbc:Percent>
         <cac:TaxScheme><cbc:ID>VAT</cbc:ID></cac:TaxScheme>
@@ -143,11 +143,11 @@ export async function GET (req: NextRequest) {
     </cac:TaxSubtotal>
   </cac:TaxTotal>
   <cac:LegalMonetaryTotal>
-    <cbc:LineExtensionAmount currencyID="EUR">${dec2(invoice.subtotal)}</cbc:LineExtensionAmount>
-    <cbc:TaxExclusiveAmount currencyID="EUR">${dec2(invoice.subtotal)}</cbc:TaxExclusiveAmount>
-    <cbc:TaxInclusiveAmount currencyID="EUR">${dec2(invoice.total)}</cbc:TaxInclusiveAmount>
-    <cbc:PrepaidAmount currencyID="EUR">${dec2(invoice.paid)}</cbc:PrepaidAmount>
-    <cbc:PayableAmount currencyID="EUR">${dec2(Math.max(0, invoice.total - invoice.paid))}</cbc:PayableAmount>
+    <cbc:LineExtensionAmount currencyID="EUR">${dec2(invoice.subtotal.toNumber())}</cbc:LineExtensionAmount>
+    <cbc:TaxExclusiveAmount currencyID="EUR">${dec2(invoice.subtotal.toNumber())}</cbc:TaxExclusiveAmount>
+    <cbc:TaxInclusiveAmount currencyID="EUR">${dec2(invoice.total.toNumber())}</cbc:TaxInclusiveAmount>
+    <cbc:PrepaidAmount currencyID="EUR">${dec2(invoice.paid.toNumber())}</cbc:PrepaidAmount>
+    <cbc:PayableAmount currencyID="EUR">${dec2(Math.max(0, invoice.total.toNumber() - invoice.paid.toNumber()))}</cbc:PayableAmount>
   </cac:LegalMonetaryTotal>
 ${lineXml}
 </Invoice>

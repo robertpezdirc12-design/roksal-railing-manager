@@ -20,10 +20,10 @@ const round2 = (n: number) => Math.round(n * 100) / 100
 async function recalcInvoice (invoiceId: string): Promise<{ paid: number; status: string }> {
   const invoice = await db.invoice.findUnique({ where: { id: invoiceId }, include: { payments: true } })
   if (!invoice) return { paid: 0, status: 'IZDAN' }
-  const paid = round2(invoice.payments.reduce((s, p) => s + p.amount, 0))
+  const paid = round2(invoice.payments.reduce((s, p) => s + p.amount.toNumber(), 0))
   const status = invoice.status === 'ZAPRT'
     ? 'ZAPRT'
-    : paid + 0.005 >= invoice.total ? 'PLACAN' : paid > 0 ? 'DELNO_PLACAN' : 'IZDAN'
+    : paid + 0.005 >= invoice.total.toNumber() ? 'PLACAN' : paid > 0 ? 'DELNO_PLACAN' : 'IZDAN'
   await db.invoice.update({ where: { id: invoiceId }, data: { paid, status } })
   return { paid, status }
 }

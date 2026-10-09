@@ -63,20 +63,21 @@ export async function resolvePrice (input: {
   }
   const rule = await db.priceRule.findFirst({ where, orderBy: { updatedAt: 'desc' }, include: { priceList: true } })
   if (!rule) return null
-  let price = rule.price
+  // Decimal(12,2) → number na meji (izračun popusta ostaja številski, kot prej s Float)
+  let price = rule.price.toNumber()
   if (input.applyDiscount !== false && rule.discountPct > 0) {
     price = price * (1 - rule.discountPct / 100)
-    if (rule.minPrice != null && price < rule.minPrice) price = rule.minPrice
+    if (rule.minPrice != null && price < rule.minPrice.toNumber()) price = rule.minPrice.toNumber()
   }
   return { price, source: 'PRICE_RULE', priceListName: rule.priceList.name, discountPct: rule.discountPct }
 }
 
 /** Prodajna cena izdelka (+ varianta override → cenik → osnovna cena produkta). */
-export async function resolveSalePrice (product: { id: string; salePrice: number }, variant?: { salePrice: number | null } | null): Promise<ResolvedPrice> {
+export async function resolveSalePrice (product: { id: string; salePrice: number | Prisma.Decimal }, variant?: { salePrice: number | null } | null): Promise<ResolvedPrice> {
   const rule = await resolvePrice({ type: 'PRODAJNA', productId: product.id })
   if (rule) return rule
   if (variant?.salePrice != null) return { price: variant.salePrice, source: 'FALLBACK', discountPct: 0 }
-  return { price: product.salePrice, source: 'FALLBACK', discountPct: 0 }
+  return { price: typeof product.salePrice === 'number' ? product.salePrice : product.salePrice.toNumber(), source: 'FALLBACK', discountPct: 0 }
 }
 
 /** Nabavna cena artikla (cenik NABAVNA → zadnja MaterialPrice → 0). */
@@ -84,7 +85,7 @@ export async function resolveItemCost (item: { id: string }): Promise<ResolvedPr
   const rule = await resolvePrice({ type: 'NABAVNA', itemId: item.id })
   if (rule) return rule
   const last = await db.materialPrice.findFirst({ where: { itemId: item.id }, orderBy: { createdAt: 'desc' } })
-  if (last) return { price: last.price, source: 'FALLBACK', discountPct: 0 }
+  if (last) return { price: last.price.toNumber(), source: 'FALLBACK', discountPct: 0 }
   return { price: 0, source: 'FALLBACK', discountPct: 0 }
 }
 
@@ -132,7 +133,7 @@ export async function resolveKonfigRule (
     include: { priceList: { select: { name: true } } },
   })
   if (!rule) return null
-  return { price: rule.price, priceListName: rule.priceList.name }
+  return { price: rule.price.toNumber(), priceListName: rule.priceList.name }
 }
 
 export interface KonfigCenaPostavka {
@@ -192,7 +193,7 @@ export async function calcKonfigCena (v: KonfigCenaVhod): Promise<KonfigCenaRezu
   if (v.profileId) {
     const profile = await db.profile.findUnique({ where: { id: v.profileId } })
     if (profile) {
-      profilCena = profile.pricePerM
+      profilCena = profile.pricePerM.toNumber()
       skuOznaka = profile.sku
       izKataloga = true
     }
@@ -351,7 +352,7 @@ export async function planBom (input: {
   if (input.variantId) {
     const v = await db.productVariant.findUnique({ where: { id: input.variantId } })
     if (!v || v.productId !== product.id) return { error: 'Varianta ne pripada izdelku.' }
-    variant = { id: v.id, sku: v.sku, name: v.name, salePrice: v.salePrice }
+    variant = { id: v.id, sku: v.sku, name: v.name, salePrice: v.salePrice == null ? null : v.salePrice.toNumber() }
   }
 
   const comps = await db.productComponent.findMany({

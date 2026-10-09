@@ -90,9 +90,9 @@ export async function GET (req: NextRequest) {
       const byCustomer = new Map<string, number>()
       for (const i of invoices) {
         const b = invByMonth.get(monthOf(i.createdAt))
-        if (b) { b.total += i.total; b.count += 1 }
+        if (b) { b.total += i.total.toNumber(); b.count += 1 }
         const name = i.project?.customer?.name ?? i.quote?.customer?.name ?? 'Brez stranke'
-        byCustomer.set(name, (byCustomer.get(name) ?? 0) + i.total)
+        byCustomer.set(name, (byCustomer.get(name) ?? 0) + i.total.toNumber())
       }
       invoicedMonthly = keys.map((k) => {
         const b = invByMonth.get(k)!
@@ -108,7 +108,7 @@ export async function GET (req: NextRequest) {
       )
       for (const p of payments) {
         const b = payByMonth.get(monthOf(p.createdAt))
-        if (b) { b.amount += p.amount; b.count += 1 }
+        if (b) { b.amount += p.amount.toNumber(); b.count += 1 }
       }
       paymentsMonthly = keys.map((k) => {
         const b = payByMonth.get(k)!
@@ -259,8 +259,8 @@ export async function GET (req: NextRequest) {
       const positive = it.lots.filter((l) => l.qty > 0)
       const qtySum = positive.reduce((s, l) => s + l.qty, 0)
       const unit = qtySum > 0
-        ? positive.reduce((s, l) => s + l.qty * l.unitCost, 0) / qtySum
-        : it.prices[0]?.price ?? 0
+        ? positive.reduce((s, l) => s + l.qty * l.unitCost.toNumber(), 0) / qtySum
+        : it.prices[0]?.price.toNumber() ?? 0
       const value = it.qty * unit
       stockTotal += value
       // počasni menjavci: zaloga > 0 in BREZ izdaje v obdobju

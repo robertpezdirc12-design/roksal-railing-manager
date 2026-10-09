@@ -54,7 +54,7 @@ export async function PATCH (req: NextRequest, { params }: Params) {
     data: {
       profileId: id,
       userId: auth.user.id,
-      data: JSON.stringify({ before, after: patch, profile: profileSnapshot(updated) }),
+      data: JSON.stringify({ before, after: patch, profile: profileSnapshot({ ...updated, pricePerM: updated.pricePerM.toNumber() }) }),
       note: `Sprememba: ${Object.keys(patch).join(', ')}`,
     },
   })

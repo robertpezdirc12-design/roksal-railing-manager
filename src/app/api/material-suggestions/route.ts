@@ -90,9 +90,9 @@ export async function GET (req: NextRequest) {
     let unitCost = 0
     if (posLots.length > 0) {
       const qtySum = posLots.reduce((s, l) => s + l.qty, 0)
-      unitCost = qtySum > 0 ? posLots.reduce((s, l) => s + l.qty * l.unitCost, 0) / qtySum : 0
+      unitCost = qtySum > 0 ? posLots.reduce((s, l) => s + l.qty * l.unitCost.toNumber(), 0) / qtySum : 0
     } else if (it.prices.length > 0) {
-      unitCost = it.prices[0].price
+      unitCost = it.prices[0].price.toNumber()
     }
 
     // namig dobavitelja: najpogostejši med loti (deterministično), fallback cenik

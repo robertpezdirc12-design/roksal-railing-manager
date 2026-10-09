@@ -45,7 +45,7 @@ export async function GET (req: NextRequest, { params }: Params) {
 
   entries.push({ at: project.createdAt.toISOString(), type: 'ODPERTJE', label: 'Projekt odprt', detail: `${project.code} — ${project.title}`, ref: project.code })
   for (const q of project.quotes) {
-    entries.push({ at: q.createdAt.toISOString(), type: 'PONUDBA', label: `Ponudba ${q.code} (${q.status.toLowerCase()})`, detail: eur(q.total ?? 0), ref: q.code })
+    entries.push({ at: q.createdAt.toISOString(), type: 'PONUDBA', label: `Ponudba ${q.code} (${q.status.toLowerCase()})`, detail: eur((q.total ?? 0).toNumber()), ref: q.code })
     if (q.signedAt) entries.push({ at: q.signedAt.toISOString(), type: 'PODPIS', label: `Podpis ${q.code}`, detail: q.signedBy ?? '—', ref: q.code })
   }
   for (const m of project.measurements) {
@@ -59,9 +59,9 @@ export async function GET (req: NextRequest, { params }: Params) {
     if (w.completedAt) entries.push({ at: w.completedAt.toISOString(), type: 'ZAKLJUCEK', label: `Teren zaključen (${w.code})`, detail: '—', ref: w.code })
   }
   for (const inv of project.invoices) {
-    entries.push({ at: inv.createdAt.toISOString(), type: 'RACUN', label: `Račun ${inv.code} (${inv.status.toLowerCase()})`, detail: eur(inv.total ?? 0), ref: inv.code })
+    entries.push({ at: inv.createdAt.toISOString(), type: 'RACUN', label: `Račun ${inv.code} (${inv.status.toLowerCase()})`, detail: eur((inv.total ?? 0).toNumber()), ref: inv.code })
     for (const p of inv.payments) {
-      entries.push({ at: p.createdAt.toISOString(), type: 'PLACILO', label: `Plačilo — ${inv.code}`, detail: `${eur(p.amount)} · ${p.method.toLowerCase()}`, ref: inv.code })
+      entries.push({ at: p.createdAt.toISOString(), type: 'PLACILO', label: `Plačilo — ${inv.code}`, detail: `${eur(p.amount.toNumber())} · ${p.method.toLowerCase()}`, ref: inv.code })
     }
   }
   for (const pr of project.productionOrders) {

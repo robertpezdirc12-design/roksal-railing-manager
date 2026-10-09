@@ -28,11 +28,11 @@ export async function POST (req: NextRequest) {
       include: { payments: true },
     })
     for (const inv of invoices) {
-      const sumPayments = round2(inv.payments.reduce((s, p) => s + p.amount, 0))
+      const sumPayments = round2(inv.payments.reduce((s, p) => s + p.amount.toNumber(), 0))
       const status = inv.status === 'ZAPRT'
         ? 'ZAPRT'
-        : sumPayments + 0.005 >= inv.total ? 'PLACAN' : sumPayments > 0 ? 'DELNO_PLACAN' : 'IZDAN'
-      const paidDiffers = Math.abs(inv.paid - sumPayments) > 0.005
+        : sumPayments + 0.005 >= inv.total.toNumber() ? 'PLACAN' : sumPayments > 0 ? 'DELNO_PLACAN' : 'IZDAN'
+      const paidDiffers = Math.abs(inv.paid.toNumber() - sumPayments) > 0.005
       if (paidDiffers || inv.status !== status) {
         await db.invoice.update({ where: { id: inv.id }, data: { paid: sumPayments, status } })
         fixed++
@@ -59,15 +59,15 @@ export async function POST (req: NextRequest) {
   })
 
   const rows = invoices.map((inv) => {
-    const sumPayments = round2(inv.payments.reduce((s, p) => s + p.amount, 0))
+    const sumPayments = round2(inv.payments.reduce((s, p) => s + p.amount.toNumber(), 0))
     return {
       id: inv.id,
       code: inv.code,
       customer: inv.project?.customer?.name ?? null,
-      total: round2(inv.total),
-      paid: round2(inv.paid),
+      total: round2(inv.total.toNumber()),
+      paid: round2(inv.paid.toNumber()),
       sumPayments,
-      diff: round2(inv.paid - sumPayments),
+      diff: round2(inv.paid.toNumber() - sumPayments),
       status: inv.status,
       paymentsCount: inv.payments.length,
       lastPaymentAt: inv.payments[0]?.createdAt.toISOString() ?? null,

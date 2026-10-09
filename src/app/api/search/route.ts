@@ -55,7 +55,7 @@ export async function GET (req: NextRequest) {
     })
     if (quotes.length) groups.push({
       kind: 'ponudba', label: 'Ponudbe',
-      hits: quotes.map((x) => ({ id: x.id, label: x.code, sub: `${x.customer?.name ?? '—'} · ${(x.total ?? 0).toLocaleString('sl-SI', { style: 'currency', currency: 'EUR' })}`, section: 'prodaja', tab: 'ponudbe', kind: 'ponudba' })),
+      hits: quotes.map((x) => ({ id: x.id, label: x.code, sub: `${x.customer?.name ?? '—'} · ${(x.total ?? 0).toNumber().toLocaleString('sl-SI', { style: 'currency', currency: 'EUR' })}`, section: 'prodaja', tab: 'ponudbe', kind: 'ponudba' })),
     })
   }
 
@@ -66,7 +66,7 @@ export async function GET (req: NextRequest) {
     })
     if (invoices.length) groups.push({
       kind: 'racun', label: 'Računi',
-      hits: invoices.map((x) => ({ id: x.id, label: x.code, sub: `${x.project?.customer?.name ?? '—'} · ${(x.total ?? 0).toLocaleString('sl-SI', { style: 'currency', currency: 'EUR' })}`, section: 'finance', tab: 'racuni', kind: 'racun' })),
+      hits: invoices.map((x) => ({ id: x.id, label: x.code, sub: `${x.project?.customer?.name ?? '—'} · ${(x.total ?? 0).toNumber().toLocaleString('sl-SI', { style: 'currency', currency: 'EUR' })}`, section: 'finance', tab: 'racuni', kind: 'racun' })),
     })
   }
 

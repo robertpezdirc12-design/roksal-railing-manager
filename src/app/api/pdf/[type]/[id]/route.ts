@@ -198,13 +198,13 @@ async function renderQuotePdf (id: string): Promise<{ bytes: Uint8Array<ArrayBuf
 
   const state: TablePageState = { y: y0 }
   drawLinesTable(doc, state, quote.lines.map((l) => ({
-    description: l.description, qty: l.qty, unitPrice: l.unitPrice, total: l.total,
+    description: l.description, qty: l.qty, unitPrice: l.unitPrice.toNumber(), total: l.total.toNumber(),
   })))
 
   let y = drawTotals(doc, state.y, [
-    { label: 'Osnova:', value: fmtEUR(quote.subtotal) },
-    { label: `${VAT_LABEL}:`, value: fmtEUR(quote.vat) },
-    { label: 'SKUPAJ Z DDV:', value: fmtEUR(quote.total), bold: true },
+    { label: 'Osnova:', value: fmtEUR(quote.subtotal.toNumber()) },
+    { label: `${VAT_LABEL}:`, value: fmtEUR(quote.vat.toNumber()) },
+    { label: 'SKUPAJ Z DDV:', value: fmtEUR(quote.total.toNumber()), bold: true },
   ])
 
   y = drawNote(doc, y, quote.note)
@@ -258,7 +258,7 @@ async function renderInvoicePdf (id: string): Promise<{ bytes: Uint8Array<ArrayB
   const state: TablePageState = { y: metaY }
   drawLinesTable(doc, state, [{
     description: `Izdelava in montaža po ponudbi ${invoice.quote?.code ?? '—'}`,
-    qty: 1, unitPrice: invoice.subtotal, total: invoice.subtotal,
+    qty: 1, unitPrice: invoice.subtotal.toNumber(), total: invoice.subtotal.toNumber(),
   }])
 
   // zgodovina plačil
@@ -272,19 +272,19 @@ async function renderInvoicePdf (id: string): Promise<{ bytes: Uint8Array<ArrayB
       doc.text(M + 4, payY + 8, fmtDate(p.createdAt), { size: 9 })
       doc.text(300, payY + 8, PAY_METHOD[p.method] ?? p.method, { size: 9 })
       doc.text(430, payY + 8, p.reference ?? '—', { size: 9 })
-      doc.text(R, payY + 8, fmtEUR(p.amount), { size: 9, align: 'right' })
+      doc.text(R, payY + 8, fmtEUR(p.amount.toNumber()), { size: 9, align: 'right' })
       payY += 17
       doc.line(M, payY - 4, R, payY - 4, { width: 0.4 })
     }
     payY += 4
   }
 
-  const remaining = Math.max(0, invoice.total - invoice.paid)
+  const remaining = Math.max(0, invoice.total.toNumber() - invoice.paid.toNumber())
   let y = drawTotals(doc, payY, [
-    { label: 'Osnova:', value: fmtEUR(invoice.subtotal) },
-    { label: `${VAT_LABEL}:`, value: fmtEUR(invoice.vat) },
-    { label: 'SKUPAJ Z DDV:', value: fmtEUR(invoice.total), bold: true },
-    { label: 'Plačano:', value: fmtEUR(invoice.paid), color: GREEN },
+    { label: 'Osnova:', value: fmtEUR(invoice.subtotal.toNumber()) },
+    { label: `${VAT_LABEL}:`, value: fmtEUR(invoice.vat.toNumber()) },
+    { label: 'SKUPAJ Z DDV:', value: fmtEUR(invoice.total.toNumber()), bold: true },
+    { label: 'Plačano:', value: fmtEUR(invoice.paid.toNumber()), color: GREEN },
     { label: 'ZA PLAČILO:', value: fmtEUR(remaining), bold: true, color: remaining > 0 ? NAVY : GREEN },
   ])
 

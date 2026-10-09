@@ -93,21 +93,21 @@ export async function GET (req: NextRequest) {
       const positive = it.lots.filter((l) => l.qty > 0)
       const qtySum = positive.reduce((s, l) => s + l.qty, 0)
       const unit = qtySum > 0
-        ? positive.reduce((s, l) => s + l.qty * l.unitCost, 0) / qtySum
-        : it.prices[0]?.price ?? 0
+        ? positive.reduce((s, l) => s + l.qty * l.unitCost.toNumber(), 0) / qtySum
+        : it.prices[0]?.price.toNumber() ?? 0
       stockTotal += it.qty * unit
     }
 
     finance = {
       invoices: {
-        outstanding: outstanding.reduce((s, i) => s + (i.total - i.paid), 0),
+        outstanding: outstanding.reduce((s, i) => s + (i.total.toNumber() - i.paid.toNumber()), 0),
         overdueCount: overdue.length,
-        overdueSum: overdue.reduce((s, i) => s + (i.total - i.paid), 0),
+        overdueSum: overdue.reduce((s, i) => s + (i.total.toNumber() - i.paid.toNumber()), 0),
       },
       aging: {
-        d0_30: overdue.filter((i) => i.dueDate && age(i.dueDate) <= 30).reduce((s, i) => s + (i.total - i.paid), 0),
-        d30_60: overdue.filter((i) => i.dueDate && age(i.dueDate) > 30 && age(i.dueDate) <= 60).reduce((s, i) => s + (i.total - i.paid), 0),
-        d60plus: overdue.filter((i) => i.dueDate && age(i.dueDate) > 60).reduce((s, i) => s + (i.total - i.paid), 0),
+        d0_30: overdue.filter((i) => i.dueDate && age(i.dueDate) <= 30).reduce((s, i) => s + (i.total.toNumber() - i.paid.toNumber()), 0),
+        d30_60: overdue.filter((i) => i.dueDate && age(i.dueDate) > 30 && age(i.dueDate) <= 60).reduce((s, i) => s + (i.total.toNumber() - i.paid.toNumber()), 0),
+        d60plus: overdue.filter((i) => i.dueDate && age(i.dueDate) > 60).reduce((s, i) => s + (i.total.toNumber() - i.paid.toNumber()), 0),
       },
       marginsTop,
     }
@@ -165,7 +165,7 @@ export async function GET (req: NextRequest) {
   if (canPipeline) {
     const opportunities = await db.opportunity.findMany({ select: { stage: true, value: true } })
     const live = opportunities.filter((o) => o.stage !== 'IZGUBLJENA')
-    pipeline = { value: live.reduce((s, o) => s + o.value, 0), count: live.length }
+    pipeline = { value: live.reduce((s, o) => s + o.value.toNumber(), 0), count: live.length }
   }
 
   return NextResponse.json({
