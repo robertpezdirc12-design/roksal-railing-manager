@@ -9,12 +9,13 @@ iskanje z obsegom in revizijske zapise.
 import json, os, sys, subprocess, urllib.request, urllib.error
 
 BASE = os.environ.get('BASE_URL', 'http://localhost:3000')
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PASS, FAIL = 0, 0
 
 def bun (script):
     """Požene PrismaClient skripto prek bun -e (vzorec iz tests/r452.py)."""
     subprocess.run(['bun', '-e', script], capture_output=True, text=True,
-                   env={**__import__('os').environ, 'DATABASE_URL': 'file:/home/z/my-project/db/custom.db'})
+                   env={**__import__('os').environ, 'DATABASE_URL': os.environ.get('TEST_DB_URL', 'file:' + REPO + '/db/roksal.db')})
 
 def call (method, path, token=None, body=None):
     data = json.dumps(body).encode() if body is not None else None

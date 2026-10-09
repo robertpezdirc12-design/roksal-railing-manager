@@ -10,9 +10,10 @@ kosovnica iz predloge × qty → rezervacija/sprostitev → osnutek ponudbe),
 ohranitev inputs čez regeneracijo BOM, R443 varovalko (409) in regresijo.
 Na koncu počisti testne entitete (SQLite, kot r446 — revizija ostane nemutabilna).
 """
-import json, sys, urllib.request, urllib.error
+import json, os, sys, urllib.request, urllib.error
 
 BASE = os.environ.get('BASE_URL', 'http://localhost:3000')
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PASS, FAIL = 0, 0
 
 def call (method, path, token=None, body=None):
@@ -66,7 +67,7 @@ QTY_T = 30.0  # terasa: 6×4 + 3×2 = 30 m²
 
 import sqlite3
 def counts ():
-    con = sqlite3.connect('db/custom.db'); cur = con.cursor()
+    con = sqlite3.connect(os.environ.get('TEST_DB_URL', 'file:' + REPO + '/db/roksal.db').replace('file:', '')); cur = con.cursor()
     cur.execute('SELECT COUNT(*) FROM ProjectPackage'); pk = cur.fetchone()[0]
     cur.execute('SELECT COUNT(*) FROM Bom'); bm = cur.fetchone()[0]
     con.close()
@@ -274,7 +275,7 @@ chk('PACKAGE_CREATE' in actions and 'BOM_GENERATE' in actions, 'revizija PACKAGE
 # ══ 6. ČIŠČENJE testnih podatkov (SQLite; revizija ostane nemutabilna) ═══════
 print('── čiščenje testnih podatkov ──')
 try:
-    con = sqlite3.connect('db/custom.db')
+    con = sqlite3.connect(os.environ.get('TEST_DB_URL', 'file:' + REPO + '/db/roksal.db').replace('file:', ''))
     cur = con.cursor()
     cur.execute("SELECT id FROM ProjectPackage WHERE note LIKE 'R447 e2e%' OR name LIKE 'R447 e2e%'")
     pkg_ids = [r[0] for r in cur.fetchall()]

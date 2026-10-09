@@ -11,6 +11,7 @@ iskanje z obsegom in revizijske zapise. Regresija: warranty ruta še deluje.
 import json, os, sys, urllib.request, urllib.error
 
 BASE = os.environ.get('BASE_URL', 'http://localhost:3000')
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PASS, FAIL = 0, 0
 
 def call (method, path, token=None, body=None):
@@ -402,7 +403,7 @@ for path, tok, expect in [
 print('── čiščenje testnih podatkov ──')
 try:
     import sqlite3
-    con = sqlite3.connect('db/custom.db')
+    con = sqlite3.connect(os.environ.get('TEST_DB_URL', 'file:' + REPO + '/db/roksal.db').replace('file:', ''))
     cur = con.cursor()
     cur.execute("SELECT id FROM ServiceCase WHERE title LIKE 'R446 e2e%'")
     case_ids = [r[0] for r in cur.fetchall()]

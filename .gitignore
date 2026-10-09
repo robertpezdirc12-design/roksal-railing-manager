@@ -60,3 +60,4 @@ agent-ctx/
 /tool-results/
 /tmp-check/
 .issues/
+env.sh

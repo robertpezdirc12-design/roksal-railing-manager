@@ -27,6 +27,7 @@ Preverja:
 import base64, json, os, subprocess, sys, time, urllib.request, urllib.error
 
 BASE = os.environ.get('BASE_URL', 'http://localhost:3000')
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TAG = 'R454-TEST'
 HERE = os.path.dirname(os.path.abspath(__file__))
 PASS, FAIL = 0, 0
@@ -59,7 +60,7 @@ def chk (cond, msg): ok(msg) if cond else bad(msg)
 
 def bun (script):
     r = subprocess.run(['bun', '-e', script], capture_output=True, text=True,
-                       env={**os.environ, 'DATABASE_URL': 'file:/home/z/my-project/db/custom.db'})
+                       env={**os.environ, 'DATABASE_URL': os.environ.get('TEST_DB_URL', 'file:' + REPO + '/db/roksal.db')})
     return 'CLEAN_DONE' in r.stdout, r.stderr[:300]
 
 # ── fixture fotografija terase (pravi JPEG za VLM analizo) ───────────────────

@@ -17,6 +17,7 @@ import json, os, subprocess, sys, urllib.request, urllib.error
 from datetime import datetime
 
 BASE = os.environ.get('BASE_URL', 'http://localhost:3000')
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TAG = 'R452-TEST'
 PASS, FAIL = 0, 0
 
@@ -49,7 +50,7 @@ def chk (cond, msg): ok(msg) if cond else bad(msg)
 def bun (script):
     """Požene PrismaClient skripto prek bun -e (vzorec iz tests/r450.py)."""
     r = subprocess.run(['bun', '-e', script], capture_output=True, text=True,
-                       env={**__import__('os').environ, 'DATABASE_URL': 'file:/home/z/my-project/db/custom.db'})
+                       env={**__import__('os').environ, 'DATABASE_URL': os.environ.get('TEST_DB_URL', 'file:' + REPO + '/db/roksal.db')})
     return 'FIXTURE_DONE' in r.stdout or 'CLEAN_DONE' in r.stdout, r.stderr[:300]
 
 # ── FIXTURE: testni BOM (povpraševanje) + testni lot (unitCost/dobavitelj) ────

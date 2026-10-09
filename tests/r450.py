@@ -12,6 +12,7 @@ Po vzoru tests/r449.py."""
 import json, os, sys, urllib.request, urllib.error, uuid
 
 BASE = os.environ.get('BASE_URL', 'http://localhost:3000')
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PASS, FAIL = 0, 0
 TAG = 'R450T'  # marker testnih entitet
 
@@ -208,7 +209,7 @@ const {PrismaClient}=require('@prisma/client');const p=new PrismaClient();
 '''.replace('__TAG__', TAG)
 import subprocess
 r = subprocess.run(['bun', '-e', CLEAN], capture_output=True, text=True,
-                   env={**__import__('os').environ, 'DATABASE_URL': 'file:/home/z/my-project/db/custom.db'})
+                   env={**__import__('os').environ, 'DATABASE_URL': os.environ.get('TEST_DB_URL', 'file:' + REPO + '/db/roksal.db')})
 print('čiščenje:', 'OK' if 'CLEAN_DONE' in r.stdout else ('NAPAKA: ' + r.stderr[:200]))
 
 print(f'═══ R450: {PASS} ✓ / {FAIL} ✗ ═══')

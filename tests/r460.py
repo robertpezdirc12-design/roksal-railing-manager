@@ -34,6 +34,7 @@ Preverja:
 import json, os, subprocess, sys, urllib.request, urllib.error
 
 BASE = os.environ.get('BASE_URL', 'http://localhost:3000')
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TAG = 'R460-TEST'
 PASS, FAIL = 0, 0
 
@@ -62,7 +63,7 @@ def chk (cond, msg): ok(msg) if cond else bad(msg)
 
 def bun (script):
     r = subprocess.run(['bun', '-e', script], capture_output=True, text=True,
-                       env={**os.environ, 'DATABASE_URL': 'file:/home/z/my-project/db/custom.db'})
+                       env={**os.environ, 'DATABASE_URL': os.environ.get('TEST_DB_URL', 'file:' + REPO + '/db/roksal.db')})
     return r.stdout, r.stderr[:400]
 
 def audit_has (token, action, entityId, projectId=None):

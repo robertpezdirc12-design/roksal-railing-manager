@@ -17,6 +17,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 BASE = os.environ.get('BASE_URL', 'http://localhost:3000')
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ROLES = [
     ('ADMIN', 'admin@roksal.si', 'Admin123!'),
     ('VODJA', 'vodja@roksal.si', 'Vodja123!'),
@@ -378,7 +379,7 @@ const {PrismaClient}=require('@prisma/client');const p=new PrismaClient();
 })()
 '''
 r = subprocess.run(['bun', '-e', CLEAN], capture_output=True, text=True,
-                   env={**__import__('os').environ, 'DATABASE_URL': 'file:/home/z/my-project/db/custom.db'})
+                   env={**__import__('os').environ, 'DATABASE_URL': os.environ.get('TEST_DB_URL', 'file:' + REPO + '/db/roksal.db')})
 print('čiščenje:', 'OK' if 'CLEAN_DONE' in r.stdout else ('NAPAKA: ' + r.stderr[:200]))
 bad = smoke.get('BROKEN', 0) + rbac_fail
 sys.exit(1 if bad else 0)
