@@ -36,6 +36,29 @@ export interface BackupResult {
 }
 
 /**
+ * Najde ops/backup.sh od zagona aplikacije navzgor.
+ * R464: standalone strežnik (next start / server.js) zamenja cwd v
+ * .next/standalone — relativna pot 'ops/backup.sh' zato ne zadošča;
+ * iščemo do 5 nivojev navzgor (dev: repo root; standalone: .next/standalone → repo root).
+ * Na serverless namestitvi (Vercel) ops/ ni del outputa → jasna napaka
+ * (DR za takšno namestitev teče prek zunanjega cron klica/neon PITR — docs/DEPLOYMENT.md).
+ */
+function resolveOpsRoot (): string {
+  const path = require('node:path') as typeof import('node:path')
+  let dir = process.cwd()
+  for (let i = 0; i < 5; i++) {
+    const candidate = path.join(dir, 'ops', 'backup.sh')
+    try {
+      require('node:fs').accessSync(candidate)
+      return dir
+    } catch {
+      dir = path.dirname(dir)
+    }
+  }
+  throw new Error('ops/backup.sh ni na voljo v tej namestitvi (serverless?) — varnostne kopije poganja zunanji cron ali skrbnik (glej docs/DEPLOYMENT.md).')
+}
+
+/**
  * Zažene ops/backup.sh in vrne njegov JSON povzetek.
  * R464: skripta se po providerju (PostgreSQL/SQLite) odloči prek DATABASE_URL —
  * okolje-processa posredujemo IZRECNO (nazadnje ROKSAL_DATABASE_URL), da tudi
@@ -45,8 +68,9 @@ export interface BackupResult {
 export async function runBackup (): Promise<BackupResult> {
   const env: NodeJS.ProcessEnv = { ...process.env }
   if (!env.DATABASE_URL && env.ROKSAL_DATABASE_URL) env.DATABASE_URL = env.ROKSAL_DATABASE_URL
-  const { stdout } = await execFileAsync('bash', ['ops/backup.sh'], {
-    cwd: process.cwd(),
+  const root = resolveOpsRoot()
+  const { stdout } = await execFileAsync('bash', [root + '/ops/backup.sh'], {
+    cwd: root,
     env,
     maxBuffer: 16 * 1024 * 1024,
     timeout: 10 * 60 * 1000,

@@ -17,7 +17,7 @@
     "db:push": "echo '[db:push] OPOZORILO: prisma db push --accept-data-loss je RAZVOJNO/RECOVERY orodje \u2014 produkcija uporablja db:migrate:deploy. Za nadaljevanje po\u017eeni: bunx prisma db push --accept-data-loss' && exit 1",
     "db:push:force": "prisma db push --accept-data-loss",
     "db:generate": "prisma generate",
-    "db:seed": "node prisma/seed.cjs && node prisma/seed-r442.cjs",
+    "db:seed": "node prisma/seed.cjs && node prisma/seed-r437.cjs && node prisma/seed-r442.cjs && node prisma/seed-r445.cjs && node prisma/seed-r446.cjs && node prisma/seed-r447.cjs && node prisma/seed-r449.cjs",
     "db:reset": "prisma migrate reset"
   },
   "dependencies": {

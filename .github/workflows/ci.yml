@@ -69,7 +69,7 @@ jobs:
         env:
           DATABASE_URL: postgresql://ci:ci@localhost:5432/roksal
       - name: seed (isti vir kot lokalno — dokaz popolne obnovljivosti)
-        run: node prisma/seed.cjs && node prisma/seed-r442.cjs
+        run: bun run db:seed
         env:
           DATABASE_URL: postgresql://ci:ci@localhost:5432/roksal
 

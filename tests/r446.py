@@ -8,7 +8,7 @@ prvem obisku, sinhkronizacijo claim ↔ case ob zaključku/zavrnitvi, RBAC
 (pisarna vs. tehnik/monter, fail-closed), obseg monterja (samo svoji primeri),
 iskanje z obsegom in revizijske zapise. Regresija: warranty ruta še deluje.
 """
-import json, os, sys, urllib.request, urllib.error
+import json, os, sys, subprocess, urllib.request, urllib.error
 
 BASE = os.environ.get('BASE_URL', 'http://localhost:3000')
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
