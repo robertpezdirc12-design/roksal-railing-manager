@@ -42,24 +42,28 @@ export interface BackupResult {
  * Preskoči kopije iz Next standalone file-tracinga (te nimajo .git in
  * prisma/ — git bundle + shema ne bi obstajali).
  * R464: standalone strežnik zamenja cwd v .next/standalone; pravi koren
- * prepoznamo po ops/backup.sh + ops/lib.sh + .git + prisma/schema.prisma.
+ * prepoznamo po ops/backup.sh + ops/lib.sh + src/ + prisma/schema.prisma.
  * Na serverless namestitvi (Vercel) tak koren ne obstaja → jasna napaka
  * (DR za takšno namestitev teče prek zunanjega cron klica/neon PITR — docs/DEPLOYMENT.md).
  */
 function resolveOpsRoot (): string {
+  // 'src' skupaj — namenoma: Next file-tracing statično sledi nizom v fs
+  // klicih (prisotnost '.git' v standalone dokaz) — sestavljeno ime sledilnika
+  // ne vidi, zato ostane diskriminator zanesljiv (pravi checkout ima src/).
+  const srcName = ['s', 'r', 'c'].join('')
   let dir = process.cwd()
   for (let i = 0; i < 6; i++) {
     try {
       accessSync(join(dir, 'ops', 'backup.sh'))
       accessSync(join(dir, 'ops', 'lib.sh'))
-      accessSync(join(dir, '.git'))
+      accessSync(join(dir, srcName))
       accessSync(join(dir, 'prisma', 'schema.prisma'))
       return dir
     } catch {
       dir = dirname(dir)
     }
   }
-  throw new Error('projektni koren (ops/ + .git + prisma/) ni na voljo v tej namestitvi (serverless?) — varnostne kopije poganja zunanji cron ali skrbnik (glej docs/DEPLOYMENT.md).')
+  throw new Error('projektni koren (ops/ + src/ + prisma/) ni na voljo v tej namestitvi (serverless?) — varnostne kopije poganja zunanji cron ali skrbnik (glej docs/DEPLOYMENT.md).')
 }
 
 /**
