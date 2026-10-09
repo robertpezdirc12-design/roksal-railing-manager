@@ -25,19 +25,42 @@ function brezArtiklaFraza (n: number, imena: string[], kontekst: 'prejeto' | 'us
 
 async function nextCode (): Promise<string> {
   const year = new Date().getFullYear()
-  // R464: številčenje po NAJVIŠJI obstoječi številki (ne števec vrstic) —
-  // brisanje naročila ne sme reciklirati kode dokumenta (revizija/revizija
-  // se nanaša na enolično kodo). Deluje tudi čez prelom 999.
-  const rows = await db.materialOrder.findMany({
-    where: { code: { startsWith: `NAR-${year}-` } },
-    select: { code: true },
-    take: 500,
+  // R464: trajni števec v Setting (vrstična ključavnica FOR UPDATE) — koda
+  // dokumenta se NIKOLI ne reciklira, tudi če se naročilo izbriše (revizija
+  // se nanaša na enolično kodo; prej: count/max-based → ponovna uporaba po
+  // brisanju je povzročila trke v revizijski sledi).
+  const key = `materialOrderSeq.${year}`
+  return db.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT "value" FROM "Setting" WHERE "key" = ${key} FOR UPDATE`
+    let setting = await tx.setting.findUnique({ where: { key } })
+    if (!setting) {
+      // prvi zagon števca: upoštej VSE kode kdajkoli izdane — obstoječa
+      // naročila + revizijsko sled (izbrisana naročila imajo immutabilen zapis)
+      const orders = await tx.materialOrder.findMany({
+        where: { code: { startsWith: `NAR-${year}-` } },
+        select: { code: true },
+        take: 500,
+      })
+      const audit = await tx.auditLog.findMany({
+        where: { action: 'MATERIAL_ORDER_CREATE' },
+        select: { detail: true },
+        take: 500,
+        orderBy: { createdAt: 'desc' },
+      })
+      let maxSeq = 0
+      for (const c of [...orders.map(o => o.code), ...audit.map(a => {
+        try { return (JSON.parse(a.detail ?? '{}') as { code?: string }).code ?? '' } catch { return '' }
+      })]) {
+        const n = Number(String(c).split('-')[2])
+        if (Number.isFinite(n) && n > maxSeq) maxSeq = n
+      }
+      setting = await tx.setting.create({ data: { key, value: String(maxSeq) } })
+    }
+    const seq = Number(setting.value) + 1
+    if (!Number.isFinite(seq) || seq < 1) throw new Error('Neveljavna vrednost števca naročil.')
+    await tx.setting.update({ where: { key }, data: { value: String(seq) } })
+    return `NAR-${year}-${String(seq).padStart(3, '0')}`
   })
-  const maxSeq = rows.reduce((m, r) => {
-    const n = Number(r.code.split('-')[2])
-    return Number.isFinite(n) && n > m ? n : m
-  }, 0)
-  return `NAR-${year}-${String(maxSeq + 1).padStart(3, '0')}`
 }
 
 export async function GET (req: NextRequest) {

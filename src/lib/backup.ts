@@ -38,30 +38,28 @@ export interface BackupResult {
 }
 
 /**
- * Najde ops/backup.sh od zagona aplikacije navzgor — PRESKOKI kopije iz
- * Next standalone file-tracinga (te vsebujejo samo backup.sh brez lib.sh
- * in ostalih skript → neuporabne).
+ * Najde PRAVI projektni koren (ops/ + .git) od zagona aplikacije navzgor.
+ * Preskoči kopije iz Next standalone file-tracinga (te nimajo .git in
+ * prisma/ — git bundle + shema ne bi obstajali).
  * R464: standalone strežnik zamenja cwd v .next/standalone; pravi koren
- * prepoznamo po ops/backup.sh + ops/lib.sh + package.json skupaj.
- * Na serverless namestitvi (Vercel) celotnega ops/ ni → jasna napaka
+ * prepoznamo po ops/backup.sh + ops/lib.sh + .git + prisma/schema.prisma.
+ * Na serverless namestitvi (Vercel) tak koren ne obstaja → jasna napaka
  * (DR za takšno namestitev teče prek zunanjega cron klica/neon PITR — docs/DEPLOYMENT.md).
  */
 function resolveOpsRoot (): string {
   let dir = process.cwd()
   for (let i = 0; i < 6; i++) {
-    const backup = join(dir, 'ops', 'backup.sh')
-    const lib = join(dir, 'ops', 'lib.sh')
-    const pkg = join(dir, 'package.json')
     try {
-      accessSync(backup)
-      accessSync(lib)
-      accessSync(pkg)
+      accessSync(join(dir, 'ops', 'backup.sh'))
+      accessSync(join(dir, 'ops', 'lib.sh'))
+      accessSync(join(dir, '.git'))
+      accessSync(join(dir, 'prisma', 'schema.prisma'))
       return dir
     } catch {
       dir = dirname(dir)
     }
   }
-  throw new Error('ops/ (backup.sh + lib.sh) ni na voljo v tej namestitvi (serverless?) — varnostne kopije poganja zunanji cron ali skrbnik (glej docs/DEPLOYMENT.md).')
+  throw new Error('projektni koren (ops/ + .git + prisma/) ni na voljo v tej namestitvi (serverless?) — varnostne kopije poganja zunanji cron ali skrbnik (glej docs/DEPLOYMENT.md).')
 }
 
 /**
