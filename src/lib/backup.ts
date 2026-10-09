@@ -47,11 +47,12 @@ export interface BackupResult {
  * (DR za takšno namestitev teče prek zunanjega cron klica/neon PITR — docs/DEPLOYMENT.md).
  */
 function resolveOpsRoot (): string {
-  // 'src' skupaj — namenoma: Next file-tracing statično sledi nizom v fs
-  // klicih (prisotnost '.git' v standalone dokaz) — sestavljeno ime sledilnika
-  // ne vidi, zato ostane diskriminator zanesljiv (pravi checkout ima src/).
+  // R464: EKSPlicitna pot ima prednost — ROKSAL_PROJECT_ROOT nastavi operater
+  // (systemd/start skripta), hevristika pa je zadnja obramba:
   const srcName = ['s', 'r', 'c'].join('')
-  let dir = process.cwd()
+  let dir = process.env.ROKSAL_PROJECT_ROOT && (() => { try { accessSync(join(process.env.ROKSAL_PROJECT_ROOT as string, 'ops', 'backup.sh')); return true } catch { return false } })()
+    ? process.env.ROKSAL_PROJECT_ROOT as string
+    : process.cwd()
   for (let i = 0; i < 6; i++) {
     try {
       accessSync(join(dir, 'ops', 'backup.sh'))
