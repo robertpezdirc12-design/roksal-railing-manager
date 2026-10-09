@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { jsonError, requirePermission } from '@/lib/auth'
-import { writeAudit } from '@/lib/audit'
 import { createPickingFromBom } from '@/lib/stock-core'
 
 // GET /api/picking?status= — seznam picking list (inventory.read)
@@ -38,9 +37,6 @@ export async function POST (req: NextRequest) {
   const res = await createPickingFromBom(bomId, auth.user.id)
   if (!res.ok) return jsonError(409, res.error)
 
-  await writeAudit({
-    userId: auth.user.id, action: 'PICKING_CREATE', entity: 'pickingList', entityId: res.id,
-    detail: { code: res.code, bomId },
-  })
+  // R464: revizija PICKING_CREATE se zapiše V transakciji (stock-core)
   return NextResponse.json({ data: { id: res.id, code: res.code } }, { status: 201 })
 }

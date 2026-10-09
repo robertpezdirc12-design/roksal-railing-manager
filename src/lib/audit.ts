@@ -1,7 +1,13 @@
 // audit — REKONSTRUKCIJA R431 (vir: R428 — sistemski/globalni pregled)
 // readAudit (per-projekt) + readAuditGlobal (projectId=null dogodki).
 
+import type { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
+
+/** Odjemalec, prek katerega gre zapis revizije: globalni db ALI transakcijski
+ * klient (tx) — R464: revizija občutljivih mutacij se zapiše V transakciji
+ * (atomarna z mutacijo; pod sočasnimi zahtevami ni SQLITE_BUSY trkov). */
+export type AuditClient = Pick<Prisma.TransactionClient, 'auditLog'>
 
 export async function writeAudit (input: {
   userId?: string | null
@@ -10,8 +16,8 @@ export async function writeAudit (input: {
   entityId?: string | null
   projectId?: string | null
   detail?: Record<string, unknown> | null
-}): Promise<void> {
-  await db.auditLog.create({
+}, client: AuditClient = db): Promise<void> {
+  await client.auditLog.create({
     data: {
       userId: input.userId ?? null,
       action: input.action,

@@ -34,12 +34,8 @@ export async function PATCH (req: NextRequest, { params }: Params) {
   const action = typeof body?.action === 'string' ? body.action : 'complete'
 
   if (action === 'cancel') {
-    const res = await cancelPicking(id)
+    const res = await cancelPicking(id, auth.user.id)
     if (!res.ok) return jsonError(409, res.error)
-    await writeAudit({
-      userId: auth.user.id, action: 'PICKING_CANCEL', entity: 'pickingList', entityId: id,
-      detail: {},
-    })
     return NextResponse.json({ data: { cancelled: true } })
   }
 
@@ -50,14 +46,6 @@ export async function PATCH (req: NextRequest, { params }: Params) {
   const res = await completePicking(id, lines, auth.user.id)
   if (!res.ok) return jsonError(409, res.error)
 
-  const picking = await db.pickingList.findUnique({
-    where: { id },
-    select: { code: true, bom: { select: { code: true, package: { select: { projectId: true } } } } },
-  })
-  await writeAudit({
-    userId: auth.user.id, action: 'PICKING_COMPLETE', entity: 'pickingList', entityId: id,
-    projectId: picking?.bom?.package?.projectId ?? null,
-    detail: { code: picking?.code ?? id, issued: res.issued, bom: picking?.bom?.code ?? null },
-  })
+  // R464: revizija PICKING_COMPLETE se zapiše V transakciji (stock-core)
   return NextResponse.json({ data: { issued: res.issued } })
 }

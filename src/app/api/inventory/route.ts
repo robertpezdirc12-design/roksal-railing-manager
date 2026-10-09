@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { jsonError, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
+import { runStockTx } from '@/lib/stock-core'
 
 // GET /api/inventory — seznam artiklov z losi + povprečno/zadnjo ceno (inventory.read)
 export async function GET (req: NextRequest) {
@@ -43,6 +44,10 @@ export async function GET (req: NextRequest) {
 }
 
 // PATCH /api/inventory — ročni popravek količine {id, delta} (inventory.write)
+// R464: popravek teče kot ATOMARNA POGOJNA posodobitev znotraj interaktivne
+// transakcije — pri negativnem delti WHERE qty >= −delta zagotovi, da
+// sočasni popravki NIKOLI ne padejo pod nič (prej: branje + pisanje naivno
+// = izgubljene posodobitve / negativna zaloga ob sočasnih klicih).
 export async function PATCH (req: NextRequest) {
   const auth = await requirePermission(req, 'inventory.write')
   if (auth instanceof NextResponse) return auth
@@ -56,27 +61,47 @@ export async function PATCH (req: NextRequest) {
   const item = await db.inventoryItem.findUnique({ where: { id } })
   if (!item) return jsonError(404, 'Artikel ne obstaja.')
 
-  const newQty = Math.round((item.qty + delta) * 1000) / 1000
-  if (newQty < 0) return jsonError(400, 'Popravek bi povzročil negativno količino.', `Trenutna količina je ${item.qty} ${item.unit}.`)
-
-  // popravek + DNEVNIK GIBANJA (R443: INVENTURA) v isti transakciji
-  const [updated] = await db.$transaction([
-    db.inventoryItem.update({
-      where: { id },
-      data: { qty: newQty },
-      include: { lots: { orderBy: { deliveredAt: 'desc' }, take: 1 } },
-    }),
-    db.stockMovement.create({
+  const res = await runStockTx(async (tx) => {
+    // atomarna pogojna posodobitev (vrstična ključavnica + invarianta)
+    const upd = delta < 0
+      ? await tx.inventoryItem.updateMany({
+          where: { id, qty: { gte: -delta } },
+          data: { qty: { increment: delta } },
+        })
+      : await tx.inventoryItem.updateMany({
+          where: { id },
+          data: { qty: { increment: delta } },
+        })
+    if (upd.count !== 1) {
+      const cur = await tx.inventoryItem.findUnique({ where: { id }, select: { qty: true, unit: true } })
+      if (!cur) return { ok: false as const, status: 404, error: 'Artikel ne obstaja več.', hint: undefined, updated: null }
+      return {
+        ok: false as const, status: 400,
+        error: 'Popravek bi povzročil negativno količino.',
+        hint: `Trenutna količina je ${cur.qty} ${cur.unit}.`,
+        updated: null,
+      }
+    }
+    // DNEVNIK GIBANJA (R443: INVENTURA) v isti transakciji + sveže stanje za odgovor
+    await tx.stockMovement.create({
       data: {
         itemId: id, qty: delta, type: 'INVENTURA', userId: auth.user.id,
         refType: 'rocni', note: 'Ročni popravek količine',
       },
-    }),
-  ])
-
-  await writeAudit({
-    userId: auth.user.id, action: 'INVENTORY_ADJUST', entity: 'inventoryItem', entityId: id,
-    detail: { sku: item.sku, name: item.name, from: item.qty, delta, to: newQty },
+    })
+    const updated = await tx.inventoryItem.findUnique({
+      where: { id },
+      include: { lots: { orderBy: { deliveredAt: 'desc' }, take: 1 } },
+    })
+    // R464: revizija V isti transakciji (atomarna s popravkom)
+    await writeAudit({
+      userId: auth.user.id, action: 'INVENTORY_ADJUST', entity: 'inventoryItem', entityId: id,
+      detail: { sku: item.sku, name: item.name, from: item.qty, delta, to: updated?.qty },
+    }, tx)
+    return { ok: true as const, status: 200, error: undefined, hint: undefined, updated }
   })
-  return NextResponse.json({ data: updated })
+
+  if (!res.ok) return jsonError(res.status, res.error, res.hint)
+
+  return NextResponse.json({ data: res.updated })
 }

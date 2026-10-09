@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { jsonError, requirePermission } from '@/lib/auth'
-import { writeAudit } from '@/lib/audit'
 import { recordMovement } from '@/lib/stock-core'
 
 // POST /api/stock/returns — vračilo materiala z terena/iz montaže nazaj v zalogo.
@@ -30,6 +29,9 @@ export async function POST (req: NextRequest) {
     if (!wo) return jsonError(404, 'Delovni nalog ne obstaja.')
   }
 
+  const item = await db.inventoryItem.findUnique({ where: { id: itemId }, select: { sku: true } })
+  if (!item) return jsonError(404, 'Artikel ne obstaja.')
+
   const refType = workOrderId ? 'workOrder' : projectId ? 'project' : 'rocni'
   const refId = workOrderId ?? projectId
 
@@ -37,19 +39,20 @@ export async function POST (req: NextRequest) {
     itemId, qty: Math.round(qty * 1000) / 1000, type: 'VRACILO',
     userId: auth.user.id, refType, refId,
     note: note ?? 'Vračilo materiala',
+    // R464: revizija V isti transakciji z gibanjem
+    audit: {
+      action: 'STOCK_RETURN', entity: 'inventoryItem', entityId: itemId,
+      projectId,
+      detail: { sku: item?.sku ?? itemId, qty, project: projectId ?? null, workOrder: workOrderId ?? null, note },
+    },
   })
   if (!res.ok) return jsonError(409, res.error)
 
-  const item = await db.inventoryItem.findUnique({ where: { id: itemId }, select: { sku: true, name: true, unit: true, qty: true } })
-  await writeAudit({
-    userId: auth.user.id, action: 'STOCK_RETURN', entity: 'inventoryItem', entityId: itemId,
-    projectId,
-    detail: { sku: item?.sku ?? itemId, qty, project: projectId ?? null, workOrder: workOrderId ?? null, note },
-  })
+  const fresh = await db.inventoryItem.findUnique({ where: { id: itemId }, select: { sku: true, name: true, unit: true, qty: true } })
   return NextResponse.json({
     data: {
       itemId, qty,
-      sku: item?.sku, physical: item?.qty, unit: item?.unit,
+      sku: fresh?.sku, physical: fresh?.qty, unit: fresh?.unit,
     },
   }, { status: 201 })
 }
