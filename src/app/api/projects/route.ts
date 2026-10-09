@@ -15,7 +15,7 @@ export async function GET (req: NextRequest) {
   const projects = await db.project.findMany({
     where: {
       ...(status ? { status } : {}),
-      ...(q ? { OR: [{ title: { contains: q } }, { code: { contains: q } }, { customer: { name: { contains: q } } }] } : {}),
+      ...(q ? { OR: [{ title: { contains: q, mode: 'insensitive' } }, { code: { contains: q, mode: 'insensitive' } }, { customer: { name: { contains: q, mode: 'insensitive' } } }] } : {}),
       // obseg (issue #1): monter vidi SAMO projekte svojih nalogov
       ...(readsAllData(user) ? {} : { workOrders: { some: { assigneeId: user.id } } }),
     },

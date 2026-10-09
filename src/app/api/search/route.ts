@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import type { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 import { jsonError, readsAllData, requirePermission } from '@/lib/auth'
 import { hasPerm } from '@/lib/permissions-core'
@@ -29,7 +30,7 @@ export async function GET (req: NextRequest) {
   const groups: { kind: string; label: string; hits: Hit[] }[] = []
 
   const projects = await db.project.findMany({
-    where: { OR: [{ title: { contains: q } }, { code: { contains: q } }, { address: { contains: q } }] },
+    where: { OR: [{ title: { contains: q, mode: 'insensitive' } }, { code: { contains: q, mode: 'insensitive' } }, { address: { contains: q, mode: 'insensitive' } }] },
     select: { id: true, code: true, title: true, status: true }, take: 5,
   })
   if (projects.length) groups.push({
@@ -39,7 +40,7 @@ export async function GET (req: NextRequest) {
 
   if (hasPerm(perms, 'customers.read')) {
     const customers = await db.customer.findMany({
-      where: { OR: [{ name: { contains: q } }, { email: { contains: q } }, { city: { contains: q } }] },
+      where: { OR: [{ name: { contains: q, mode: 'insensitive' } }, { email: { contains: q, mode: 'insensitive' } }, { city: { contains: q, mode: 'insensitive' } }] },
       select: { id: true, name: true, city: true }, take: 5,
     })
     if (customers.length) groups.push({
@@ -50,7 +51,7 @@ export async function GET (req: NextRequest) {
 
   if (hasPerm(perms, 'quotes.read')) {
     const quotes = await db.quote.findMany({
-      where: { OR: [{ code: { contains: q } }, { note: { contains: q } }] },
+      where: { OR: [{ code: { contains: q, mode: 'insensitive' } }, { note: { contains: q, mode: 'insensitive' } }] },
       select: { id: true, code: true, status: true, total: true, customer: { select: { name: true } } }, take: 5,
     })
     if (quotes.length) groups.push({
@@ -61,7 +62,7 @@ export async function GET (req: NextRequest) {
 
   if (hasPerm(perms, 'invoices.read')) {
     const invoices = await db.invoice.findMany({
-      where: { code: { contains: q } },
+      where: { code: { contains: q, mode: 'insensitive' } },
       select: { id: true, code: true, status: true, total: true, project: { select: { customer: { select: { name: true } } } } }, take: 5,
     })
     if (invoices.length) groups.push({
@@ -72,7 +73,7 @@ export async function GET (req: NextRequest) {
 
   if (hasPerm(perms, 'nalog.read')) {
     const wos = await db.workOrder.findMany({
-      where: { OR: [{ code: { contains: q } }, { title: { contains: q } }] },
+      where: { OR: [{ code: { contains: q, mode: 'insensitive' } }, { title: { contains: q, mode: 'insensitive' } }] },
       select: { id: true, code: true, title: true, status: true }, take: 5,
     })
     if (wos.length) groups.push({
@@ -85,8 +86,8 @@ export async function GET (req: NextRequest) {
   // uporabnik z omejenim branjem (monter) vidi SAMO dostave, kjer je voznik ALI
   // so vezane na nalog, dodeljen njemu (fail-closed).
   {
-    const base = { OR: [{ code: { contains: q } }, { address: { contains: q } }, { note: { contains: q } }] }
-    const where = readsAllData(auth.user)
+    const base: Prisma.DeliveryWhereInput = { OR: [{ code: { contains: q, mode: 'insensitive' } }, { address: { contains: q, mode: 'insensitive' } }, { note: { contains: q, mode: 'insensitive' } }] }
+    const where: Prisma.DeliveryWhereInput = readsAllData(auth.user)
       ? base
       : { AND: [base, { OR: [{ driverId: auth.user.id }, { workOrder: { assigneeId: auth.user.id } }] }] }
     const deliveries = await db.delivery.findMany({
@@ -108,12 +109,12 @@ export async function GET (req: NextRequest) {
   // (fail-closed). Zadetki navigirajo na zavihek servis.
   if (readsAllData(auth.user)) {
     const claims = await db.claim.findMany({
-      where: { OR: [{ code: { contains: q } }, { title: { contains: q } }] },
+      where: { OR: [{ code: { contains: q, mode: 'insensitive' } }, { title: { contains: q, mode: 'insensitive' } }] },
       select: { id: true, code: true, title: true, status: true, customer: { select: { name: true } } },
       take: 5,
     })
     const cases = await db.serviceCase.findMany({
-      where: { OR: [{ code: { contains: q } }, { title: { contains: q } }] },
+      where: { OR: [{ code: { contains: q, mode: 'insensitive' } }, { title: { contains: q, mode: 'insensitive' } }] },
       select: { id: true, code: true, title: true, status: true, project: { select: { code: true } } },
       take: 5,
     })
@@ -134,7 +135,7 @@ export async function GET (req: NextRequest) {
 
   if (hasPerm(perms, 'inventory.read')) {
     const items = await db.inventoryItem.findMany({
-      where: { OR: [{ name: { contains: q } }, { sku: { contains: q } }] },
+      where: { OR: [{ name: { contains: q, mode: 'insensitive' } }, { sku: { contains: q, mode: 'insensitive' } }] },
       select: { id: true, sku: true, name: true, qty: true, unit: true }, take: 5,
     })
     if (items.length) groups.push({
@@ -146,7 +147,7 @@ export async function GET (req: NextRequest) {
   // R442: izdelki iz produktnega modela (katalog po družinah)
   if (hasPerm(perms, 'catalog.read')) {
     const products = await db.product.findMany({
-      where: { active: true, OR: [{ name: { contains: q } }, { sku: { contains: q } }] },
+      where: { active: true, OR: [{ name: { contains: q, mode: 'insensitive' } }, { sku: { contains: q, mode: 'insensitive' } }] },
       select: { id: true, sku: true, name: true, unit: true, salePrice: true, family: { select: { name: true } } }, take: 5,
     })
     if (products.length) groups.push({
@@ -160,7 +161,7 @@ export async function GET (req: NextRequest) {
 
   if (hasPerm(perms, 'users.read')) {
     const users = await db.user.findMany({
-      where: { OR: [{ name: { contains: q } }, { email: { contains: q } }] },
+      where: { OR: [{ name: { contains: q, mode: 'insensitive' } }, { email: { contains: q, mode: 'insensitive' } }] },
       select: { id: true, name: true, email: true, role: true }, take: 5,
     })
     if (users.length) groups.push({

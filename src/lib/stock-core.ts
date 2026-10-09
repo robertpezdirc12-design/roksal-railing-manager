@@ -110,7 +110,7 @@ export interface StockRow {
 export async function stockOverview (opts: { q?: string; lowOnly?: boolean } = {}): Promise<StockRow[]> {
   const items = await db.inventoryItem.findMany({
     where: opts.q
-      ? { OR: [{ sku: { contains: opts.q } }, { name: { contains: opts.q } }, { location: { contains: opts.q } }] }
+      ? { OR: [{ sku: { contains: opts.q, mode: 'insensitive' } }, { name: { contains: opts.q, mode: 'insensitive' } }, { location: { contains: opts.q, mode: 'insensitive' } }] }
       : undefined,
     orderBy: { sku: 'asc' },
     include: { reservations: { where: { status: 'AKTIVNA' }, select: { qty: true } } },

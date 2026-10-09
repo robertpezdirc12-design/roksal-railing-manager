@@ -4,6 +4,7 @@
 // PDF izvoz je ločen modul (documents.generate) — tu zgolj arhiv.
 
 import { NextRequest, NextResponse } from 'next/server'
+import type { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 import { requirePermission } from '@/lib/auth'
 
@@ -41,23 +42,23 @@ export async function GET (req: NextRequest) {
   const wantQuotes = type !== 'racun'
   const wantInvoices = type !== 'ponudba'
 
-  const quoteFilter = {
+  const quoteFilter: Prisma.QuoteWhereInput = {
     ...(status ? { status } : {}),
     ...(q ? {
       OR: [
-        { code: { contains: q } },
-        { customer: { name: { contains: q } } },
-        { project: { title: { contains: q } } },
+        { code: { contains: q, mode: 'insensitive' } },
+        { customer: { name: { contains: q, mode: 'insensitive' } } },
+        { project: { title: { contains: q, mode: 'insensitive' } } },
       ],
     } : {}),
   }
-  const invoiceFilter = {
+  const invoiceFilter: Prisma.InvoiceWhereInput = {
     ...(status ? { status } : {}),
     ...(q ? {
       OR: [
-        { code: { contains: q } },
-        { project: { customer: { name: { contains: q } } } },
-        { project: { title: { contains: q } } },
+        { code: { contains: q, mode: 'insensitive' } },
+        { project: { customer: { name: { contains: q, mode: 'insensitive' } } } },
+        { project: { title: { contains: q, mode: 'insensitive' } } },
       ],
     } : {}),
   }

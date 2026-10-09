@@ -2,6 +2,8 @@
 // Jedro logike je v ops/backup.sh (en sam vir resnice za vse vnose: job, cron, ročno).
 // Skrivnosti (šifrirno geslo, žeton) skripta prebere IZKLJUČNO iz okolja/.env.recovery.
 import { execFile } from 'node:child_process'
+import { accessSync } from 'node:fs'
+import { dirname, join } from 'node:path'
 import { promisify } from 'node:util'
 
 const execFileAsync = promisify(execFile)
@@ -44,15 +46,14 @@ export interface BackupResult {
  * (DR za takšno namestitev teče prek zunanjega cron klica/neon PITR — docs/DEPLOYMENT.md).
  */
 function resolveOpsRoot (): string {
-  const path = require('node:path') as typeof import('node:path')
   let dir = process.cwd()
   for (let i = 0; i < 5; i++) {
-    const candidate = path.join(dir, 'ops', 'backup.sh')
+    const candidate = join(dir, 'ops', 'backup.sh')
     try {
-      require('node:fs').accessSync(candidate)
+      accessSync(candidate)
       return dir
     } catch {
-      dir = path.dirname(dir)
+      dir = dirname(dir)
     }
   }
   throw new Error('ops/backup.sh ni na voljo v tej namestitvi (serverless?) — varnostne kopije poganja zunanji cron ali skrbnik (glej docs/DEPLOYMENT.md).')

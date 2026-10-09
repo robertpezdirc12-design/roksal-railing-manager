@@ -19,7 +19,7 @@ export async function GET (req: NextRequest) {
     where: {
       active: true,
       ...(family && family !== 'all' ? { family: { code: family } } : {}),
-      ...(q ? { OR: [{ name: { contains: q } }, { sku: { contains: q } }] } : {}),
+      ...(q ? { OR: [{ name: { contains: q, mode: 'insensitive' } }, { sku: { contains: q, mode: 'insensitive' } }] } : {}),
     },
     orderBy: { sku: 'asc' },
     include: {

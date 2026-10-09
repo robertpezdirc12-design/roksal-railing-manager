@@ -34,10 +34,10 @@ export async function GET (req: NextRequest) {
       ...(status ? { status } : {}),
       ...(q ? {
         OR: [
-          { code: { contains: q } },
-          { project: { title: { contains: q } } },
-          { project: { customer: { name: { contains: q } } } },
-          { quote: { code: { contains: q } } },
+          { code: { contains: q, mode: 'insensitive' } },
+          { project: { title: { contains: q, mode: 'insensitive' } } },
+          { project: { customer: { name: { contains: q, mode: 'insensitive' } } } },
+          { quote: { code: { contains: q, mode: 'insensitive' } } },
         ],
       } : {}),
     },

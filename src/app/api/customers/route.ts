@@ -16,11 +16,11 @@ export async function GET (req: NextRequest) {
   const customers = await db.customer.findMany({
     where: q ? {
       OR: [
-        { name: { contains: q } },
-        { email: { contains: q } },
-        { phone: { contains: q } },
-        { city: { contains: q } },
-        { taxId: { contains: q } },
+        { name: { contains: q, mode: 'insensitive' } },
+        { email: { contains: q, mode: 'insensitive' } },
+        { phone: { contains: q, mode: 'insensitive' } },
+        { city: { contains: q, mode: 'insensitive' } },
+        { taxId: { contains: q, mode: 'insensitive' } },
       ],
     } : {},
     include: { _count: { select: { projects: true, quotes: true } } },

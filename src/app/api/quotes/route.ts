@@ -36,10 +36,10 @@ export async function GET (req: NextRequest) {
       ...(status ? { status } : {}),
       ...(q ? {
         OR: [
-          { code: { contains: q } },
-          { note: { contains: q } },
-          { customer: { name: { contains: q } } },
-          { project: { title: { contains: q } } },
+          { code: { contains: q, mode: 'insensitive' } },
+          { note: { contains: q, mode: 'insensitive' } },
+          { customer: { name: { contains: q, mode: 'insensitive' } } },
+          { project: { title: { contains: q, mode: 'insensitive' } } },
         ],
       } : {}),
     },

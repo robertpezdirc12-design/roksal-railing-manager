@@ -19,10 +19,10 @@ export async function GET (req: NextRequest) {
   const equipment = await db.equipment.findMany({
     where: q ? {
       OR: [
-        { code: { contains: q } },
-        { name: { contains: q } },
-        { serialNumber: { contains: q } },
-        { location: { contains: q } },
+        { code: { contains: q, mode: 'insensitive' } },
+        { name: { contains: q, mode: 'insensitive' } },
+        { serialNumber: { contains: q, mode: 'insensitive' } },
+        { location: { contains: q, mode: 'insensitive' } },
       ],
     } : {},
     include: {
