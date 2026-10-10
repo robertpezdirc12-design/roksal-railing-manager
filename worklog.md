@@ -1309,3 +1309,24 @@ Work Log:
 Stage Summary:
 - R471 NI nameščen v produkciji (blok: SAML scope na žetonih); koda, testi in CI končani
 - potrebna uporabnikova akcija: Vercel → Settings → Tokens → nov žeton s scope-om »robertpezdirc12-designs-projects« (najprej SAML prijava), ali Deploy iz nadzorne plošče
+
+---
+Task ID: R472
+Agent: main (Z.ai Code)
+Task: GitHub issue #9 HOVER PARITY — Faza 0 audit (obvezen pred implementacijo)
+
+Work Log:
+- seja nadaljevana; uporabnik poslal nov GitLab žeton glpat-5P7j…: API odgovarja »Token was revoked« (preizkušeno 3×; navidezni žeton vrača 401 Unauthorized → žeton je res obstajal, a preklican) — GitLab mirror ostaja BLOKIRAN, potrebna uporabnikova akcija (nov žeton, brez rotacije po kopiranju)
+- Vercel deploy R471 še vedno BLOKIRAN (SAML scope) — produkcija na R470; prav tako čaka uporabnika
+- Faza 0 audit izveden s 4 vzporednimi read-only agenti (2-a vizualizacija/3D, 2-b poslovni tok, 2-c zajem→geometrija, 2-d podatki/izvozi/testi) — ~14,3k vrstic glavnih modulov + 75 Prisma modelov + 168 API rut + 33 testnih datotek
+- ključne ugotovitve:
+  • NI three.js/WebGL — vsi »3D« prikazi so SVG/canvas parametrične risbe; merilno skaliran KOORDINATNI model ne obstaja (tekač = 1D lok atCm, kamera = 2D slika, AR globina = skalar)
+  • trden temelj: fence-run (cm, verifikacije, verzije) + dvojček (AS-* veriga, provenance, diff) + foto-viz (PREJ/POTEM, A/B/C) + konfigurator/BOM/ponudbe + PWA (manifest/sw/offline/sync) + javno deljenje (žetoni/rok/preklic/tempomat)
+  • glavne vrzeli: Quote brez FK na paket/BOM (ni invalidacije — poslovno tveganje), BOM = predloga × količina (ne iz segmentov, brez odpada), brez merilnega PDF paketa/montažne skice/odreznega seznama, brez XLSX/izvoza BOM, inženirska pravila se ne preverjajo pred izvozom, javni vizualizator in soglasje za fotografije manjkata, UI testi ne obstajajo (samo API)
+  • dolgovi: mrtvi cron viz/gc, neuporabljene ENV spremenljivke, GDPR lukna na portalu (foto brez soglasja)
+- napisan docs/AUDIT-9.md (polna tabela po modulih + 4 razlikovalne presoje + presoja po §3–§12 + fazni načrt)
+
+Stage Summary:
+- Faza 0 POPOLNOMA izvedena (audit z dokazi file:line); načrt faz: F1 §3 model-core geometrija, F2 §5 količine iz segmentov + invalidacija, F3 §4 2D→3D preslikava, F4 §6 PDF merilni paket + izvozi, F5 §7–§10
+- odločitve poštenosti prenesene iz #8: SVG/parametrično nikoli ni »registriran model«; nezajeto vidno označeno; tolerance izključno iz EngineeringRule
+- deliveroti: docs/AUDIT-9.md; issue #9 komentar z auditom
