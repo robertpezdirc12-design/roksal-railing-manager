@@ -60,6 +60,8 @@ import {
   type AnalyzeResult, type CalibrationMethod, type DeviceCaps, type DomainOptions, type MeasureMode,
 } from '@/lib/measure-engine'
 import { EmptyState, ErrorBox } from '@/components/roksal/ui-bits'
+import SceneOverlay from '@/components/roksal/scene-overlay'
+import { useSceneUnderstanding } from '@/hooks/use-scene-understanding'
 
 interface Pt { x: number; y: number; label?: string; src?: 'ROCNO' | 'PREDLOG' }
 interface PhotoRow {
@@ -278,6 +280,10 @@ export function KameraMeritevDialog ({ open, onClose, onSaved }: {
   const [workOrderId, setWorkOrderId] = useState('none')
   const [location, setLocation] = useState('')
   const [camActive, setCamActive] = useState(false)
+  const videoRef = useRef<HTMLVideoElement>(null)
+
+  // ── R467 (issue #8 F1): živo razumevanje prizora med zajemom ──
+  const sceneState = useSceneUnderstanding(videoRef, camActive)
   const [guides, setGuides] = useState(true) // R455: vodila v živem predogledu (§4)
 
   // R455: pogledi (fotografije istega objekta) + aktivni zavihek
@@ -326,7 +332,6 @@ export function KameraMeritevDialog ({ open, onClose, onSaved }: {
   const [overrideLen, setOverrideLen] = useState('')
   const [overrideReason, setOverrideReason] = useState('')
 
-  const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const fileViewRef = useRef<HTMLInputElement>(null)
@@ -1088,6 +1093,14 @@ export function KameraMeritevDialog ({ open, onClose, onSaved }: {
             <div className="space-y-2 overflow-hidden rounded-lg border bg-black">
               <div className="relative">
                 <video ref={videoRef} autoPlay playsInline muted className="max-h-[360px] w-full object-contain" aria-label="Predogled kamere" />
+                {/* R467 (issue #8 F1): žive zaznave prizora (tla, ovire, struktura) —
+                    čist pogled, 2–4 oznake, tap za podatek; nikoli ne blokira zajema */}
+                {sceneState.elements.length > 0 ? (
+                  <SceneOverlay
+                    elements={sceneState.elements}
+                    quality={sceneState.quality}
+                  />
+                ) : null}
                 {/* R455: vodila za vodenje zajema (§4) — mreža + vodoravnica + središče */}
                 {guides ? (
                   <svg className="pointer-events-none absolute inset-0 size-full" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden>

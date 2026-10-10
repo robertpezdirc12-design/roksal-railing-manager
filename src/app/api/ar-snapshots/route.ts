@@ -12,6 +12,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { jsonError, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
+import { sanitizeSceneResult, serializeSceneResult } from '@/lib/scene-understanding-core'
 
 export async function GET (req: NextRequest) {
   const auth = await requirePermission(req, 'projects.read')
@@ -54,12 +55,15 @@ export async function POST (req: NextRequest) {
   const note = typeof body.note === 'string' ? body.note.trim().slice(0, 500) || null : null
   const analysis = typeof body.analysis === 'string' && body.analysis.trim() ? body.analysis.slice(0, 20_000) : null
   const params = typeof body.params === 'string' && body.params.trim() ? body.params.slice(0, 4_000_000) : null
-  if (!params && !analysis && !note) {
-    return jsonError(400, 'Posnetek potrebuje vsaj params (posnetek), analysis ali opombo.')
+  // R467: razumevanje prizora (objekt → stroga validacija → serializacija)
+  const sceneUnderstanding = sanitizeSceneResult(body.sceneUnderstanding)
+  const sceneJson = sceneUnderstanding ? serializeSceneResult(sceneUnderstanding) : null
+  if (!params && !analysis && !note && !sceneJson) {
+    return jsonError(400, 'Posnetek potrebuje vsaj params (posnetek), analysis, scene ali opombo.')
   }
 
   const snapshot = await db.arSnapshot.create({
-    data: { projectId, authorId: user.id, scene, analysis, params, note },
+    data: { projectId, authorId: user.id, scene, analysis, params, note, sceneJson },
   })
 
   await writeAudit({
@@ -68,7 +72,7 @@ export async function POST (req: NextRequest) {
     entity: 'arSnapshot',
     entityId: snapshot.id,
     projectId,
-    detail: { scene, hasPhoto: !!params, note },
+    detail: { scene, hasPhoto: !!params, note, sceneElements: sceneUnderstanding?.elements.length ?? 0 },
   })
 
   return NextResponse.json({ data: { id: snapshot.id, createdAt: snapshot.createdAt } }, { status: 201 })

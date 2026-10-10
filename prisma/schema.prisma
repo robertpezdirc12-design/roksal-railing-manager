@@ -1224,6 +1224,7 @@ model ArSnapshot {
   scene     String? // kratek opis prizora (VLM), npr. „terasa z vhodnimi vrati"
   analysis  String? // JSON { placement: [{label, where, estLenCm?, note?}], obstacles: [], references: [] }
   params    String? // JSON { photo, posts, heightCm, scale, opacity, mode } — posnetek + nastavitve
+  sceneJson String? // R467 (issue #8 F1): JSON SceneUnderstandingResult {version, elements[], edits[]} — živi razredi prizora ob zajemu; edits = označeni popravki monterja (izvirnik se ne prepisuje)
   note      String?
   createdAt DateTime @default(now())
 

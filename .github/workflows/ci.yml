@@ -86,6 +86,7 @@ jobs:
           - grupa: r454-r458
           - grupa: r459-r462
           - grupa: r464
+          - grupa: r465-r467
     services:
       postgres:
         image: postgres:16

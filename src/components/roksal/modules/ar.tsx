@@ -38,6 +38,12 @@ import { useToast } from '@/hooks/use-toast'
 import { useAppStore } from '@/lib/store'
 import { apiDelete, apiGet, apiPost, useApi } from '@/lib/api-client'
 import { EmptyState, ErrorBox, LoadingRows, PageHeader } from '@/components/roksal/ui-bits'
+import SceneOverlay from '@/components/roksal/scene-overlay'
+import { useSceneUnderstanding } from '@/hooks/use-scene-understanding'
+import {
+  SCENE_CLASSES, SURFACE_KINDS, applyEdits,
+  type SceneClass, type SceneEdit, type SceneElement, type SurfaceKind,
+} from '@/lib/scene-understanding-core'
 import { hasPerm } from '@/lib/permissions-core'
 
 const ANTHRACITE = '#2b2f36'
@@ -128,6 +134,16 @@ export default function ArModule () {
   const dragRef = useRef<{ startX: number; startY: number; baseX: number; baseY: number } | null>(null)
 
   const [mode, setMode] = useState<Mode>('off')
+
+  // ── R467 (issue #8 F1): živo razumevanje prizora ──
+  const sceneState = useSceneUnderstanding(videoRef, mode === 'on')
+  const [sceneSelectedId, setSceneSelectedId] = useState<string | null>(null)
+  const [sceneEdits, setSceneEdits] = useState<SceneEdit[]>([])
+  /** elementi z apliciranimi popravki (za prikaz/detalj) */
+  const sceneDisplayed = sceneState.elements.length > 0
+    ? applyEdits({ version: 1, at: Date.now(), elements: sceneState.elements, edits: sceneEdits })
+    : []
+  const sceneSelected = sceneDisplayed.find((e) => e.id === sceneSelectedId) ?? null
   const [starting, setStarting] = useState(false)
   const [busy, setBusy] = useState(false)
   const [pos, setPos] = useState({ x: 0, y: 20 })
@@ -344,6 +360,7 @@ export default function ArModule () {
       })
 
       // R454: vztrajnost AR posnetka (fotografija + nastavitve + morebitna analiza)
+      // R467: + razumevanje prizora (živi elementi + monterjevi popravki)
       let snapSaved = false
       try {
         await apiPost('/api/ar-snapshots', {
@@ -352,12 +369,18 @@ export default function ArModule () {
           analysis: analysis ? JSON.stringify(analysis) : null,
           params: JSON.stringify({ photo, posts, heightCm, scale, opacity, mode, ...sourceInfo }),
           note: (note.trim() || null) as string | null,
+          ...(sceneDisplayed.length > 0
+            ? { sceneUnderstanding: { version: 1, at: Date.now(), elements: sceneDisplayed, edits: sceneEdits } }
+            : {}),
         })
         snapSaved = true
       } catch {
         // meritev FOTO je že shranjena — napaka posnetka ne sme pokvariti toka
       }
       void snapshots.reload()
+      // popravljeni elementi so sedaj shranjeni v posnetku — lokalni popravki se počistijo
+      setSceneEdits([])
+      setSceneSelectedId(null)
 
       setLastShot(photo)
       toast({
@@ -610,6 +633,17 @@ export default function ArModule () {
                   aria-label="Živa slika kamere"
                 />
 
+                {/* R467 (issue #8 F1): žive zaznave prizora — samo z živo kamero;
+                    POD ograjinim overlayjem (ograja ostane glavni interakcijski objekt) */}
+                {mode === 'on' && sceneDisplayed.length > 0 ? (
+                  <SceneOverlay
+                    elements={sceneDisplayed}
+                    quality={sceneState.quality}
+                    selectedId={sceneSelectedId}
+                    onSelect={(el) => { setSceneSelectedId(el.id === sceneSelectedId ? null : el.id) }}
+                  />
+                ) : null}
+
                 {/* demo ozadje */}
                 {mode === 'demo' ? (
                   <div className="absolute inset-0" style={{ background: DEMO_GRAD }} aria-hidden />
@@ -681,6 +715,73 @@ export default function ArModule () {
                   ? 'Kamera ni na voljo — predogled na demo ozadju. Zajem shrani enak sestavek (demo ozadje + ograja).'
                   : 'Ograjo premikajte z vlečenjem po predogledu; velikost in prosojnost nastavite z drsnikoma levo.'}
               </p>
+
+              {/* R467 (issue #8 F1 §2): popravek zaznanega elementa — OZNAČEN PODATEK,
+                  izvirni zajem ostaja; shrani se z naslednjim AR posnetkom */}
+              {mode === 'on' && sceneSelected ? (
+                <div className="rounded-lg border bg-secondary/40 p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-sm font-semibold">
+                      Zaznan element: {sceneSelected.cls}
+                      {sceneSelected.kind ? ` · ${sceneSelected.kind}` : ''}
+                    </p>
+                    <Badge variant="outline" className="text-[10px]">
+                      vir: {sceneSelected.source === 'ROCNO' ? 'ročno potrjeno' : sceneSelected.source === 'VLM' ? 'AI predlog' : 'lokalna hevristika'}
+                    </Badge>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Popravek se shrani kot označen podatek ob zajemu AR posnetka — izvirna zaznava ostane nespremenjena.
+                  </p>
+                  <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                    <div className="space-y-1">
+                      <Label htmlFor="scene-cls" className="text-xs">Razred</Label>
+                      <Select
+                        value={sceneSelected.cls}
+                        onValueChange={(v) => {
+                          const cls = v as SceneClass
+                          setSceneEdits((prev) => [...prev.filter((e) => e.elementId !== sceneSelected.id), {
+                            elementId: sceneSelected.id,
+                            cls,
+                            by: user?.name ?? 'monter',
+                            at: Date.now(),
+                          }])
+                          toast({ title: 'Popravek razreda zabeležen.', description: `Nov razred: ${cls}. Shrani se z zajemom AR posnetka.` })
+                        }}
+                      >
+                        <SelectTrigger id="scene-cls" className="h-9"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {SCENE_CLASSES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="scene-kind" className="text-xs">Vrsta podlage {sceneSelected.cls !== 'PODLAGA' ? '(samo za podlago)' : ''}</Label>
+                      <Select
+                        value={sceneSelected.kind ?? undefined}
+                        disabled={sceneSelected.cls !== 'PODLAGA' && sceneSelected.cls !== 'TLA'}
+                        onValueChange={(v) => {
+                          const kind = v as SurfaceKind
+                          setSceneEdits((prev) => [...prev.filter((e) => e.elementId !== sceneSelected.id), {
+                            elementId: sceneSelected.id,
+                            kind,
+                            by: user?.name ?? 'monter',
+                            at: Date.now(),
+                          }])
+                          toast({ title: 'Popravek podlage zabeležen.', description: `Vrsta: ${kind}.` })
+                        }}
+                      >
+                        <SelectTrigger id="scene-kind" className="h-9"><SelectValue placeholder="neznana" /></SelectTrigger>
+                        <SelectContent>
+                          {SURFACE_KINDS.map((k) => <SelectItem key={k} value={k}>{k}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="mt-2 flex justify-end">
+                    <Button variant="ghost" size="sm" onClick={() => setSceneSelectedId(null)}>Zapri</Button>
+                  </div>
+                </div>
+              ) : null}
             </CardContent>
           </Card>
 
