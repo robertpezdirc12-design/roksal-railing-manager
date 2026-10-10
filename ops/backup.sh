@@ -61,6 +61,17 @@ trap 'rm -rf "$STAGE"' EXIT
 
 log "1/6 git bundle (cel repozitorij: zgodovina, veje, tagi)…"
 mkdir -p "$STAGE/git"
+# R466: klon je lahko shallow (CI checkout fetch-depth:1, ročni kloni --depth) —
+# bundle iz shallow zgodovine je NEUPORABEN za obnovo (clone iz njega pada z
+# "remote did not send all necessary objects", ugotovitev R464). Pred bundle-jem
+# pridobimo celotno zgodovino; če to ni mogoče, UMREMO — tiha neuporabna kopija
+# je hujša od spodletelega poskusa (kanarsko na JobRun poročilu).
+if [ -f "$ROOT_DIR/.git/shallow" ]; then
+  log "   klon je shallow — pridobivam celotno zgodovino (git fetch --unshallow)…"
+  if ! git -C "$ROOT_DIR" fetch --unshallow --quiet 2>>"$LOG_FILE"; then
+    die "repozitorij je shallow in unshallow ni uspel — bundle ne bi vseboval celotne zgodovine (R466)"
+  fi
+fi
 git -C "$ROOT_DIR" bundle create "$STAGE/git/git.bundle" --all --quiet
 BUNDLE_SHA="$(sha256_of "$STAGE/git/git.bundle")"
 

@@ -105,6 +105,11 @@ jobs:
       BASE_URL: http://localhost:3000
     steps:
       - uses: actions/checkout@v4
+        with:
+          # R466: r441 backup/restore test dela git bundle --all + clone iz
+          # bundle — shallow klon (privzeti fetch-depth:1) da neuporaben bundle
+          # ("did not send all necessary objects", ugotovitev R464)
+          fetch-depth: 0
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile
       - name: priprava baze (migrate + popoln seed)
