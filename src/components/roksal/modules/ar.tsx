@@ -41,7 +41,7 @@ import { EmptyState, ErrorBox, LoadingRows, PageHeader } from '@/components/roks
 import SceneOverlay, { geomStatusText, slopeSourceText } from '@/components/roksal/scene-overlay'
 import { useSceneUnderstanding } from '@/hooks/use-scene-understanding'
 import {
-  SCENE_CLASSES, SURFACE_KINDS, applyEdits,
+  SCENE_CLASSES, SURFACE_KINDS, applyEdits, ascentText,
   type SceneClass, type SceneEdit, type SceneElement, type SurfaceKind,
 } from '@/lib/scene-understanding-core'
 import { hasPerm } from '@/lib/permissions-core'
@@ -162,6 +162,8 @@ export default function ArModule () {
   const [scenePinned, setScenePinned] = useState<Set<string>>(new Set())
   /** R468 (F2 §3): vnos ročno izmerjenega naklona v kartici elementa. */
   const [slopeInput, setSlopeInput] = useState('')
+  /** R469 (F3 §4): vnos ročno potrjenega števila stopnic. */
+  const [stepsInput, setStepsInput] = useState('')
   /** elementi z apliciranimi popravki (za prikaz/detalj) */
   const sceneDisplayed = sceneState.elements.length > 0
     ? applyEdits({ version: 1, at: Date.now(), elements: sceneState.elements, edits: sceneEdits })
@@ -666,7 +668,7 @@ export default function ArModule () {
                     quality={sceneState.quality}
                     selectedId={sceneSelectedId}
                     pinnedIds={scenePinned}
-                    onSelect={(el) => { setSceneSelectedId(el.id === sceneSelectedId ? null : el.id); setSlopeInput('') }}
+                    onSelect={(el) => { setSceneSelectedId(el.id === sceneSelectedId ? null : el.id); setSlopeInput(''); setStepsInput('') }}
                   />
                 ) : null}
 
@@ -779,6 +781,82 @@ export default function ArModule () {
                   <p className="mt-1 text-xs text-muted-foreground">
                     Popravek se shrani kot označen podatek ob zajemu AR posnetka — izvirna zaznava ostane nespremenjena.
                   </p>
+
+                  {/* R469 (F3 §4): geometrija stopnic — števec, smer, pravilnost, podest;
+                      POŠTENOST: višin čel in globin nastopov NI mogoče izmeriti
+                      iz enega 2D pogleda (issue §4) — to je izrecno zapisano. */}
+                  {sceneSelected.cls === 'STOPNICA' ? (
+                    <div className="mt-2 rounded-md border border-dashed px-2.5 py-2 text-xs">
+                      <p className="font-semibold">Geometrija stopnic</p>
+                      <ul className="mt-1 space-y-0.5 text-muted-foreground">
+                        <li>
+                          Vidni nastopi: {sceneSelected.steps != null
+                            ? `${sceneSelected.steps} (${sceneSelected.source === 'ROCNO' ? 'ročno potrjeno' : 'ocena iz vizualne geometrije'})`
+                            : 'nezaznani v tem kadru'}
+                        </li>
+                        <li>
+                          Smer vzpenjanja: {sceneSelected.ascent != null
+                            ? `${ascentText(sceneSelected.ascent)} (ocena — preverite na objektu)`
+                            : 'ni ocenljiva iz tega kadra'}
+                        </li>
+                        <li>
+                          Razmaki med nastopi: {sceneSelected.stepIrregular === true
+                            ? 'NEENAKOMERNI — ročni pregled odstopajoče stopnice'
+                            : sceneSelected.stepGap != null ? 'videti enakomerni (ocena)' : 'nezaznani'}
+                        </li>
+                        <li>
+                          Podest: {sceneSelected.landing === true
+                            ? 'morebiten (večja vrzel med nastopi) — potrdite'
+                            : 'ni zaznan'}
+                        </li>
+                        <li className="text-foreground">
+                          Višine čel in globine nastopov niso izmerljive iz enega pogleda — izmerite z referenco ali AR globino.
+                        </li>
+                        <li>
+                          Status geometrije: <span className="font-medium text-foreground">{geomStatusText(sceneSelected) ?? 'ni podatka'}</span>
+                          {sceneSelected.geomStatus === 'GEOMETRIJA_OCENJENA' ? ' — ocena, ne izmera.' : ''}
+                        </li>
+                      </ul>
+                      <div className="mt-2 flex flex-wrap items-end gap-1.5">
+                        <div className="space-y-0.5">
+                          <Label htmlFor="scene-steps" className="text-[11px]">Potrjeno število stopnic (preštejte na objektu)</Label>
+                          <Input
+                            id="scene-steps"
+                            inputMode="numeric"
+                            className="h-8 w-28 text-xs"
+                            placeholder="npr. 5"
+                            value={stepsInput}
+                            onChange={(e) => { setStepsInput(e.target.value) }}
+                            aria-describedby="scene-steps-help"
+                          />
+                        </div>
+                        <Button
+                          size="sm"
+                          className="h-8"
+                          disabled={Number.isNaN(Number(stepsInput.replace(',', '.'))) || stepsInput.trim() === '' ||
+                            !(Number(stepsInput.replace(',', '.')) >= 1) || !(Number(stepsInput.replace(',', '.')) <= 20)}
+                          onClick={() => {
+                            const v = Math.round(Number(stepsInput.replace(',', '.')))
+                            if (!Number.isFinite(v) || v < 1 || v > 20) return
+                            setSceneEdits((prev) => [...prev.filter((e) => e.elementId !== sceneSelected.id), {
+                              elementId: sceneSelected.id,
+                              steps: v,
+                              by: user?.name ?? 'monter',
+                              at: Date.now(),
+                            }])
+                            toast({ title: 'Potrjeno število stopnic zabeleženo.', description: `${v} stopnic (ročno potrjeno). Shrani se z zajemom AR posnetka.` })
+                            setStepsInput('')
+                          }}
+                        >
+                          <Save className="size-3.5" aria-hidden />
+                          Potrdi
+                        </Button>
+                        <span id="scene-steps-help" className="sr-only">
+                          Preštejte vidne stopnice na objektu in vnesite število od 1 do 20; potrditev se shrani z zajemom.
+                        </span>
+                      </div>
+                    </div>
+                  ) : null}
 
                   {/* R468 (F2 §3): geometrija površine — ločena od prepoznave (§2/§6) */}
                   {(sceneSelected.cls === 'TLA' || sceneSelected.cls === 'PODLAGA' || sceneSelected.cls === 'ROB') ? (

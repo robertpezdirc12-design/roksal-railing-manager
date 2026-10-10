@@ -2,7 +2,9 @@
 // POPRAVEK RAZREDA/STATUSA zaznanega elementa prizora.
 // R468 (issue #8 Faza 2, §3): popravek NAKLONA (slopeDeg, ročno izmerjen
 //   ali potrjen) — zapiše se z virom ROCNO + statusom IZMERJENO.
-// PATCH (measurements.write) { elementId, cls?, status?, kind?, slopeDeg? } →
+// R469 (issue #8 Faza 3, §4): popravek STOPNIC — potrjeno število nastopov
+//   (steps, 1..20) in smer vzpenjanja (ascent: levo/desno/globina).
+// PATCH (measurements.write) { elementId, cls?, status?, kind?, slopeDeg?, steps?, ascent? } →
 //   popravek se shrani kot OZNAČEN PODATEK (append v sceneJson.edits),
 //   izvirni element iz zajema SE NIKOLI NE PREPIŠE (revizija SCENE_EDIT).
 // GET  (projects.read) — elementi z apliciranimi popravki (applyEdits) +
@@ -13,7 +15,7 @@ import { db } from '@/lib/db'
 import { jsonError, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
 import {
-  SCENE_CLASSES, SCENE_LIMITS, SCENE_STATUSES, SURFACE_KINDS,
+  SCENE_CLASSES, SCENE_LIMITS, SCENE_STATUSES, STAIR_ASCENTS, SURFACE_KINDS,
   applyEdits, sanitizeSceneResult, serializeSceneResult,
   type SceneUnderstandingResult,
 } from '@/lib/scene-understanding-core'
@@ -74,8 +76,12 @@ export async function PATCH (req: NextRequest, { params }: Params) {
     Math.abs(body.slopeDeg) <= SCENE_LIMITS.slopeAbsMax
     ? Math.round(body.slopeDeg * 10) / 10
     : undefined
-  if (!cls && !status && !kind && slopeDeg == null) {
-    return jsonError(400, `Podajte vsaj en popravek: cls (${SCENE_CLASSES.join('/')}), status (${SCENE_STATUSES.join('/')}), kind ali slopeDeg (±${SCENE_LIMITS.slopeAbsMax}°).`)
+  // R469 (F3 §4): potrjeno število nastopov (celo število 1..maxSteps) + smer
+  const stepsRaw = typeof body.steps === 'number' && Number.isFinite(body.steps) ? Math.round(body.steps) : null
+  const steps = stepsRaw != null && stepsRaw >= 1 && stepsRaw <= SCENE_LIMITS.maxSteps ? stepsRaw : undefined
+  const ascent = STAIR_ASCENTS.includes(body.ascent) ? body.ascent : undefined
+  if (!cls && !status && !kind && slopeDeg == null && steps == null && ascent == null) {
+    return jsonError(400, `Podajte vsaj en popravek: cls (${SCENE_CLASSES.join('/')}), status (${SCENE_STATUSES.join('/')}), kind, slopeDeg (±${SCENE_LIMITS.slopeAbsMax}°), steps (1..${SCENE_LIMITS.maxSteps}) ali ascent (${STAIR_ASCENTS.join('/')}).`)
   }
 
   // element mora obstajati v izvirniku — popravek brez izvirnika je sumljiv
@@ -86,7 +92,7 @@ export async function PATCH (req: NextRequest, { params }: Params) {
     return jsonError(409, 'Dosežen največji število popravkov na posnetku.')
   }
 
-  const edit = { elementId, cls, status, kind, slopeDeg, by: user.name || user.id, at: Date.now() }
+  const edit = { elementId, cls, status, kind, slopeDeg, steps, ascent, by: user.name || user.id, at: Date.now() }
   const updated: SceneUnderstandingResult = { ...result, edits: [...result.edits, edit] }
 
   await db.arSnapshot.update({
@@ -103,7 +109,12 @@ export async function PATCH (req: NextRequest, { params }: Params) {
     projectId: snapshot.projectId,
     detail: {
       edit,
-      before: { cls: element.cls, status: element.status, kind: element.kind ?? null, slopeDeg: element.slopeDeg ?? null },
+      before: {
+        cls: element.cls, status: element.status, kind: element.kind ?? null,
+        slopeDeg: element.slopeDeg ?? null,
+        steps: element.steps ?? null,
+        ascent: element.ascent ?? null,
+      },
     },
   })
 

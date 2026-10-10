@@ -2,21 +2,25 @@
 // R468 (issue #8 — Faza 2): maska tal (segmentacija z regijo rasti), detekcija
 //   dolgih robov (ROB), ocena talne ravnine in naklona z ločitvijo od nagiba
 //   telefona (getPhoneRollDeg → estimateSlope v jedru).
+// R469 (issue #8 — Faza 3): STOPNICE — detekcija nastopnih črt (vrhovi
+//   vodoravnih gradientov + najdaljši tek močnih stolpcev), analiza vzorca
+//   pa je v jedru (analyzeStairPattern): števec, smer vzpenjanja, enakomernost,
+//   morebitni podest. Iz enega pogleda NI metrske izmere (poštenost §4).
 // DOM/canvas plast nad scene-understanding-core (čista logika): poganja
 // nizkofrekvenčno analizo kadrov iz <video> in vrača SceneElement[].
 //
-// FAZA 1+2 BREZ ML: vse hevristike so klasične računalniškovidezne osnove
+// FAZA 1–3 BREZ ML: vse hevristike so klasične računalniškovidezne osnove
 // (svetlost, Laplace, Sobel robovi, razlika sličic za gibanje, barvne
-// značilnosti podlage, regija rasti za masko tal, sledenje črt za robove).
-// NISO merilne — rezultat je PREDLOG, ki ga monter potrdi ali popravi
-// (core načelo: avtomatika ni avtoriteta).
+// značilnosti podlage, regija rasti za masko tal, sledenje črt za robove in
+// stopnice). NISO merilne — rezultat je PREDLOG, ki ga monter potrdi ali
+// popravi (core načelo: avtomatika ni avtoriteta).
 //
 // Zmogljivost: canvas ≤ 320 px, interval privzeto 250 ms (~4 Hz), izklop ob
 // document.hidden — namenjeno telefonom brez pregrevanja (issue §10).
 
 import {
-  classifySurface, estimateSlope, newSceneId, stabilizeElements,
-  type SceneElement, type ScenePoint, type SurfaceFeatures,
+  analyzeStairPattern, classifySurface, estimateSlope, newSceneId, stabilizeElements,
+  type SceneElement, type ScenePoint, type StairLineInput, type SurfaceFeatures,
 } from '@/lib/scene-understanding-core'
 
 export interface PerceptionQuality {
@@ -50,7 +54,11 @@ const SOBEL_THRESHOLD = 52 // jakost roba na 0..255 sivinah
 const MOTION_PIXEL_THRESHOLD = 26 // |Δsivina| za "piksel se je spremenil"
 const MOTION_RATIO_MIN = 0.008 // ≥ 0,8 % spremenjenih pikslov = gibanje
 const HLINE_STRONG = 0.16 // delež močnih vodoravnih robov v vrstici = "črta"
-const MIN_ROW_PEAKS_FOR_STAIRS = 3
+
+// ── R469 (F3 §4): STOPNICE — iskanje nastopnih črt ──────────────────────────
+const STAIR_SEARCH_TOP = 0.15 // pas iskanja nastopov (od zgoraj) — širše kot ROB
+const STAIR_SEARCH_BOT = 0.92 // pas iskanja nastopov (od zgoraj)
+const STAIR_LINE_MIN_SPAN = 0.22 // nastopna črta ≥ 22 % širine kadra
 
 // ── R468 (F2): segmentacija tal + detekcija robov ──────────────────────────
 const FLOOR_CELL = 8 // px — velikost celice mreže (ista mreža kot gibanje)
@@ -188,12 +196,14 @@ function analyzeFrame (
     at,
   })
 
-  // ── ROB elementi (F2 §3): najdaljši črti, ki NISTA del stopničnega vzorca
-  //    (≥3 vzporedne črte = stopnice — te pusti Fazi 3) ────────────────────
-  const rs = horizontalRowStrength(gray, w, h, Math.floor(h * 0.28), Math.floor(h * 0.68))
-  const peaks = rowPeaks(rs, h, Math.floor(h * 0.28))
-  const isStairPattern = peaks.length >= MIN_ROW_PEAKS_FOR_STAIRS
-  if (!isStairPattern) {
+  // ── STOPNICE (F3 §4): vrhovi vodoravnih črt → nastopne črte → analiza
+  //    vzorca v jedru (števec, smer, enakomernost, podest) ──────────────
+  const stairDetect = detectStairLines(gray, w, h)
+  const stair = analyzeStairPattern(stairDetect.lines, w, h)
+
+  // ── ROB elementi (F2 §3): najdaljši črti, ki NISO del stopničnega vzorca
+  //    (vzorec ≥3 nastopnih črt = stopnice — te pripadajo STOPNICA) ────
+  if (stair == null) {
     for (const line of lines.slice(0, EDGE_LINE_MAX_COUNT)) {
       elements.push({
         id: newSceneId(),
@@ -231,20 +241,33 @@ function analyzeFrame (
     }
   }
 
-  // ── STRUKTURA v srednjem pasu: vodoravni robovi → stopnice/ograja ──────────
-  if (isStairPattern) {
-    const first = peaks[0]; const last = peaks[peaks.length - 1]
+  // ── STRUKTURA: STOPNICA (F3 §4) z bogatimi podatki ALI OGRAJA (F1) ─────────
+  if (stair != null) {
+    // bbox iz unije nastopnih črt (+ blazina)
+    const xs = stair.stepLines.flatMap((l) => [l.x1, l.x2])
+    const ys = stair.stepLines.flatMap((l) => [l.y1, l.y2])
+    const x0 = Math.max(0, Math.min(...xs) - 0.02)
+    const x1 = Math.min(1, Math.max(...xs) + 0.02)
+    const y0 = Math.max(0, Math.min(...ys) - 0.02)
+    const y1 = Math.min(1, Math.max(...ys) + 0.02)
     elements.push({
       id: newSceneId(),
       cls: 'STOPNICA',
-      status: 'NEJASNO',
+      status: stair.confidence >= 0.4 ? 'VERJETNO' : 'NEJASNO',
       source: 'LOKALNO',
-      confidence: 0.3,
-      bbox: [0.05, first / h, 0.9, Math.max(0.06, (last - first) / h + 0.06)],
+      confidence: stair.confidence,
+      bbox: [x0, y0, Math.max(0.05, x1 - x0), Math.max(0.05, y1 - y0)],
+      steps: stair.steps,
+      ascent: stair.ascent,
+      stepLines: stair.stepLines,
+      stepGap: stair.stepGap,
+      stepIrregular: stair.stepIrregular,
+      landing: stair.landing,
+      geomStatus: 'GEOMETRIJA_OCENJENA',
       at,
     })
-  } else if (peaks.length >= 1 && rs.overallRatio > HLINE_STRONG) {
-    const p = peaks[0]
+  } else if (stairDetect.lines.length >= 1 && stairDetect.strongRowRatio > HLINE_STRONG) {
+    const p = stairDetect.lines[0].y
     elements.push({
       id: newSceneId(),
       cls: 'OGRAJA',
@@ -395,6 +418,49 @@ function rowPeaks (rs: RowStrength, h: number, yFrom: number): number[] {
   })
   flush()
   return peaks
+}
+
+// ── R469 (F3 §4): NASTOPNE ČRTE — vrhovi vrstic + najdaljši tek stolpcev ────
+// Za vsak vrh vodoravne črte (rowPeaks) preišči pas [py−1 .. py+1] in najdi
+// najdaljši ZAPOREDNI TEK močnih navpičnih gradientov (stolpci, kjer je
+// |gray[y−1] − gray[y+1]| > prag). Tek ≥ 22 % širine = nastopna črta.
+// Vrača tudi delež močnih vrstic (za staro OGRAJA hevristiko).
+
+interface StairDetect { lines: StairLineInput[]; strongRowRatio: number }
+
+function detectStairLines (gray: Float32Array, w: number, h: number): StairDetect {
+  const yTop = Math.floor(h * STAIR_SEARCH_TOP)
+  const yBot = Math.floor(h * STAIR_SEARCH_BOT)
+  const rs = horizontalRowStrength(gray, w, h, yTop, yBot)
+  const peaks = rowPeaks(rs, h, yTop)
+
+  const lines: StairLineInput[] = []
+  const minSpan = Math.floor(w * STAIR_LINE_MIN_SPAN)
+  for (const py of peaks) {
+    let bestFrom = -1
+    let bestLen = 0
+    let runFrom = -1
+    for (let x = 1; x <= w; x++) {
+      let strong = false
+      if (x < w) {
+        for (let yy = py - 1; yy <= py + 1; yy++) {
+          if (yy < 1 || yy >= h - 1) continue
+          const i = yy * w + x
+          if (Math.abs(gray[i - w] - gray[i + w]) > SOBEL_THRESHOLD) { strong = true; break }
+        }
+      }
+      if (strong) {
+        if (runFrom < 0) runFrom = x
+      } else if (runFrom >= 0) {
+        if (x - runFrom > bestLen) { bestLen = x - runFrom; bestFrom = runFrom }
+        runFrom = -1
+      }
+    }
+    if (bestFrom >= 0 && bestLen >= minSpan) {
+      lines.push({ y: py, xFrom: bestFrom, xTo: Math.min(w - 1, bestFrom + bestLen) })
+    }
+  }
+  return { lines, strongRowRatio: rs.overallRatio }
 }
 
 // ── R468 (F2 §3): MASKA TAL — segmentacija z regijo rasti ──────────────────

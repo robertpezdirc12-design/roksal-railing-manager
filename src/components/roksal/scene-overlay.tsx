@@ -9,6 +9,9 @@
 // R468 (issue #8 Faza 2, §9): maska tal kot POLIGON (ne samo pravokotnik),
 // ROB kot črta pod kotom angleDeg, naklon v oznaki tal, pripnjeni (zaklep)
 // elementi so vedno prikazani.
+//
+// R469 (issue #8 Faza 3, §4/§9): STOPNICA — vsaka nastopna črta kot svoja
+// daljica (ne en sam okvir), število nastopov v oznaki (ocena, nikoli izmera).
 
 import { HelpCircle, Layers, MapPin, MoveHorizontal, Ruler, TriangleAlert, User, Waypoints } from 'lucide-react'
 import type { SceneClass, SceneElement, SceneStatus } from '@/lib/scene-understanding-core'
@@ -86,6 +89,12 @@ function slopeChip (el: SceneElement): string | null {
   return `naklon ~${Math.abs(el.slopeDeg).toFixed(1).replace('.', ',')}°`
 }
 
+/** R469 (F3 §4): oznaka za stopnice — „5 nastopov (ocena)“. */
+function stairChip (el: SceneElement): string | null {
+  if (el.cls !== 'STOPNICA' || el.steps == null) return null
+  return `${el.steps} nastopov (ocena)`
+}
+
 export default function SceneOverlay ({ elements, quality, selectedId, onSelect, maxLabels = 4, pinnedIds }: SceneOverlayProps) {
   const shown = pickLabels(elements, maxLabels, pinnedIds)
   if (shown.length === 0) return null
@@ -154,6 +163,38 @@ export default function SceneOverlay ({ elements, quality, selectedId, onSelect,
             )
           }
 
+          // R469 (F3 §4): STOPNICA → vsaka nastopna črta kot svoja daljica
+          if (el.cls === 'STOPNICA' && el.stepLines && el.stepLines.length >= 1) {
+            return (
+              <g key={el.id}>
+                {el.stepLines.map((l, i) => (
+                  <g key={`${el.id}-l${i}`}>
+                    <line
+                      x1={(l.x1 * 100).toFixed(2)}
+                      y1={(l.y1 * 100).toFixed(2)}
+                      x2={(l.x2 * 100).toFixed(2)}
+                      y2={(l.y2 * 100).toFixed(2)}
+                      stroke={color}
+                      strokeWidth={selected ? 0.8 : 0.5}
+                      strokeLinecap="round"
+                    />
+                    <line
+                      x1={(l.x1 * 100).toFixed(2)}
+                      y1={(l.y1 * 100).toFixed(2)}
+                      x2={(l.x2 * 100).toFixed(2)}
+                      y2={(l.y2 * 100).toFixed(2)}
+                      stroke="#ffffff"
+                      strokeOpacity={0.45}
+                      strokeWidth={0.16}
+                      strokeLinecap="round"
+                    />
+                  </g>
+                ))}
+                {pinned ? <circle cx={2} cy={2} r={0.9} fill={color} fillOpacity={0.5} /> : null}
+              </g>
+            )
+          }
+
           const [x, y, w, h] = el.bbox
           return (
             <g key={el.id}>
@@ -183,6 +224,7 @@ export default function SceneOverlay ({ elements, quality, selectedId, onSelect,
           const selected = selectedId === el.id
           const pinned = pinnedIds?.has(el.id) ?? false
           const slope = slopeChip(el)
+          const stair = stairChip(el)
           return (
             <button
               key={el.id}
@@ -196,11 +238,12 @@ export default function SceneOverlay ({ elements, quality, selectedId, onSelect,
                 ...(selected ? ({ '--tw-ring-color': color } as React.CSSProperties) : {}),
               }}
               onClick={onSelect ? () => { onSelect(el) } : undefined}
-              aria-label={`${CLS_LABEL[el.cls]}${el.kind ? ` (${el.kind.toLowerCase()})` : ''}${slope ? `, ${slope}` : ''} — ${STATUS_TEXT[el.status]}${pinned ? ' — pripeto' : ''}${el.cls === 'NEZNANO' ? ' — tapnite za označitev' : ''}`}
+              aria-label={`${CLS_LABEL[el.cls]}${el.kind ? ` (${el.kind.toLowerCase()})` : ''}${slope ? `, ${slope}` : ''}${stair ? `, ${stair}` : ''} — ${STATUS_TEXT[el.status]}${pinned ? ' — pripeto' : ''}${el.cls === 'NEZNANO' ? ' — tapnite za označitev' : ''}`}
             >
               {pinned ? <MapPin className="size-3" style={{ color }} aria-hidden /> : null}
               <Icon className="size-3" style={{ color }} aria-hidden />
               <span>{CLS_LABEL[el.cls]}{el.kind && el.kind !== 'NEZNANA' ? ` · ${el.kind.toLowerCase()}` : ''}</span>
+              {stair ? <span className="font-semibold" style={{ color }}>{stair}</span> : null}
               {slope ? <span className="font-semibold" style={{ color }}>{slope}</span> : null}
               <span className="font-normal text-zinc-500">· {STATUS_TEXT[el.status]}</span>
             </button>

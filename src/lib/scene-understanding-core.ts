@@ -2,6 +2,11 @@
 // R468 (issue #8 — Faza 2): tla, ravnine, robovi in naklon — maska tal,
 //   talna ravnina, ROB elementi, ocena naklona z LOČITVIJO nagiba telefona
 //   od naklona tal + zapis metode/vira/statusa geometrije (§3, §6).
+// R469 (issue #8 — Faza 3): STOPNICE — vzorec vzporednih nastopnih črt →
+//   število vidnih nastopov, smer vzpenjanja (levo/desno/globina),
+//   enakomernost razmakov in morebitni podest (§4). POŠTENOST: iz enega
+//   pogleda BREZ globine NISO izmerljive višine čel in globine nastopov —
+//   te izrecno označimo kot „potrebna mera“ (§4/§6).
 // Čista logika brez DOM/React — enako testirljiva kot measure-engine/prefab-core.
 //
 // Načelo celotnega modula (issue #8 §2, §6): AVTOMATIKA JE PREDLOG, NE
@@ -36,6 +41,15 @@ export const SLOPE_SOURCES = ['VIZUALNA_GEOMETRIJA', 'SENZOR_NAPRAVE', 'ROCNO'] 
 export type SlopeSource = (typeof SLOPE_SOURCES)[number]
 
 /**
+ * R469 (F3 §4): predlagana smer vzpenjanja stopnišča V KADRU — iz drifa
+ * središč nastopnih črt. Vrednosti: 'levo' / 'desno' (stranski pogled) ali
+ * 'globina' (čelni pogled — stopnice se od kamero oddaljujejo navzgor).
+ * Vedno OCENA, nikoli trditev (§4: „predlaga smer vzpenjanja“).
+ */
+export const STAIR_ASCENTS = ['levo', 'desno', 'globina'] as const
+export type StairAscent = (typeof STAIR_ASCENTS)[number]
+
+/**
  * Status GEOMETRIJE površine — LOČENO od statusa prepoznave (issue §2:
  * „razloči semantično prepoznavo od geometrijske izmere“; §6 veriga
  * PREPOZNANO/GEOMETRIJA OCENJENA/IZMERJENO/NEZADOSTNI PODATKI).
@@ -47,6 +61,9 @@ export type GeomStatus = (typeof GEOM_STATUSES)[number]
 
 /** Točka maske (normalizirana na kader 0..1). */
 export interface ScenePoint { x: number; y: number }
+
+/** R469 (F3 §4): daljica (normalizirana na kader 0..1) — npr. nastopna črta. */
+export interface SceneLine { x1: number; y1: number; x2: number; y2: number }
 
 /** En zaznani element prizora. bbox je normaliziran (0..1, x/y/w/h) na kader. */
 export interface SceneElement {
@@ -67,6 +84,19 @@ export interface SceneElement {
   slopeSource?: SlopeSource
   /** Status geometrije — ločen od statusa prepoznave (issue §2/§6). */
   geomStatus?: GeomStatus
+  // ── R469 (F3 §4): STOPNICE — vse vrednosti so OCENA iz vizualne geometrije ──
+  /** Število zaznanih nastopnih robov (≈ vidnih stopnic) — predlog, ne izmera. */
+  steps?: number
+  /** Predlagana smer vzpenjanja v kadru (ocena — preveri jo monter). */
+  ascent?: StairAscent
+  /** Nastopne črte (0..1) — za risanje čez predogled. */
+  stepLines?: SceneLine[]
+  /** Povprečni razmak med nastopi v kadru (0..1) — za primerjavo pravilnosti. */
+  stepGap?: number
+  /** Razmaki med nastopi so neenakomerni — mesto za ROČNI PREGLED (issue §4). */
+  stepIrregular?: boolean
+  /** Večja vrzel med nastopi — morebiten podest (issue §4). */
+  landing?: boolean
   at: number // epoch ms zajema
 }
 
@@ -78,6 +108,10 @@ export interface SceneEdit {
   kind?: SurfaceKind
   /** Ročno potrjen/izmerjen naklon (stopinje, -45..45) — vir postane ROCNO. */
   slopeDeg?: number
+  /** R469 (F3 §4): ročno potrjeno število stopnic/nastopov — vir postane ROCNO. */
+  steps?: number
+  /** R469 (F3 §4): ročno potrjena smer vzpenjanja — vir postane ROCNO. */
+  ascent?: StairAscent
   by: string
   at: number
 }
@@ -99,6 +133,8 @@ export const SCENE_LIMITS = {
   maxMaskPoints: 32,
   slopeAbsMax: 45, // stopinj
   angleAbsMax: 90, // stopinj
+  maxSteps: 20, // R469 (F3): največje razumno število vidnih nastopov
+  maxStepLines: 12, // R469 (F3): nastopne črte za risanje
 } as const
 
 // ── Hevristika: klasifikacija podlage iz barvnih/teksturnih značilnic ────────
@@ -247,6 +283,120 @@ export function slopeMessage (s: SlopeEstimate): string {
   return s.slopeDeg == null ? s.note : s.note
 }
 
+// ── STOPNICE (issue #8 §4, Faza 3) — vzorec vzporednih nastopnih črt ────────
+//
+// Vhod iz percepcije (px): { y, xFrom, xTo } — središča pasov z močno
+// vodoravno črto. Odločitev je TU (čista, testirljiva):
+//   • vzorec = ≥ 3 črte (STAIR_MIN_LINES)
+//   • razmaki med sosednjima črtama → medij; odstopanje → NEENAKOMERNO
+//     (ročni pregled), vrzel ≥ ~2× medij → MOREBITEN PODEST
+//   • smer vzpenjanja: linearna vezava središč črt x(y); drif ≥ 12 % širine
+//     kadra → levo/desno, sicer 'globina' (čelni pogled)
+// POŠTENOST (§4/§6): iz enega 2D pogleda NI možno izmeriti višine čela in
+// globine nastopa — to izrecno zapišemo v opombo; geometrija ostane OCENJENA.
+
+export const STAIR_MIN_LINES = 3
+export const STAIR_IRREGULAR_TOL = 0.35 // odstopanje razmaka od medija (delež)
+export const STAIR_LANDING_FACTOR = 1.9 // vrzel ≥ 1,9× medij → morebiten podest
+export const STAIR_DRIFT_MIN = 0.12 // drif središč ≥ 12 % širine → stranski pogled
+
+/** Vhod percepcije: zaznana nastopna črta v delovnem canvasu (px). */
+export interface StairLineInput { y: number; xFrom: number; xTo: number }
+
+/** Rezultat analize stopnišča (vse OCENA, nikoli izmera). */
+export interface StairVerdict {
+  steps: number
+  ascent: StairAscent
+  stepLines: SceneLine[]
+  /** medij razmakov med nastopi, normaliziran na višino kadra (0..1) */
+  stepGap: number
+  stepIrregular: boolean
+  landing: boolean
+  confidence: number
+  note: string
+}
+
+/** Analiza vzorca nastopnih črt → predlog stopnišča (ali null, če ni vzorca). */
+export function analyzeStairPattern (lines: StairLineInput[], w: number, h: number): StairVerdict | null {
+  if (!Array.isArray(lines) || lines.length < STAIR_MIN_LINES) return null
+  if (!Number.isFinite(w) || w < 16 || !Number.isFinite(h) || h < 16) return null
+
+  const sorted = [...lines]
+    .filter((l) => l && Number.isFinite(l.y) && Number.isFinite(l.xFrom) && Number.isFinite(l.xTo) && l.xTo > l.xFrom)
+    .sort((a, b) => a.y - b.y)
+  if (sorted.length < STAIR_MIN_LINES) return null
+
+  // razmaki med sosednjima črtama (px) + medij
+  const gaps: number[] = []
+  for (let i = 1; i < sorted.length; i++) gaps.push(sorted[i].y - sorted[i - 1].y)
+  const gapsSorted = [...gaps].sort((a, b) => a - b)
+  const mid = Math.floor(gapsSorted.length / 2)
+  const medianGap = gapsSorted.length % 2 === 1
+    ? gapsSorted[mid]
+    : (gapsSorted[mid - 1] + gapsSorted[mid]) / 2
+  if (!(medianGap >= 2)) return null // preplitko/gosto = šum, ne stopnice
+
+  // enakomernost in podest
+  let stepIrregular = false
+  let landing = false
+  for (const g of gaps) {
+    if (Math.abs(g - medianGap) > STAIR_IRREGULAR_TOL * medianGap) stepIrregular = true
+    if (g >= STAIR_LANDING_FACTOR * medianGap) landing = true
+  }
+
+  // smer vzpenjanja: linearna vezava središč x(y) — drif čez pas stopnic
+  const centers = sorted.map((l) => (l.xFrom + l.xTo) / 2)
+  const yFirst = sorted[0].y
+  const yLast = sorted[sorted.length - 1].y
+  const meanY = sorted.reduce((s, l) => s + l.y, 0) / sorted.length
+  const meanX = centers.reduce((s, c) => s + c, 0) / centers.length
+  let num = 0; let den = 0
+  for (let i = 0; i < sorted.length; i++) {
+    num += (sorted[i].y - meanY) * (centers[i] - meanX)
+    den += (sorted[i].y - meanY) ** 2
+  }
+  const slope = den > 0 ? num / den : 0 // px na vrstico
+  const drift = slope * (yLast - yFirst) // sprememba x od zgoraj navzdol
+  let ascent: StairAscent = 'globina'
+  if (Math.abs(drift) >= STAIR_DRIFT_MIN * w) {
+    // y os slike raste navzdol: drif < 0 → x se VEČA navzgor po sliki → vzpon desno
+    ascent = drift < 0 ? 'desno' : 'levo'
+  }
+
+  // nastopne črte normalizirano (za risanje) — omeji na maxStepLines
+  const stepLines: SceneLine[] = sorted
+    .slice(0, SCENE_LIMITS.maxStepLines)
+    .map((l) => ({
+      x1: Math.round(Math.max(0, Math.min(1, l.xFrom / w)) * 1000) / 1000,
+      y1: Math.round(Math.max(0, Math.min(1, l.y / h)) * 1000) / 1000,
+      x2: Math.round(Math.max(0, Math.min(1, l.xTo / w)) * 1000) / 1000,
+      y2: Math.round(Math.max(0, Math.min(1, l.y / h)) * 1000) / 1000,
+    }))
+
+  const steps = sorted.length
+  const confidence = Math.min(0.45, 0.28 + steps * 0.03)
+
+  const notes: string[] = [`${steps} vidnih nastopov (ocena iz vizualne geometrije)`]
+  if (landing) notes.push('večja vrzel med nastopi — morebiten podest, potrdite')
+  if (stepIrregular) notes.push('razmaki med nastopi so neenakomerni — ročni pregled')
+  notes.push('višine čel in globine nastopov niso izmerljive iz enega pogleda')
+
+  return {
+    steps, ascent, stepLines,
+    stepGap: Math.round((medianGap / h) * 1000) / 1000,
+    stepIrregular, landing, confidence,
+    note: notes.join('; ') + '.',
+  }
+}
+
+/** Slovenska beseda za smer vzpenjanja (izvoz za kartico/prikaz). */
+export function ascentText (a: StairAscent | undefined): string {
+  if (a === 'levo') return 'v levo'
+  if (a === 'desno') return 'v desno'
+  if (a === 'globina') return 'od kamere (v globino)'
+  return 'neznana'
+}
+
 // ── Stabilizacija: oznake ne skačejo med sličicami (issue §2) ────────────────
 
 export interface StabilizeOptions {
@@ -379,8 +529,19 @@ export function nextStepGuidance (elements: SceneElement[], quality?: SceneQuali
   const obstacle = byCls.get('OVIRA')?.[0]
   if (obstacle) return 'V kadru je ovira — premaknite se, da bo merilna linija vidna.'
   const stairs = byCls.get('STOPNICA')
+  // R469 (F3 §4): obogateno s številom nastopov, pravilnostjo razmakov in podestom
   if (stairs && stairs.length > 0) {
-    return `Zaznane stopnice (${stairs.length}). Preverite robove posameznih stopnic pred izmero.`
+    const stair = stairs[0]
+    const n = typeof stair.steps === 'number' ? stair.steps : null
+    if (stair.landing === true) {
+      return `Stopnišče z morebitnim podestom${n != null ? ` (${n} nastopov, ocena)` : ''} — preverite prehod na podest in robove.`
+    }
+    if (stair.stepIrregular === true) {
+      return `Razmaki med stopnicami so neenakomerni${n != null ? ` (${n} nastopov)` : ''} — preverite odstopajočo stopnico ročno.`
+    }
+    return n != null
+      ? `Zaznane stopnice (${n} nastopov, ocena) — višine čel izmerite z referenco ali globino.`
+      : `Zaznane stopnice (${stairs.length}). Preverite robove posameznih stopnic pred izmero.`
   }
   // R468 (F2 §3): naklon tal — najpomembnejša nova informacija za monterja
   const floor = byCls.get('TLA')?.[0] ?? byCls.get('PODLAGA')?.[0]
@@ -419,6 +580,14 @@ export function applyEdits (result: SceneUnderstandingResult): SceneElement[] {
       el.slopeDeg = Math.max(-SCENE_LIMITS.slopeAbsMax, Math.min(SCENE_LIMITS.slopeAbsMax, Math.round(edit.slopeDeg * 10) / 10))
       el.slopeSource = 'ROCNO'
       el.geomStatus = 'IZMERJENO'
+    }
+    // R469 (F3 §4): ročno potrjeno število stopnic + smer vzpenjanja
+    if (typeof edit.steps === 'number' && Number.isFinite(edit.steps)) {
+      el.steps = Math.max(1, Math.min(SCENE_LIMITS.maxSteps, Math.round(edit.steps)))
+      el.geomStatus = 'IZMERJENO' // števec je potrjen, ne zgolj ocenjen
+    }
+    if (edit.ascent != null) {
+      el.ascent = edit.ascent
     }
     el.source = 'ROCNO'
     el.confidence = 1
@@ -466,6 +635,18 @@ export function sanitizeSceneResult (raw: unknown): SceneUnderstandingResult | n
     const geomStatus = GEOM_STATUSES.includes(e.geomStatus as GeomStatus) ? (e.geomStatus as GeomStatus) : undefined
     const hasSlope = slopeDeg != null && slopeSource != null
 
+    // R469 (F3 §4): STOPNICE — število nastopov, smer, nastopne črte,
+    // razmak, neenakomernost, morebitni podest. Vsa polja neodvisno
+    // validirana; neveljavna se IZPUSTIJO (brez tihih popravkov vrednosti).
+    const stepsRaw = typeof e.steps === 'number' && Number.isFinite(e.steps) ? Math.round(e.steps) : null
+    const steps = stepsRaw != null && stepsRaw >= 1 && stepsRaw <= SCENE_LIMITS.maxSteps ? stepsRaw : undefined
+    const ascent = STAIR_ASCENTS.includes(e.ascent as StairAscent) ? (e.ascent as StairAscent) : undefined
+    const stepLines = sanitizeStepLines(e.stepLines)
+    const stepGapRaw = typeof e.stepGap === 'number' && Number.isFinite(e.stepGap) ? Math.round(e.stepGap * 1000) / 1000 : null
+    const stepGap = stepGapRaw != null && stepGapRaw > 0 && stepGapRaw <= 1 ? stepGapRaw : undefined
+    const stepIrregular = e.stepIrregular === true
+    const landing = e.landing === true
+
     elements.push({
       id, cls, status, source, confidence,
       bbox: [bbox[0], bbox[1], bbox[2], bbox[3]], kind, at,
@@ -473,6 +654,12 @@ export function sanitizeSceneResult (raw: unknown): SceneUnderstandingResult | n
       ...(angleDeg != null ? { angleDeg } : {}),
       ...(hasSlope ? { slopeDeg, slopeSource, ...(geomStatus ? { geomStatus } : {}) } : {}),
       ...(!hasSlope && geomStatus ? { geomStatus } : {}),
+      ...(steps != null ? { steps } : {}),
+      ...(ascent != null ? { ascent } : {}),
+      ...(stepLines.length >= 1 ? { stepLines } : {}),
+      ...(stepGap != null ? { stepGap } : {}),
+      ...(stepIrregular ? { stepIrregular: true } : {}),
+      ...(landing ? { landing: true } : {}),
     })
   }
   if (elements.length === 0) return null
@@ -490,8 +677,12 @@ export function sanitizeSceneResult (raw: unknown): SceneUnderstandingResult | n
       const kind = SURFACE_KINDS.includes(e.kind as SurfaceKind) ? (e.kind as SurfaceKind) : undefined
       const slopeDeg = typeof e.slopeDeg === 'number' && Number.isFinite(e.slopeDeg) &&
         Math.abs(e.slopeDeg) <= SCENE_LIMITS.slopeAbsMax ? Math.round(e.slopeDeg * 10) / 10 : undefined
-      if (!cls && !status && !kind && slopeDeg == null) continue
-      edits.push({ elementId: e.elementId, cls, status, kind, slopeDeg, by: e.by, at: atEdit })
+      // R469 (F3 §4): popravek števila stopnic + smeri vzpenjanja
+      const stepsRaw = typeof e.steps === 'number' && Number.isFinite(e.steps) ? Math.round(e.steps) : null
+      const steps = stepsRaw != null && stepsRaw >= 1 && stepsRaw <= SCENE_LIMITS.maxSteps ? stepsRaw : undefined
+      const ascent = STAIR_ASCENTS.includes(e.ascent as StairAscent) ? (e.ascent as StairAscent) : undefined
+      if (!cls && !status && !kind && slopeDeg == null && steps == null && ascent == null) continue
+      edits.push({ elementId: e.elementId, cls, status, kind, slopeDeg, steps, ascent, by: e.by, at: atEdit })
     }
   }
 
@@ -510,6 +701,26 @@ function sanitizeMaskPoints (raw: unknown): ScenePoint[] {
     pts.push({ x: Math.round(q.x * 1000) / 1000, y: Math.round(q.y * 1000) / 1000 })
   }
   return pts
+}
+
+/** R469 (F3): nastopne črte — veljavne daljice 0..1, max SCENE_LIMITS.maxStepLines.
+ * Neveljavna daljica se izpusti; če nobena ni veljavna, polje izpade. */
+function sanitizeStepLines (raw: unknown): SceneLine[] {
+  if (!Array.isArray(raw)) return []
+  const out: SceneLine[] = []
+  for (const l of raw.slice(0, SCENE_LIMITS.maxStepLines)) {
+    if (!l || typeof l !== 'object') continue
+    const q = l as Record<string, unknown>
+    const vals = [q.x1, q.y1, q.x2, q.y2]
+    if (vals.some((v) => typeof v !== 'number' || !Number.isFinite(v) || v < 0 || v > 1)) continue
+    out.push({
+      x1: Math.round((q.x1 as number) * 1000) / 1000,
+      y1: Math.round((q.y1 as number) * 1000) / 1000,
+      x2: Math.round((q.x2 as number) * 1000) / 1000,
+      y2: Math.round((q.y2 as number) * 1000) / 1000,
+    })
+  }
+  return out
 }
 
 /** Serializacija v JSON niz (persistenca na ArSnapshot.sceneJson). */
