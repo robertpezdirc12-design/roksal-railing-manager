@@ -1265,3 +1265,6 @@ Stage Summary:
 - issue #8 §5 POPOLNOMA izveden po faznem redu (F0–F3 + §5); naslednja faza po §11: Faza 4 — senzorji (ARCore Depth adapter), optimizacija in integracija, ali #9 HOVER PARITY (P1)
 - ključne odločitve: OSEBA se ne persistira (zasebnost §5); DEPTH_AR metoda rezervirana za prihodnjo integracijo senzorjev; osi nikoli ne nosijo cm brez reference
 - deliveroti: tag v1.26.0, CI skupina r465-r470, tests/r470.py
+- DEPLOY R470: Vercel CLI (token uporabnika) → dpl_HDzm6G12eHRgxk3Bxv4NFRHEuVgr READY; health OK
+- PRODUKCIJSKA SANACIJA: Neon baza je bila PRAZNA (0 uporabnikov/nastavitev/projektov — prijava na produkciji NI bila mogoča nikoli!). Izveden popoln seed (7 skript) prek dešifriranega DATABASE_URL (vercel env pull, poverilnice po uporabi POBRISANE). Prijava monter@roksal.si na produkciji zdaj deluje; R470 smoke na produkciji: mere/osi persistirane, OSEBA izpuščena (zasebnost), PATCH measure → ROCNO_POPRAVLJENO; smoke posnetek počiščen
+- brskalniška verifikacija (agent-browser): prijava monter → AR modul se izriše brez napak (namizje + mobilni 390×844); issue #8 komentar objavljen (6099223617)
