@@ -1,15 +1,28 @@
-// API /api/pdf/[type]/[id] — izvoz ponudbe/računa/foto-vizualizacije v PDF (documents.generate)
+// API /api/pdf/[type]/[id] — izvoz ponudbe/računa/foto-vizualizacije/merilnega
+// paketa v PDF (documents.generate)
 // GET → application/pdf (inline; filename="<koda>.pdf"), lasten generator pdf-mini.
 // R459: tip photoviz — dokument FOTO-VIZUALIZACIJE s PREJ/POTEM slikama (issue #14 §14).
-// Revizija: DOC_GENERATE (entity quote|invoice|photoviz).
+// R477: tip measure — MERILNI PAKET tekača (issue #9 §6 Faza 4: risba +
+// montažna skica + tabele + odrezni seznam + fotografije + preverjanja).
+// Revizija: DOC_GENERATE (entity quote|invoice|photoviz|measure-package).
 
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { jsonError, requirePermission } from '@/lib/auth'
+import { jsonError, requirePermission, type SessionUser } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
 import { jpegSize, pdfDoc, AMBER, GRAY, LIGHT, NAVY, PAGE_W, type Rgb } from '@/lib/pdf-mini'
 import { vizZaUporabnika } from '@/lib/photo-replace-engine'
 import { VIZ_ZIG } from '@/lib/photo-replace-core'
+import { fenceRunZaUporabnika } from '@/lib/fence-run-access'
+import { computeSegments, qualityGate, validateRun } from '@/lib/fence-run-engine'
+import { loadRunContext } from '@/lib/fence-run-service'
+import { buildPlanModel, parseTurns, type CornerTurn } from '@/lib/model-core'
+import {
+  segmentLinesForComponent, SEGMENT_ROLES, POSTS_RULE_KEY, WASTE_RULE_KEY,
+  type SegmentRules, type SegmentRole, type SegmentInput,
+} from '@/lib/segment-bom'
+import { exportChecks } from '@/lib/export-core'
+import { renderMeasurePackagePdf, type CutListRow, type PackagePhoto } from '@/lib/measure-package-pdf'
 
 type Params = { params: Promise<{ type: string; id: string }> }
 
@@ -434,6 +447,166 @@ async function renderPhotoVizPdf (id: string): Promise<{ bytes: Uint8Array<Array
   return { bytes: doc.build(), code: `FOTO-VIZ-${viz.project?.code ?? ''}-${viz.variantLabel}`, projectId: viz.projectId }
 }
 
+// ─── MERILNI PAKET (R477 — issue #9 §6 Faza 4) ──────────────────────────────
+
+async function renderMeasurePackage (
+  user: SessionUser, id: string, turns: CornerTurn[] | null
+): Promise<{ bytes: Uint8Array<ArrayBuffer>; code: string; projectId: string | null } | NextResponse> {
+  const scope = await fenceRunZaUporabnika(user, id)
+  if (scope instanceof NextResponse) return scope
+
+  const ctx = await loadRunContext(id)
+  if (!ctx) return jsonError(404, 'Tekač ne obstaja.')
+
+  // σ + tolerance iz EngineeringRule (ista resolucija kot /api/fence-run/[id]/model)
+  const ruleRows = await db.engineeringRule.findMany({
+    where: {
+      active: true,
+      key: { in: ['tol_pozicija_modela', 'tol_dolzina_segmenta', POSTS_RULE_KEY, WASTE_RULE_KEY] },
+    },
+  })
+  const ruleVal = (key: string): number | null => {
+    const r = ruleRows.find((x) => x.key === key)
+    return r ? Number(r.value) : null
+  }
+
+  // quality gate tekača (enak izračun kot GET tekača)
+  const computed = computeSegments({ nodes: ctx.nodes, terrain: ctx.terrain, rules: ctx.rules })
+  const verifications = ctx.segments
+    .filter((s) => s.verifiedCm != null)
+    .map((s) => ({ fromAtCm: s.fromAtCm, toAtCm: s.toAtCm, verifiedCm: s.verifiedCm as number }))
+  const validation = validateRun({
+    nodes: ctx.nodes, segments: computed, terrain: ctx.terrain, rules: ctx.rules,
+    calibration: ctx.calibration, verifications,
+  })
+  const gate = qualityGate({
+    nodes: ctx.nodes, segments: computed, validation,
+    calibration: ctx.calibration, terrain: ctx.terrain,
+    verifications: verifications.length,
+  })
+
+  const model = buildPlanModel({
+    runId: ctx.run.id,
+    runName: ctx.run.name,
+    runStatus: ctx.run.status,
+    nodes: ctx.nodes,
+    segments: ctx.segments.map((s) => ({
+      order: s.order, fromAtCm: s.fromAtCm, toAtCm: s.toAtCm, lengthCm: s.lengthCm,
+      heightCm: s.heightCm, angleDeg: s.angleDeg, slopeDeg: s.slopeDeg,
+      heightDiffCm: s.heightDiffCm, posts: s.posts, status: s.status,
+      verifiedCm: s.verifiedCm, verifyMethod: s.verifyMethod,
+    })),
+    terrain: ctx.terrain,
+    calibration: ctx.calibration,
+    gate: { state: gate.state, score: gate.score },
+    turns: turns ?? undefined,
+    ruleSigmaCm: ruleVal('tol_pozicija_modela'),
+  })
+
+  const [project, product, variant] = await Promise.all([
+    db.project.findUnique({
+      where: { id: ctx.run.projectId },
+      select: { code: true, title: true, customer: { select: { name: true } } },
+    }),
+    ctx.run.productId
+      ? db.product.findUnique({ where: { id: ctx.run.productId }, select: { sku: true, name: true } })
+      : null,
+    ctx.run.variantId
+      ? db.productVariant.findUnique({ where: { id: ctx.run.variantId }, select: { sku: true, name: true, ral: true } })
+      : null,
+  ])
+
+  // ── ODREZNI SEZNAM: komponente izdelka × segmenti tekača (R475 matematika)
+  const cutList: CutListRow[] = []
+  let cutListNote: string | null = null
+  const segmentsInput: SegmentInput[] = model.segments.map((s) => ({
+    key: s.key, lengthCm: s.lengthCm, heightCm: s.heightCm,
+  }))
+  const spacingCm = ruleVal(POSTS_RULE_KEY)
+  const wastePct = ruleVal(WASTE_RULE_KEY)
+  const segRules: SegmentRules = {
+    spacingCm,
+    spacingSource: spacingCm != null ? `RULE:${POSTS_RULE_KEY}` : null,
+    wastePct: wastePct ?? 0,
+    wasteSource: wastePct != null ? `RULE:${WASTE_RULE_KEY}` : null,
+  }
+  if (product && ctx.run.productId) {
+    const comps = await db.productComponent.findMany({
+      where: { productId: ctx.run.productId },
+      orderBy: { sortOrder: 'asc' },
+      include: { item: { select: { sku: true, name: true, unit: true } } },
+    })
+    for (const c of comps) {
+      const validRole = c.segmentRole != null && (SEGMENT_ROLES as readonly string[]).includes(c.segmentRole)
+      if (!validRole) continue
+      const { lines } = segmentLinesForComponent(c.segmentRole as SegmentRole, c.qty, segmentsInput, segRules)
+      for (const l of lines) {
+        cutList.push({
+          sku: c.item.sku, name: c.item.name, segmentKey: l.segmentKey,
+          group: l.group, qty: l.qty, unit: c.item.unit,
+          wastePct: l.wastePct, note: l.note,
+        })
+      }
+    }
+    if (cutList.length === 0) {
+      cutListNote = 'Izdelek nima komponent s segmentno vlogo — odrezni seznam po komponentah ni mogoč (glej kosovnico paketa).'
+    }
+  } else {
+    cutListNote = 'Tekač nima vezanega izdelka — odrezni seznam po komponentah ni mogoč; mere segmentov so v tabeli 3.'
+  }
+
+  // ── FOTOGRAFIJE: sličice zajemov vezanih na tekača (dokazila pokritosti)
+  const sessions = await db.captureSession.findMany({
+    where: { fenceRunId: id },
+    select: {
+      id: true, name: true, status: true,
+      photos: { select: { zone: true, thumb: true }, orderBy: { capturedAt: 'asc' } },
+    },
+    orderBy: { createdAt: 'desc' },
+  })
+  const photos: PackagePhoto[] = []
+  for (const sess of sessions) {
+    for (const ph of sess.photos) {
+      if (photos.length >= 6) break
+      photos.push({ zone: ph.zone, label: sess.name, thumb: ph.thumb })
+    }
+  }
+
+  // ── PREVERJANJA PRED IZVOZOM (inženirska pravila — vidna, ne tiha)
+  const unverified = model.segments.filter((s) => !['VERIFIED', 'CONFIRMED', 'CALIBRATED'].includes(s.status)).length
+  const checks = exportChecks({
+    wastePct,
+    postSpacingCm: spacingCm,
+    unverifiedSegments: unverified,
+    quoteStale: false,
+    linesWithoutSegment: 0,
+    hasSegments: model.segments.length > 0,
+  })
+
+  const bytes = renderMeasurePackagePdf({
+    run: {
+      id: ctx.run.id, name: ctx.run.name, status: ctx.run.status,
+      createdAt: ctx.run.createdAt.toISOString(), note: ctx.run.note,
+    },
+    project: project ? { code: project.code, title: project.title, customer: project.customer?.name ?? null } : null,
+    product, variant,
+    calibration: ctx.calibration
+      ? { method: ctx.calibration.method, refValueCm: ctx.calibration.refValueCm }
+      : null,
+    model,
+    rules: {
+      sigmaCm: model.quality.sigmaCm,
+      sigmaSource: model.quality.sigmaSource,
+      tolDolzinaCm: ruleVal('tol_dolzina_segmenta'),
+      maxRazdaljaStebrovCm: spacingCm,
+      odpadRezPct: wastePct,
+    },
+    cutList, cutListNote, photos, checks,
+  })
+
+  return { bytes, code: `merilni-paket-${ctx.run.id.slice(-8)}`, projectId: ctx.run.projectId }
+}
+
 // ─── GET ─────────────────────────────────────────────────────────────────────
 
 export async function GET (req: NextRequest, { params }: Params) {
@@ -441,8 +614,8 @@ export async function GET (req: NextRequest, { params }: Params) {
   if (auth instanceof NextResponse) return auth
   const { type, id } = await params
 
-  if (type !== 'quote' && type !== 'invoice' && type !== 'photoviz') {
-    return jsonError(400, 'Neznana vrsta dokumenta.', 'Veljavni tipi: quote, invoice, photoviz.')
+  if (type !== 'quote' && type !== 'invoice' && type !== 'photoviz' && type !== 'measure') {
+    return jsonError(400, 'Neznana vrsta dokumenta.', 'Veljavni tipi: quote, invoice, photoviz, measure.')
   }
   if (!id) return jsonError(400, 'Manjka identifikator dokumenta.')
 
@@ -453,11 +626,23 @@ export async function GET (req: NextRequest, { params }: Params) {
     if (res instanceof NextResponse) return res
   }
 
+  // R477: merilni paket — smeri zavojev iz query (enaka semantika kot model API)
+  let turns: CornerTurn[] | null = null
+  if (type === 'measure') {
+    const url = new URL(req.url)
+    turns = parseTurns(url.searchParams.get('turns'))
+    if (url.searchParams.get('turns') != null && turns === null) {
+      return jsonError(400, 'Neveljaven turns.', 'Zapišite smeri zavojev kot niz L/D (npr. „LDL“ — po vrstnem redu vogalov).')
+    }
+  }
+
   const rendered = type === 'quote'
     ? await renderQuotePdf(id)
     : type === 'invoice'
       ? await renderInvoicePdf(id)
-      : await renderPhotoVizPdf(id)
+      : type === 'measure'
+        ? await renderMeasurePackage(auth.user, id, turns)
+        : await renderPhotoVizPdf(id)
   if (rendered instanceof NextResponse) return rendered
 
   await writeAudit({

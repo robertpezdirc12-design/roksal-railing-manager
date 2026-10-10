@@ -8,7 +8,7 @@
 
 import { useMemo, useState } from 'react'
 import {
-  ArrowLeftRight, Box, Compass, Fence, Info, Layers, Loader2, Map as MapIcon,
+  ArrowLeftRight, Box, Compass, FileDown, Fence, Info, Layers, Loader2, Map as MapIcon,
   Mountain, RotateCcw, Ruler, ScanLine, ShieldQuestion,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
@@ -77,6 +77,7 @@ const fmtCm = (n: number | null | undefined, unit = 'cm'): string =>
 
 export default function ModelModule () {
   const user = useAppStore((s) => s.user)
+  const token = useAppStore((s) => s.token)
   const [projectId, setProjectId] = useState<string>('')
   const [runId, setRunId] = useState<string>('')
   const [view, setView] = useState<'plan' | 'profile' | '3d'>('plan')
@@ -118,8 +119,41 @@ export default function ModelModule () {
     setTurns(cur.split('').map((c) => (c === 'D' ? 'L' : 'D')).join(''))
   }
 
+  // R477 (issue #9 §6): izvoz MERILNEGA PAKETA — tloris + montažna skica +
+  // tabele + odrezni seznam + fotografije + preverjanja (PDF, blob → nov zavihek)
+  const [pdfBusy, setPdfBusy] = useState(false)
+  async function exportPdf (): Promise<void> {
+    if (!runId || !token) return
+    setPdfBusy(true)
+    try {
+      const q = turns ? `?turns=${encodeURIComponent(turns)}` : ''
+      const res = await fetch(`/api/pdf/measure/${runId}${q}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error((data as { error?: string }).error ?? `Napaka strežnika (${res.status}).`)
+      }
+      const blob = await res.blob()
+      if (!blob.type.includes('pdf')) throw new Error('Odgovor ni veljaven PDF.')
+      const url = URL.createObjectURL(blob)
+      window.open(url, '_blank', 'noopener')
+      setTimeout(() => URL.revokeObjectURL(url), 60_000)
+      toast({ title: 'Merilni paket pripravljen.', description: 'Tloris, montažna skica, tabele in odrezni seznam so v PDF dokumentu.' })
+    } catch (e) {
+      toast({
+        title: 'Izvoz PDF ni uspel.',
+        description: e instanceof Error ? e.message : 'Neznana napaka.',
+        variant: 'destructive',
+      })
+    } finally {
+      setPdfBusy(false)
+    }
+  }
+
   const projOpts = projects.data?.data ?? []
   const runOpts = runs.data?.data ?? []
+  const { toast } = useToast()
 
   return (
     <div className="space-y-4">
@@ -127,9 +161,17 @@ export default function ModelModule () {
         title="Merilni model"
         desc="Geometrija iz tekača — tloris, profil, 3D (issue #9 §3, R473)"
         actions={m ? (
-          <Badge variant="outline" className="gap-1 font-normal">
-            <ScanLine className="size-3" aria-hidden /> {m.engineVersion}
-          </Badge>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="outline" className="gap-1 font-normal">
+              <ScanLine className="size-3" aria-hidden /> {m.engineVersion}
+            </Badge>
+            <Button size="sm" variant="outline" onClick={exportPdf} disabled={pdfBusy}>
+              {pdfBusy
+                ? <Loader2 className="size-3.5 animate-spin" aria-hidden />
+                : <FileDown className="size-3.5" aria-hidden />}
+              Merilni paket PDF
+            </Button>
+          </div>
         ) : null}
       />
 

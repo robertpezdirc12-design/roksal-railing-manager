@@ -6,7 +6,7 @@
 // R436: 3D predogled — zadnja shranjena konfiguracija iz zavihka Vizualizacija.
 
 import { useMemo, useState } from 'react'
-import { Box, CalendarCheck, ClipboardList, Copy, ExternalLink, Eye, FolderKanban, HardHat, History, Layers, Link2, MapPin, Package, Plus, Ruler, Scale, Search, FileText, Banknote, ShieldCheck } from 'lucide-react'
+import { Box, CalendarCheck, ClipboardList, Copy, ExternalLink, Eye, FolderKanban, HardHat, History, Layers, Link2, Loader2, MapPin, Package, Plus, Ruler, Scale, Search, FileDown, FileText, Banknote, ShieldCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
@@ -1271,6 +1271,44 @@ function NewPackageDialog ({ projectId, projectCode, measurements, onClose, onCr
 }
 
 function PackageBomDialog ({ pkg }: { pkg: PackageRow | null }) {
+  const token = useAppStore((s) => s.token)
+  const { toast } = useToast()
+  const [expBusy, setExpBusy] = useState<string | null>(null)
+
+  // R477 (issue #9 §6): izvoz kosovnice — CSV (podpično, vejica, BOM) ali
+  // XLSX (xlsx-mini) s preverjanji pravil pred izvozom (vidna opozorila)
+  async function exportBom (format: 'csv' | 'xlsx'): Promise<void> {
+    if (!pkg || !token) return
+    setExpBusy(format)
+    try {
+      const res = await fetch(`/api/export/bom/${pkg.id}?format=${format}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error((data as { error?: string }).error ?? `Napaka strežnika (${res.status}).`)
+      }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `kosovnica-${pkg.code}.${format}`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 30_000)
+      toast({ title: `Kosovnica izvožena (${format.toUpperCase()}).`, description: 'Datoteka je prenesena; opozorila pravil so zapisana v izvoz.' })
+    } catch (e) {
+      toast({
+        title: 'Izvoz kosovnice ni uspel.',
+        description: e instanceof Error ? e.message : 'Neznana napaka.',
+        variant: 'destructive',
+      })
+    } finally {
+      setExpBusy(null)
+    }
+  }
+
   const bom = useApi<{ data: { lines: { id: string; itemId: string; qty: number; unit: string; note: string | null; segmentKey: string | null; group: string | null; wastePct: number | null; sourceRule: string | null; item: { sku: string; name: string; unit: string; qty: number } }[]; product: { sku: string; name: string }; qty: number; unit: string; code: string; status: string } }>(
     pkg?.bom ? `/api/bom/${pkg.bom.id}` : null, [pkg?.bom?.id]
   )
@@ -1322,6 +1360,19 @@ function PackageBomDialog ({ pkg }: { pkg: PackageRow | null }) {
           {d ? ` — ${d.product.sku} × ${d.qty} ${d.unit}` : ''}
         </DialogDescription>
       </DialogHeader>
+      {pkg?.bom ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <Button size="sm" variant="outline" onClick={() => { void exportBom('csv') }} disabled={expBusy != null}>
+            {expBusy === 'csv' ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <FileDown className="size-3.5" aria-hidden />}
+            Izvozi CSV
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => { void exportBom('xlsx') }} disabled={expBusy != null}>
+            {expBusy === 'xlsx' ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <FileDown className="size-3.5" aria-hidden />}
+            Izvozi XLSX
+          </Button>
+          <span className="text-[11px] text-muted-foreground">CSV: podpično, decimalna vejica (SI) · XLSX: kosovnica + sume + preverjanja</span>
+        </div>
+      ) : null}
       <ErrorBox error={bom.error} />
       {bom.loading ? <LoadingRows rows={3} /> : d ? (
         <div className="min-w-0 space-y-3">

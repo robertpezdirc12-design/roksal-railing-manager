@@ -6,7 +6,7 @@
 // na osnutku (PATCH discountPct); DDV je že izračunan iz osnove PO popustu.
 
 import { useMemo, useState } from 'react'
-import { BadgeCheck, FileText, Lock, Percent, Search, Send, TriangleAlert, User } from 'lucide-react'
+import { BadgeCheck, FileDown, FileText, Loader2, Lock, Percent, Search, Send, TriangleAlert, User } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -242,6 +242,44 @@ function QuoteDetailDialog ({ detail, canCreate, canApprove, busy, onStatus, onD
   onStatus: (status: string) => void
   onDiscount: (pct: number) => Promise<void>
 }) {
+  const token = useAppStore((s) => s.token)
+  const { toast } = useToast()
+  const [expBusy, setExpBusy] = useState<string | null>(null)
+
+  // R477 (issue #9 §6): izvoz ponudbe — CSV/XLSX (pravila in zastarelost
+  // vidno zapisani v izvozu) + JSON (strukturirano, za integracije)
+  async function exportQuote (format: 'csv' | 'xlsx' | 'json'): Promise<void> {
+    if (!token) return
+    setExpBusy(format)
+    try {
+      const res = await fetch(`/api/export/quote/${detail.id}?format=${format}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error((data as { error?: string }).error ?? `Napaka strežnika (${res.status}).`)
+      }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `ponudba-${detail.code}.${format}`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 30_000)
+      toast({ title: `Ponudba izvožena (${format.toUpperCase()}).`, description: format === 'csv' ? 'CSV: podpično, decimalna vejica (SI). Opozorila so v komentarjih.' : 'Datoteka je prenesena.' })
+    } catch (e) {
+      toast({
+        title: 'Izvoz ponudbe ni uspel.',
+        description: e instanceof Error ? e.message : 'Neznana napaka.',
+        variant: 'destructive',
+      })
+    } finally {
+      setExpBusy(null)
+    }
+  }
+
   const canSend = canCreate && detail.status === 'OSNUTEK'
   const canAccept = canApprove && ['OSNUTEK', 'POSLAN'].includes(detail.status)
   const pct = detail.discountPct ?? 0
@@ -320,6 +358,19 @@ function QuoteDetailDialog ({ detail, canCreate, canApprove, busy, onStatus, onD
       ) : null}
 
       {detail.note ? <p className="rounded-lg border p-3 text-sm">{detail.note}</p> : null}
+
+      {/* R477: izvozi ponudbe (CSV/XLSX/JSON) */}
+      <div className="flex flex-wrap items-center gap-2">
+        {(['csv', 'xlsx', 'json'] as const).map((fmt) => (
+          <Button key={fmt} size="sm" variant="outline" onClick={() => { void exportQuote(fmt) }} disabled={expBusy != null}>
+            {expBusy === fmt ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <FileDown className="size-3.5" aria-hidden />}
+            Izvozi {fmt.toUpperCase()}
+          </Button>
+        ))}
+        {detail.staleAt ? (
+          <span className="text-[11px] font-medium text-red-700 dark:text-red-400">Zastarelost bo zapisana v izvozu (opozorilo pred pošiljanjem stranki).</span>
+        ) : null}
+      </div>
 
       {/* podpis */}
       {detail.signature ? (
