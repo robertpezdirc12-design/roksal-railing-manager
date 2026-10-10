@@ -55,7 +55,12 @@ def bad (msg): global FAIL; FAIL += 1; print(f'  ✗ {msg}')
 def chk (cond, msg): ok(msg) if cond else bad(msg)
 
 def bun_ts (script):
-    db_url = os.environ.get('TEST_DB_URL') or os.environ.get('DATABASE_URL') or ('postgresql://roksal:roksal@localhost:54329/roksal')
+    # R470: samo veljavni postgres URL-ji iz okolja — sqlite ostanki (sandbox
+    # razvojne lupine) ne smejo prelomiti Prisma klienta (shema je postgresql)
+    env_url = os.environ.get('DATABASE_URL') or ''
+    if not env_url.startswith(('postgresql://', 'postgres://')):
+        env_url = ''
+    db_url = os.environ.get('TEST_DB_URL') or env_url or 'postgresql://roksal:roksal@localhost:54329/roksal'
     r = subprocess.run(['bun', '-e', script], capture_output=True, text=True,
                        cwd=REPO, env={**os.environ, 'DATABASE_URL': db_url})
     return r.stdout, r.stderr[:600]

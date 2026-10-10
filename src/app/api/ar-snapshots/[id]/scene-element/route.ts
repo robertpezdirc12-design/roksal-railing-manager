@@ -4,7 +4,10 @@
 //   ali potrjen) — zapiše se z virom ROCNO + statusom IZMERJENO.
 // R469 (issue #8 Faza 3, §4): popravek STOPNIC — potrjeno število nastopov
 //   (steps, 1..20) in smer vzpenjanja (ascent: levo/desno/globina).
-// PATCH (measurements.write) { elementId, cls?, status?, kind?, slopeDeg?, steps?, ascent? } →
+// R470 (issue #8 §5): popravek MERE — { label, valueCm, toleranceCm? } →
+//   edit.measure; METODO izpelje applyEdits (prvi vnos na naziv =
+//   ROCNI_VNOS, ponovni = ROCNO_POPRAVLJENO) — odjemalec je ne more določiti.
+// PATCH (measurements.write) { elementId, cls?, status?, kind?, slopeDeg?, steps?, ascent?, measure? } →
 //   popravek se shrani kot OZNAČEN PODATEK (append v sceneJson.edits),
 //   izvirni element iz zajema SE NIKOLI NE PREPIŠE (revizija SCENE_EDIT).
 // GET  (projects.read) — elementi z apliciranimi popravki (applyEdits) +
@@ -80,8 +83,23 @@ export async function PATCH (req: NextRequest, { params }: Params) {
   const stepsRaw = typeof body.steps === 'number' && Number.isFinite(body.steps) ? Math.round(body.steps) : null
   const steps = stepsRaw != null && stepsRaw >= 1 && stepsRaw <= SCENE_LIMITS.maxSteps ? stepsRaw : undefined
   const ascent = STAIR_ASCENTS.includes(body.ascent) ? body.ascent : undefined
-  if (!cls && !status && !kind && slopeDeg == null && steps == null && ascent == null) {
-    return jsonError(400, `Podajte vsaj en popravek: cls (${SCENE_CLASSES.join('/')}), status (${SCENE_STATUSES.join('/')}), kind, slopeDeg (±${SCENE_LIMITS.slopeAbsMax}°), steps (1..${SCENE_LIMITS.maxSteps}) ali ascent (${STAIR_ASCENTS.join('/')}).`)
+  // R470 (§5): izmerjena mera — { label, valueCm, toleranceCm? }; metodo izpelje
+  // applyEdits pri prikazu (ROCNI_VNOS oz. ROCNO_POPRAVLJENO) — surov vnos se
+  // shrani kot označen podatek (edit.measure), izvirni element ostaja nedotaknjen.
+  const mRaw = body.measure && typeof body.measure === 'object' ? body.measure as Record<string, unknown> : null
+  let measure: { label: string; valueCm: number; toleranceCm?: number } | undefined
+  if (mRaw) {
+    const mLabel = typeof mRaw.label === 'string' ? mRaw.label.trim().slice(0, SCENE_LIMITS.measureLabelMaxLen) : ''
+    const mVal = typeof mRaw.valueCm === 'number' && Number.isFinite(mRaw.valueCm) ? Math.round(mRaw.valueCm * 10) / 10 : null
+    if (!mLabel || mVal == null || mVal < 0.1 || mVal > SCENE_LIMITS.measureCmMax) {
+      return jsonError(400, `Neveljavna mera: label (1..${SCENE_LIMITS.measureLabelMaxLen} znakov) in valueCm (0,1..${SCENE_LIMITS.measureCmMax}) sta obvezna.`)
+    }
+    const mTol = typeof mRaw.toleranceCm === 'number' && Number.isFinite(mRaw.toleranceCm) &&
+      mRaw.toleranceCm >= 0 && mRaw.toleranceCm <= mVal ? Math.round(mRaw.toleranceCm * 10) / 10 : undefined
+    measure = { label: mLabel, valueCm: mVal, ...(mTol != null ? { toleranceCm: mTol } : {}) }
+  }
+  if (!cls && !status && !kind && slopeDeg == null && steps == null && ascent == null && measure == null) {
+    return jsonError(400, `Podajte vsaj en popravek: cls (${SCENE_CLASSES.join('/')}), status (${SCENE_STATUSES.join('/')}), kind, slopeDeg (±${SCENE_LIMITS.slopeAbsMax}°), steps (1..${SCENE_LIMITS.maxSteps}), ascent (${STAIR_ASCENTS.join('/')}) ali measure ({label, valueCm}).`)
   }
 
   // element mora obstajati v izvirniku — popravek brez izvirnika je sumljiv
@@ -92,7 +110,7 @@ export async function PATCH (req: NextRequest, { params }: Params) {
     return jsonError(409, 'Dosežen največji število popravkov na posnetku.')
   }
 
-  const edit = { elementId, cls, status, kind, slopeDeg, steps, ascent, by: user.name || user.id, at: Date.now() }
+  const edit = { elementId, cls, status, kind, slopeDeg, steps, ascent, measure, by: user.name || user.id, at: Date.now() }
   const updated: SceneUnderstandingResult = { ...result, edits: [...result.edits, edit] }
 
   await db.arSnapshot.update({
@@ -114,6 +132,8 @@ export async function PATCH (req: NextRequest, { params }: Params) {
         slopeDeg: element.slopeDeg ?? null,
         steps: element.steps ?? null,
         ascent: element.ascent ?? null,
+        // R470 (§5): prejšnje mere istega naziva (transparentnost popravka)
+        measures: (element.measures ?? []).map((m) => ({ label: m.label, valueCm: m.valueCm, method: m.method })),
       },
     },
   })

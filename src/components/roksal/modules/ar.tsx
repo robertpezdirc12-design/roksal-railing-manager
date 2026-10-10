@@ -24,7 +24,7 @@
 
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type Ref } from 'react'
 import {
-  Camera, CameraOff, Download, History, ImageIcon, Lightbulb, Loader2, Lock, LockOpen, MapPin, Move, ScanLine,
+  Camera, CameraOff, Download, History, ImageIcon, Lightbulb, Loader2, Lock, LockOpen, MapPin, Move, Ruler, ScanLine,
   Save, Sparkles, Trash2, Video, Waypoints, X,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
@@ -41,7 +41,8 @@ import { EmptyState, ErrorBox, LoadingRows, PageHeader } from '@/components/roks
 import SceneOverlay, { geomStatusText, slopeSourceText } from '@/components/roksal/scene-overlay'
 import { useSceneUnderstanding } from '@/hooks/use-scene-understanding'
 import {
-  SCENE_CLASSES, SURFACE_KINDS, applyEdits, ascentText,
+  AXIS_KIND_TEXT, MEASURE_METHOD_TEXT, SCENE_CLASSES, SURFACE_KINDS, applyEdits, ascentText,
+  axisCmFromReference, consolidateMeasures, personHeightNote, proposeAxes,
   type SceneClass, type SceneEdit, type SceneElement, type SurfaceKind,
 } from '@/lib/scene-understanding-core'
 import { hasPerm } from '@/lib/permissions-core'
@@ -164,11 +165,31 @@ export default function ArModule () {
   const [slopeInput, setSlopeInput] = useState('')
   /** R469 (F3 §4): vnos ročno potrjenega števila stopnic. */
   const [stepsInput, setStepsInput] = useState('')
+  /** R470 (§5): vnosi mer po osi (index osi → vrednost v cm) + referenčna skala. */
+  const [measureInputs, setMeasureInputs] = useState<Record<number, string>>({})
+  const [refAxisIdx, setRefAxisIdx] = useState('')
+  const [refCmInput, setRefCmInput] = useState('')
+  /** R470 (§5): razmerje stranic žive slike — za izračun dolžin osi v px. */
+  const [videoAspect, setVideoAspect] = useState(4 / 3)
   /** elementi z apliciranimi popravki (za prikaz/detalj) */
   const sceneDisplayed = sceneState.elements.length > 0
     ? applyEdits({ version: 1, at: Date.now(), elements: sceneState.elements, edits: sceneEdits })
     : []
   const sceneSelected = sceneDisplayed.find((e) => e.id === sceneSelectedId) ?? null
+  // R470 (§5): osi izbranega elementa (persistirane imajo prednost pred predlogom)
+  const selectedAxes = sceneSelected
+    ? (sceneSelected.axes && sceneSelected.axes.length >= 1 ? sceneSelected.axes : proposeAxes(sceneSelected))
+    : []
+  // R470 (§5): konsolidirane mere izbranega elementa (po nazivu, s konflikti)
+  const selectedMeasures = sceneSelected ? consolidateMeasures(sceneSelected.measures ?? []) : []
+  // R470 (§5): skala iz referenčne osi — cm na enoto višine kadra (KALIBRIRANA_FOTOGRAFIJA)
+  const refIdx = refAxisIdx === '' ? -1 : Number(refAxisIdx)
+  const refCm = Number(refCmInput.replace(',', '.'))
+  const refAxis = refIdx >= 0 && refIdx < selectedAxes.length && Number.isFinite(refCm) && refCm > 0
+    ? selectedAxes[refIdx]
+    : null
+  const computedForAxis = (i: number): number | null =>
+    refAxis != null && selectedAxes[i] ? axisCmFromReference(refAxis, refCm, selectedAxes[i], videoAspect) : null
   const [starting, setStarting] = useState(false)
   const [busy, setBusy] = useState(false)
   const [pos, setPos] = useState({ x: 0, y: 20 })
@@ -386,16 +407,22 @@ export default function ArModule () {
 
       // R454: vztrajnost AR posnetka (fotografija + nastavitve + morebitna analiza)
       // R467: + razumevanje prizora (živi elementi + monterjevi popravki)
+      // R470 (§5): elementi se ob shranjevanju obogatijo s predlogom dimenzijskih
+      // osi (proposeAxes) — OSEBA se pri tem PRESKOČI (zasebnost §5: ne
+      // persistiramo odsevkov o ljudeh; strip nato izvede sanitize na strežniku).
       let snapSaved = false
       try {
+        const elementsToSave = sceneDisplayed
+          .filter((e) => e.cls !== 'OSEBA')
+          .map((e) => (e.axes && e.axes.length >= 1 ? e : { ...e, axes: proposeAxes(e) }))
         await apiPost('/api/ar-snapshots', {
           projectId: projectId !== 'none' ? projectId : null,
           scene: analysis?.scene ?? null,
           analysis: analysis ? JSON.stringify(analysis) : null,
           params: JSON.stringify({ photo, posts, heightCm, scale, opacity, mode, ...sourceInfo }),
           note: (note.trim() || null) as string | null,
-          ...(sceneDisplayed.length > 0
-            ? { sceneUnderstanding: { version: 1, at: Date.now(), elements: sceneDisplayed, edits: sceneEdits } }
+          ...(elementsToSave.length > 0
+            ? { sceneUnderstanding: { version: 1, at: Date.now(), elements: elementsToSave, edits: sceneEdits } }
             : {}),
         })
         snapSaved = true
@@ -658,6 +685,12 @@ export default function ArModule () {
                   muted
                   className="absolute inset-0 size-full object-cover"
                   aria-label="Živa slika kamere"
+                  onLoadedMetadata={(e) => {
+                    // R470 (§5): razmerje stranic za izračun dolžin osi v px
+                    const vw = e.currentTarget.videoWidth
+                    const vh = e.currentTarget.videoHeight
+                    if (vw > 0 && vh > 0) setVideoAspect(vw / vh)
+                  }}
                 />
 
                 {/* R467 (issue #8 F1): žive zaznave prizora — samo z živo kamero;
@@ -668,7 +701,11 @@ export default function ArModule () {
                     quality={sceneState.quality}
                     selectedId={sceneSelectedId}
                     pinnedIds={scenePinned}
-                    onSelect={(el) => { setSceneSelectedId(el.id === sceneSelectedId ? null : el.id); setSlopeInput(''); setStepsInput('') }}
+                    onSelect={(el) => {
+                      setSceneSelectedId(el.id === sceneSelectedId ? null : el.id)
+                      setSlopeInput(''); setStepsInput('')
+                      setMeasureInputs({}); setRefAxisIdx(''); setRefCmInput('')
+                    }}
                   />
                 ) : null}
 
@@ -925,6 +962,185 @@ export default function ArModule () {
                           </span>
                         </div>
                       ) : null}
+                    </div>
+                  ) : null}
+
+                  {/* R470 (issue #8 §5): MERE PREDMETOV — predlog dimenzijskih osi
+                      BREZ cm vrednosti; fizična mera pride SAMO z zapisano metodo
+                      (ročni vnos ali kalibrirana fotografija prek reference). */}
+                  {sceneSelected.cls !== 'OSEBA' && (selectedAxes.length > 0 || selectedMeasures.length > 0) ? (
+                    <div className="mt-2 rounded-md border border-dashed px-2.5 py-2 text-xs">
+                      <p className="font-semibold">Mere</p>
+                      <p className="mt-0.5 text-[10px] text-muted-foreground">
+                        Osi so predlog — vrednosti v cm se ne izračunavajo iz pikslov brez veljavne reference (poštenost §5).
+                      </p>
+
+                      {/* predlogane osi + vnos mere po osi */}
+                      {selectedAxes.length > 0 ? (
+                        <ul className="mt-1.5 space-y-1.5">
+                          {selectedAxes.map((a, i) => {
+                            const computed = computedForAxis(i)
+                            const manual = measureInputs[i] ?? ''
+                            const manualVal = Number(manual.replace(',', '.'))
+                            return (
+                              <li key={`${a.label}-${i}`} className="rounded border bg-secondary/30 px-2 py-1.5">
+                                <div className="flex flex-wrap items-center justify-between gap-1">
+                                  <span className="font-medium">{a.label}</span>
+                                  <span className="text-[10px] text-muted-foreground">{AXIS_KIND_TEXT[a.kind]} · potrebna mera</span>
+                                </div>
+                                {computed != null ? (
+                                  <p className="mt-0.5 text-[11px] text-muted-foreground">
+                                    Iz reference: <span className="font-semibold text-foreground">≈ {computed.toFixed(1).replace('.', ',')} cm</span>{' '}
+                                    <span className="text-[10px]">(ocena iz kalibrirane fotografije — potrdite z izmero)</span>
+                                  </p>
+                                ) : null}
+                                <div className="mt-1 flex flex-wrap items-end gap-1.5">
+                                  <div className="space-y-0.5">
+                                    <Label htmlFor={`scene-measure-${i}`} className="text-[10px]">Izmerjeno (cm, npr. 117,5)</Label>
+                                    <Input
+                                      id={`scene-measure-${i}`}
+                                      inputMode="decimal"
+                                      className="h-8 w-28 text-xs"
+                                      placeholder="cm"
+                                      value={manual}
+                                      onChange={(e) => { setMeasureInputs((prev) => ({ ...prev, [i]: e.target.value })) }}
+                                      aria-describedby={`scene-measure-${i}-help`}
+                                    />
+                                  </div>
+                                  <Button
+                                    size="sm"
+                                    className="h-8"
+                                    disabled={Number.isNaN(manualVal) || manual.trim() === '' || !(manualVal >= 0.1) || manualVal > 100000}
+                                    onClick={() => {
+                                      if (!Number.isFinite(manualVal) || manualVal < 0.1 || manualVal > 100000) return
+                                      setSceneEdits((prev) => [...prev, {
+                                        elementId: sceneSelected.id,
+                                        measure: { label: a.label, valueCm: manualVal },
+                                        by: user?.name ?? 'monter',
+                                        at: Date.now(),
+                                      }])
+                                      toast({
+                                        title: 'Mera zabeležena.',
+                                        description: `${a.label}: ${manualVal.toFixed(1).replace('.', ',')} cm (ročni vnos). Shrani se z zajemom AR posnetka.`,
+                                      })
+                                      setMeasureInputs((prev) => ({ ...prev, [i]: '' }))
+                                    }}
+                                  >
+                                    <Save className="size-3.5" aria-hidden />
+                                    Zabeleži
+                                  </Button>
+                                  {computed != null ? (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-8"
+                                      onClick={() => {
+                                        setSceneEdits((prev) => [...prev, {
+                                          elementId: sceneSelected.id,
+                                          measure: { label: a.label, valueCm: computed, method: 'KALIBRIRANA_FOTOGRAFIJA' },
+                                          by: user?.name ?? 'monter',
+                                          at: Date.now(),
+                                        }])
+                                        toast({
+                                          title: 'Mera prevzeta iz reference.',
+                                          description: `${a.label}: ≈ ${computed.toFixed(1).replace('.', ',')} cm (kalibrirana fotografija — ocena, potrdite z izmero).`,
+                                        })
+                                      }}
+                                    >
+                                      <Ruler className="size-3.5" aria-hidden />
+                                      Prevzemi ≈ {computed.toFixed(1).replace('.', ',')} cm
+                                    </Button>
+                                  ) : null}
+                                  <span id={`scene-measure-${i}-help`} className="sr-only">
+                                    Vnesite z merilnim trakom ali laserjem izmerjeno dolžino te osi v centimetrih.
+                                  </span>
+                                </div>
+                              </li>
+                            )
+                          })}
+                        </ul>
+                      ) : null}
+
+                      {/* referenčna skala: ena znana dolžina → izračun ostalih osi */}
+                      {selectedAxes.length >= 1 ? (
+                        <div className="mt-2 rounded border bg-secondary/30 px-2 py-1.5">
+                          <p className="text-[11px] font-medium">Referenca za oceno ostalih osi (neobvezno)</p>
+                          <div className="mt-1 flex flex-wrap items-end gap-1.5">
+                            <div className="space-y-0.5">
+                              <Label htmlFor="scene-ref-axis" className="text-[10px]">Referenčna os</Label>
+                              <Select value={refAxisIdx} onValueChange={setRefAxisIdx}>
+                                <SelectTrigger id="scene-ref-axis" className="h-8 w-44 text-xs"><SelectValue placeholder="izberi os" /></SelectTrigger>
+                                <SelectContent>
+                                  {selectedAxes.map((a, i) => (
+                                    <SelectItem key={`ref-${i}`} value={String(i)}>{a.label}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="space-y-0.5">
+                              <Label htmlFor="scene-ref-cm" className="text-[10px]">Znana dolžina (cm)</Label>
+                              <Input
+                                id="scene-ref-cm"
+                                inputMode="decimal"
+                                className="h-8 w-24 text-xs"
+                                placeholder="cm"
+                                value={refCmInput}
+                                onChange={(e) => { setRefCmInput(e.target.value) }}
+                                aria-describedby="scene-ref-help"
+                              />
+                            </div>
+                            <span id="scene-ref-help" className="sr-only">
+                              Izberite os, katere dejansko dolžino poznate (npr. širina stopnice), in jo vnesite — ostale osi nato dobijo oceno iz kalibrirane fotografije.
+                            </span>
+                          </div>
+                          {refAxis != null ? (
+                            <p className="mt-1 text-[10px] text-muted-foreground">
+                              Skala aktivna — ocene so označene kot „kalibrirana fotografija“ in ostanejo OCENA, dokler jih ne potrdite z izmero.
+                            </p>
+                          ) : null}
+                        </div>
+                      ) : null}
+
+                      {/* konsolidirane mere z metodo + konflikti (§5.6) */}
+                      {selectedMeasures.length > 0 ? (
+                        <div className="mt-2">
+                          <p className="text-[11px] font-medium">Zabeležene mere</p>
+                          <ul className="mt-1 space-y-1">
+                            {selectedMeasures.map((m) => (
+                              <li key={m.label} className={`rounded border px-2 py-1 ${m.conflict ? 'border-destructive/50 bg-destructive/5' : 'bg-secondary/30'}`}>
+                                <div className="flex flex-wrap items-center justify-between gap-1">
+                                  <span className="font-medium">{m.label}</span>
+                                  <span className="font-semibold">{m.valueCm.toFixed(1).replace('.', ',')} cm</span>
+                                </div>
+                                <p className="text-[10px] text-muted-foreground">
+                                  metoda: {MEASURE_METHOD_TEXT[m.method]}
+                                  {m.toleranceCm != null ? ` · ±${m.toleranceCm.toFixed(1).replace('.', ',')} cm` : ''}
+                                  {m.count > 1 ? ` · ${m.count} mere (razpon ${m.spreadPct.toFixed(1).replace('.', ',')} %)` : ''}
+                                </p>
+                                {m.conflict ? (
+                                  <p className="text-[10px] font-medium text-destructive">
+                                    Konflikt: mere istega naziva odstopajo — preverite na objektu.
+                                  </p>
+                                ) : null}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+
+                  {/* R470 (issue #8 §5 „Osebe“): figura SAMO za razumevanje zakritja —
+                      brez identifikacije, brez mer na osebi, ne persistira se. */}
+                  {sceneSelected.cls === 'OSEBA' ? (
+                    <div className="mt-2 rounded-md border border-dashed px-2.5 py-2 text-xs">
+                      <p className="font-semibold">Morebitna oseba (ocena iz gibanja in oblike)</p>
+                      <ul className="mt-1 space-y-0.5 text-muted-foreground">
+                        <li>{personHeightNote(sceneSelected)}</li>
+                        <li>Namen zaznave je samo razumevanje zakritja merilnih točk — brez identifikacije oseb.</li>
+                        <li>Ta zaznava se ne shrani v posnetek (zasebnost).</li>
+                        <li>Počakajte na prost kader ali označite merilne točke ročno.</li>
+                      </ul>
                     </div>
                   ) : null}
 

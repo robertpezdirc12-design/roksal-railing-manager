@@ -7,6 +7,15 @@
 //   enakomernost razmakov in morebitni podest (§4). POŠTENOST: iz enega
 //   pogleda BREZ globine NISO izmerljive višine čel in globine nastopov —
 //   te izrecno označimo kot „potrebna mera“ (§4/§6).
+// R470 (issue #8 — §5): MERE PREDMETOV IN ČLOVEŠKA FIGURA —
+//   • metode mere (DEPTH/AR, KALIBRIRANA_FOTOGRAFIJA, VEČ_POGLEDOV,
+//     ROČNI_VNOS, ROČNO_POPRAVLJENO) — mera BREZ metode ni veljavna;
+//   • predlog dimenzijskih osi (v kadru, BREZ realnih enot — cm pride
+//     samo z veljavno referenco, §5: „ne iz pikslov brez skale“);
+//   • konsolidacija mer istega naziva + prijava konflikta (>15 %);
+//   • človeška figura: živa hevristika (gibanje + razmerje stranic) SAMO
+//     za razumevanje zakritja — NE shranjuje se v posnetek (zasebnost §5),
+//     NE identificira oseb, višino NE trdi brez veljavne reference.
 // Čista logika brez DOM/React — enako testirljiva kot measure-engine/prefab-core.
 //
 // Načelo celotnega modula (issue #8 §2, §6): AVTOMATIKA JE PREDLOG, NE
@@ -97,6 +106,11 @@ export interface SceneElement {
   stepIrregular?: boolean
   /** Večja vrzel med nastopi — morebiten podest (issue §4). */
   landing?: boolean
+  // ── R470 (§5): MERE PREDMETOV ──
+  /** Predlogi dimenzijskih osi (0..1, BREZ cm — fizična vrednost samo v measures). */
+  axes?: DimAxis[]
+  /** Izmerjene fizične mere (cm) z ZAPISANO metodo — prazna, dokler ni reference. */
+  measures?: SceneMeasure[]
   at: number // epoch ms zajema
 }
 
@@ -112,6 +126,20 @@ export interface SceneEdit {
   steps?: number
   /** R469 (F3 §4): ročno potrjena smer vzpenjanja — vir postane ROCNO. */
   ascent?: StairAscent
+  /**
+   * R470 (§5): izmerjena mera na elementu (ROČNI_VNOS ali iz kalibrirane
+   * fotografije). METODO izpelje applyEdits: prvi vnos na naziv → ROCNI_VNOS
+   * (ali podana KALIBRIRANA_FOTOGRAFIJA), ponovni vnos istega naziva →
+   * ROCNO_POPRAVLJENO — monter ne more ročno „pretentati“ metode DEPTH_AR.
+   */
+  measure?: {
+    label: string
+    valueCm: number
+    toleranceCm?: number
+    /** izvor izračuna (KALIBRIRANA_FOTOGRAFIJA) — drugače izpeljano */
+    method?: MeasureMethod
+    at?: number
+  }
   by: string
   at: number
 }
@@ -135,6 +163,10 @@ export const SCENE_LIMITS = {
   angleAbsMax: 90, // stopinj
   maxSteps: 20, // R469 (F3): največje razumno število vidnih nastopov
   maxStepLines: 12, // R469 (F3): nastopne črte za risanje
+  maxAxesPerElement: 4, // R470 (§5): dimenzijske osi na element
+  maxMeasuresPerElement: 8, // R470 (§5): mere na element (po nazivu se konsolidirajo)
+  measureLabelMaxLen: 48, // R470 (§5): dolžina naziva mere
+  measureCmMax: 100000, // R470 (§5): 1000 m — fizična meja smisla
 } as const
 
 // ── Hevristika: klasifikacija podlage iz barvnih/teksturnih značilnic ────────
@@ -397,6 +429,259 @@ export function ascentText (a: StairAscent | undefined): string {
   return 'neznana'
 }
 
+// ── MERE PREDMETOV (issue #8 §5) ────────────────────────────────────────────
+//
+// POŠTENOST (§5/§6): predlagane so samo OSI v koordinatah kadra (0..1) —
+// BREZ vrednosti v cm. Fizična vrednost obstaja IZKLJUČNO kot SceneMeasure
+// z ZAPISANO metodo. Vrednosti v cm NIKOLI ne izračunavamo iz pikslov brez
+// veljavne skale/reference (§5: „širine/višine v realnih enotah ne izračunavaj
+// samo iz števila slikovnih pik“).
+
+/** Metoda izmere (issue §5) — taksonomija po zahtevi naloge. */
+export const MEASURE_METHODS = ['DEPTH_AR', 'KALIBRIRANA_FOTOGRAFIJA', 'VEC_POGLEDOV', 'ROCNI_VNOS', 'ROCNO_POPRAVLJENO'] as const
+export type MeasureMethod = (typeof MEASURE_METHODS)[number]
+
+export const MEASURE_METHOD_TEXT: Record<MeasureMethod, string> = {
+  DEPTH_AR: 'AR globina',
+  KALIBRIRANA_FOTOGRAFIJA: 'kalibrirana fotografija',
+  VEC_POGLEDOV: 'več pogledov',
+  ROCNI_VNOS: 'ročni vnos',
+  ROCNO_POPRAVLJENO: 'ročno popravljeno',
+}
+
+/** Vrsta dimenzijske osi (predlog, kaj bi meril monter). */
+export const AXIS_KINDS = ['DOLZINA', 'SIRINA', 'VISINA', 'GLOBINA'] as const
+export type AxisKind = (typeof AXIS_KINDS)[number]
+
+export const AXIS_KIND_TEXT: Record<AxisKind, string> = {
+  DOLZINA: 'dolžina',
+  SIRINA: 'širina',
+  VISINA: 'višina',
+  GLOBINA: 'globina',
+}
+
+/** Predlog dimenzijske osi v kadru (0..1) — brez realnih enot (issue §5). */
+export interface DimAxis {
+  x1: number; y1: number; x2: number; y2: number
+  kind: AxisKind
+  /** Kaj os predstavlja (slovensko, kratko) — npr. „višina stopnišča“. */
+  label: string
+}
+
+/** Izmerjena fizična mera na elementu — vedno z metodo (issue §5). */
+export interface SceneMeasure {
+  label: string
+  valueCm: number
+  method: MeasureMethod
+  /** Dokazljiva toleranca (cm), če jo monter pozna (npr. podatki proizvajalca). */
+  toleranceCm?: number
+  at: number
+  by?: string
+}
+
+/** Konsolidirana mera po nazivu (§5: več pogledov/mer istega elementa). */
+export interface ConsolidatedMeasure {
+  label: string
+  valueCm: number
+  method: MeasureMethod
+  toleranceCm?: number
+  /** število posameznih mer, ki so sestavile konsolidacijo */
+  count: number
+  /** razpon (max−min) glede na vrednost v % */
+  spreadPct: number
+  /** mere istega naziva odstopajo > 15 % — prijava konflikta (§5) */
+  conflict: boolean
+  note: string
+}
+
+/** prag odstopanja mer istega naziva za prijavo konflikta (§5: „prijavi konflikt“) */
+export const MEASURE_CONFLICT_PCT = 15
+
+/**
+ * Dolžina osi v enotah VIŠINE kadra (frame height = 1), upoštevajoč razmerje
+ * stranic (diagonala v pravem merilu). Isti aspect za referenco in ciljno os
+ * da pravilno razmerje pikslov — iz tega pride cm samo preko reference.
+ */
+export function axisSpan (a: DimAxis, aspect: number): number {
+  const ax = Number.isFinite(aspect) && aspect > 0 ? aspect : 1
+  const dx = (a.x2 - a.x1) * ax
+  const dy = a.y2 - a.y1
+  return Math.sqrt(dx * dx + dy * dy)
+}
+
+/**
+ * Izračun cm CILJNE osi iz znane dolžine REFERENČNE osi istega kadra
+ * (§5: KALIBRIRANA_FOTOGRAFIJA — ena slika + ena veljavna referenca).
+ * Vrne null, če referenca ni uporabljiva (ničelna os/nedeljiva dolžina) —
+ * nikoli ne ugibamo.
+ */
+export function axisCmFromReference (
+  refAxis: DimAxis, refCm: number, targetAxis: DimAxis, aspect: number,
+): number | null {
+  if (!Number.isFinite(refCm) || refCm <= 0) return null
+  const refSpan = axisSpan(refAxis, aspect)
+  if (!(refSpan > 1e-6)) return null
+  const ratio = axisSpan(targetAxis, aspect) / refSpan
+  if (!Number.isFinite(ratio) || ratio <= 0) return null
+  return Math.round(Math.min(SCENE_LIMITS.measureCmMax, refCm * ratio) * 10) / 10
+}
+
+/**
+ * Predlog dimenzijskih osi za element (§5: „predlaga robove in dimenzijske
+ * osi za ograjni segment, odprtino/vrata, steber, stopnico, rob plošče,
+ * steno in druge gradbene elemente“). Osi so ČISTO v koordinatah kadra —
+ * brez cm. Največ SCENE_LIMITS.maxAxesPerElement.
+ */
+export function proposeAxes (el: SceneElement): DimAxis[] {
+  const r3 = (n: number): number => Math.round(Math.max(0, Math.min(1, n)) * 1000) / 1000
+  const mk = (x1: number, y1: number, x2: number, y2: number, kind: AxisKind, label: string): DimAxis =>
+    ({ x1: r3(x1), y1: r3(y1), x2: r3(x2), y2: r3(y2), kind, label })
+
+  // STOPNICA: najdaljša nastopna črta (širina) + povezovalna os prve↔zadnje
+  // črte (višina stopnišča v kadru — potrebna referenca za fizično vrednost)
+  if (el.cls === 'STOPNICA') {
+    const lines = (el.stepLines ?? []).slice(0, SCENE_LIMITS.maxStepLines)
+    const axes: DimAxis[] = []
+    const longest = [...lines].sort((a, b) => (Math.abs(b.x2 - b.x1) - Math.abs(a.x2 - a.x1)))[0]
+    if (longest) {
+      axes.push(mk(longest.x1, longest.y1, longest.x2, longest.y2, 'SIRINA', 'širina stopnice'))
+    }
+    if (lines.length >= 2) {
+      const first = lines[0]
+      const last = lines[lines.length - 1]
+      axes.push(mk(
+        (first.x1 + first.x2) / 2, (first.y1 + first.y2) / 2,
+        (last.x1 + last.x2) / 2, (last.y1 + last.y2) / 2,
+        'VISINA', 'višina stopnišča',
+      ))
+    }
+    return axes.slice(0, SCENE_LIMITS.maxAxesPerElement)
+  }
+
+  const [bx, by, bw, bh] = el.bbox
+
+  // ROB: os vzdolž roba (dolžina)
+  if (el.cls === 'ROB') {
+    return [mk(bx, by + bh / 2, bx + bw, by + bh / 2, 'DOLZINA', 'dolžina roba')]
+  }
+  // OGRAJA: vodoravna os skozi središče (dolžina segmenta)
+  if (el.cls === 'OGRAJA') {
+    return [mk(bx, by + bh / 2, bx + bw, by + bh / 2, 'DOLZINA', 'dolžina ograjnega segmenta')]
+  }
+  // OSEBA / OVIRA: navpična os (višina figure v kadru — za §5 brez cm)
+  if (el.cls === 'OSEBA' || el.cls === 'OVIRA') {
+    return [mk(bx + bw / 2, by, bx + bw / 2, by + bh, 'VISINA', 'višina figure v kadru')]
+  }
+  // TLA / PODLAGA: vodoravna os čez spodnji rob maske (ali bbox)
+  if (el.cls === 'TLA' || el.cls === 'PODLAGA') {
+    const pts = el.maskPoints ?? []
+    if (pts.length >= 2) {
+      let maxY = -1
+      for (const p of pts) if (p.y > maxY) maxY = p.y
+      if (maxY > 0) {
+        let minX = 1; let maxX = 0
+        for (const p of pts) {
+          if (Math.abs(p.y - maxY) <= 0.08) { // točke ob spodnjem robu maske
+            if (p.x < minX) minX = p.x
+            if (p.x > maxX) maxX = p.x
+          }
+        }
+        if (maxX - minX > 0.05) {
+          return [mk(minX, Math.min(1, maxY), maxX, Math.min(1, maxY), 'SIRINA', 'širina tal v kadru')]
+        }
+      }
+    }
+    return [mk(bx, Math.min(1, by + bh), bx + bw, Math.min(1, by + bh), 'SIRINA', 'širina tal v kadru')]
+  }
+  // NEZNANO in ostalo: brez predloga — ne izmišljujemo osi (issue §1)
+  return []
+}
+
+/**
+ * Konsolidacija mer istega naziva (§5.6: „več pogledov mora omogočati
+ * konsolidacijo istega elementa in prijavo konflikta med merami“).
+ * Pravila (poštena, določena):
+ *   • ROCNO_POPRAVLJENO (zadnja) ima prednost — je izrecna popravka monterja;
+ *   • sicer mediana vrednosti; metoda = VEC_POGLEDOV, če je mer več;
+ *   • razpon > 15 % → konflikt (prijava, ne tiha poravnava).
+ */
+export function consolidateMeasures (measures: SceneMeasure[]): ConsolidatedMeasure[] {
+  if (!Array.isArray(measures) || measures.length === 0) return []
+  const groups = new Map<string, SceneMeasure[]>()
+  for (const m of measures) {
+    if (!m || typeof m.label !== 'string' || !m.label) continue
+    if (typeof m.valueCm !== 'number' || !Number.isFinite(m.valueCm) || m.valueCm <= 0) continue
+    const arr = groups.get(m.label) ?? []
+    arr.push(m)
+    groups.set(m.label, arr)
+  }
+  const out: ConsolidatedMeasure[] = []
+  for (const [label, ms] of groups) {
+    const sorted = [...ms].sort((a, b) => a.at - b.at)
+    const corrections = sorted.filter((m) => m.method === 'ROCNO_POPRAVLJENO')
+    const values = sorted.map((m) => m.valueCm).sort((a, b) => a - b)
+    const mid = Math.floor(values.length / 2)
+    const median = values.length % 2 === 1 ? values[mid] : (values[mid - 1] + values[mid]) / 2
+    const winner = corrections.length > 0 ? corrections[corrections.length - 1] : null
+    const valueCm = Math.round((winner ? winner.valueCm : median) * 10) / 10
+    const spread = values.length >= 2 ? values[values.length - 1] - values[0] : 0
+    const spreadPct = Math.round((spread / Math.max(1e-6, Math.abs(valueCm))) * 1000) / 10
+    const conflict = values.length >= 2 && spreadPct > MEASURE_CONFLICT_PCT
+    let method: MeasureMethod
+    if (winner) method = 'ROCNO_POPRAVLJENO'
+    else if (sorted.length === 1) method = sorted[0].method
+    else method = 'VEC_POGLEDOV'
+    const tol = winner?.toleranceCm ?? sorted[sorted.length - 1].toleranceCm
+    out.push({
+      label,
+      valueCm,
+      method,
+      ...(tol != null ? { toleranceCm: tol } : {}),
+      count: sorted.length,
+      spreadPct,
+      conflict,
+      note: conflict
+        ? 'mere istega naziva odstopajo — preverite na objektu'
+        : winner
+          ? 'zadnja ročna popravka prevladuje'
+          : 'konsolidirano',
+    })
+  }
+  return out
+}
+
+// ── ČLOVEŠKA FIGURA (issue #8 §5 „Osebe“) ───────────────────────────────────
+//
+// Namen SAMO prostorsko razumevanje (zakritje merilne točke) in dokumentacija
+// — NE identifikacija oseb, NE obrazno prepoznavanje, NE shranjevanje.
+// Hevristika: GIBANJE + razmerje stranic bbox (pokončna figura). Iskrena
+// meja: mirujoče osebe brez ML ne zaznamo — to je dokumentirana omejitev.
+
+export const PERSON_AR_MIN = 1.6 // razmerje višina/širina — spodnja meja stoječe figure
+export const PERSON_AR_MAX = 5.5 // zgornja meja (ozka figura/robnost)
+export const PERSON_MIN_H = 0.25 // figura ≥ 25 % višine kadra
+export const PERSON_MAX_W = 0.45 // širina ≤ 45 % kadra (širša stvar ni oseba)
+
+/** Ali bbox ustreza obliki pokončne človeške figure (konzervativno). */
+export function looksLikePerson (bbox: [number, number, number, number]): boolean {
+  const [, , w, h] = bbox
+  if (!(w > 0) || !(h > 0)) return false
+  const ar = h / w
+  return ar >= PERSON_AR_MIN && ar <= PERSON_AR_MAX && h >= PERSON_MIN_H && w <= PERSON_MAX_W
+}
+
+/**
+ * Iskrena opomba o višini osebe (§5: ocena višine SAMO, če je figura celotna
+ * in obstaja primerna globina/merilo — sicer tega NE trdimo).
+ */
+export function personHeightNote (el: SceneElement): string {
+  const [, y, , h] = el.bbox
+  if (y <= 0.02) return 'Figura je odrezana na zgornjem robu kadra — višina ni ocenljiva.'
+  if (y + h >= 0.98) return 'Figura sega čez spodnji rob kadra — delno vidna, višina ni zanesljiva.'
+  if (h < PERSON_MIN_H) return 'Figura je v kadru prekratka — verjetno sedeča ali delno zakrita.'
+  return 'Figura je celotna v kadru — višino izmerite le z veljavno referenco, ne iz slike.'
+}
+
 // ── Stabilizacija: oznake ne skačejo med sličicami (issue §2) ────────────────
 
 export interface StabilizeOptions {
@@ -589,6 +874,34 @@ export function applyEdits (result: SceneUnderstandingResult): SceneElement[] {
     if (edit.ascent != null) {
       el.ascent = edit.ascent
     }
+    // R470 (§5): izmerjena mera — METODA se izpelje TU (enotna pravila za
+    // odjemalca in strežnik): ponovni vnos istega naziva je POPRAVEK.
+    // DEPTH_AR je REZERVIRAN za prihodnjo integracijo senzorja globine —
+    // ročni popravek ga ne more „pretentati“ (issue §5: mera z metodo).
+    if (edit.measure && typeof edit.measure.label === 'string' && edit.measure.label &&
+        typeof edit.measure.valueCm === 'number' && Number.isFinite(edit.measure.valueCm) &&
+        edit.measure.valueCm > 0) {
+      const label = edit.measure.label.slice(0, SCENE_LIMITS.measureLabelMaxLen)
+      const value = Math.max(0.1, Math.min(SCENE_LIMITS.measureCmMax, Math.round(edit.measure.valueCm * 10) / 10))
+      const existing = (el.measures ?? []).some((m) => m.label === label)
+      const method: MeasureMethod = existing
+        ? 'ROCNO_POPRAVLJENO'
+        : (edit.measure.method === 'KALIBRIRANA_FOTOGRAFIJA' || edit.measure.method === 'VEC_POGLEDOV'
+            ? edit.measure.method
+            : 'ROCNI_VNOS')
+      const tolRaw = edit.measure.toleranceCm
+      const toleranceCm = typeof tolRaw === 'number' && Number.isFinite(tolRaw) && tolRaw >= 0 && tolRaw <= value
+        ? Math.round(tolRaw * 10) / 10
+        : undefined
+      el.measures = [...(el.measures ?? []), {
+        label,
+        valueCm: value,
+        method,
+        ...(toleranceCm != null ? { toleranceCm } : {}),
+        at: edit.measure.at ?? edit.at,
+        ...(edit.by ? { by: edit.by } : {}),
+      }].slice(-SCENE_LIMITS.maxMeasuresPerElement)
+    }
     el.source = 'ROCNO'
     el.confidence = 1
   }
@@ -615,6 +928,9 @@ export function sanitizeSceneResult (raw: unknown): SceneUnderstandingResult | n
     const source = SCENE_SOURCES.includes(e.source as SceneSource) ? (e.source as SceneSource) : null
     const bboxRaw = Array.isArray(e.bbox) ? e.bbox : null
     if (!id || !cls || !status || !source || !bboxRaw || bboxRaw.length !== 4) continue
+    // R470 (§5 ZASEBNOST): zaznava OSEBE je ŽIVA (pomaga monterju pri zakritju)
+    // in se NAMENOMA ne persistira — ne shranjujemo odsevkov o ljudeh.
+    if (cls === 'OSEBA') continue
     const bbox = bboxRaw.map((v) => (typeof v === 'number' && Number.isFinite(v) ? v : -1))
     if (bbox.some((v) => v < 0 || v > 1)) continue
     if (bbox[2] <= 0 || bbox[3] <= 0) continue
@@ -647,6 +963,11 @@ export function sanitizeSceneResult (raw: unknown): SceneUnderstandingResult | n
     const stepIrregular = e.stepIrregular === true
     const landing = e.landing === true
 
+    // R470 (§5): dimenzijske osi (samo geometrija kadra) + izmerjene mere
+    // z metodo. Neveljavne se IZPUSTIJO (brez tihih popravkov).
+    const axes = sanitizeAxes(e.axes)
+    const measures = sanitizeMeasures(e.measures)
+
     elements.push({
       id, cls, status, source, confidence,
       bbox: [bbox[0], bbox[1], bbox[2], bbox[3]], kind, at,
@@ -660,6 +981,8 @@ export function sanitizeSceneResult (raw: unknown): SceneUnderstandingResult | n
       ...(stepGap != null ? { stepGap } : {}),
       ...(stepIrregular ? { stepIrregular: true } : {}),
       ...(landing ? { landing: true } : {}),
+      ...(axes.length >= 1 ? { axes } : {}),
+      ...(measures.length >= 1 ? { measures } : {}),
     })
   }
   if (elements.length === 0) return null
@@ -681,8 +1004,30 @@ export function sanitizeSceneResult (raw: unknown): SceneUnderstandingResult | n
       const stepsRaw = typeof e.steps === 'number' && Number.isFinite(e.steps) ? Math.round(e.steps) : null
       const steps = stepsRaw != null && stepsRaw >= 1 && stepsRaw <= SCENE_LIMITS.maxSteps ? stepsRaw : undefined
       const ascent = STAIR_ASCENTS.includes(e.ascent as StairAscent) ? (e.ascent as StairAscent) : undefined
-      if (!cls && !status && !kind && slopeDeg == null && steps == null && ascent == null) continue
-      edits.push({ elementId: e.elementId, cls, status, kind, slopeDeg, steps, ascent, by: e.by, at: atEdit })
+      // R470 (§5): popravek mere — surovi vnos {label, valueCm, toleranceCm?};
+      // metodo izpelje applyEdits (ne zaupa se odjemalcu/strežniku posebej).
+      const measureRaw = e.measure && typeof e.measure === 'object' ? e.measure as Record<string, unknown> : null
+      let measure: SceneEdit['measure'] | undefined
+      if (measureRaw) {
+        const mLabel = typeof measureRaw.label === 'string' ? measureRaw.label.trim().slice(0, SCENE_LIMITS.measureLabelMaxLen) : ''
+        const mVal = typeof measureRaw.valueCm === 'number' && Number.isFinite(measureRaw.valueCm)
+          ? Math.round(measureRaw.valueCm * 10) / 10 : null
+        const mTol = typeof measureRaw.toleranceCm === 'number' && Number.isFinite(measureRaw.toleranceCm) &&
+          measureRaw.toleranceCm >= 0 && (mVal == null || measureRaw.toleranceCm <= mVal)
+          ? Math.round(measureRaw.toleranceCm * 10) / 10 : undefined
+        const mMethod = (MEASURE_METHODS.includes(measureRaw.method as MeasureMethod) && measureRaw.method !== 'DEPTH_AR')
+          ? measureRaw.method as MeasureMethod : undefined
+        if (mLabel && mVal != null && mVal >= 0.1 && mVal <= SCENE_LIMITS.measureCmMax) {
+          measure = {
+            label: mLabel,
+            valueCm: mVal,
+            ...(mTol != null ? { toleranceCm: mTol } : {}),
+            ...(mMethod ? { method: mMethod } : {}),
+          }
+        }
+      }
+      if (!cls && !status && !kind && slopeDeg == null && steps == null && ascent == null && measure == null) continue
+      edits.push({ elementId: e.elementId, cls, status, kind, slopeDeg, steps, ascent, measure, by: e.by, at: atEdit })
     }
   }
 
@@ -726,4 +1071,62 @@ function sanitizeStepLines (raw: unknown): SceneLine[] {
 /** Serializacija v JSON niz (persistenca na ArSnapshot.sceneJson). */
 export function serializeSceneResult (r: SceneUnderstandingResult): string {
   return JSON.stringify(r)
+}
+
+/** R470 (§5): dimenzijske osi — veljavne točke 0..1, kind iz seznama,
+ * label 1..measureLabelMaxLen. Najprej se izločijo neveljavne, ŠE NATO
+ * rezultat reže na maxAxesPerElement (neveljavna os ne „poje“ mesta). */
+function sanitizeAxes (raw: unknown): DimAxis[] {
+  if (!Array.isArray(raw)) return []
+  const out: DimAxis[] = []
+  for (const a of raw.slice(0, SCENE_LIMITS.maxAxesPerElement * 2)) {
+    if (!a || typeof a !== 'object') continue
+    const q = a as Record<string, unknown>
+    const vals = [q.x1, q.y1, q.x2, q.y2]
+    if (vals.some((v) => typeof v !== 'number' || !Number.isFinite(v) || v < 0 || v > 1)) continue
+    const kind = AXIS_KINDS.includes(q.kind as AxisKind) ? q.kind as AxisKind : null
+    const label = typeof q.label === 'string' && q.label.trim() ? q.label.trim().slice(0, SCENE_LIMITS.measureLabelMaxLen) : null
+    if (!kind || !label) continue
+    if (out.length >= SCENE_LIMITS.maxAxesPerElement) break
+    out.push({
+      x1: Math.round((q.x1 as number) * 1000) / 1000,
+      y1: Math.round((q.y1 as number) * 1000) / 1000,
+      x2: Math.round((q.x2 as number) * 1000) / 1000,
+      y2: Math.round((q.y2 as number) * 1000) / 1000,
+      kind,
+      label,
+    })
+  }
+  return out
+}
+
+/** R470 (§5): mere — label, vrednost 0,1..measureCmMax, METODA obvezna,
+ * toleranca 0..vrednost (neveljavna toleranca se izpusti, MERA ostane —
+ * vrednost brez tolerance je še vedno veljavna mera, issue §5). Mera brez
+ * veljavne metode se IZPUSTI (issue §5: „izračunane mere poveži z njihovo
+ * metodo“). Neveljavne se izločijo, nato rez na maxMeasuresPerElement. */
+function sanitizeMeasures (raw: unknown): SceneMeasure[] {
+  if (!Array.isArray(raw)) return []
+  const out: SceneMeasure[] = []
+  for (const m of raw.slice(0, SCENE_LIMITS.maxMeasuresPerElement * 2)) {
+    if (!m || typeof m !== 'object') continue
+    const q = m as Record<string, unknown>
+    const label = typeof q.label === 'string' && q.label.trim() ? q.label.trim().slice(0, SCENE_LIMITS.measureLabelMaxLen) : null
+    const valueRaw = typeof q.valueCm === 'number' && Number.isFinite(q.valueCm) ? Math.round(q.valueCm * 10) / 10 : null
+    const valueCm = valueRaw != null && valueRaw >= 0.1 && valueRaw <= SCENE_LIMITS.measureCmMax ? valueRaw : null
+    const method = MEASURE_METHODS.includes(q.method as MeasureMethod) ? q.method as MeasureMethod : null
+    if (!label || valueCm == null || !method) continue
+    if (out.length >= SCENE_LIMITS.maxMeasuresPerElement) break
+    const toleranceRaw = typeof q.toleranceCm === 'number' && Number.isFinite(q.toleranceCm) &&
+      q.toleranceCm >= 0 && q.toleranceCm <= valueCm ? Math.round(q.toleranceCm * 10) / 10 : undefined
+    const at = typeof q.at === 'number' && Number.isFinite(q.at) ? Math.round(q.at) : Date.now()
+    const by = typeof q.by === 'string' && q.by ? q.by.slice(0, SCENE_LIMITS.idMaxLen) : undefined
+    out.push({
+      label, valueCm, method,
+      ...(toleranceRaw != null ? { toleranceCm: toleranceRaw } : {}),
+      at,
+      ...(by != null ? { by } : {}),
+    })
+  }
+  return out
 }

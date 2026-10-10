@@ -6,6 +6,11 @@
 //   vodoravnih gradientov + najdaljši tek močnih stolpcev), analiza vzorca
 //   pa je v jedru (analyzeStairPattern): števec, smer vzpenjanja, enakomernost,
 //   morebitni podest. Iz enega pogleda NI metrske izmere (poštenost §4).
+// R470 (issue #8 — §5): ČLOVEŠKA FIGURA — gibanje + razmerje stranic bbox
+//   (looksLikePerson v jedru) → element OSEBA (status NEJASNO — hevristika
+//   NE trdi „oseba“, dokler ne pokaže oblike figure). DOKUMENTIRANA MEJA:
+//   mirujoče osebe brez ML ne zaznamo; zaznava je ŽIVA in se ne persistira
+//   (zasebnost §5 — strip v sanitizeSceneResult).
 // DOM/canvas plast nad scene-understanding-core (čista logika): poganja
 // nizkofrekvenčno analizo kadrov iz <video> in vrača SceneElement[].
 //
@@ -19,7 +24,7 @@
 // document.hidden — namenjeno telefonom brez pregrevanja (issue §10).
 
 import {
-  analyzeStairPattern, classifySurface, estimateSlope, newSceneId, stabilizeElements,
+  analyzeStairPattern, classifySurface, estimateSlope, looksLikePerson, newSceneId, stabilizeElements,
   type SceneElement, type ScenePoint, type StairLineInput, type SurfaceFeatures,
 } from '@/lib/scene-understanding-core'
 
@@ -224,17 +229,22 @@ function analyzeFrame (
     }
   }
 
-  // ── GIBANJE: razlika sličic → OVIRA (hevristika NE razlikuje osebe od
-  //    predmeta — ne trdi "oseba", če tega ne zmore; issue §5) ────────────────
+  // ── GIBANJE (F1) + FIGURA (R470 §5): razlika sličic → bbox; če oblika
+  //    ustreza pokončni človeški figuri (razmerje stranic + velikost),
+  //    element postane OSEBA — NAMEN je samo zakritje merilne točke
+  //    (§5: prostorsko razumevanje, NE identifikacija; ne persistira se).
+  //    Ostanek gibanja ostane OVIRA (hevristika NE trdi „oseba“ brez
+  //    oblike figure — issue §5 poštenost). ────────────────────────────────
   if (prevGray) {
     const motion = motionBox(gray, prevGray, w, h)
     if (motion) {
+      const personLike = looksLikePerson(motion)
       elements.push({
         id: newSceneId(),
-        cls: 'OVIRA',
-        status: 'VERJETNO',
+        cls: personLike ? 'OSEBA' : 'OVIRA',
+        status: personLike ? 'NEJASNO' : 'VERJETNO',
         source: 'LOKALNO',
-        confidence: 0.35,
+        confidence: personLike ? 0.3 : 0.35,
         bbox: motion,
         at,
       })
