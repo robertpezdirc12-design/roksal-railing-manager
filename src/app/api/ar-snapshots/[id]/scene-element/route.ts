@@ -1,6 +1,8 @@
 // /api/ar-snapshots/[id]/scene-element — R467 (issue #8 Faza 1, §2):
 // POPRAVEK RAZREDA/STATUSA zaznanega elementa prizora.
-// PATCH (measurements.write) { elementId, cls?, status?, kind? } →
+// R468 (issue #8 Faza 2, §3): popravek NAKLONA (slopeDeg, ročno izmerjen
+//   ali potrjen) — zapiše se z virom ROCNO + statusom IZMERJENO.
+// PATCH (measurements.write) { elementId, cls?, status?, kind?, slopeDeg? } →
 //   popravek se shrani kot OZNAČEN PODATEK (append v sceneJson.edits),
 //   izvirni element iz zajema SE NIKOLI NE PREPIŠE (revizija SCENE_EDIT).
 // GET  (projects.read) — elementi z apliciranimi popravki (applyEdits) +
@@ -67,8 +69,13 @@ export async function PATCH (req: NextRequest, { params }: Params) {
   const cls = SCENE_CLASSES.includes(body.cls) ? body.cls : undefined
   const status = SCENE_STATUSES.includes(body.status) ? body.status : undefined
   const kind = SURFACE_KINDS.includes(body.kind) ? body.kind : undefined
-  if (!cls && !status && !kind) {
-    return jsonError(400, `Podajte vsaj en popravek: cls (${SCENE_CLASSES.join('/')}), status (${SCENE_STATUSES.join('/')}) ali kind.`)
+  // R468 (F2 §3): ročno potrjen naklon — veljavna številka znotraj meje
+  const slopeDeg = typeof body.slopeDeg === 'number' && Number.isFinite(body.slopeDeg) &&
+    Math.abs(body.slopeDeg) <= SCENE_LIMITS.slopeAbsMax
+    ? Math.round(body.slopeDeg * 10) / 10
+    : undefined
+  if (!cls && !status && !kind && slopeDeg == null) {
+    return jsonError(400, `Podajte vsaj en popravek: cls (${SCENE_CLASSES.join('/')}), status (${SCENE_STATUSES.join('/')}), kind ali slopeDeg (±${SCENE_LIMITS.slopeAbsMax}°).`)
   }
 
   // element mora obstajati v izvirniku — popravek brez izvirnika je sumljiv
@@ -79,7 +86,7 @@ export async function PATCH (req: NextRequest, { params }: Params) {
     return jsonError(409, 'Dosežen največji število popravkov na posnetku.')
   }
 
-  const edit = { elementId, cls, status, kind, by: user.name || user.id, at: Date.now() }
+  const edit = { elementId, cls, status, kind, slopeDeg, by: user.name || user.id, at: Date.now() }
   const updated: SceneUnderstandingResult = { ...result, edits: [...result.edits, edit] }
 
   await db.arSnapshot.update({
@@ -94,7 +101,10 @@ export async function PATCH (req: NextRequest, { params }: Params) {
     entity: 'arSnapshot',
     entityId: id,
     projectId: snapshot.projectId,
-    detail: { edit, before: { cls: element.cls, status: element.status, kind: element.kind ?? null } },
+    detail: {
+      edit,
+      before: { cls: element.cls, status: element.status, kind: element.kind ?? null, slopeDeg: element.slopeDeg ?? null },
+    },
   })
 
   return NextResponse.json({ data: { ok: true, edit } })

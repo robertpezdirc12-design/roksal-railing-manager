@@ -5,8 +5,12 @@
 // (pickLabels), barva NI edini nosilec statusa (beseda + ikona + barva).
 // Tap na oznako → onSelect (detail/popravek). Brez oznak = brez overlayja
 // (kamera ostane čista, issue: privzeti pogled čist).
+//
+// R468 (issue #8 Faza 2, §9): maska tal kot POLIGON (ne samo pravokotnik),
+// ROB kot črta pod kotom angleDeg, naklon v oznaki tal, pripnjeni (zaklep)
+// elementi so vedno prikazani.
 
-import { HelpCircle, Layers, Ruler, TriangleAlert, User, Waypoints } from 'lucide-react'
+import { HelpCircle, Layers, MapPin, MoveHorizontal, Ruler, TriangleAlert, User, Waypoints } from 'lucide-react'
 import type { SceneClass, SceneElement, SceneStatus } from '@/lib/scene-understanding-core'
 import { nextStepGuidance, pickLabels } from '@/lib/scene-understanding-core'
 
@@ -19,6 +23,8 @@ export interface SceneOverlayProps {
   onSelect?: (el: SceneElement) => void
   /** max sočasno prikazanih oznak (issue §9: 2–4). */
   maxLabels?: number
+  /** pripnjeni (zaklenjeni) elementi — vedno prikazani (issue §9). */
+  pinnedIds?: ReadonlySet<string>
 }
 
 const CLS_LABEL: Record<SceneClass, string> = {
@@ -26,6 +32,7 @@ const CLS_LABEL: Record<SceneClass, string> = {
   PODLAGA: 'Podlaga',
   OGRAJA: 'Ograja',
   STOPNICA: 'Stopnice',
+  ROB: 'Rob',
   OSEBA: 'Oseba',
   OVIRA: 'Ovira',
   NEZNANO: 'Neprepoznano',
@@ -36,6 +43,7 @@ const CLS_ICON: Record<SceneClass, typeof Layers> = {
   PODLAGA: Layers,
   OGRAJA: Waypoints,
   STOPNICA: Ruler,
+  ROB: MoveHorizontal,
   OSEBA: User,
   OVIRA: TriangleAlert,
   NEZNANO: HelpCircle,
@@ -46,6 +54,7 @@ const CLS_COLOR: Record<SceneClass, string> = {
   PODLAGA: '#0d9488',
   OGRAJA: '#2b2f36', // anthracite
   STOPNICA: '#b45309', // amber-700
+  ROB: '#65a30d', // lime-600 — rob plošče/terase
   OSEBA: '#dc2626', // red
   OVIRA: '#d97706', // amber-600
   NEZNANO: '#71717a', // zinc
@@ -58,8 +67,27 @@ const STATUS_TEXT: Record<SceneStatus, string> = {
   SKRITO: 'Skrito',
 }
 
-export default function SceneOverlay ({ elements, quality, selectedId, onSelect, maxLabels = 4 }: SceneOverlayProps) {
-  const shown = pickLabels(elements, maxLabels)
+const GEOM_TEXT: Record<string, string> = {
+  GEOMETRIJA_OCENJENA: 'geometrija ocenjena',
+  IZMERJENO: 'izmerjeno',
+  NEZADOSTNI_PODATKI: 'nezadostni podatki',
+}
+
+const SLOPE_TEXT: Record<string, string> = {
+  VIZUALNA_GEOMETRIJA: 'vizualna geometrija',
+  SENZOR_NAPRAVE: 'senzor naprave',
+  ROCNO: 'ročno',
+}
+
+/** Oznaka vrstice za podlagi z naklonom: „naklon ~3,5° (ocena)“. */
+function slopeChip (el: SceneElement): string | null {
+  if (el.slopeDeg == null) return null
+  if (el.slopeDeg === 0) return 'naklon ~0°'
+  return `naklon ~${Math.abs(el.slopeDeg).toFixed(1).replace('.', ',')}°`
+}
+
+export default function SceneOverlay ({ elements, quality, selectedId, onSelect, maxLabels = 4, pinnedIds }: SceneOverlayProps) {
+  const shown = pickLabels(elements, maxLabels, pinnedIds)
   if (shown.length === 0) return null
   const guidance = nextStepGuidance(elements, quality ?? undefined)
 
@@ -72,9 +100,61 @@ export default function SceneOverlay ({ elements, quality, selectedId, onSelect,
         aria-label={`Živi zaznave: ${shown.map((e) => CLS_LABEL[e.cls]).join(', ')}`}
       >
         {shown.map((el) => {
-          const [x, y, w, h] = el.bbox
           const color = CLS_COLOR[el.cls]
           const selected = selectedId === el.id
+          const pinned = pinnedIds?.has(el.id) ?? false
+
+          // R468 (F2 §3): TLA/PODLAGA z masko → POLIGON (območje, ne okvir)
+          if ((el.cls === 'TLA' || el.cls === 'PODLAGA') && el.maskPoints && el.maskPoints.length >= 3) {
+            const points = el.maskPoints.map((p) => `${(p.x * 100).toFixed(1)},${(p.y * 100).toFixed(1)}`).join(' ')
+            return (
+              <g key={el.id}>
+                <polygon
+                  points={points}
+                  fill={color}
+                  fillOpacity={selected ? 0.16 : 0.08}
+                  stroke={color}
+                  strokeWidth={selected ? 0.6 : 0.35}
+                  strokeDasharray="1.6 1.2"
+                />
+                {pinned ? <circle cx={2} cy={98} r={0.9} fill={color} fillOpacity={0.5} /> : null}
+              </g>
+            )
+          }
+
+          // R468 (F2 §3): ROB → črta pod kotom angleDeg (transform okrog središča)
+          if (el.cls === 'ROB') {
+            const [x, y, w, h] = el.bbox
+            const cx = (x + w / 2) * 100
+            const cy = (y + h / 2) * 100
+            const len = Math.max(4, w * 100 * 0.92)
+            return (
+              <g key={el.id} transform={`rotate(${(-(el.angleDeg ?? 0)).toFixed(2)}, ${cx.toFixed(2)}, ${cy.toFixed(2)})`}>
+                <line
+                  x1={(cx - len / 2).toFixed(2)}
+                  y1={cy.toFixed(2)}
+                  x2={(cx + len / 2).toFixed(2)}
+                  y2={cy.toFixed(2)}
+                  stroke={color}
+                  strokeWidth={selected ? 1 : 0.65}
+                  strokeLinecap="round"
+                />
+                <line
+                  x1={(cx - len / 2).toFixed(2)}
+                  y1={cy.toFixed(2)}
+                  x2={(cx + len / 2).toFixed(2)}
+                  y2={cy.toFixed(2)}
+                  stroke="#ffffff"
+                  strokeOpacity={0.5}
+                  strokeWidth={0.18}
+                  strokeLinecap="round"
+                />
+                {pinned ? <circle cx={(x * 100 + 2).toFixed(1)} cy={cy.toFixed(1)} r={0.9} fill={color} fillOpacity={0.5} /> : null}
+              </g>
+            )
+          }
+
+          const [x, y, w, h] = el.bbox
           return (
             <g key={el.id}>
               <rect
@@ -89,6 +169,7 @@ export default function SceneOverlay ({ elements, quality, selectedId, onSelect,
                 strokeDasharray={el.status === 'NEJASNO' || el.status === 'SKRITO' ? '1.6 1.2' : undefined}
                 rx={0.6}
               />
+              {pinned ? <circle cx={x * 100 + 1.5} cy={y * 100 + 1.5} r={0.9} fill={color} fillOpacity={0.5} /> : null}
             </g>
           )
         })}
@@ -100,6 +181,8 @@ export default function SceneOverlay ({ elements, quality, selectedId, onSelect,
           const Icon = CLS_ICON[el.cls]
           const color = CLS_COLOR[el.cls]
           const selected = selectedId === el.id
+          const pinned = pinnedIds?.has(el.id) ?? false
+          const slope = slopeChip(el)
           return (
             <button
               key={el.id}
@@ -113,10 +196,12 @@ export default function SceneOverlay ({ elements, quality, selectedId, onSelect,
                 ...(selected ? ({ '--tw-ring-color': color } as React.CSSProperties) : {}),
               }}
               onClick={onSelect ? () => { onSelect(el) } : undefined}
-              aria-label={`${CLS_LABEL[el.cls]}${el.kind ? ` (${el.kind.toLowerCase()})` : ''} — ${STATUS_TEXT[el.status]}${el.cls === 'NEZNANO' ? ' — tapnite za označitev' : ''}`}
+              aria-label={`${CLS_LABEL[el.cls]}${el.kind ? ` (${el.kind.toLowerCase()})` : ''}${slope ? `, ${slope}` : ''} — ${STATUS_TEXT[el.status]}${pinned ? ' — pripeto' : ''}${el.cls === 'NEZNANO' ? ' — tapnite za označitev' : ''}`}
             >
+              {pinned ? <MapPin className="size-3" style={{ color }} aria-hidden /> : null}
               <Icon className="size-3" style={{ color }} aria-hidden />
               <span>{CLS_LABEL[el.cls]}{el.kind && el.kind !== 'NEZNANA' ? ` · ${el.kind.toLowerCase()}` : ''}</span>
+              {slope ? <span className="font-semibold" style={{ color }}>{slope}</span> : null}
               <span className="font-normal text-zinc-500">· {STATUS_TEXT[el.status]}</span>
             </button>
           )
@@ -133,4 +218,16 @@ export default function SceneOverlay ({ elements, quality, selectedId, onSelect,
       ) : null}
     </>
   )
+}
+
+/** Slovenska beseda za vir/estatus geometrije (izvoz za detail kartice). */
+export function geomStatusText (el: SceneElement): string | null {
+  if (el.geomStatus == null) return null
+  return GEOM_TEXT[el.geomStatus] ?? null
+}
+
+/** Slovenska beseda za vir naklona (izvoz za detail kartice). */
+export function slopeSourceText (el: SceneElement): string | null {
+  if (el.slopeSource == null) return null
+  return SLOPE_TEXT[el.slopeSource] ?? null
 }

@@ -24,7 +24,7 @@
 
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type Ref } from 'react'
 import {
-  Camera, CameraOff, Download, History, ImageIcon, Lightbulb, Loader2, Lock, LockOpen, Move, ScanLine,
+  Camera, CameraOff, Download, History, ImageIcon, Lightbulb, Loader2, Lock, LockOpen, MapPin, Move, ScanLine,
   Save, Sparkles, Trash2, Video, Waypoints, X,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
@@ -38,7 +38,7 @@ import { useToast } from '@/hooks/use-toast'
 import { useAppStore } from '@/lib/store'
 import { apiDelete, apiGet, apiPost, useApi } from '@/lib/api-client'
 import { EmptyState, ErrorBox, LoadingRows, PageHeader } from '@/components/roksal/ui-bits'
-import SceneOverlay from '@/components/roksal/scene-overlay'
+import SceneOverlay, { geomStatusText, slopeSourceText } from '@/components/roksal/scene-overlay'
 import { useSceneUnderstanding } from '@/hooks/use-scene-understanding'
 import {
   SCENE_CLASSES, SURFACE_KINDS, applyEdits,
@@ -136,9 +136,32 @@ export default function ArModule () {
   const [mode, setMode] = useState<Mode>('off')
 
   // ── R467 (issue #8 F1): živo razumevanje prizora ──
-  const sceneState = useSceneUnderstanding(videoRef, mode === 'on')
+  // R468 (F2 §3): nagib telefona (DeviceOrientation gamma) za ločitev od
+  // naklona tal — ref, da se percepcijska zanka NE restarta ob vsakem dogodku.
+  const phoneRollRef = useRef<number | null>(null)
+  useEffect(() => {
+    if (mode !== 'on') return
+    phoneRollRef.current = null
+    const h = (e: DeviceOrientationEvent): void => {
+      const g = e.gamma
+      phoneRollRef.current = typeof g === 'number' && Number.isFinite(g) ? g : null
+    }
+    window.addEventListener('deviceorientation', h)
+    return () => {
+      window.removeEventListener('deviceorientation', h)
+      phoneRollRef.current = null
+    }
+  }, [mode])
+
+  const sceneState = useSceneUnderstanding(videoRef, mode === 'on', {
+    getPhoneRollDeg: () => phoneRollRef.current,
+  })
   const [sceneSelectedId, setSceneSelectedId] = useState<string | null>(null)
   const [sceneEdits, setSceneEdits] = useState<SceneEdit[]>([])
+  /** R468 (F2 §9): pripnjeni (zaklenjeni) elementi — vedno prikazani. */
+  const [scenePinned, setScenePinned] = useState<Set<string>>(new Set())
+  /** R468 (F2 §3): vnos ročno izmerjenega naklona v kartici elementa. */
+  const [slopeInput, setSlopeInput] = useState('')
   /** elementi z apliciranimi popravki (za prikaz/detalj) */
   const sceneDisplayed = sceneState.elements.length > 0
     ? applyEdits({ version: 1, at: Date.now(), elements: sceneState.elements, edits: sceneEdits })
@@ -381,6 +404,8 @@ export default function ArModule () {
       // popravljeni elementi so sedaj shranjeni v posnetku — lokalni popravki se počistijo
       setSceneEdits([])
       setSceneSelectedId(null)
+      setScenePinned(new Set())
+      setSlopeInput('')
 
       setLastShot(photo)
       toast({
@@ -640,7 +665,8 @@ export default function ArModule () {
                     elements={sceneDisplayed}
                     quality={sceneState.quality}
                     selectedId={sceneSelectedId}
-                    onSelect={(el) => { setSceneSelectedId(el.id === sceneSelectedId ? null : el.id) }}
+                    pinnedIds={scenePinned}
+                    onSelect={(el) => { setSceneSelectedId(el.id === sceneSelectedId ? null : el.id); setSlopeInput('') }}
                   />
                 ) : null}
 
@@ -717,7 +743,9 @@ export default function ArModule () {
               </p>
 
               {/* R467 (issue #8 F1 §2): popravek zaznanega elementa — OZNAČEN PODATEK,
-                  izvirni zajem ostaja; shrani se z naslednjim AR posnetkom */}
+                  izvirni zajem ostaja; shrani se z naslednjim AR posnetkom.
+                  R468 (F2 §3/§9): prikaz GEOMETRIJE (maska/naklon/vir/status),
+                  ročna izmera naklona in pripinjanje oznake. */}
               {mode === 'on' && sceneSelected ? (
                 <div className="rounded-lg border bg-secondary/40 p-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
@@ -725,13 +753,103 @@ export default function ArModule () {
                       Zaznan element: {sceneSelected.cls}
                       {sceneSelected.kind ? ` · ${sceneSelected.kind}` : ''}
                     </p>
-                    <Badge variant="outline" className="text-[10px]">
-                      vir: {sceneSelected.source === 'ROCNO' ? 'ročno potrjeno' : sceneSelected.source === 'VLM' ? 'AI predlog' : 'lokalna hevristika'}
-                    </Badge>
+                    <div className="flex items-center gap-1.5">
+                      <Button
+                        variant={scenePinned.has(sceneSelected.id) ? 'default' : 'outline'}
+                        size="sm"
+                        className="h-7 px-2 text-[11px]"
+                        aria-pressed={scenePinned.has(sceneSelected.id)}
+                        onClick={() => {
+                          setScenePinned((prev) => {
+                            const next = new Set(prev)
+                            if (next.has(sceneSelected.id)) next.delete(sceneSelected.id)
+                            else next.add(sceneSelected.id)
+                            return next
+                          })
+                        }}
+                      >
+                        <MapPin className="size-3.5" aria-hidden />
+                        {scenePinned.has(sceneSelected.id) ? 'Pripeto' : 'Pripni'}
+                      </Button>
+                      <Badge variant="outline" className="text-[10px]">
+                        vir: {sceneSelected.source === 'ROCNO' ? 'ročno potrjeno' : sceneSelected.source === 'VLM' ? 'AI predlog' : 'lokalna hevristika'}
+                      </Badge>
+                    </div>
                   </div>
                   <p className="mt-1 text-xs text-muted-foreground">
                     Popravek se shrani kot označen podatek ob zajemu AR posnetka — izvirna zaznava ostane nespremenjena.
                   </p>
+
+                  {/* R468 (F2 §3): geometrija površine — ločena od prepoznave (§2/§6) */}
+                  {(sceneSelected.cls === 'TLA' || sceneSelected.cls === 'PODLAGA' || sceneSelected.cls === 'ROB') ? (
+                    <div className="mt-2 rounded-md border border-dashed px-2.5 py-2 text-xs">
+                      <p className="font-semibold">Geometrija površine</p>
+                      <ul className="mt-1 space-y-0.5 text-muted-foreground">
+                        <li>
+                          Maska tal: {sceneSelected.maskPoints && sceneSelected.maskPoints.length >= 3
+                            ? `zaznana (${sceneSelected.maskPoints.length} točk poligona)`
+                            : 'ni zaznana v tem kadru'}
+                        </li>
+                        {sceneSelected.cls === 'ROB' ? (
+                          <li>
+                            Kot roba v kadru: {sceneSelected.angleDeg != null
+                              ? `${sceneSelected.angleDeg.toFixed(1).replace('.', ',')}° (ocena iz vizualne geometrije)`
+                              : 'neznan'}
+                          </li>
+                        ) : (
+                          <li>
+                            Naklon: {sceneSelected.slopeDeg != null
+                              ? `${sceneSelected.slopeDeg === 0 ? '~0°' : `~${Math.abs(sceneSelected.slopeDeg).toFixed(1).replace('.', ',')}° (${sceneSelected.slopeDeg > 0 ? 'padec desno' : 'padec levo'})`} — vir: ${slopeSourceText(sceneSelected) ?? 'neznan'}`
+                              : `ni ocenljiv iz tega kadra${geomStatusText(sceneSelected) ? ` (${geomStatusText(sceneSelected)})` : ''}`}
+                          </li>
+                        )}
+                        <li>
+                          Status geometrije: <span className="font-medium text-foreground">{geomStatusText(sceneSelected) ?? 'ni podatka'}</span>
+                          {sceneSelected.geomStatus === 'GEOMETRIJA_OCENJENA' ? ' — ocena, ne izmera; potrdite z referenco.' : ''}
+                        </li>
+                      </ul>
+                      {sceneSelected.cls !== 'ROB' ? (
+                        <div className="mt-2 flex flex-wrap items-end gap-1.5">
+                          <div className="space-y-0.5">
+                            <Label htmlFor="scene-slope" className="text-[11px]">Izmerjeni naklon (°, npr. 3,5 ali −2)</Label>
+                            <Input
+                              id="scene-slope"
+                              inputMode="decimal"
+                              className="h-8 w-28 text-xs"
+                              placeholder="Stopinje"
+                              value={slopeInput}
+                              onChange={(e) => { setSlopeInput(e.target.value) }}
+                              aria-describedby="scene-slope-help"
+                            />
+                          </div>
+                          <Button
+                            size="sm"
+                            className="h-8"
+                            disabled={Number.isNaN(Number(slopeInput.replace(',', '.'))) || slopeInput.trim() === '' || Math.abs(Number(slopeInput.replace(',', '.'))) > 45}
+                            onClick={() => {
+                              const v = Number(slopeInput.replace(',', '.'))
+                              if (!Number.isFinite(v) || Math.abs(v) > 45) return
+                              setSceneEdits((prev) => [...prev.filter((e) => e.elementId !== sceneSelected.id), {
+                                elementId: sceneSelected.id,
+                                slopeDeg: v,
+                                by: user?.name ?? 'monter',
+                                at: Date.now(),
+                              }])
+                              toast({ title: 'Izmerjeni naklon zabeležen.', description: `Naklon ${v.toFixed(1).replace('.', ',')}° (ročno, IZMERJENO). Shrani se z zajemom AR posnetka.` })
+                              setSlopeInput('')
+                            }}
+                          >
+                            <Save className="size-3.5" aria-hidden />
+                            Zabeleži
+                          </Button>
+                          <span id="scene-slope-help" className="sr-only">
+                            Vnesite z nivelirjem ali referenčno metodo izmerjen naklon tal v stopinjah; veljavno od −45 do 45.
+                          </span>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+
                   <div className="mt-2 grid gap-2 sm:grid-cols-2">
                     <div className="space-y-1">
                       <Label htmlFor="scene-cls" className="text-xs">Razred</Label>

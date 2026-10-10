@@ -1,18 +1,22 @@
 // R467 (issue #8 — SMART VISION, Faza 1): ŽIVA PERCEPCIJA PRIZORA (odjemalec).
+// R468 (issue #8 — Faza 2): maska tal (segmentacija z regijo rasti), detekcija
+//   dolgih robov (ROB), ocena talne ravnine in naklona z ločitvijo od nagiba
+//   telefona (getPhoneRollDeg → estimateSlope v jedru).
 // DOM/canvas plast nad scene-understanding-core (čista logika): poganja
 // nizkofrekvenčno analizo kadrov iz <video> in vrača SceneElement[].
 //
-// FAZA 1 BREZ ML: vse hevristike so klasične računalniškovidezne osnove
+// FAZA 1+2 BREZ ML: vse hevristike so klasične računalniškovidezne osnove
 // (svetlost, Laplace, Sobel robovi, razlika sličic za gibanje, barvne
-// značilnosti podlage). NISO merilne — rezultat je PREDLOG, ki ga monter
-// potrdi ali popravi (core načelo: avtomatika ni avtoriteta).
+// značilnosti podlage, regija rasti za masko tal, sledenje črt za robove).
+// NISO merilne — rezultat je PREDLOG, ki ga monter potrdi ali popravi
+// (core načelo: avtomatika ni avtoriteta).
 //
 // Zmogljivost: canvas ≤ 320 px, interval privzeto 250 ms (~4 Hz), izklop ob
 // document.hidden — namenjeno telefonom brez pregrevanja (issue §10).
 
 import {
-  classifySurface, newSceneId, stabilizeElements,
-  type SceneElement, type SurfaceFeatures,
+  classifySurface, estimateSlope, newSceneId, stabilizeElements,
+  type SceneElement, type ScenePoint, type SurfaceFeatures,
 } from '@/lib/scene-understanding-core'
 
 export interface PerceptionQuality {
@@ -33,6 +37,12 @@ export interface SceneLoopOptions {
   intervalMs?: number
   /** širina delovnega canvasa (privzeto 320, 160..640). */
   workWidth?: number
+  /**
+   * R468 (F2 §3): trenutni nagib telefona okrog optične osi (stopinje,
+   * + = desna stran nižje) ali null, če senzorja ni / ni javil. Odjemalec
+   * priskrbei lastno DeviceOrientation poslušanje — percepcija ostane čista.
+   */
+  getPhoneRollDeg?: () => number | null
   onFrame: (frame: PerceptionFrame) => void
 }
 
@@ -42,6 +52,17 @@ const MOTION_RATIO_MIN = 0.008 // ≥ 0,8 % spremenjenih pikslov = gibanje
 const HLINE_STRONG = 0.16 // delež močnih vodoravnih robov v vrstici = "črta"
 const MIN_ROW_PEAKS_FOR_STAIRS = 3
 
+// ── R468 (F2): segmentacija tal + detekcija robov ──────────────────────────
+const FLOOR_CELL = 8 // px — velikost celice mreže (ista mreža kot gibanje)
+const FLOOR_LUM_TOL = 30 // |Δsvetlost| med sosedo in regijo
+const FLOOR_CHROMA_TOL = 84 // |Δr|+|Δg|+|Δb| med sosedo in regijo
+const FLOOR_MIN_COVERAGE = 0.08 // < 8 % kadra → ni vidnih tal
+const EDGE_LINE_MIN_SPAN = 0.35 // črta ≥ 35 % širine kadra = kandidat ROB
+const EDGE_LINE_MAX_STEP = 3 // px skoka med sosednjima stolpcema (sledenje)
+const EDGE_LINE_MAX_COUNT = 2 // najdaljši 2 črti → ROB elementa
+const EDGE_SEARCH_TOP = 0.18 // pas iskanja robov (od zgoraj)
+const EDGE_SEARCH_BOT = 0.92 // pas iskanja robov (od zgoraj)
+
 /**
  * Zažene živo percepcijo nad <video>. Vrne stop(). Varno: ob napaki zanka
  * utihne, kamera ostane pri uporabniku — zajem nikoli ni odvisen od percepcije.
@@ -49,6 +70,7 @@ const MIN_ROW_PEAKS_FOR_STAIRS = 3
 export function startSceneLoop (video: HTMLVideoElement, opts: SceneLoopOptions): () => void {
   const intervalMs = Math.max(120, opts.intervalMs ?? 250)
   const workWidth = Math.min(640, Math.max(160, opts.workWidth ?? 320))
+  const getPhoneRollDeg = typeof opts.getPhoneRollDeg === 'function' ? opts.getPhoneRollDeg : null
   const onFrame = opts.onFrame
 
   const canvas = document.createElement('canvas')
@@ -97,7 +119,11 @@ export function startSceneLoop (video: HTMLVideoElement, opts: SceneLoopOptions)
       }
 
       const hasPrev = prevGray != null && prevW === w
-      const raw = analyzeFrame(data, gray, w, h, hasPrev ? prevGray : null)
+      let phoneRollDeg: number | null = null
+      if (getPhoneRollDeg) {
+        try { phoneRollDeg = getPhoneRollDeg() } catch { phoneRollDeg = null }
+      }
+      const raw = analyzeFrame(data, gray, w, h, hasPrev ? prevGray : null, phoneRollDeg)
       prevGray = gray
       prevW = w
 
@@ -121,15 +147,32 @@ export function startSceneLoop (video: HTMLVideoElement, opts: SceneLoopOptions)
 }
 
 /** Analiza ene sličice → novi elementi (brez stabilizacije). */
-function analyzeFrame (data: Uint8ClampedArray, gray: Float32Array, w: number, h: number, prevGray: Float32Array | null): SceneElement[] {
+function analyzeFrame (
+  data: Uint8ClampedArray, gray: Float32Array, w: number, h: number,
+  prevGray: Float32Array | null, phoneRollDeg: number | null,
+): SceneElement[] {
   const at = Date.now()
   const elements: SceneElement[] = []
 
-  // ── PODLAGA: barvne/teksturne značilnice spodnje tretjine ──────────────────
+  // ── ROBOVI (F2 §3): dolge povezane črte v pasu — predlog ROB-ov in vir
+  //    vizualnega kota talne meje (za oceno naklona) ──────────────────────
+  const lines = detectEdgeLines(gray, w, h)
+
+  // ── PODLAGA + MASKA TAL + NAKLON (F2 §3) ────────────────────────────────
   const y0 = Math.floor(h * 2 / 3)
   let surface = computeSurfaceFeatures(data, w, y0, h)
   surface = withEdgeDensity(surface, gray, w, y0, h)
   const verdict = classifySurface(surface)
+
+  // maska tal: regija rasti od dna kadra (barvna podobnost, 8-px celice)
+  const floorMask = segmentFloor(data, w, h)
+
+  // vizualni kot talne meje: najdaljša črta, ki leži v spodnji polovici
+  const floorLine = lines
+    .filter((l) => l.yAvg >= h * 0.42)
+    .sort((a, b) => b.span - a.span)[0] ?? null
+  const slope = estimateSlope(floorLine != null ? floorLine.angleDeg : null, phoneRollDeg)
+
   elements.push({
     id: newSceneId(),
     cls: 'PODLAGA',
@@ -138,8 +181,38 @@ function analyzeFrame (data: Uint8ClampedArray, gray: Float32Array, w: number, h
     confidence: verdict.confidence,
     bbox: [0, 2 / 3, 1, 1 / 3],
     kind: verdict.kind,
+    ...(floorMask != null ? { maskPoints: floorMask.maskPoints } : {}),
+    ...(slope.slopeDeg != null
+      ? { slopeDeg: slope.slopeDeg, slopeSource: slope.slopeSource, geomStatus: slope.geomStatus }
+      : { geomStatus: slope.geomStatus }),
     at,
   })
+
+  // ── ROB elementi (F2 §3): najdaljši črti, ki NISTA del stopničnega vzorca
+  //    (≥3 vzporedne črte = stopnice — te pusti Fazi 3) ────────────────────
+  const rs = horizontalRowStrength(gray, w, h, Math.floor(h * 0.28), Math.floor(h * 0.68))
+  const peaks = rowPeaks(rs, h, Math.floor(h * 0.28))
+  const isStairPattern = peaks.length >= MIN_ROW_PEAKS_FOR_STAIRS
+  if (!isStairPattern) {
+    for (const line of lines.slice(0, EDGE_LINE_MAX_COUNT)) {
+      elements.push({
+        id: newSceneId(),
+        cls: 'ROB',
+        status: line.span >= 0.55 ? 'VERJETNO' : 'NEJASNO',
+        source: 'LOKALNO',
+        confidence: Math.min(0.45, 0.25 + line.spanRatio * 0.25),
+        bbox: [
+          Math.max(0, (line.xFrom - w * 0.01) / w),
+          Math.max(0, (line.yTop - h * 0.02) / h),
+          Math.min(1, (line.xTo - line.xFrom) / w + 0.02),
+          Math.max(0.08, (line.yBot - line.yTop) / h + 0.05),
+        ],
+        angleDeg: line.angleDeg,
+        geomStatus: 'GEOMETRIJA_OCENJENA',
+        at,
+      })
+    }
+  }
 
   // ── GIBANJE: razlika sličic → OVIRA (hevristika NE razlikuje osebe od
   //    predmeta — ne trdi "oseba", če tega ne zmore; issue §5) ────────────────
@@ -159,11 +232,7 @@ function analyzeFrame (data: Uint8ClampedArray, gray: Float32Array, w: number, h
   }
 
   // ── STRUKTURA v srednjem pasu: vodoravni robovi → stopnice/ograja ──────────
-  const yTop = Math.floor(h * 0.28)
-  const yBot = Math.floor(h * 0.68)
-  const rs = horizontalRowStrength(gray, w, h, yTop, yBot)
-  const peaks = rowPeaks(rs, h, yTop)
-  if (peaks.length >= MIN_ROW_PEAKS_FOR_STAIRS) {
+  if (isStairPattern) {
     const first = peaks[0]; const last = peaks[peaks.length - 1]
     elements.push({
       id: newSceneId(),
@@ -326,4 +395,241 @@ function rowPeaks (rs: RowStrength, h: number, yFrom: number): number[] {
   })
   flush()
   return peaks
+}
+
+// ── R468 (F2 §3): MASKA TAL — segmentacija z regijo rasti ──────────────────
+// Klasika brez ML: mreža 8-px celic, povprečne barve celic, semena v spodnji
+// sredini kadra (kjer so tla skoraj vedno), BFS 4-sosed z barvno toleranco
+// glede na TEKAJOČE povprečje regije. Izhod: poligon konture (0..1) + pokritost.
+
+interface FloorMask { maskPoints: ScenePoint[]; coverage: number }
+
+function segmentFloor (data: Uint8ClampedArray, w: number, h: number): FloorMask | null {
+  const gw = Math.ceil(w / FLOOR_CELL)
+  const gh = Math.ceil(h / FLOOR_CELL)
+  if (gw < 4 || gh < 4) return null
+
+  // povprečja celic (r, g, b)
+  const cellR = new Float32Array(gw * gh)
+  const cellG = new Float32Array(gw * gh)
+  const cellB = new Float32Array(gw * gh)
+  for (let gy = 0; gy < gh; gy++) {
+    for (let gx = 0; gx < gw; gx++) {
+      let sr = 0; let sg = 0; let sb = 0; let cnt = 0
+      const x0 = gx * FLOOR_CELL
+      const y0 = gy * FLOOR_CELL
+      const x1 = Math.min(w, x0 + FLOOR_CELL)
+      const y1 = Math.min(h, y0 + FLOOR_CELL)
+      for (let y = y0; y < y1; y++) {
+        for (let x = x0; x < x1; x++) {
+          const i = (y * w + x) * 4
+          sr += data[i]; sg += data[i + 1]; sb += data[i + 2]; cnt++
+        }
+      }
+      const n = Math.max(1, cnt)
+      cellR[gy * gw + gx] = sr / n
+      cellG[gy * gw + gx] = sg / n
+      cellB[gy * gw + gx] = sb / n
+    }
+  }
+
+  // semena: zadnja vrstica celic, sredinska polovica širine (tla so spodaj)
+  const seedRow = gh - 1
+  const seedFrom = Math.floor(gw * 0.25)
+  const seedTo = Math.ceil(gw * 0.75)
+  const visited = new Uint8Array(gw * gh)
+  let sumR = 0; let sumG = 0; let sumB = 0; let count = 0
+  const queue: number[] = []
+  for (let gx = seedFrom; gx < seedTo; gx++) {
+    const idx = seedRow * gw + gx
+    queue.push(idx)
+    visited[idx] = 1
+    sumR += cellR[idx]; sumG += cellG[idx]; sumB += cellB[idx]; count++
+  }
+
+  // BFS regija rasti — sprejemljive sosede glede na tekoče povprečje
+  const accepted = new Uint8Array(gw * gh)
+  for (const s of queue) accepted[s] = 1
+  while (queue.length > 0) {
+    const idx = queue.shift() as number
+    const gx = idx % gw
+    const gy = (idx - gx) / gw
+    const neighbours = [
+      gy > 0 ? idx - gw : -1,
+      gy < gh - 1 ? idx + gw : -1,
+      gx > 0 ? idx - 1 : -1,
+      gx < gw - 1 ? idx + 1 : -1,
+    ]
+    for (const nb of neighbours) {
+      if (nb < 0 || visited[nb] === 1) continue
+      visited[nb] = 1
+      const r = cellR[nb]; const g = cellG[nb]; const b = cellB[nb]
+      const avgR = sumR / count; const avgG = sumG / count; const avgB = sumB / count
+      const lum = 0.299 * r + 0.587 * g + 0.114 * b
+      const avgLum = 0.299 * avgR + 0.587 * avgG + 0.114 * avgB
+      const dChroma = Math.abs(r - avgR) + Math.abs(g - avgG) + Math.abs(b - avgB)
+      if (Math.abs(lum - avgLum) > FLOOR_LUM_TOL || dChroma > FLOOR_CHROMA_TOL) continue
+      accepted[nb] = 1
+      sumR += r; sumG += g; sumB += b; count++
+      queue.push(nb)
+    }
+  }
+
+  const coverage = count / (gw * gh)
+  if (coverage < FLOOR_MIN_COVERAGE) return null
+
+  // kontura: po vrsticah celic leví in desni rob → zaprt poligon
+  const rowLeft = new Int32Array(gh).fill(-1)
+  const rowRight = new Int32Array(gh).fill(-1)
+  let rowTop = -1
+  let rowBot = -1
+  for (let gy = 0; gy < gh; gy++) {
+    for (let gx = 0; gx < gw; gx++) {
+      if (accepted[gy * gw + gx] !== 1) continue
+      if (rowLeft[gy] < 0) rowLeft[gy] = gx
+      rowRight[gy] = gx
+      if (rowTop < 0) rowTop = gy
+      rowBot = gy
+    }
+  }
+  if (rowTop < 0 || rowBot < rowTop) return null
+
+  const toX = (gx: number): number => Math.max(0, Math.min(1, ((gx + 0.5) * FLOOR_CELL) / w))
+  const toY = (gy: number): number => Math.max(0, Math.min(1, ((gy + 0.5) * FLOOR_CELL) / h))
+
+  const pts: ScenePoint[] = []
+  // levi rob navzdol
+  for (let gy = rowTop; gy <= rowBot; gy++) {
+    if (rowLeft[gy] < 0) continue
+    pts.push({ x: toX(rowLeft[gy]), y: toY(gy) })
+  }
+  // dno kadra (regija sega do dna → zapri po spodnji meji)
+  if (rowBot >= gh - 1) {
+    pts.push({ x: toX(rowRight[rowBot]), y: 1 })
+  } else if (rowRight[rowBot] >= 0) {
+    pts.push({ x: toX(rowRight[rowBot]), y: toY(rowBot) })
+  }
+  // desni rob navzgor
+  for (let gy = rowBot; gy >= rowTop; gy--) {
+    if (rowRight[gy] < 0) continue
+    pts.push({ x: toX(rowRight[gy]), y: toY(gy) })
+  }
+  // zapri po zgornji meji
+  if (rowLeft[rowTop] >= 0 && pts.length > 0) {
+    pts.push({ x: toX(rowLeft[rowTop]), y: toY(rowTop) })
+  }
+  if (pts.length < 3) return null
+
+  // decimacija na mejo (≤32 točk) — enakomerni korak
+  const maxPts = 32
+  let maskPoints = pts
+  if (pts.length > maxPts) {
+    const stepN = Math.ceil(pts.length / maxPts)
+    maskPoints = pts.filter((_, i) => i % stepN === 0)
+    if (maskPoints.length < 3) maskPoints = pts.slice(0, maxPts)
+  }
+  return { maskPoints, coverage }
+}
+
+// ── R468 (F2 §3): DOLGE ČRTE — sledenje verticalnega gradienta po stolpcih ──
+// Za vsak stolpec najdi y z najmočnejšim vertikalnim Sobelom v pasu; poveži
+// sosednje stolpce v črto (skok ≤ 3 px). Črta ≥ 35 % širine = ROB kandidat.
+// Kot črte: linearizacija po najmanjših kvadratih; + pomeni desni konec višje
+// (y os slike raste navzdol → kot = -atan(naklon y(x))).
+
+interface EdgeLine {
+  xFrom: number
+  xTo: number
+  yTop: number
+  yBot: number
+  yAvg: number
+  span: number // px
+  spanRatio: number // delež širine kadra
+  angleDeg: number // + = desni konec višje
+}
+
+function detectEdgeLines (gray: Float32Array, w: number, h: number): EdgeLine[] {
+  const yTop = Math.floor(h * EDGE_SEARCH_TOP)
+  const yBot = Math.floor(h * EDGE_SEARCH_BOT)
+  const yMax = Math.min(h - 2, yBot)
+  const yMin = Math.max(1, yTop)
+
+  // za vsak stolpec: y* z najmočnejšim vertikalnim gradientom (če je dovolj močan)
+  const colY = new Int32Array(w).fill(-1)
+  for (let x = 1; x < w - 1; x++) {
+    let best = -1
+    let bestG = SOBEL_THRESHOLD
+    for (let y = yMin; y <= yMax; y++) {
+      const i = y * w + x
+      const gy = Math.abs(-gray[i - w] - 2 * gray[i] - gray[i + w] + 2 * gray[i]) +
+        Math.abs(gray[i - w] - gray[i + w])
+      if (gy > bestG) { bestG = gy; best = y }
+    }
+    colY[x] = best
+  }
+
+  // poveži stolpce v segmente
+  const lines: EdgeLine[] = []
+  let segStart = -1
+  const flushSeg = (endX: number): void => {
+    if (segStart < 0) return
+    const span = endX - segStart + 1
+    if (span >= Math.floor(w * EDGE_LINE_MIN_SPAN)) {
+      let sy = 0; let minY = h; let maxY = 0; let n = 0
+      for (let x = segStart; x <= endX; x++) {
+        const y = colY[x]
+        if (y < 0) continue
+        sy += y; n++
+        if (y < minY) minY = y
+        if (y > maxY) maxY = y
+      }
+      if (n >= 8) {
+        // preprosta regresija y = meanY + b·(x − meanX) → kot črte v kadru
+        const meanX = (segStart + endX) / 2
+        const meanY = sy / n
+        let num = 0; let den = 0
+        for (let x = segStart; x <= endX; x++) {
+          const y = colY[x]
+          if (y < 0) continue
+          num += (x - meanX) * (y - meanY)
+          den += (x - meanX) * (x - meanX)
+        }
+        const b = den > 0 ? num / den : 0
+        const angleRad = -Math.atan(b) // + = desni višje (y raste dol)
+        const deg = Math.round((angleRad * 180 / Math.PI) * 10) / 10
+        lines.push({
+          xFrom: segStart, xTo: endX,
+          yTop: Math.max(0, minY - 2), yBot: Math.min(h - 1, maxY + 2),
+          yAvg: meanY, span, spanRatio: span / w,
+          angleDeg: Math.max(-90, Math.min(90, deg)),
+        })
+      }
+    }
+    segStart = -1
+  }
+  for (let x = 1; x < w - 1; x++) {
+    const y = colY[x]
+    if (y < 0) { flushSeg(x - 1); continue }
+    if (segStart < 0) { segStart = x; continue }
+    const prev = colY[x - 1]
+    if (prev < 0 || Math.abs(y - prev) > EDGE_LINE_MAX_STEP) {
+      flushSeg(x - 1)
+      segStart = x
+    }
+  }
+  flushSeg(w - 2)
+
+  // najdaljše prve; izloči črte, ki se močno prekrivajo (isti rob, dva kandidata)
+  lines.sort((a, b) => b.span - a.span)
+  const out: EdgeLine[] = []
+  for (const l of lines) {
+    const dup = out.some((o) => {
+      const xOverlap = Math.min(o.xTo, l.xTo) - Math.max(o.xFrom, l.xFrom)
+      const yOverlap = Math.min(o.yBot, l.yBot) - Math.max(o.yTop, l.yTop)
+      return xOverlap > 0 && yOverlap > 0 && xOverlap > 0.5 * Math.min(o.span, l.span)
+    })
+    if (!dup) out.push(l)
+    if (out.length >= EDGE_LINE_MAX_COUNT + 2) break
+  }
+  return out
 }

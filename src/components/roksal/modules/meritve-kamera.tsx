@@ -283,7 +283,12 @@ export function KameraMeritevDialog ({ open, onClose, onSaved }: {
   const videoRef = useRef<HTMLVideoElement>(null)
 
   // ── R467 (issue #8 F1): živo razumevanje prizora med zajemom ──
-  const sceneState = useSceneUnderstanding(videoRef, camActive)
+  // R468 (F2 §3): trenutni nagib telefona (roll) za ločitev naklona telefona
+  // od naklona tal — ref, da se percepcijska zanka NE restarta ob dogodku.
+  const phoneRollRef = useRef<number | null>(null)
+  const sceneState = useSceneUnderstanding(videoRef, camActive, {
+    getPhoneRollDeg: () => phoneRollRef.current,
+  })
   const [guides, setGuides] = useState(true) // R455: vodila v živem predogledu (§4)
 
   // R455: pogledi (fotografije istega objekta) + aktivni zavihek
@@ -370,12 +375,19 @@ export function KameraMeritevDialog ({ open, onClose, onSaved }: {
   // R457 (§3): nagib naprave med živim predogledom (DeviceOrientation)
   useEffect(() => {
     if (!camActive) return
+    phoneRollRef.current = null
     const h = (e: DeviceOrientationEvent): void => {
       const t = Math.max(Math.abs(e.beta ?? 0), Math.abs(e.gamma ?? 0))
       setMaxTilt((prev) => (prev === null || t > prev ? t : prev))
+      // R468 (F2): trenutni roll (gamma) za oceno naklona tal
+      const g = e.gamma
+      phoneRollRef.current = typeof g === 'number' && Number.isFinite(g) ? g : null
     }
     window.addEventListener('deviceorientation', h)
-    return () => window.removeEventListener('deviceorientation', h)
+    return () => {
+      window.removeEventListener('deviceorientation', h)
+      phoneRollRef.current = null
+    }
   }, [camActive])
 
   /** Nalogi za izbor: online API, offline predpomnjeni. */
