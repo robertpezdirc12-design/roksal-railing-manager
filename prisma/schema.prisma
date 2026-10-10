@@ -158,6 +158,13 @@ model Quote {
   project    Project?  @relation(fields: [projectId], references: [id])
   customerId String?
   customer   Customer? @relation(fields: [customerId], references: [id])
+  // R474 (issue #9 §5): ponudba je VEZANA na paket/kosovnico — sprememba mere/
+  // SKU/obsega invalidira ponudbo (OSNUTEK/POSLAN → OSNUTEK; SPREJET/ZAKLENJEN
+  // samo ZASTARELO zastavica — podpisanega dokumenta se ne spreminja tiho).
+  packageId  String?
+  package    ProjectPackage? @relation(fields: [packageId], references: [id], onDelete: SetNull)
+  staleAt    DateTime? // kdaj je bila označena kot zastarela
+  staleReason String? // človeško berljiv razlog (revizija ima več)
   status     String    @default("OSNUTEK") // OSNUTEK | POSLAN | SPREJET | ZAVRNJEN | ZAKLENJEN
   subtotal   Decimal @db.Decimal(12,2) @default(0)
   vat        Decimal @db.Decimal(12,2) @default(0)
@@ -1004,6 +1011,7 @@ model ProjectPackage {
   updatedAt     DateTime        @updatedAt
 
   bom Bom?
+  quotes Quote[] // R474: invalidacija ob spremembi obsega
   claims Claim[] // R446: reklamacije, ki se tičejo tega paketa (issue #7 §10)
 }
 

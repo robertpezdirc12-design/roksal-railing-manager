@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { jsonError, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
 import { nextBomCode, planBom } from '@/lib/product-core'
+import { invalidateQuotesForPackage } from '@/lib/quote-invalidation'
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -109,10 +110,19 @@ export async function POST (req: NextRequest, { params }: Params) {
     },
   })
 
+  // R474 (issue #9 §5): regeneracija kosovnice = nov obseg → povezane ponudbe
+  // invalidiramo (OSNUTEK/POSLAN → OSNUTEK; SPREJET/ZAKLENJEN samo zastavica)
+  const invalidated = await invalidateQuotesForPackage(
+    { id: pkg.id, code: pkg.code, projectId: pkg.projectId },
+    `Kosovnica paketa ${pkg.code} je bila ponovno generirana — količine/cene so se lahko spremenile.`,
+    auth.user.id
+  )
+
   return NextResponse.json({
     data: {
       bom: { id: bom.id, code: bom.code, status: bom.status, qty: bom.qty, unit: bom.unit, lines: plan.lines },
       calc,
+      ...(invalidated.reset + invalidated.flagged > 0 ? { invalidated } : {}),
     },
   }, { status: 201 })
 }

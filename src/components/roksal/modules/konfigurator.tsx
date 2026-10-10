@@ -445,6 +445,7 @@ export default function KonfiguratorModule () {
           const unitPrice = round2(plan.salePriceUnit + plan.montazaUnit)
           const qRes = await apiPost<{ data: { code: string } }>('/api/quotes', {
             projectId: project.id,
+            packageId: pkgRes.data.id,
             note: `Konfigurator — paket ${pkgRes.data.code}`,
             lines: [{
               description: `${product.name}${variant ? ` — ${variant.name}` : ''} (${variant?.sku ?? product.sku})`,

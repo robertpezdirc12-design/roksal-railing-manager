@@ -71,6 +71,15 @@ export async function POST (req: NextRequest) {
     const project = await db.project.findUnique({ where: { id: projectId } })
     if (!project) return jsonError(404, 'Projekt ne obstaja.')
   }
+  // R474 (issue #9 §5): povezava na paket — omogoča invalidacijo ob spremembi obsega
+  const packageId = typeof body?.packageId === 'string' && body.packageId ? body.packageId : null
+  if (packageId) {
+    const pkg = await db.projectPackage.findUnique({ where: { id: packageId }, select: { id: true, projectId: true } })
+    if (!pkg) return jsonError(404, 'Paket ne obstaja.')
+    if (projectId && pkg.projectId !== projectId) {
+      return jsonError(400, 'Paket pripada drugemu projektu.', 'Ponudba in paket morata biti na istem projektu.')
+    }
+  }
 
   // pozicije
   const rawLines: unknown[] = Array.isArray(body?.lines) ? body.lines : []
@@ -98,6 +107,7 @@ export async function POST (req: NextRequest) {
       status: 'OSNUTEK',
       customerId,
       projectId,
+      packageId,
       note: typeof body?.note === 'string' && body.note.trim() ? body.note.trim() : null,
       subtotal,
       vat,
@@ -113,7 +123,7 @@ export async function POST (req: NextRequest) {
 
   await writeAudit({
     userId: auth.user.id, action: 'QUOTE_CREATE', entity: 'quote', entityId: quote.id, projectId,
-    detail: { code, customerId, lines: lines.length, subtotal, vat, total },
+    detail: { code, customerId, packageId, lines: lines.length, subtotal, vat, total },
   })
   return NextResponse.json({ data: quote }, { status: 201 })
 }

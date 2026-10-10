@@ -4,7 +4,7 @@
 // ZAKLENJEN dosegljiv samo prek podpisa (modul Signatura — deal.lock).
 
 import { useMemo, useState } from 'react'
-import { BadgeCheck, FileText, Lock, Search, Send, User } from 'lucide-react'
+import { BadgeCheck, FileText, Lock, Search, Send, TriangleAlert, User } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -27,6 +27,8 @@ interface QuoteRow {
   note: string | null
   createdAt: string
   signedBy: string | null
+  staleAt: string | null // R474: zastarela (spremenjen obseg paketa/kosovnice)
+  staleReason: string | null
   customer: { name: string; city: string | null } | null
   project: { code: string; title: string } | null
   _count: { lines: number }
@@ -109,6 +111,14 @@ export default function PonudbeModule () {
                     <div className="flex items-center justify-between gap-2">
                       <span className="font-mono text-xs font-semibold text-roksal-amber">{qq.code}</span>
                       <div className="flex items-center gap-1.5">
+                        {qq.staleAt ? (
+                          <span
+                            className="inline-flex items-center gap-1 rounded-md bg-red-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-red-800 dark:bg-red-950 dark:text-red-300"
+                            title={qq.staleReason ?? 'Obseg paketa/kosovnice se je spremenil.'}
+                          >
+                            <TriangleAlert className="size-3" aria-hidden /> Zastarelo
+                          </span>
+                        ) : null}
                         {qq.status === 'ZAKLENJEN' ? <Lock className="size-3.5 text-amber-600 dark:text-amber-400" aria-label="Zaklenjeno" /> : null}
                         <StatusBadge status={qq.status} />
                       </div>
@@ -176,6 +186,23 @@ function QuoteDetailDialog ({ detail, canCreate, canApprove, busy, onStatus }: {
           <StatusBadge status={detail.status} />
         </div>
         <DialogTitle>Ponudba {detail.code}</DialogTitle>
+        {detail.staleAt ? (
+          <div
+            role="alert"
+            className="mt-2 flex items-start gap-2 rounded-lg border border-red-300 bg-red-50 p-2.5 text-left text-xs text-red-800 dark:border-red-800/60 dark:bg-red-950/40 dark:text-red-300"
+          >
+            <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden />
+            <div>
+              <div className="font-bold uppercase tracking-wider">Ponudba je zastarela</div>
+              <div className="mt-0.5">{detail.staleReason ?? 'Obseg paketa/kosovnice se je spremenil po izdelavi ponudbe.'}</div>
+              <div className="mt-0.5 text-red-700/80 dark:text-red-300/80">
+                {['OSNUTEK', 'POSLAN'].includes(detail.status)
+                  ? 'Status je bil povrnjen na Osnutek — ponudbo preverite in znova potrdite ali pošljite.'
+                  : 'Ponudba je bila sprejeta/zaklenjena pred spremembo — sprememba ne sme iti tiho mimo pisarne.'}
+              </div>
+            </div>
+          </div>
+        ) : null}
         <DialogDescription>
           {detail.customer?.name ?? 'Brez stranke'}
           {detail.project ? ` · ${detail.project.title}` : ''} · {fmtDate(detail.createdAt)}

@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { jsonError, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
 import { PACKAGE_STATUSES } from '@/lib/product-core'
+import { invalidateQuotesForPackage } from '@/lib/quote-invalidation'
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -58,5 +59,16 @@ export async function PATCH (req: NextRequest, { params }: Params) {
     projectId: existing.projectId,
     detail: { code: existing.code, from: existing.status, ...patch },
   })
-  return NextResponse.json({ data: updated })
+
+  // R474 (issue #9 §5): sprememba obsega (količina/izmera) invalidira povezane
+  // ponudbe — ne pusti zastarele ponudbe kot veljavne.
+  let invalidated: Awaited<ReturnType<typeof invalidateQuotesForPackage>> | null = null
+  if (patch.qty !== undefined || patch.measurementId !== undefined) {
+    invalidated = await invalidateQuotesForPackage(
+      { id: existing.id, code: existing.code, projectId: existing.projectId },
+      `Spremenjen obseg paketa ${existing.code} (${patch.qty !== undefined ? `količina → ${patch.qty}` : 'nova izmera'}) — ponudbo je treba ponovno pregledati.`,
+      auth.user.id
+    )
+  }
+  return NextResponse.json({ data: { ...updated, ...(invalidated ? { invalidated } : {}) } })
 }

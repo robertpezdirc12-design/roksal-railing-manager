@@ -56,7 +56,11 @@ export async function PATCH (req: NextRequest, { params }: Params) {
 
   const updated = await db.quote.update({
     where: { id },
-    data: { status },
+    data: {
+      status,
+      // R474: izrecna sprememba statusa = pisarna je zastarelost pregledala
+      ...(existing.staleAt ? { staleAt: null, staleReason: null } : {}),
+    },
     include: {
       customer: { select: { name: true, city: true } },
       project: { select: { code: true, title: true } },

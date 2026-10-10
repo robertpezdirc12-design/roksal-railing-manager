@@ -1355,3 +1355,23 @@ Stage Summary:
 - issue #9 §3 Faza 1 POPOLNOMA izvedena: merilno skalirana geometrija z izvorom/enotami/verzijo/σ in opredeljenimi mejami, projekcije tloris/profil/3D, izbira segmenta z viri; naslednja faza: F2 (§5 — količine iz segmentov, odpad, Quote↔paket FK + invalidacija)
 - ključne odločitve: tekač ostaja vir resnice (model = deterministična izpeljava, brez persistiranje); smeri zavojev so IZRECNE predpostavke (nikoli tihe); σ izključno iz aktivnega EngineeringRule ali pisno označena ocena metode
 - deliveroti: src/lib/model-core.ts, /api/fence-run/[id]/model, modul Model, tests/r473.py (66), CI skupina r465-r473, popravki robustnosti testov (22 datotek), tag v1.29.0
+
+---
+Task ID: R474
+Agent: main (Z.ai Code)
+Task: GitHub issue #9 Faza 2 (§5, jedro) — POVEZAVA PONUDBA ↔ PAKET/KOSOVNICA + INVALIDACIJA
+
+Work Log:
+- migracija 20261010183115_r474_quote_invalidation: Quote.packageId (FK, SetNull) + staleAt + staleReason; ProjectPackage.quotes povratna relacija
+- src/lib/quote-invalidation.ts (NOV): invalidateQuotesForPackage — OSNUTEK/POSLAN → povrnjen na OSNUTEK + zastavica z razlogom; SPREJET/ZAKLENJEN → SAMO zastavica (podpisanega/sprejetega dokumenta se ne spreminja tiho); ZAVRNJEN preskočen; vsak zapis = revizija QUOTE_INVALIDATED (detail: prej/zdaj/vrsta/razlog)
+- sprožilci: POST /api/project-packages/[id]/bom (regeneracija kosovnice — odgovor poroča invalidated) + PATCH /api/project-packages/[id] ob spremembi qty/measurementId (sprememba obsega)
+- POST /api/quotes: sprejema packageId (validacija: obstoj + ISTI projekt, sicer 404/400); revizija QUOTE_CREATE nosi packageId; PATCH /api/quotes/[id]: izrecna sprememba statusa počisti zastavico (pregled pisarne)
+- UI: konfigurator pošlje packageId pri ustvarjanju osnutka; ponudbe.tsx — kartica nosi rdečo značko ZASTARELO (tooltip z razlogom), podrobnost ima opozorilo role=alert z razlogom + navodilom (povrnitev na Osnutek oz. opozorilo za sprejete)
+- testi: tests/r474.py 37/37 ✓ (RBAC, povezava 404/400/201, POSLAN→OSNUTEK+revizija, SPREJET samo zastavica, ZAVRNJEN preskočen, izrecni pregled počisti, klasična ponudba brez paketa, trdo čiščenje)
+- regresija: r446-r452 ✓ (r452 je sprva padel — VZROK: r443 izčrpa zalogo VIJ-INOX-M8 z izdajami picking BREZ vračila, 3 današnja poganjanja skupine so odvedla 340 kosov; CI ima vedno svežo bazo → tam ni prizadeto; lokalno obnovljeno z INVENTURA +400 — PREDHODNA težava testne izolacije, ne povezana s spremembami); r465-r474 8/8 ✓; tsc 0; lint čisto
+- brskalniška verifikacija (agent-browser): demo ponudba PON-2026-016 povezana na paket → regeneracija kosovnice → kartica in podrobnost kažeta »PONUDBA JE ZASTARELA« s celotnim razlogom + »Status je bil povrnjen na Osnutek«; status pravilen
+
+Stage Summary:
+- issue #9 §5 jedro izvedeno: ponudba ni več odsekana od kosovnice — sprememba obsega invalidira in se NE more tiho izgubiti (revizija + UI)
+- preostanek §5 za naslednje faze: količine iz segmentov (BomLine.segmentKey, odpad iz EngineeringRule), skupine pozicij, primerjalni paketi
+- deliveroti: migracija r474, quote-invalidation.ts, 4 API-ji dopolnjeni, UI značka/opozorilo, tests/r474.py (37), CI skupina r465-r474, tag v1.30.0

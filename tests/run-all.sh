@@ -30,7 +30,7 @@ run_py r454.py; run_py r455.py; run_py r456.py; run_py r457.py; run_py r458.py
 run_py r459.py; run_py r460.py; run_py r461.py; run_py r462.py
 run_py r464-pricing.py
 run_py r464-concurrency.py
-run_py r465.py; run_py r467.py; run_py r468.py; run_py r469.py; run_py r470.py; run_py r471.py; run_py r473.py
+run_py r465.py; run_py r467.py; run_py r468.py; run_py r469.py; run_py r470.py; run_py r471.py; run_py r473.py; run_py r474.py
 echo "══════════ r464-notifications (samostojen strežnik :3031) ══════════"
 if BASE_URL=http://localhost:3031 TEST_DB_URL="$TEST_DB_URL" timeout 420 python3 tests/r464-notifications.py > /tmp/reg-r464-notifications.log 2>&1; then
   tail -2 /tmp/reg-r464-notifications.log | head -1; PASS=$((PASS+1))
