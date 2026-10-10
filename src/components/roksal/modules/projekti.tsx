@@ -850,6 +850,8 @@ interface PackageCalc {
   generatedAt: string; qty: number; unit: string
   materialCost: number; montazaUnit: number; totalSale: number
   margin: number; marginPct: number; priceSource: string; lines: number
+  segmentsApplied?: number // R475: segmentni režim kosovnice
+  warnings?: { code: string; message: string }[]
 }
 
 const PACKAGE_STATUS_OPTIONS = [
@@ -1104,7 +1106,7 @@ function NewPackageDialog ({ projectId, projectCode, measurements, onClose, onCr
 }
 
 function PackageBomDialog ({ pkg }: { pkg: PackageRow | null }) {
-  const bom = useApi<{ data: { lines: { itemId: string; qty: number; unit: string; note: string | null; item: { sku: string; name: string; unit: string; qty: number } }[]; product: { sku: string; name: string }; qty: number; unit: string; code: string; status: string } }>(
+  const bom = useApi<{ data: { lines: { id: string; itemId: string; qty: number; unit: string; note: string | null; segmentKey: string | null; group: string | null; wastePct: number | null; sourceRule: string | null; item: { sku: string; name: string; unit: string; qty: number } }[]; product: { sku: string; name: string }; qty: number; unit: string; code: string; status: string } }>(
     pkg?.bom ? `/api/bom/${pkg.bom.id}` : null, [pkg?.bom?.id]
   )
   const d = bom.data?.data
@@ -1114,9 +1116,38 @@ function PackageBomDialog ({ pkg }: { pkg: PackageRow | null }) {
     try { return JSON.parse(calcJson) as PackageCalc } catch { return null }
   }, [calcJson])
 
+  // R475: skupine pozicij (STEBRI → ROCNIK → POLNILO → brez) z sumo materiala
+  const grouped = useMemo(() => {
+    if (!d) return []
+    const order = ['STEBRI', 'ROCNIK', 'POLNILO', 'OSTALO']
+    const map = new Map<string, typeof d.lines>()
+    for (const l of d.lines) {
+      const g = l.group ?? 'OSTALO'
+      if (!map.has(g)) map.set(g, [])
+      map.get(g)!.push(l)
+    }
+    const labels: Record<string, string> = {
+      STEBRI: 'Stebri in sidranje', ROCNIK: 'Ročnik in profili',
+      POLNILO: 'Polnilo', OSTALO: 'Pripadnosti in obdelava',
+    }
+    return [...map.entries()]
+      .sort((a, b) => order.indexOf(a[0]) - order.indexOf(b[0]))
+      .map(([g, lines]) => ({
+        key: g, label: labels[g] ?? g, lines,
+        count: lines.length,
+        segments: new Set(lines.map((l) => l.segmentKey).filter(Boolean)).size,
+      }))
+  }, [d])
+  const segCount = calc && typeof (calc as { segmentsApplied?: number }).segmentsApplied === 'number'
+    ? (calc as { segmentsApplied: number }).segmentsApplied
+    : 0
+
   return (
     <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
-      <DialogHeader>
+      {/* R475: min-w-0 na neposrednih otrocih grid dialoga — brez tega tabela
+          (w-full → auto tirnica) razširi tirnico na max-content in vsebina
+          na mobilnem gre čez rob dialoga (grid item min-width:auto). */}
+      <DialogHeader className="min-w-0">
         <DialogTitle className="flex flex-wrap items-center gap-2">
           Kosovnica {pkg?.bom?.code ?? ''}
           {pkg ? <StatusBadge status={pkg.bom?.status ?? 'OSNUTEK'} /> : null}
@@ -1128,7 +1159,7 @@ function PackageBomDialog ({ pkg }: { pkg: PackageRow | null }) {
       </DialogHeader>
       <ErrorBox error={bom.error} />
       {bom.loading ? <LoadingRows rows={3} /> : d ? (
-        <div className="space-y-3">
+        <div className="min-w-0 space-y-3">
           {calc ? (
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               <div className="rounded-lg border bg-secondary/30 p-2">
@@ -1149,36 +1180,56 @@ function PackageBomDialog ({ pkg }: { pkg: PackageRow | null }) {
               </div>
             </div>
           ) : null}
-          <div className="overflow-x-auto rounded-lg border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="pl-3">Artikel</TableHead>
-                  <TableHead className="text-right">Količina</TableHead>
-                  <TableHead className="pr-3">Zaloga</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {d.lines.map((l) => (
-                  <TableRow key={l.itemId}>
-                    <TableCell className="pl-3">
-                      <span className="font-mono text-xs text-muted-foreground">{l.item.sku}</span>
-                      <span className="ml-2 font-medium">{l.item.name}</span>
-                      {l.note ? <span className="block text-[11px] text-muted-foreground">{l.note}</span> : null}
-                    </TableCell>
-                    <TableCell className="text-right font-bold">{l.qty} <span className="text-xs font-normal text-muted-foreground">{l.unit}</span></TableCell>
-                    <TableCell className="pr-3">
-                      {l.item.qty >= l.qty ? (
-                        <Badge variant="secondary" className="border-transparent bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">pokrito</Badge>
-                      ) : (
-                        <Badge variant="secondary" className="border-transparent bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300">manjka {Math.round((l.qty - l.item.qty) * 100) / 100}</Badge>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+          {segCount > 0 ? (
+            <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200" role="status">
+              <Layers className="mt-0.5 size-4 shrink-0" aria-hidden />
+              <span>
+                Kosovnica je izpeljana <strong>po {segCount} {segCount === 1 ? 'segmentu' : segCount < 5 ? 'segmentih' : 'segmentih'}</strong> (ključi seg-N so usklajeni z digitalnim dvojčkom in merilnim modelom) —
+                stebri iz razmika, dolžine/ploščine z odpadom iz pravil.
+              </span>
+            </div>
+          ) : null}
+          {grouped.map((g) => (
+            <div key={g.key} className="overflow-hidden rounded-lg border">
+              <div className="flex flex-wrap items-center gap-2 border-b bg-secondary/40 px-3 py-2">
+                <span className="text-sm font-semibold">{g.label}</span>
+                <Badge variant="secondary" className="border-transparent bg-secondary text-secondary-foreground">{g.count} {g.count === 1 ? 'vrstica' : g.count < 5 ? 'vrstice' : 'vrstic'}</Badge>
+                {g.segments > 0 ? (
+                  <Badge variant="secondary" className="border-transparent bg-roksal-amber/15 text-roksal-amber">{g.segments} {g.segments === 1 ? 'segment' : g.segments < 5 ? 'segmenti' : 'segmentov'}</Badge>
+                ) : null}
+              </div>
+              <Table>
+                <TableBody>
+                  {g.lines.map((l) => (
+                    <TableRow key={l.id}>
+                      {/* R475: whitespace-normal — osnovni TableCell ima whitespace-nowrap,
+                          zaradi česar celica z značko+SKU+imenom+opombo na mobilnem ne prelomi
+                          (min-content 394 px) in razširi tabelo čez dialog. */}
+                      <TableCell className="whitespace-normal pl-3">
+                        {l.segmentKey ? (
+                          <Badge variant="outline" className="mb-1 mr-2 font-mono text-[10px] text-roksal-amber">{l.segmentKey}</Badge>
+                        ) : null}
+                        <span className="font-mono text-xs text-muted-foreground">{l.item.sku}</span>
+                        <span className="ml-2 font-medium">{l.item.name}</span>
+                        {l.wastePct != null && l.wastePct > 0 ? (
+                          <span className="ml-2 rounded bg-secondary px-1.5 py-0.5 text-[10px] text-muted-foreground" title={l.sourceRule ?? ''}>+ {l.wastePct} % odpad</span>
+                        ) : null}
+                        {l.note ? <span className="block text-[11px] text-muted-foreground">{l.note}</span> : null}
+                      </TableCell>
+                      <TableCell className="text-right font-bold">{l.qty} <span className="text-xs font-normal text-muted-foreground">{l.unit}</span></TableCell>
+                      <TableCell className="w-24 pr-3">
+                        {l.item.qty >= l.qty ? (
+                          <Badge variant="secondary" className="border-transparent bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">pokrito</Badge>
+                        ) : (
+                          <Badge variant="secondary" className="border-transparent bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300">manjka {Math.round((l.qty - l.item.qty) * 100) / 100}</Badge>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          ))}
           <p className="text-xs text-muted-foreground">
             Vrstice so vezane na artikle z eksplicitnimi ID — brez ujemanja imen (issue #7 §2).
           </p>

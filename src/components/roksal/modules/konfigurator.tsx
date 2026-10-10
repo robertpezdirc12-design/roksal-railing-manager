@@ -104,6 +104,7 @@ interface PlanLine {
   qty: number; optional: boolean; note: string | null
   unitCost: number; lineCost: number
   stockQty: number; covered: boolean; missing: number
+  segmentKey: string | null; group: string | null; wastePct: number | null; sourceRule: string | null // R475
 }
 interface PlanData {
   product: { id: string; sku: string; name: string; unit: string }
@@ -113,6 +114,7 @@ interface PlanData {
   materialCost: number; salePriceUnit: number; montazaUnit: number
   totalSale: number; totalCost: number; margin: number; marginPct: number
   priceSource: string
+  segmentsApplied: number; warnings: { code: string; message: string }[]; segmentEngine: string | null // R475
   family: { code: string; name: string; unit: string }
 }
 
@@ -331,11 +333,17 @@ export default function KonfiguratorModule () {
     if (!product || !(effectiveQty > 0)) return
     setCalcBusy(true); setCalcError(null)
     try {
+      // R475: m-forma pošlje SEGMENTE (s ključi seg-N) + razmik — komponente z
+      // segmentno vlogo dobijo količine PO ODSEKU (stebri/ročnik/polnilo+odpad)
+      const segBody = formType === 'm'
+        ? { segments: buildSegmentsM(), ...(pos(parseNum(razmik)) ? { razmikStebrovM: parseNum(razmik) } : {}) }
+        : {}
       const res = await apiPost<{ data: PlanData }>('/api/project-packages/plan', {
         productId: product.id,
         variantId: variantId || null,
         qty: effectiveQty,
         includeOptional,
+        ...segBody,
       })
       setPlan(res.data)
     } catch (e) {
@@ -373,6 +381,17 @@ export default function KonfiguratorModule () {
     gotoStep(step + 1)
   }
 
+  /** R475: segmenti m-forme s KLJUČI seg-N (vezava vrstic BOM ← segment). */
+  function buildSegmentsM (): { kljuc: string; dolzina: number; visina: number | null }[] {
+    return segsM
+      .filter((g) => pos(parseNum(g.len)))
+      .map((g, i) => ({
+        kljuc: `seg-${i + 1}`,
+        dolzina: parseNum(g.len),
+        visina: pos(parseNum(g.h)) ? parseNum(g.h) : null,
+      }))
+  }
+
   /** Strukturirani vhodi → paket.calcJson.inputs (issue #7 §4). */
   function buildInputs (): Record<string, unknown> {
     const inputs: Record<string, unknown> = {
@@ -400,9 +419,7 @@ export default function KonfiguratorModule () {
       }
       if (family?.code === 'PREGRADA' && pos(parseNum(vrata))) inputs.vrataKos = Math.trunc(parseNum(vrata))
     } else if (formType === 'm') {
-      inputs.segments = segsM
-        .filter((g) => pos(parseNum(g.len)))
-        .map((g) => ({ dolzina: parseNum(g.len), visina: pos(parseNum(g.h)) ? parseNum(g.h) : null }))
+      inputs.segments = buildSegmentsM()
       if (pos(parseNum(razmik))) inputs.razmikStebrovM = parseNum(razmik)
       if (pos(parseNum(vrata))) inputs.vrataKos = Math.trunc(parseNum(vrata))
       inputs.nacinPritrditve = nacin
@@ -1338,12 +1355,24 @@ function StepIzracun ({ plan, busy, error, onRecalc, familyLabel }: {
     <section aria-label="Rezultat izračuna" className="space-y-4">
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
         <SummaryTile label="Količina" value={`${plan.qty} ${plan.unit}`} hint={familyLabel} />
-        <SummaryTile label="Material (strošek)" value={fmtEUR(plan.materialCost)} hint={`${plan.lines.length} vrstic BOM`} />
+        <SummaryTile label="Material (strošek)" value={fmtEUR(plan.materialCost)} hint={`${plan.lines.length} vrstic BOM${plan.segmentsApplied > 0 ? ` · ${plan.segmentsApplied} segmentov` : ''}`} />
         <SummaryTile label="Prodajna cena / enoto" value={fmtEUR(plan.salePriceUnit)} hint={plan.montazaUnit > 0 ? `vključeno: montaža ${fmtEUR(plan.montazaUnit)}` : `montaža ${fmtEUR(plan.montazaUnit)}`} />
         <SummaryTile label="Skupaj (prodaja)" value={fmtEUR(plan.totalSale)} hint={`(${fmtEUR(plan.salePriceUnit + plan.montazaUnit)} × ${plan.qty})`} />
         <SummaryTile label="Marža — interno" value={`${fmtEUR(plan.margin)} (${plan.marginPct} %)`} hint="vidno samo pisarni" tone="green" />
         <SummaryTile label="Vir cene" value={plan.priceSource} hint={plan.variant ? `varianta ${plan.variant.sku}` : 'brez variante'} />
       </div>
+
+      {/* R475: opozorila segmentne izpeljave (vidna, ne tiha) */}
+      {(plan.warnings ?? []).length > 0 ? (
+        <div className="space-y-1.5 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200" role="alert">
+          <p className="flex items-center gap-1.5 font-semibold"><TriangleAlert className="size-4" aria-hidden /> Opozorila segmentnega izračuna</p>
+          <ul className="list-inside list-disc space-y-0.5 text-xs">
+            {(plan.warnings ?? []).map((w, i) => (
+              <li key={`${w.code}-${i}`}>{w.message}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
       {missing.length > 0 ? (
         <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-300" role="alert">
@@ -1361,15 +1390,21 @@ function StepIzracun ({ plan, busy, error, onRecalc, familyLabel }: {
       )}
 
       <div className="space-y-2">
-        <h3 className="flex items-center gap-1.5 text-sm font-semibold">
-          <ClipboardList className="size-4 text-roksal-amber" aria-hidden /> Kosovnica (predloga × {plan.qty} {plan.unit})
+        <h3 className="flex flex-wrap items-center gap-1.5 text-sm font-semibold">
+          <ClipboardList className="size-4 text-roksal-amber" aria-hidden />
+          {plan.segmentsApplied > 0
+            ? <>Kosovnica po segmentih — {plan.segmentsApplied} {plan.segmentsApplied === 1 ? 'odsek' : plan.segmentsApplied < 5 ? 'odseki' : 'odsekov'}</>
+            : <>Kosovnica (predloga × {plan.qty} {plan.unit})</>}
         </h3>
         <ul className="space-y-1.5">
-          {plan.lines.map((l) => (
-            <li key={l.itemId} className="rounded-lg border p-2.5">
+          {plan.lines.map((l, i) => (
+            <li key={`${l.itemId}-${l.segmentKey ?? 'x'}-${i}`} className="rounded-lg border p-2.5">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="font-mono text-xs text-muted-foreground">{l.sku}</span>
                 <span className="min-w-0 flex-1 truncate text-sm font-medium" title={l.name}>{l.name}</span>
+                {l.segmentKey ? (
+                  <Badge className="border-transparent bg-roksal-amber/15 text-roksal-amber dark:text-roksal-amber">{l.segmentKey}</Badge>
+                ) : null}
                 {l.covered ? (
                   <Badge className="border-transparent bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">na zalogi ({l.stockQty})</Badge>
                 ) : (
@@ -1381,6 +1416,7 @@ function StepIzracun ({ plan, busy, error, onRecalc, familyLabel }: {
                 <span className="tabular-nums">{fmtEUR(l.unitCost)} / {l.unit}</span>
                 <span className="font-medium tabular-nums text-foreground">skupaj {fmtEUR(l.lineCost)}</span>
                 {l.optional ? <span className="rounded bg-secondary px-1.5 py-0.5">neobvezna</span> : null}
+                {l.wastePct != null && l.wastePct > 0 ? <span className="rounded bg-secondary px-1.5 py-0.5" title={l.sourceRule ?? ''}>+ {l.wastePct} % odpad</span> : null}
                 {l.note ? <span className="italic">{l.note}</span> : null}
               </div>
             </li>

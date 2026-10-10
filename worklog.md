@@ -1375,3 +1375,29 @@ Stage Summary:
 - issue #9 §5 jedro izvedeno: ponudba ni več odsekana od kosovnice — sprememba obsega invalidira in se NE more tiho izgubiti (revizija + UI)
 - preostanek §5 za naslednje faze: količine iz segmentov (BomLine.segmentKey, odpad iz EngineeringRule), skupine pozicij, primerjalni paketi
 - deliveroti: migracija r474, quote-invalidation.ts, 4 API-ji dopolnjeni, UI značka/opozorilo, tests/r474.py (37), CI skupina r465-r474, tag v1.30.0
+
+---
+Task ID: R475
+Agent: main (Z.ai Code)
+Task: issue #9 §5 Faza 3 — KOLIČINE IZ SEGMENTOV (vrstica BOM ← segment, odpad iz EngineeringRule, skupine pozicij)
+
+Work Log:
+- seja se je prekinila sredi R475 (nezacomitirane spremembe v delovnem drevesu): dokončana implementacija, odpovedi testov so bile V TESTIH, ne v kodi (zastareli pričakovani vrednosti 0.34×11/6.83 + crash f-string ob None v segmentKey)
+- migracija 20261012000000_r475_segment_quantities: BomLine.segmentKey/group/wastePct/sourceRule + ProductComponent.segmentRole (aditivno, brez uničenja)
+- src/lib/segment-bom.ts (NOV, 261 vrstic): segmentna matematika — STEBER (kos/steber, vmesni+čelni PO VERIGI: spoji pripadajo prejšnjemu segmentu, Σ=vmesni+N+1), ROCNIK/POLNILO_M (m na m segmenta), POLNILO_M2 (m² na m² polnila, BREZ_VISINE → vrstica IZPUŠČENA); odpad IZKLJUČNO iz pravila odpad_rez_pct (manjka → 0 % + vidno opozorilo BREZ_ODPADA); razmik iz VNOSA ima prednost pred pravilom max_razdalja_stebrov (ista formula kot fence-run engine); NEZNANA_VLOGA → fallback predloga + opozorilo; čist lib (uporaben client+server), verzija segment-bom/1.0
+- product-core.planBom: segmentni režim — komponenta z segmentRole dobi VRSTICO NA SEGMENT (segmentKey/group/wastePct/sourceRule zapisani na vrstici), komponente brez vloge ostanejo predloga × qty (skupina OSTALO); brez segmentov = obnašanje do R474 (segmentsApplied 0)
+- API: PATCH /api/products/[id]/components (NOV, catalog.write) — dodelitev segmentRole + qty (semantika množitelja se ob vlogi spremeni!), validacija vloge 400/tuja komponenta 404, revizija COMPONENT_ROLE_SET; plan + [id]/bom + products/[id]/bom povezani na segmentni režim; kalkulacija paketa nosi segmentsApplied/segmentEngine/warnings
+- seed-r475.cjs (idempotentno): pravilo odpad_rez_pct=5 % + demo vloge na OGR-P-001 (ALU-PROF-6060→POLNILO_M×2, ALU-STEBER-80→STEBER×1, ANC-M12→STEBER×2)
+- UI: katalog — stolpec Segmentna vloga s Selectom (RBAC canWrite) + razlaga nove semantike množitelja; konfigurator — m-forma pošlje segmente s KLJUČI seg-N + razmik (buildSegmentsM), izračun prikaže opozorila segmentne izpeljave + značke segmentov na vrsticah; projekti PackageBomDialog — skupine pozicij STEBRI/ROCNIK/POLNILO/OSTALO s števci vrstic/segmentov, odpad v opombi, vir pravila v tooltipu
+- testi tests/r475.py 49/49 ✓ (RBAC, vloge 400/404/200+revizija, dry-run segmentni: stebri 7/4 kos, sidra 14, polnilo 13.65/9.46 m z 5 % odpadom, vir vnos:razmik vs RULE:max_razdalja_stebrov, BREZ_ODPADA/BREZ_VISINE/NEZNANA_VLOGA, brez segmentov = R474 obnašanje, kosovnica paketa: polja zapisana + GET vrača + inputs ohranjeni + revizija BOM_GENERATE v PROJEKTNEM dnevniku — globalni dashboard vrača samo projectId: null dogodke)
+- popravki regresijskih testov: r447 pričakovanje št. vrstic posodobljeno na R475 semantiko (vloge × segmenti + ostalo, dinamično iz predloge); r452 osnovno stanje obnovljeno (INVENTURA WPC-DES-150 −220 nazaj na 260 po mojem napačnem +220; izbrisan osiroteli demo paket PAK-P-2026-004-1 z BOM-2026-018 iz R474 brskalniške verifikacije, ki je zahteval 8.4 m² WPC — ponudba PON-2026-016 z zastarelo značijo ostaja)
+- POPRAVEK MOBILNEGA PRELIVA v PackageBomDialog (najden z agent-browser + VLM na 390 px): grid item min-width:auto — tabela (w-full → auto tirnica) je razširila tirnico na 594 px; popravljeno z min-w-0 na neposrednih otrocih + whitespace-normal na celici vsebine (osnovni TableCell ima whitespace-nowrap → min-content 394 px); po popravku 0 prelivov, tabela se prelomi
+- regresija: r446 104 ✓, r447 61 ✓, r451 88 ✓, r452 63 ✓, r455 36 ✓, r440-smoke ✓, r464-pricing 93 ✓, r465 90 ✓, r474 37 ✓; lint čisto; dev.log brez napak
+- brskalniška verifikacija (agent-browser + VLM): konfigurator 6.5+4.5 m × 1.2 m razmik → 9 vrstic BOM · 2 segmentov, značke seg-1/seg-2, opombe »vmesni 5 + čelni 2«; projekti BOM dialog skupine Stebri in sidranje/Polnilo/Pripadnosti; katalog PATCH vloga ROCNIK↔BREZ deluje; mobilni + namizni pogled čista (VLM)
+
+Stage Summary:
+- issue #9 §5 »količine iz segmentov« POPOLNOMA izvedeno: kosovnica ni več le predloga × skupna količina — vrstice so vezane na segmente (seg-N usklajeni z dvojčkom/prefab/modelom R473), stebri iz razmika, dolžine/ploščine z odpadom iz pravil, skupine pozicij za prikaz
+- poštenost ohranjena: manjkajoča pravila/višine/vloge so VIDNA opozorila (BREZ_RAZMIKA/BREZ_ODPADA/BREZ_VISINE/NEZNANA_VLOGA), nikoli tihe predpostavke
+- GitLab mirror: uporabnikov žeton glpat-5P7j… ZNOVA PREKLIČAN (401 Token was revoked — drugič v dveh sejah) — mirror ostaja blokiran, potreben nov žeton brez rotacije
+- preostanek issue #9: primerjalni paketi (STANDARD/BOLJŠI/PREMIUM), marža/popusti v ponudbi, merilni PDF iz modela R473
+- deliveroti: migracija r475, segment-bom.ts, 5 API-jev, UI 3 moduli, seed, tests/r475.py (49), tag v1.31.0

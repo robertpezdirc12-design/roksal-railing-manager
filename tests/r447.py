@@ -244,7 +244,12 @@ chk(s == 201 and pkg_o and pkg_o['unit'] == 'm', f'ograjni paket ustvarjen ({s})
 s, b = call('POST', f"/api/project-packages/{pkg_o['id']}/bom", admin, {})
 bom_o = json.loads(b)['data'] if s == 201 else None
 tmpl_o = sorted(jget(f"/api/products/{ograja['id']}", admin)['data']['components'], key=lambda c: c['sortOrder'])
-chk(s == 201 and bom_o and len(bom_o['bom']['lines']) == len(tmpl_o), 'ograjni BOM iz predloge')
+# R475 (issue #9 §5): paket z segmenti v vhodih → komponente s segmentno vlogo
+# dobijo VRSTICO NA SEGMENT (seg-1/seg-2), brez vloge ostanejo predloga × qty.
+n_seg = len(inputs_o['segments'])
+exp_lines = sum((n_seg if c.get('segmentRole') else 1) for c in tmpl_o)
+chk(s == 201 and bom_o and len(bom_o['bom']['lines']) == exp_lines,
+    f'ograjni BOM: vloge × {n_seg} segmenti + ostalo = {exp_lines} vrstic (R475)')
 
 # ══ 4. KALKULATOR ODSTRANJEN iz navigacije ══════════════════════════════════
 print('── kalkulator odstranjen, konfigurator registriran ──')

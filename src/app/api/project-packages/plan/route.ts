@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { jsonError, requirePermission } from '@/lib/auth'
 import { planBom } from '@/lib/product-core'
+import { normalizeSegments, type RawSegmentRow } from '@/lib/segment-bom'
 
 // POST /api/project-packages/plan — DRY-RUN izračun konfiguratorja (R447, issue #7 §5)
 // TANEK wrapper okoli product-core.planBom — brez podvajanja logike, BREZ pisanja v bazo.
@@ -9,7 +10,9 @@ import { planBom } from '@/lib/product-core'
 //       → CALCULATE → BOM vrstice → STOCK CHECK (covered/missing) → PRICE/MARGIN.
 // Vrata: quotes.create (pisarna) — rezultat vsebuje nabavne cene in maržo,
 // zato monter/terenske vloge dobi 403 (enako kot ostale kalkulacijske poti).
-// Telo: { productId, variantId?, qty, includeOptional? } → { data: BomPlan + family }
+// Telo: { productId, variantId?, qty, includeOptional?,
+//         segments?: [{ kljuc?, dolzina (m), visina? (m) }], razmikStebrovM? } // R475
+//       → { data: BomPlan + family }
 export async function POST (req: NextRequest) {
   const auth = await requirePermission(req, 'quotes.create')
   if (auth instanceof NextResponse) return auth
@@ -23,6 +26,12 @@ export async function POST (req: NextRequest) {
   if (!productId) return jsonError(400, 'productId je obvezen.')
   if (!Number.isFinite(qty) || qty <= 0) return jsonError(400, 'Količina mora biti pozitivno število.')
 
+  // R475: segmenti (m-forma) + razmik stebrov iz konfiguratorja
+  const segments = normalizeSegments(Array.isArray(body?.segments) ? body?.segments as RawSegmentRow[] : [])
+  const spacingCm = typeof body?.razmikStebrovM === 'number' && body.razmikStebrovM > 0
+    ? Math.round(body.razmikStebrovM * 100)
+    : null
+
   // predogled izdelka samo za statusno kodo (404) in družino za odgovor;
   // sam izračun ostane V planBom (en vir resnice)
   const product = await db.product.findUnique({
@@ -31,7 +40,10 @@ export async function POST (req: NextRequest) {
   })
   if (!product || !product.active) return jsonError(404, 'Izdelek ne obstaja ali ni aktiven.')
 
-  const plan = await planBom({ productId, variantId, qty, includeOptional })
+  const plan = await planBom({
+    productId, variantId, qty, includeOptional,
+    ...(segments.length > 0 ? { segments, ...(spacingCm != null ? { spacingCm } : {}) } : {}),
+  })
   if ('error' in plan) return jsonError(400, plan.error)
 
   return NextResponse.json({ data: { ...plan, family: product.family } })

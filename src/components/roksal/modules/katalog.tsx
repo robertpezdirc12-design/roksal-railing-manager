@@ -33,6 +33,7 @@ interface VariantRow { id: string; sku: string; name: string; color: string | nu
 
 interface ComponentRow {
   id: string; qty: number; unitBasis: string; optional: boolean; note: string | null; sortOrder: number
+  segmentRole: string | null // R475: STEBER | ROCNIK | POLNILO_M | POLNILO_M2 | null
   item: { id: string; sku: string; name: string; unit: string; qty: number }
 }
 
@@ -55,6 +56,7 @@ interface BomPlanLine {
   itemId: string; sku: string; name: string; unit: string; qty: number
   optional: boolean; note: string | null; unitCost: number; lineCost: number
   stockQty: number; covered: boolean; missing: number
+  segmentKey: string | null; group: string | null; wastePct: number | null; sourceRule: string | null // R475
 }
 
 interface BomPlan {
@@ -65,6 +67,7 @@ interface BomPlan {
   materialCost: number; salePriceUnit: number; montazaUnit: number
   totalSale: number; totalCost: number; margin: number; marginPct: number
   priceSource: string
+  segmentsApplied: number; warnings: { code: string; message: string }[]; segmentEngine: string | null // R475
 }
 
 interface PriceRuleRow {
@@ -264,7 +267,9 @@ function ProductsTab () {
           detail={detail.data?.data ?? null}
           loading={detail.loading}
           canCalc={canCalc}
+          canWrite={canWrite}
           onClose={() => setSelected(null)}
+          onReload={detail.reload}
         />
       </Dialog>
     </div>
@@ -273,17 +278,36 @@ function ProductsTab () {
 
 // ─── podrobnost izdelka: variante + BOM predloga + kalkulator ────────────────
 
-function ProductDialog ({ detail, loading, canCalc, onClose }: {
+function ProductDialog ({ detail, loading, canCalc, canWrite, onClose, onReload }: {
   detail: ProductDetail | null
   loading: boolean
   canCalc: boolean
+  canWrite: boolean
   onClose: () => void
+  onReload: () => Promise<void>
 }) {
   const { toast } = useToast()
   const [qty, setQty] = useState('')
   const [variantId, setVariantId] = useState('none')
   const [plan, setPlan] = useState<BomPlan | null>(null)
   const [busy, setBusy] = useState(false)
+  const [roleBusy, setRoleBusy] = useState<string | null>(null)
+
+  // R475: dodelitev segmentne vloge komponenti (količine po odseku)
+  async function setRole (componentId: string, role: string) {
+    if (!detail) return
+    setRoleBusy(componentId)
+    try {
+      await apiPatch(`/api/products/${detail.id}/components`, {
+        componentId,
+        segmentRole: role === 'BREZ' ? null : role,
+      })
+      await onReload()
+      toast({ title: 'Segmentna vloga shranjena.', description: role === 'BREZ' ? 'Komponenta uporablja predlogo × količino.' : 'Količina bo izračunana po segmentih (tekač/konfigurator).' })
+    } catch (e) {
+      toast({ title: 'Sprememba vloge ni uspela', description: e instanceof Error ? e.message : undefined, variant: 'destructive' })
+    } finally { setRoleBusy(null) }
+  }
 
   async function calculate () {
     if (!detail) return
@@ -350,6 +374,10 @@ function ProductDialog ({ detail, loading, canCalc, onClose }: {
           {/* BOM predloga — eksplicitne povezave na artikle */}
           <section className="space-y-1.5">
             <h3 className="text-sm font-semibold">BOM predloga (na 1 {detail.unit})</h3>
+            <p className="text-xs text-muted-foreground">
+              Segmentna vloga (R475): komponenta z vlogo dobiva količino PO SEGMENTU, ko paket vsebuje segmente
+              (izmera/tekač/konfigurator) — množitelj „/ {detail.unit}“ pomeni takrat kos/steber oz. m/m oz. m²/m².
+            </p>
             {detail.components.length === 0 ? (
               <p className="text-xs text-muted-foreground">Izdelek nima definiranih komponent.</p>
             ) : (
@@ -359,6 +387,7 @@ function ProductDialog ({ detail, loading, canCalc, onClose }: {
                     <TableRow>
                       <TableHead className="pl-3">Artikel (eksplicitna povezava)</TableHead>
                       <TableHead className="text-right">Količina / {detail.unit}</TableHead>
+                      <TableHead>Segmentna vloga</TableHead>
                       <TableHead className="pr-3">Zaloga</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -372,6 +401,30 @@ function ProductDialog ({ detail, loading, canCalc, onClose }: {
                           {c.note ? <span className="block text-[11px] text-muted-foreground">{c.note}</span> : null}
                         </TableCell>
                         <TableCell className="text-right font-bold">{c.qty} <span className="text-xs font-normal text-muted-foreground">{c.item.unit}</span></TableCell>
+                        <TableCell>
+                          {canWrite ? (
+                            <Select
+                              value={c.segmentRole ?? 'BREZ'}
+                              onValueChange={(v) => { if (v !== (c.segmentRole ?? 'BREZ')) void setRole(c.id, v) }}
+                              disabled={roleBusy === c.id}
+                            >
+                              <SelectTrigger className="h-9 w-52" aria-label={`Segmentna vloga za ${c.item.sku}`}>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="BREZ">Brez vloge (predloga × kol.)</SelectItem>
+                                <SelectItem value="STEBER">Steber — kos/steber</SelectItem>
+                                <SelectItem value="ROCNIK">Ročnik — m na m segmenta</SelectItem>
+                                <SelectItem value="POLNILO_M">Polnilo (dolžina) — m/m</SelectItem>
+                                <SelectItem value="POLNILO_M2">Polnilo (ploščina) — m²/m²</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          ) : c.segmentRole ? (
+                            <Badge variant="secondary" className="border-transparent bg-secondary text-secondary-foreground">{c.segmentRole}</Badge>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
                         <TableCell className="pr-3 text-xs text-muted-foreground">{c.item.qty} {c.item.unit}</TableCell>
                       </TableRow>
                     ))}

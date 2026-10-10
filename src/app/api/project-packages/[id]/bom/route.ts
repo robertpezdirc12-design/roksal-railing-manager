@@ -4,6 +4,7 @@ import { jsonError, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
 import { nextBomCode, planBom } from '@/lib/product-core'
 import { invalidateQuotesForPackage } from '@/lib/quote-invalidation'
+import { normalizeSegments, SEGMENT_BOM_VERSION, type RawSegmentRow } from '@/lib/segment-bom'
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -11,6 +12,11 @@ type Params = { params: Promise<{ id: string }> }
 // (quotes.create → revizija BOM_GENERATE)
 // Telo: { includeOptional? } — količina/product/variant vzame iz paketa.
 // BOM vrstice vsebujejo EKSPlicitne itemId → InventoryItem (issue #7 §2).
+//
+// R475 (issue #9 §5 — KOLIČINE IZ SEGMENTOV): če paket vsebuje segmente
+// (calcJson.inputs.segments, m-forma s ključi seg-N), se vrstice komponent z
+// segmentRole izračunajo PO SEGMENTU (stebri iz razmika, dolžine/ploščine z
+// odpadom iz pravila odpad_rez_pct) — vrstica ← segment je sledljiva.
 export async function POST (req: NextRequest, { params }: Params) {
   const auth = await requirePermission(req, 'quotes.create')
   if (auth instanceof NextResponse) return auth
@@ -23,11 +29,29 @@ export async function POST (req: NextRequest, { params }: Params) {
   if (!pkg) return jsonError(404, 'Paket ne obstaja.')
 
   const body = await req.json().catch(() => null)
+
+  // R475: segmenti + razmik iz strukturiranih vhodov konfiguratorja (R447:
+  // calcJson.inputs so izvor količine in se ohranijo čez regeneracijo).
+  let segments: ReturnType<typeof normalizeSegments> = []
+  let spacingCm: number | null = null
+  if (pkg.calcJson) {
+    try {
+      const parsed = JSON.parse(pkg.calcJson) as {
+        inputs?: { segments?: RawSegmentRow[]; razmikStebrovM?: number }
+      }
+      segments = normalizeSegments(Array.isArray(parsed?.inputs?.segments) ? parsed.inputs.segments : [])
+      if (typeof parsed?.inputs?.razmikStebrovM === 'number' && parsed.inputs.razmikStebrovM > 0) {
+        spacingCm = Math.round(parsed.inputs.razmikStebrovM * 100)
+      }
+    } catch { /* starejše/prazne kalkulacije brez inputs — predloga × qty */ }
+  }
+
   const plan = await planBom({
     productId: pkg.productId,
     variantId: pkg.variantId,
     qty: pkg.qty,
     includeOptional: body?.includeOptional !== false,
+    ...(segments.length > 0 ? { segments, ...(spacingCm != null ? { spacingCm } : {}) } : {}),
   })
   if ('error' in plan) return jsonError(400, plan.error)
   if (plan.lines.length === 0) {
@@ -68,6 +92,7 @@ export async function POST (req: NextRequest, { params }: Params) {
       lines: {
         create: plan.lines.map((l, i) => ({
           itemId: l.itemId, qty: l.qty, unit: l.unit, note: l.note, sortOrder: i,
+          segmentKey: l.segmentKey, group: l.group, wastePct: l.wastePct, sourceRule: l.sourceRule,
         })),
       },
     },
@@ -90,6 +115,13 @@ export async function POST (req: NextRequest, { params }: Params) {
     totalSale: plan.totalSale, margin: plan.margin, marginPct: plan.marginPct,
     priceSource: plan.priceSource,
     lines: plan.lines.length,
+    // R475: segmentni režim — opozorila in verzija engine-a se shranijo v
+    // kalkulacijo (revizijska sled izpeljave količin po segmentih)
+    ...(plan.segmentsApplied > 0 ? {
+      segmentsApplied: plan.segmentsApplied,
+      segmentEngine: plan.segmentEngine ?? SEGMENT_BOM_VERSION,
+      warnings: plan.warnings,
+    } : {}),
     ...(preservedInputs ? { inputs: preservedInputs } : {}),
   }
   await db.projectPackage.update({
@@ -107,6 +139,7 @@ export async function POST (req: NextRequest, { params }: Params) {
       code: bom.code, package: pkg.code, product: plan.product.sku,
       qty: plan.qty, unit: plan.unit, lines: plan.lines.length,
       materialCost: plan.materialCost, totalSale: plan.totalSale, marginPct: plan.marginPct,
+      ...(plan.segmentsApplied > 0 ? { segmentsApplied: plan.segmentsApplied, segmentEngine: plan.segmentEngine } : {}),
     },
   })
 

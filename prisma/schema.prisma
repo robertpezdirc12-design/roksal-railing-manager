@@ -900,11 +900,19 @@ model ProductComponent {
   product   Product       @relation("bomTemplate", fields: [productId], references: [id], onDelete: Cascade)
   itemId    String
   item      InventoryItem @relation("inBomTemplates", fields: [itemId], references: [id])
-  qty       Float // količina na enoto osnove
+  qty       Float // količina na enoto osnove (oz. na enoto VLOGE, če je segmentRole nastavljena)
   unitBasis String        @default("m2") // m2 | m | kos — osnova produkta
   optional  Boolean       @default(false)
   note      String?
   sortOrder Int           @default(0)
+  // R475 (issue #9 §5 — KOLIČINE IZ SEGMENTOV): vloga komponente v segmentni
+  // matematiki. Če je nastavljena IN paket vsebuje segmente (calcJson.inputs.
+  // segments), se količina vrstice izračuna PO SEGMENTU iz tekača/konfiguratorja
+  // namesto predloga × skupna količina. Množitelj `qty` ima takrat semantiko
+  // "na enoto vloge": STEBER → kos/steber, ROCNIK → m na m segmenta,
+  // POLNILO_M → m na m segmenta, POLNILO_M2 → m² na m² polnila.
+  // Null = predloga × količina (obnašanje do R474, nespremenjeno).
+  segmentRole String? // STEBER | ROCNIK | POLNILO_M | POLNILO_M2
 }
 
 // ─── Kosovnica (generirana BOM; issue #7 §2 + §5) ───────────────────────────
@@ -943,6 +951,18 @@ model BomLine {
   unit      String
   note      String?
   sortOrder Int           @default(0)
+  // R475 (issue #9 §5 — vrstica BOM ← segment): vezava vrstice na segment
+  // tekača/konfiguratorja (seg-1, seg-2 … — isti ključi kot digitalni dvojček,
+  // prefab lističi in merilni model R473). Null = vrstica brez segmenta
+  // (pripadnosti/priprava — predloga × skupna količina).
+  segmentKey String?
+  // R475: skupina pozicij za prikaz/sume (STEBRI | ROCNIK | POLNILO | OSTALO).
+  group      String?
+  // R475: upoštevani odpad rezanja v % (vir: EngineeringRule odpad_rez_pct).
+  wastePct   Float?
+  // R475: ključ pravila/vnosa, iz katerega je količina izpeljana
+  // (max_razdalja_stebrov | odpad_rez_pct | vnos:razmik) — revizijska sled.
+  sourceRule String?
 }
 
 // ─── Ceniki (issue #7 §6: poslovne cene NISO hardcoded) ─────────────────────

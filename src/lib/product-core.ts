@@ -7,6 +7,11 @@
 
 import { db } from '@/lib/db'
 import type { Prisma } from '@prisma/client'
+import {
+  segmentLinesForComponent, SEGMENT_BOM_VERSION, SEGMENT_ROLES,
+  POSTS_RULE_KEY, WASTE_RULE_KEY,
+  type SegmentInput, type SegmentRole, type SegmentRules, type SegmentWarning,
+} from '@/lib/segment-bom'
 
 // ─── Družine ─────────────────────────────────────────────────────────────────
 
@@ -314,6 +319,15 @@ export interface BomPlanLine {
   /** pokritost: zaloga ≥ potrebna količina */
   covered: boolean
   missing: number
+  // ── R475 (issue #9 §5 — količine iz segmentov) ──
+  /** vezava vrstice na segment verige (seg-N) — null za pripadnosti */
+  segmentKey: string | null
+  /** skupina pozicij (STEBRI | ROCNIK | POLNILO | OSTALO) */
+  group: string | null
+  /** upoštevani odpad rezanja (%) — vir: pravilo odpad_rez_pct */
+  wastePct: number | null
+  /** ključ pravila/vnosa iz katerega je količina izpeljana */
+  sourceRule: string | null
 }
 
 export interface BomPlan {
@@ -330,19 +344,51 @@ export interface BomPlan {
   margin: number // totalSale − materialCost
   marginPct: number // marža v %
   priceSource: string // od kod cena (cenik/fallback)
+  // ── R475 (issue #9 §5): segmentni režim ──
+  /** št. segmentov, iz katerih so količine izpeljane (0 = predloga × qty) */
+  segmentsApplied: number
+  /** opozorila segmentne izpeljave (vidna v UI, zapisana v kalkulacijo) */
+  warnings: SegmentWarning[]
+  /** verzija segmentne matematike (segment-bom/1.0) ko je aktivna */
+  segmentEngine: string | null
+}
+
+/** Prebere pravila za segmentno matematiko (razmik + odpad). */
+async function resolveSegmentRules (spacingCm: number | null): Promise<SegmentRules> {
+  const rows = await db.engineeringRule.findMany({
+    where: { active: true, key: { in: [POSTS_RULE_KEY, WASTE_RULE_KEY] } },
+  })
+  const posts = rows.find((r) => r.key === POSTS_RULE_KEY)
+  const waste = rows.find((r) => r.key === WASTE_RULE_KEY)
+  return {
+    spacingCm: spacingCm ?? (posts ? posts.value : null),
+    spacingSource: spacingCm != null ? 'vnos:razmik' : (posts ? `RULE:${POSTS_RULE_KEY}` : null),
+    wastePct: waste ? waste.value : 0,
+    wasteSource: waste ? `RULE:${WASTE_RULE_KEY}` : null,
+  }
 }
 
 /**
  * Generira BOM načrt za produkt × količina — brez pisanja v bazo (dry-run za konfigurator).
  * Količine vrstic = predloga (ProductComponent.qty na enoto osnove) × količina.
+ *
+ * R475 (issue #9 §5 — KOLIČINE IZ SEGMENTOV): če `segments` so podani IN komponenta
+ * ima segmentRole, se količina izračuna PO SEGMENTU (stebri iz razmika, dolžine/
+ * ploščine z odpadom) — vrstice nosijo segmentKey/skupino/vir pravila.
  */
 export async function planBom (input: {
   productId: string
   variantId?: string | null
   qty: number
   includeOptional?: boolean
+  /** R475: segmenti verige (ključi seg-N, dolžine v cm) */
+  segments?: SegmentInput[]
+  /** R475: razmik stebrov v cm iz VNOSa uporabnika (imeL pred pravilom) */
+  spacingCm?: number | null
 }): Promise<BomPlan | { error: string }> {
   if (!Number.isFinite(input.qty) || input.qty <= 0) return { error: 'Količina mora biti pozitivno število.' }
+  const segments = (input.segments ?? []).filter((s) => Number.isFinite(s.lengthCm) && s.lengthCm > 0)
+  const useSegments = segments.length > 0
   const product = await db.product.findUnique({
     where: { id: input.productId },
     include: { family: true },
@@ -361,16 +407,54 @@ export async function planBom (input: {
     include: { item: true },
   })
 
+  // R475: pravila segmentne matematike preberemo SAMO kadar so segmenti podani
+  const segRules = useSegments ? await resolveSegmentRules(input.spacingCm ?? null) : null
+  const warnings: SegmentWarning[] = []
+
   const lines: BomPlanLine[] = []
   for (const c of comps) {
     const cost = await resolveItemCost(c.item)
-    const qty = Math.round(c.qty * input.qty * 100) / 100
     const stockQty = c.item.qty
+    const validRole = c.segmentRole != null && (SEGMENT_ROLES as readonly string[]).includes(c.segmentRole)
+    const hasRole = useSegments && validRole
+
+    if (useSegments && c.segmentRole != null && !validRole) {
+      // POŠTENO: neznana vloga se ne tiho ignorira — vidno opozorilo + predloga
+      warnings.push({
+        code: 'NEZNANA_VLOGA',
+        message: `Komponenta ${c.item.sku} ima neznano segmentno vlogo „${c.segmentRole}“ — uporabljena je predloga × količina.`,
+      })
+    }
+
+    if (hasRole) {
+      // ── R475: količina PO SEGMENTU (stebri/ročnik/polnilo + odpad) ──
+      const { lines: segLines, warnings: segWarn } = segmentLinesForComponent(
+        c.segmentRole as SegmentRole, c.qty, segments, segRules as SegmentRules,
+      )
+      warnings.push(...segWarn)
+      for (const sl of segLines) {
+        lines.push({
+          itemId: c.itemId, sku: c.item.sku, name: c.item.name, unit: c.item.unit,
+          qty: sl.qty, optional: c.optional,
+          note: [c.note, sl.note].filter(Boolean).join(' — ') || null,
+          unitCost: cost.price, lineCost: Math.round(cost.price * sl.qty * 100) / 100,
+          stockQty, covered: stockQty >= sl.qty, missing: Math.max(0, Math.round((sl.qty - stockQty) * 100) / 100),
+          segmentKey: sl.segmentKey, group: sl.group, wastePct: sl.wastePct, sourceRule: sl.sourceRule,
+        })
+      }
+      continue
+    }
+
+    // ── predloga × skupna količina (obnašanje do R474) ──
+    const qty = Math.round(c.qty * input.qty * 100) / 100
     lines.push({
       itemId: c.itemId, sku: c.item.sku, name: c.item.name, unit: c.item.unit,
       qty, optional: c.optional, note: c.note,
       unitCost: cost.price, lineCost: Math.round(cost.price * qty * 100) / 100,
       stockQty, covered: stockQty >= qty, missing: Math.max(0, Math.round((qty - stockQty) * 100) / 100),
+      segmentKey: null,
+      group: useSegments ? 'OSTALO' : null, // pripadnosti brez vloge — skupina samo v segmentnem režimu
+      wastePct: null, sourceRule: null,
     })
   }
 
@@ -389,6 +473,9 @@ export async function planBom (input: {
     qty: input.qty, unit: product.unit, lines,
     materialCost, salePriceUnit: sale.price, montazaUnit, totalSale, totalCost, margin, marginPct,
     priceSource: sale.source === 'PRICE_RULE' ? (sale.priceListName ?? 'cenik') : 'osnovna cena',
+    segmentsApplied: segments.length,
+    warnings,
+    segmentEngine: useSegments ? SEGMENT_BOM_VERSION : null,
   }
 }
 
