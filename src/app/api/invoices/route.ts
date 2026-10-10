@@ -82,13 +82,17 @@ export async function POST (req: NextRequest) {
   }
 
   const code = await nextInvoiceCode()
+  // R476: račun podeduje OSNOVO PO POPUSTU (subtotal − discount) — tako so
+  // zneski računa aritmetično konsistentni (osnova + DDV = skupaj). Popust se
+  // je zgodil na ponudbi; račun zaračuna dogovorjeni (popustljeni) znesek.
+  const invoiceSubtotal = quote.subtotal.minus(quote.discount)
   const invoice = await db.invoice.create({
     data: {
       code,
       status: 'IZDAN',
       projectId,
       quoteId,
-      subtotal: quote.subtotal,
+      subtotal: invoiceSubtotal,
       vat: quote.vat,
       total: quote.total,
       paid: 0,

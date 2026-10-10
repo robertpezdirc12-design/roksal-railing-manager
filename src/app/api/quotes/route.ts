@@ -1,14 +1,11 @@
 // API /api/quotes — seznam s številom pozicij (quotes.read) + ustvarjanje s pozicijami (quotes.create)
-// Izračun: subtotal → DDV 22 % → total (vsota zaokrožena na 2 decimalki).
+// Izračun: subtotal → [popust −] → DDV 22 % → total (R476: DDV iz osnove PO popustu).
 
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { jsonError, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
-
-const VAT_RATE = 0.22
-
-const round2 = (n: number) => Math.round(n * 100) / 100
+import { computeQuoteTotals, parseDiscountPct, round2 } from '@/lib/quote-core'
 
 /** Zaporedna koda PON-<leto>-<seq> — robustno glede na obstoječe kode istega leta. */
 async function nextQuoteCode (): Promise<string> {
@@ -84,6 +81,14 @@ export async function POST (req: NextRequest) {
   // pozicije
   const rawLines: unknown[] = Array.isArray(body?.lines) ? body.lines : []
   if (rawLines.length === 0) return jsonError(400, 'Ponudba potrebuje vsaj eno pozicijo.')
+  // R476 (issue #9 §5): popust na celotno ponudbo (0..100 %) — neobvezen
+  const discountPct = body?.discountPct === undefined || body?.discountPct === null
+    ? 0
+    : parseDiscountPct(body.discountPct)
+  if (discountPct === null) {
+    return jsonError(400, 'Popust mora biti število med 0 in 100 %.')
+  }
+
   const lines: { description: string; qty: number; unitPrice: number; total: number }[] = []
   for (const [i, l] of rawLines.entries()) {
     const line = l as { description?: unknown; qty?: unknown; unitPrice?: unknown } | null
@@ -96,9 +101,7 @@ export async function POST (req: NextRequest) {
     lines.push({ description, qty, unitPrice, total: round2(qty * unitPrice) })
   }
 
-  const subtotal = round2(lines.reduce((s, l) => s + l.total, 0))
-  const vat = round2(subtotal * VAT_RATE)
-  const total = round2(subtotal + vat)
+  const totals = computeQuoteTotals(lines.map((l) => l.total), discountPct)
   const code = await nextQuoteCode()
 
   const quote = await db.quote.create({
@@ -109,9 +112,11 @@ export async function POST (req: NextRequest) {
       projectId,
       packageId,
       note: typeof body?.note === 'string' && body.note.trim() ? body.note.trim() : null,
-      subtotal,
-      vat,
-      total,
+      discountPct: discountPct > 0 ? discountPct : null,
+      discount: totals.discount,
+      subtotal: totals.subtotal,
+      vat: totals.vat,
+      total: totals.total,
       lines: { create: lines },
     },
     include: {
@@ -123,7 +128,7 @@ export async function POST (req: NextRequest) {
 
   await writeAudit({
     userId: auth.user.id, action: 'QUOTE_CREATE', entity: 'quote', entityId: quote.id, projectId,
-    detail: { code, customerId, packageId, lines: lines.length, subtotal, vat, total },
+    detail: { code, customerId, packageId, lines: lines.length, ...totals },
   })
   return NextResponse.json({ data: quote }, { status: 201 })
 }

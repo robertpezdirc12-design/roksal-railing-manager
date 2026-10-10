@@ -167,7 +167,11 @@ model Quote {
   staleReason String? // človeško berljiv razlog (revizija ima več)
   status     String    @default("OSNUTEK") // OSNUTEK | POSLAN | SPREJET | ZAVRNJEN | ZAKLENJEN
   subtotal   Decimal @db.Decimal(12,2) @default(0)
-  vat        Decimal @db.Decimal(12,2) @default(0)
+  // R476 (issue #9 §5): popust na celotno ponudbo — znesek se shrani ob vsaki
+  // spremembi (snapshot), DDV se izračuna iz osnove PO popustu.
+  discountPct Decimal? @db.Decimal(5,2) // 0..100; null = brez popusta
+  discount    Decimal  @db.Decimal(12,2) @default(0) // subtotal × pct/100 (zaokroženo)
+  vat        Decimal @db.Decimal(12,2) @default(0) // 22 % iz (subtotal − discount)
   total      Decimal @db.Decimal(12,2) @default(0)
   note       String?
   signature  String? // podpis stranke (data URL)
@@ -1027,6 +1031,11 @@ model ProjectPackage {
   status        String          @default("POVPRAŠEVANJE") // POVPRAŠEVANJE | IZMERA | KONFIGURACIJA | PONUDBA | POTRJENO | REZERVIRANO | V_IZDELAVI | DOSTAVLJENO | MONTIRANO | PREDANO
   calcJson      String? // JSON kalkulacija (cena, marža, material)
   note          String?
+  // R476 (issue #9 §5 — PRIMERJALNI PAKETI): isti obseg (izmera) v več nivojih
+  // — STANDARD / BOLJSI / PREMIUM. Paketi z enako compareCode pripadajo isti
+  // primerjavi (en projekt); nivo je enoličen znotraj skupine.
+  tier          String? // STANDARD | BOLJSI | PREMIUM (null = ni del primerjave)
+  compareCode   String? // skupina primerjave, npr. CMP-2026-001
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
 

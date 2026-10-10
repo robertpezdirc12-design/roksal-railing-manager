@@ -6,7 +6,7 @@
 // R436: 3D predogled — zadnja shranjena konfiguracija iz zavihka Vizualizacija.
 
 import { useMemo, useState } from 'react'
-import { Box, CalendarCheck, ClipboardList, Copy, ExternalLink, Eye, FolderKanban, HardHat, History, Layers, Link2, MapPin, Package, Plus, Ruler, Search, FileText, Banknote, ShieldCheck } from 'lucide-react'
+import { Box, CalendarCheck, ClipboardList, Copy, ExternalLink, Eye, FolderKanban, HardHat, History, Layers, Link2, MapPin, Package, Plus, Ruler, Scale, Search, FileText, Banknote, ShieldCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
@@ -21,6 +21,7 @@ import { cn } from '@/lib/utils'
 import { apiDelete, apiPatch, apiPost, fmtDate, fmtDateTime, fmtEUR, useApi } from '@/lib/api-client'
 import { EmptyState, ErrorBox, LoadingRows, PageHeader, StatusBadge } from '@/components/roksal/ui-bits'
 import { hasPerm } from '@/lib/permissions-core'
+import { TIER_ORDER, tierLabel } from '@/lib/quote-core'
 import { Railing3D, TIP_LABELS, parseKonfigurator, ralHex, ralLabel } from './viz-3d'
 
 interface ProjectRow {
@@ -834,6 +835,7 @@ function WarrantySection ({ projectId, projectStatus }: { projectId: string; pro
 interface PackageRow {
   id: string; code: string; name: string; qty: number; unit: string
   status: string; note: string | null; calcJson: string | null
+  tier: string | null; compareCode: string | null // R476: primerjalni paket
   createdAt: string
   product: { sku: string; name: string; unit: string; family: { code: string; name: string } }
   variant: { sku: string; name: string } | null
@@ -875,6 +877,23 @@ function PackagesSection ({ projectId, projectCode, measurements }: {
   const rows = packages.data?.data ?? []
   const withBom = rows.filter((p) => p.bom).length
 
+  // R476: primerjalne skupine (paketi z compareCode) — izris nad navadnim seznamom
+  const compareGroups = useMemo(() => {
+    const m = new Map<string, PackageRow[]>()
+    for (const p of rows) {
+      if (p.compareCode) m.set(p.compareCode, [...(m.get(p.compareCode) ?? []), p])
+    }
+    return [...m.entries()].map(([code, members]) => ({
+      code,
+      members: [...members].sort((a, b) => {
+        const ia = a.tier ? TIER_ORDER.indexOf(a.tier as (typeof TIER_ORDER)[number]) : 99
+        const ib = b.tier ? TIER_ORDER.indexOf(b.tier as (typeof TIER_ORDER)[number]) : 99
+        return ia - ib
+      }),
+    }))
+  }, [rows])
+  const regularRows = useMemo(() => rows.filter((p) => !p.compareCode), [rows])
+
   async function generateBom (pkg: PackageRow) {
     setBusyId(pkg.id)
     try {
@@ -915,13 +934,26 @@ function PackagesSection ({ projectId, projectCode, measurements }: {
         <div className="space-y-2 rounded-xl border p-3">
           <p className="inline-flex items-center gap-2 text-sm">
             <Layers className="size-4 text-roksal-amber" aria-hidden />
-            {rows.length > 0 ? `${rows.length} paketov · ${withBom} s kosovnico` : 'Ni paketov'}
+            {rows.length > 0 ? `${rows.length} paketov · ${withBom} s kosovnico${compareGroups.length ? ` · ${compareGroups.length} primerjav` : ''}` : 'Ni paketov'}
             <span className="text-xs text-muted-foreground">— vsak paket je ena rešitev (terasa, ograja, fasada …)</span>
           </p>
 
-          {rows.length > 0 ? (
+          {/* R476: primerjalne skupine — isti obseg v nivojih STANDARD/BOLJSI/PREMIUM */}
+          {compareGroups.map((g) => (
+            <CompareGroupCard
+              key={g.code}
+              group={g}
+              canManage={canManage}
+              busyId={busyId}
+              onGenerateBom={generateBom}
+              onStatus={changeStatus}
+              onBomView={setBomView}
+            />
+          ))}
+
+          {regularRows.length > 0 ? (
             <ul className="space-y-2">
-              {rows.map((p) => (
+              {regularRows.map((p) => (
                 <li key={p.id} className="rounded-lg border p-2.5">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-mono text-[11px] text-muted-foreground">{p.code}</span>
@@ -983,6 +1015,139 @@ function PackagesSection ({ projectId, projectCode, measurements }: {
         <PackageBomDialog pkg={bomView} />
       </Dialog>
     </section>
+  )
+}
+
+// ── R476: primerjalna skupina paketov (isti obseg, več nivojev) ───────────────
+
+/** Izračun iz calcJson (konfigurator { inputs, plan } ali BOM kalkulacija). */
+function parsePkgSale (calcJson: string | null): { totalSale: number | null; marginPct: number | null } {
+  if (!calcJson) return { totalSale: null, marginPct: null }
+  try {
+    const parsed = JSON.parse(calcJson) as {
+      plan?: { totalSale?: number; marginPct?: number }
+      totalSale?: number
+      marginPct?: number
+    }
+    return {
+      totalSale: typeof parsed.plan?.totalSale === 'number' ? parsed.plan.totalSale
+        : typeof parsed.totalSale === 'number' ? parsed.totalSale : null,
+      marginPct: typeof parsed.plan?.marginPct === 'number' ? parsed.plan.marginPct
+        : typeof parsed.marginPct === 'number' ? parsed.marginPct : null,
+    }
+  } catch {
+    return { totalSale: null, marginPct: null }
+  }
+}
+
+function CompareGroupCard ({ group, canManage, busyId, onGenerateBom, onStatus, onBomView }: {
+  group: { code: string; members: PackageRow[] }
+  canManage: boolean
+  busyId: string | null
+  onGenerateBom: (pkg: PackageRow) => Promise<void>
+  onStatus: (pkg: PackageRow, status: string) => Promise<void>
+  onBomView: (pkg: PackageRow) => void
+}) {
+  // referenčni nivo = prvi z izračunano ceno (ponavadi STANDARD)
+  const refSale = group.members
+    .map((m) => parsePkgSale(m.calcJson).totalSale)
+    .find((v): v is number => v != null && v > 0) ?? null
+
+  return (
+    <div className="space-y-2 rounded-xl border-2 border-amber-200 p-3 dark:border-amber-900/50">
+      <div className="flex flex-wrap items-center gap-2">
+        <Scale className="size-4 text-roksal-amber" aria-hidden />
+        <span className="text-sm font-semibold">Primerjava {group.code}</span>
+        <span className="text-xs text-muted-foreground">
+          — isti obseg v {group.members.length} nivojih (STANDARD / BOLJŠI / PREMIUM)
+        </span>
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        {group.members.map((p) => (
+          <CompareTierCard
+            key={p.id}
+            pkg={p}
+            refSale={refSale}
+            canManage={canManage}
+            busy={busyId === p.id}
+            onGenerateBom={onGenerateBom}
+            onStatus={onStatus}
+            onBomView={onBomView}
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function CompareTierCard ({ pkg, refSale, canManage, busy, onGenerateBom, onStatus, onBomView }: {
+  pkg: PackageRow
+  refSale: number | null
+  canManage: boolean
+  busy: boolean
+  onGenerateBom: (pkg: PackageRow) => Promise<void>
+  onStatus: (pkg: PackageRow, status: string) => Promise<void>
+  onBomView: (pkg: PackageRow) => void
+}) {
+  const { totalSale, marginPct } = useMemo(() => parsePkgSale(pkg.calcJson), [pkg.calcJson])
+  const deltaPct = totalSale != null && refSale != null && refSale > 0
+    ? Math.round(((totalSale - refSale) / refSale) * 100)
+    : null
+
+  return (
+    <div className="space-y-1.5 rounded-lg border p-2.5">
+      <div className="flex items-center justify-between gap-2">
+        <span className="inline-flex items-center gap-1 rounded-md bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+          {tierLabel(pkg.tier)}
+        </span>
+        <StatusBadge status={pkg.status} />
+      </div>
+      <p className="min-w-0 truncate text-sm font-medium" title={pkg.name}>{pkg.name}</p>
+      <div className="flex flex-wrap items-center gap-x-2 text-[11px] text-muted-foreground">
+        <span className="font-mono">{pkg.product.sku}</span>
+        {pkg.variant ? <span>· {pkg.variant.name}</span> : null}
+        <span>· {pkg.qty} {pkg.unit}</span>
+      </div>
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="text-sm font-bold">
+          {totalSale != null ? fmtEUR(totalSale) : <span className="text-xs font-normal text-muted-foreground">brez izračuna</span>}
+        </span>
+        {deltaPct != null && deltaPct !== 0 ? (
+          <span className={cn('text-xs font-semibold', deltaPct > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400')}>
+            {deltaPct > 0 ? '+' : ''}{deltaPct} %
+          </span>
+        ) : null}
+      </div>
+      {marginPct != null ? (
+        <p className="text-[11px] text-muted-foreground">marža {marginPct} % (interno)</p>
+      ) : null}
+      {pkg.bom ? (
+        <button
+          type="button"
+          className="inline-flex items-center gap-1 text-[11px] font-medium text-roksal-amber hover:underline"
+          onClick={() => onBomView(pkg)}
+        >
+          <ClipboardList className="size-3" aria-hidden /> {pkg.bom.code} ({pkg.bom.lines.length})
+        </button>
+      ) : (
+        <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+          <ClipboardList className="size-3" aria-hidden /> brez kosovnice
+        </span>
+      )}
+      {canManage ? (
+        <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+          <Button size="sm" variant="outline" className="h-7 gap-1 px-2 text-xs" onClick={() => void onGenerateBom(pkg)} disabled={busy}>
+            <ClipboardList className="size-3.5" aria-hidden /> {pkg.bom ? 'BOM' : 'Generiraj BOM'}
+          </Button>
+          <Select value={pkg.status} onValueChange={(v) => void onStatus(pkg, v)}>
+            <SelectTrigger className="h-7 w-36 text-xs" aria-label={`Status paketa ${pkg.code}`}><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {PACKAGE_STATUS_OPTIONS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+      ) : null}
+    </div>
   )
 }
 

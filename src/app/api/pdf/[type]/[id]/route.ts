@@ -201,8 +201,15 @@ async function renderQuotePdf (id: string): Promise<{ bytes: Uint8Array<ArrayBuf
     description: l.description, qty: l.qty, unitPrice: l.unitPrice.toNumber(), total: l.total.toNumber(),
   })))
 
+  // R476 (issue #9 §5): popust na ponudbo — vidna vrstica v zneskih (DDV je že
+  // izračunan iz osnove PO popustu na API-ju; tukaj samo prikaz).
+  const discountPct = quote.discountPct?.toNumber() ?? 0
+  const discountAmt = quote.discount.toNumber()
   let y = drawTotals(doc, state.y, [
     { label: 'Osnova:', value: fmtEUR(quote.subtotal.toNumber()) },
+    ...(discountPct > 0
+      ? [{ label: `Popust ${num(discountPct, discountPct % 1 === 0 ? 0 : 2)} %:`, value: `− ${fmtEUR(discountAmt)}` }]
+      : []),
     { label: `${VAT_LABEL}:`, value: fmtEUR(quote.vat.toNumber()) },
     { label: 'SKUPAJ Z DDV:', value: fmtEUR(quote.total.toNumber()), bold: true },
   ])

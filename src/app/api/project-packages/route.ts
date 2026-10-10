@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { jsonError, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
 import { nextPackageCode, PACKAGE_STATUSES } from '@/lib/product-core'
+import { isPackageTier } from '@/lib/quote-core'
 
 // GET /api/project-packages?projectId=… — paketi projekta (projects.read)
 // Varnost: kalkulacija (marža!) se prikaže SAMO vlogam z quotes.create.
@@ -39,9 +40,24 @@ export async function GET (req: NextRequest) {
 
 // POST /api/project-packages — nov paket (quotes.create → revizija)
 // Telo: { projectId, productId, variantId?, name?, qty, unit?, note?, measurementId?,
-//         status?, calcJson? }
+//         status?, calcJson?, tier?, compareCode? | compare:true } // R476
 // R447: calcJson (objekt) shrani strukturirane vhode konfiguratorja (inputs) in
 // rezultat dry-run izračuna (plan). Ni nujno — če manjka, paket ostane brez kalkulacije.
+// R476 (issue #9 §5 — PRIMERJALNI PAKETI): tier (STANDARD|BOLJSI|PREMIUM) skupaj
+// z compareCode ( obstoječa skupina istega projekta) ali compare:true (nova).
+// Nivo je enoličen znotraj skupine; skupina ne prečka projektov.
+
+/** Zaporedna koda CMP-<leto>-<seq> — globalna (primerjava živi na projektu). */
+async function nextCompareCode (): Promise<string> {
+  const year = new Date().getFullYear()
+  const prefix = `CMP-${year}-`
+  const existing = await db.projectPackage.findMany({ where: { compareCode: { startsWith: prefix } }, select: { compareCode: true } })
+  const seqs = existing
+    .map((p) => parseInt((p.compareCode ?? '').slice(prefix.length), 10))
+    .filter((n) => Number.isFinite(n))
+  const next = (seqs.length ? Math.max(...seqs) : 0) + 1
+  return `${prefix}${String(next).padStart(3, '0')}`
+}
 export async function POST (req: NextRequest) {
   const auth = await requirePermission(req, 'quotes.create')
   if (auth instanceof NextResponse) return auth
@@ -68,6 +84,40 @@ export async function POST (req: NextRequest) {
 
   const name = typeof body?.name === 'string' && body.name.trim() ? body.name.trim() : `${product.family.name} — ${product.name}`
 
+  // ── R476: primerjalni paketi — tier + skupina ────────────────────────────
+  const tierRaw = typeof body?.tier === 'string' && body.tier ? body.tier : null
+  if (tierRaw != null && !isPackageTier(tierRaw)) {
+    return jsonError(400, 'Neveljaven nivo paketa.', 'Dovoljeni: STANDARD, BOLJSI, PREMIUM.')
+  }
+  const compareCodeRaw = typeof body?.compareCode === 'string' && body.compareCode.trim() ? body.compareCode.trim() : null
+  const newCompare = body?.compare === true
+  if (compareCodeRaw != null && tierRaw == null) {
+    return jsonError(400, 'Pridružitev obstoječi primerjavi zahteva tudi nivo (tier).')
+  }
+  if (newCompare && tierRaw == null) {
+    return jsonError(400, 'Nova primerjava zahteva tudi nivo (tier).')
+  }
+  let compareCode: string | null = null
+  if (tierRaw != null) {
+    if (compareCodeRaw != null) {
+      const member = await db.projectPackage.findFirst({
+        where: { compareCode: compareCodeRaw },
+        select: { projectId: true },
+      })
+      if (!member) return jsonError(404, 'Primerjava ne obstaja.', `Skupina ${compareCodeRaw} ni najdena.`)
+      if (member.projectId !== projectId) {
+        return jsonError(400, 'Primerjava pripada drugemu projektu.', 'Primerjalni paketi morajo ostati znotraj enega projekta.')
+      }
+      const dup = await db.projectPackage.findFirst({ where: { compareCode: compareCodeRaw, tier: tierRaw } })
+      if (dup) {
+        return jsonError(409, `V primerjavi ${compareCodeRaw} je nivo ${tierRaw} že zaseden.`, `Zaseden s paketom ${dup.code}.`)
+      }
+      compareCode = compareCodeRaw
+    } else {
+      compareCode = await nextCompareCode()
+    }
+  }
+
   // R447: strukturirana kalkulacija konfiguratorja (objekt → JSON niz); varovalka velikosti
   let calcJson: string | null = null
   if (body?.calcJson !== undefined && body?.calcJson !== null) {
@@ -91,13 +141,15 @@ export async function POST (req: NextRequest) {
       calcJson,
       note: typeof body?.note === 'string' && body.note.trim() ? body.note.trim() : null,
       measurementId: typeof body?.measurementId === 'string' && body.measurementId ? body.measurementId : null,
+      tier: tierRaw,
+      compareCode,
     },
   })
 
   await writeAudit({
     userId: auth.user.id, action: 'PACKAGE_CREATE', entity: 'projectPackage', entityId: pkg.id,
     projectId,
-    detail: { code: pkg.code, product: product.sku, variantId, qty, unit: pkg.unit, ...(calcJson ? { calcInputs: true } : {}) },
+    detail: { code: pkg.code, product: product.sku, variantId, qty, unit: pkg.unit, ...(calcJson ? { calcInputs: true } : {}), ...(tierRaw ? { tier: tierRaw, compareCode } : {}) },
   })
   return NextResponse.json({ data: pkg }, { status: 201 })
 }

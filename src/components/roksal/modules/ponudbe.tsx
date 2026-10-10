@@ -2,9 +2,11 @@
 
 // PONUDBE — seznam s statusi/zneski, podrobnost s pozicijami, sprejem (quotes.approve)
 // ZAKLENJEN dosegljiv samo prek podpisa (modul Signatura — deal.lock).
+// R476 (issue #9 §5): POPUST na celotno ponudbo — prikaz v zneskih + urejanje
+// na osnutku (PATCH discountPct); DDV je že izračunan iz osnove PO popustu.
 
 import { useMemo, useState } from 'react'
-import { BadgeCheck, FileText, Lock, Search, Send, TriangleAlert, User } from 'lucide-react'
+import { BadgeCheck, FileText, Lock, Percent, Search, Send, TriangleAlert, User } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -22,6 +24,8 @@ interface QuoteRow {
   code: string
   status: string
   subtotal: number
+  discountPct: number | null // R476: popust (%) — null = brez
+  discount: number // R476: znesek popusta
   vat: number
   total: number
   note: string | null
@@ -80,6 +84,18 @@ export default function PonudbeModule () {
     } finally { setBusy(false) }
   }
 
+  /** R476: sprememba popusta (samo osnutek — strežnik vrata strogo nadzira). */
+  async function setDiscountFor (id: string, pct: number) {
+    setBusy(true)
+    try {
+      await apiPatch(`/api/quotes/${id}`, { discountPct: pct })
+      toast({ title: pct > 0 ? `Popust ${pct} % uporabljen.` : 'Popust odstranjen.' })
+      await Promise.all([list.reload(), detail.reload()])
+    } catch (e) {
+      toast({ title: 'Popust ni bil uporabljen', description: e instanceof Error ? e.message : undefined, variant: 'destructive' })
+    } finally { setBusy(false) }
+  }
+
   return (
     <div className="space-y-4">
       <PageHeader title="Ponudbe" desc="Ponudbe s pozicijami in podpisi" />
@@ -125,7 +141,14 @@ export default function PonudbeModule () {
                     </div>
                     <div className="mt-1.5 flex items-center justify-between gap-2">
                       <span className="min-w-0 truncate text-sm font-semibold">{qq.customer?.name ?? 'Brez stranke'}</span>
-                      <span className="shrink-0 text-base font-bold">{fmtEUR(qq.total)}</span>
+                      <span className="flex shrink-0 items-baseline gap-1.5">
+                        {qq.discountPct != null && qq.discountPct > 0 ? (
+                          <span className="rounded-md bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300" title={`Popust ${qq.discountPct} % (−${fmtEUR(qq.discount)})`}>
+                            −{qq.discountPct} %
+                          </span>
+                        ) : null}
+                        <span className="text-base font-bold">{fmtEUR(qq.total)}</span>
+                      </span>
                     </div>
                     <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
                       {qq.project ? <span className="truncate">{qq.project.title}</span> : null}
@@ -155,6 +178,7 @@ export default function PonudbeModule () {
               canApprove={canApprove}
               busy={busy}
               onStatus={(s) => void setStatusFor(detail.data!.data.id, s)}
+              onDiscount={(pct) => setDiscountFor(detail.data!.data.id, pct)}
             />
           ) : (
             <>
@@ -168,15 +192,59 @@ export default function PonudbeModule () {
   )
 }
 
-function QuoteDetailDialog ({ detail, canCreate, canApprove, busy, onStatus }: {
+/** R476: urejevalnik popusta na osnutku — % + predogled zneska. */
+function DiscountEditor ({ initialPct, busy, onApply }: {
+  initialPct: number
+  busy: boolean
+  onApply: (pct: number) => Promise<void>
+}) {
+  const [val, setVal] = useState(String(initialPct > 0 ? initialPct : ''))
+  const parsed = Number(val.replace(',', '.'))
+  const valid = val.trim() === '' || (Number.isFinite(parsed) && parsed >= 0 && parsed <= 100)
+
+  async function apply () {
+    if (!valid) return
+    await onApply(val.trim() === '' ? 0 : Math.round(parsed * 100) / 100)
+  }
+
+  return (
+    <div className="flex flex-wrap items-end gap-2 rounded-xl border border-dashed p-3">
+      <div className="min-w-0 flex-1 space-y-1">
+        <label htmlFor="pon-popust" className="text-xs font-medium text-muted-foreground">Popust na ponudbo (%)</label>
+        <Input
+          id="pon-popust"
+          inputMode="decimal"
+          value={val}
+          onChange={(e) => setVal(e.target.value)}
+          placeholder="npr. 5 ali 7,5"
+          aria-invalid={!valid}
+          aria-describedby="pon-popust-hint"
+          className="h-9 max-w-32"
+        />
+      </div>
+      <Button variant="outline" className="h-9" onClick={() => void apply()} disabled={busy || !valid}>
+        <Percent className="size-4" aria-hidden /> Uporabi popust
+      </Button>
+      <p id="pon-popust-hint" className="w-full text-xs text-muted-foreground">
+        {valid
+          ? 'DDV 22 % se preračuna iz osnove po popustu. Popust je mogoče spreminjati samo na osnutku.'
+          : 'Vnesite odstotek med 0 in 100.'}
+      </p>
+    </div>
+  )
+}
+
+function QuoteDetailDialog ({ detail, canCreate, canApprove, busy, onStatus, onDiscount }: {
   detail: QuoteDetail
   canCreate: boolean
   canApprove: boolean
   busy: boolean
   onStatus: (status: string) => void
+  onDiscount: (pct: number) => Promise<void>
 }) {
   const canSend = canCreate && detail.status === 'OSNUTEK'
   const canAccept = canApprove && ['OSNUTEK', 'POSLAN'].includes(detail.status)
+  const pct = detail.discountPct ?? 0
 
   return (
     <>
@@ -236,9 +304,20 @@ function QuoteDetailDialog ({ detail, canCreate, canApprove, busy, onStatus }: {
       {/* zneski */}
       <div className="ml-auto w-full max-w-xs space-y-1 rounded-xl bg-secondary/60 p-3 text-sm">
         <div className="flex justify-between"><span className="text-muted-foreground">Osnova</span><span className="tabular-nums">{fmtEUR(detail.subtotal)}</span></div>
+        {pct > 0 ? (
+          <div className="flex justify-between text-emerald-700 dark:text-emerald-400">
+            <span className="inline-flex items-center gap-1"><Percent className="size-3" aria-hidden /> Popust {pct} %</span>
+            <span className="tabular-nums">− {fmtEUR(detail.discount)}</span>
+          </div>
+        ) : null}
         <div className="flex justify-between"><span className="text-muted-foreground">DDV 22 %</span><span className="tabular-nums">{fmtEUR(detail.vat)}</span></div>
         <div className="flex justify-between border-t pt-1 font-bold"><span>Skupaj</span><span className="tabular-nums">{fmtEUR(detail.total)}</span></div>
       </div>
+
+      {/* R476: urejanje popusta — samo osnutek (poslane/sprejete se ne spreminjajo) */}
+      {canCreate && detail.status === 'OSNUTEK' ? (
+        <DiscountEditor initialPct={pct} busy={busy} onApply={onDiscount} />
+      ) : null}
 
       {detail.note ? <p className="rounded-lg border p-3 text-sm">{detail.note}</p> : null}
 

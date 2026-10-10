@@ -14,7 +14,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Calculator, CheckCircle2, Circle, ClipboardList, Download, FolderKanban, Image as ImageIcon, Layers, Loader2,
-  Package, Palette, Plus, RotateCcw, Ruler, Save, Trash2, TriangleAlert,
+  Package, Palette, Plus, RotateCcw, Ruler, Save, Scale, Trash2, TriangleAlert,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -29,6 +29,7 @@ import { useToast } from '@/hooks/use-toast'
 import { useAppStore } from '@/lib/store'
 import { apiGet, apiPost, fmtEUR, useApi } from '@/lib/api-client'
 import { EmptyState, ErrorBox, LoadingRows, PageHeader, StatusBadge } from '@/components/roksal/ui-bits'
+import { PACKAGE_TIERS, TIER_HINTS, TIER_LABELS, tierLabel, type PackageTier } from '@/lib/quote-core'
 import { cn } from '@/lib/utils'
 
 // ─── Koraki čarovnika (tok §5) ────────────────────────────────────────────────
@@ -125,6 +126,14 @@ interface Odb { id: number; opis: string; m2: string }
 interface SaveResult {
   packageId: string; packageCode: string
   bomCode: string | null; quoteCode: string | null
+  tier: string | null; compareCode: string | null // R476: primerjalni paket
+}
+
+/** Ena obstoječa primerjava na projektu (R476) — nivoji + prosti nivoji. */
+interface CompareGroupRow {
+  code: string
+  tiers: string[]
+  free: PackageTier[]
 }
 
 // ─── Pomočniki ────────────────────────────────────────────────────────────────
@@ -178,6 +187,9 @@ export default function KonfiguratorModule () {
   const [genQuote, setGenQuote] = useState(false)
   const [saveBusy, setSaveBusy] = useState(false)
   const [result, setResult] = useState<SaveResult | null>(null)
+  // R476: primerjalna ponudba — nivo + izbira skupine
+  const [tier, setTier] = useState<string>('') // '' | STANDARD | BOLJSI | PREMIUM
+  const [comparePick, setComparePick] = useState<string>('new') // 'new' | CMP-koda
 
   const segId = useRef(1)
   const nextSegId = () => ++segId.current
@@ -194,6 +206,21 @@ export default function KonfiguratorModule () {
   const openProjects = projectRows.filter((p) => !CLOSED_PROJECT_STATUSES.includes(p.status))
   const projectChoices = showClosed ? projectRows : openProjects
   const project = projectRows.find((p) => p.id === projectId) ?? null
+
+  // R476: paketi izbranega projekta — za obstoječe primerjalne skupine
+  const projPackages = useApi<{ data: { id: string; compareCode: string | null; tier: string | null }[] }>(
+    project ? `/api/project-packages?projectId=${project.id}` : null, [project?.id]
+  )
+  const compareGroups = useMemo<CompareGroupRow[]>(() => {
+    const m = new Map<string, string[]>()
+    for (const p of projPackages.data?.data ?? []) {
+      if (p.compareCode) m.set(p.compareCode, [...(m.get(p.compareCode) ?? []), p.tier ?? ''])
+    }
+    return [...m.entries()]
+      .map(([code, tiers]) => ({ code, tiers, free: PACKAGE_TIERS.filter((t) => !tiers.includes(t)) }))
+      .filter((g) => g.free.length > 0) // polne skupine nimajo prostih nivojev
+      .sort((a, b) => b.code.localeCompare(a.code))
+  }, [projPackages.data])
 
   const prodRows = products.data?.data ?? []
   const product = prodRows.find((p) => p.id === productId) ?? null
@@ -434,7 +461,11 @@ export default function KonfiguratorModule () {
     if (!project || !product || !plan || !(effectiveQty > 0)) return
     setSaveBusy(true)
     try {
-      const pkgRes = await apiPost<{ data: { id: string; code: string } }>('/api/project-packages', {
+      // R476: primerjalni paket — nivo + (nova ali obstoječa) skupina primerjave
+      const tierBody = tier
+        ? { tier, ...(comparePick !== 'new' ? { compareCode: comparePick } : { compare: true }) }
+        : {}
+      const pkgRes = await apiPost<{ data: { id: string; code: string; tier: string | null; compareCode: string | null } }>('/api/project-packages', {
         projectId: project.id,
         productId: product.id,
         variantId: variantId || null,
@@ -444,8 +475,12 @@ export default function KonfiguratorModule () {
         status: 'KONFIGURACIJA',
         note: note.trim() || undefined,
         calcJson: { inputs: buildInputs(), plan },
+        ...tierBody,
       })
-      const out: SaveResult = { packageId: pkgRes.data.id, packageCode: pkgRes.data.code, bomCode: null, quoteCode: null }
+      const out: SaveResult = {
+        packageId: pkgRes.data.id, packageCode: pkgRes.data.code, bomCode: null, quoteCode: null,
+        tier: pkgRes.data.tier ?? null, compareCode: pkgRes.data.compareCode ?? null,
+      }
 
       if (genBom && plan.lines.length > 0) {
         try {
@@ -483,6 +518,7 @@ export default function KonfiguratorModule () {
           `Projekt ${project.code} · status KONFIGURACIJA`,
           out.bomCode ? `kosovnica ${out.bomCode}` : null,
           out.quoteCode ? `osnutek ponudbe ${out.quoteCode}` : null,
+          out.tier ? `${tierLabel(out.tier)} · primerjava ${out.compareCode}` : null,
         ].filter(Boolean).join(' · '),
       })
     } catch (e) {
@@ -496,6 +532,7 @@ export default function KonfiguratorModule () {
     resetMeasurements()
     setIncludeOptional(true); setPlan(null); setCalcError(null)
     setName(''); setNote(''); setGenBom(true); setGenQuote(false)
+    setTier(''); setComparePick('new')
     setResult(null)
   }
 
@@ -667,6 +704,9 @@ export default function KonfiguratorModule () {
                 note={note} setNote={setNote}
                 genBom={genBom} setGenBom={setGenBom}
                 genQuote={genQuote} setGenQuote={setGenQuote}
+                tier={tier} setTier={setTier}
+                comparePick={comparePick} setComparePick={setComparePick}
+                compareGroups={compareGroups}
                 busy={saveBusy}
                 onSave={() => void save()}
               />
@@ -1448,7 +1488,7 @@ function SummaryTile ({ label, value, hint, tone }: { label: string; value: stri
 
 // ─── 6. SHRANI ────────────────────────────────────────────────────────────────
 
-function StepShrani ({ project, product, variant, plan, name, setName, note, setNote, genBom, setGenBom, genQuote, setGenQuote, busy, onSave }: {
+function StepShrani ({ project, product, variant, plan, name, setName, note, setNote, genBom, setGenBom, genQuote, setGenQuote, tier, setTier, comparePick, setComparePick, compareGroups, busy, onSave }: {
   project: ProjectRow | null
   product: ProductRow
   variant: VariantRow | null
@@ -1457,6 +1497,9 @@ function StepShrani ({ project, product, variant, plan, name, setName, note, set
   note: string; setNote: (v: string) => void
   genBom: boolean; setGenBom: (v: boolean) => void
   genQuote: boolean; setGenQuote: (v: boolean) => void
+  tier: string; setTier: (v: string) => void
+  comparePick: string; setComparePick: (v: string) => void
+  compareGroups: CompareGroupRow[]
   busy: boolean
   onSave: () => void
 }) {
@@ -1515,6 +1558,59 @@ function StepShrani ({ project, product, variant, plan, name, setName, note, set
         </label>
       </div>
 
+      {/* R476: primerjalna ponudba — isti obseg v več nivojih */}
+      <div className="space-y-2 rounded-xl border p-3">
+        <div className="flex items-center gap-2">
+          <Scale className="size-4 text-roksal-amber" aria-hidden />
+          <span className="text-sm font-semibold">Primerjalna ponudba</span>
+          <span className="text-xs text-muted-foreground">— isti obseg v več rešitvah (neobvezno)</span>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="konf-tier">Nivo paketa</Label>
+            <Select value={tier || 'brez'} onValueChange={(v) => { setTier(v === 'brez' ? '' : v) }}>
+              <SelectTrigger id="konf-tier" aria-label="Nivo primerjalnega paketa"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="brez">Brez primerjave</SelectItem>
+                {PACKAGE_TIERS.map((t) => (
+                  <SelectItem key={t} value={t}>
+                    {TIER_LABELS[t]} — {TIER_HINTS[t]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          {tier ? (
+            <div className="space-y-1.5">
+              <Label htmlFor="konf-compare">Skupina primerjave</Label>
+              <Select
+                value={comparePick}
+                onValueChange={(v) => setComparePick(v)}
+              >
+                <SelectTrigger id="konf-compare" aria-label="Skupina primerjave"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="new">Nova primerjava</SelectItem>
+                  {compareGroups.map((g) => (
+                    <SelectItem key={g.code} value={g.code}>
+                      {g.code} (prosti: {g.free.map((t) => TIER_LABELS[t]).join(', ')})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                {comparePick === 'new'
+                  ? 'Ustvari novo skupino primerjave — naslednji nivo ji pridružite z istim izborom.'
+                  : `Paket se pridruži obstoječi primerjavi na projektu ${project?.code ?? ''}.`}
+              </p>
+            </div>
+          ) : null}
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Vsak nivo je en paket (po navadi drugačen izdelek/varianta) — v Projektih se primerjava izriše
+          drug ob drugem s cenami, stranka pa izbere ravovesje med ceno in kakovostjo.
+        </p>
+      </div>
+
       <Button className="h-11 w-full sm:w-auto" onClick={onSave} disabled={busy}>
         {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Save className="size-4" aria-hidden />}
         {busy ? 'Ustvarjam …' : 'Ustvari paket'}
@@ -1550,6 +1646,11 @@ function SaveResultPanel ({ result, projectCode, onNew, onOpenProjects, onOpenBo
             <Package className="size-4 text-muted-foreground" aria-hidden />
             <span>Paket <span className="font-mono font-medium">{result.packageCode}</span></span>
             <StatusBadge status="KONFIGURACIJA" />
+            {result.tier ? (
+              <span className="inline-flex items-center gap-1 rounded-md bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                <Scale className="size-3" aria-hidden /> {tierLabel(result.tier)} · {result.compareCode}
+              </span>
+            ) : null}
           </li>
           {result.bomCode ? (
             <li className="flex flex-wrap items-center gap-2">
