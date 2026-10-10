@@ -1293,3 +1293,19 @@ Stage Summary:
 - ključne odločitve: DEPTH_AR mera je veljavna SAMO z manifestom senzorja (sledljivost §6); iOS brez WebXR-AR ostaja na referenčni poti (brez lažnega obljubljanja §0); degradacija guvernerja enosmerna (toplotna stabilnost); native iOS adapter NI dodan (ni potrebe — obstoječa pot mer pokriva)
 - deliveroti: tests/r471.py, src/lib/depth-adapter.ts (nov), CI skupina r465-r471
 - ODPRTA TEŽAVA (za uporabnika): novi Vercel žeton vcp_0Iw9… NIMA scope-a »robertpezdirc12-designs-projects« (SAML) — za prihodnje API operacije je treba ustvariti žeton z izbranim timom/scope-om; stari žeton še velja (do preklica)
+
+---
+Task ID: R471-DEPLOY-BLOK
+Agent: main (Z.ai Code)
+Task: Deploy R471 na produkcijo
+
+Work Log:
+- push na main (82e705d, tag v1.27.0) uspešen; CI 9/9 kontrol ZELENO (run 38068108929)
+- Vercel git-integracija NE sproži deploymenta (zadnji deploymenti so bili CLI z git metapodatki; github status/check-runi brez Vercel konteksta)
+- Vercel API + CLI: OBA žetona (stari vcp_0BS9… in novi vcp_0Iw9…) vračata 403 »Not authorized: scope robertpezdirc12-designs-projects, re-authenticate (SAML)« — /v2/user deluje, vse projektne operacije blokirane
+- sklep: deploy R471 zahteva uporabnikovo akcijo (nov žeton z izbranim scope-om ALI deploy/ponovna povezava git iz Vercel nadzorne plošče)
+- produkcija ostaja na R470 (health OK, mere delujejo — brez globine); R471 je pripravljen na main
+
+Stage Summary:
+- R471 NI nameščen v produkciji (blok: SAML scope na žetonih); koda, testi in CI končani
+- potrebna uporabnikova akcija: Vercel → Settings → Tokens → nov žeton s scope-om »robertpezdirc12-designs-projects« (najprej SAML prijava), ali Deploy iz nadzorne plošče
