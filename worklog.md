@@ -1241,3 +1241,27 @@ Work Log:
 Stage Summary:
 - Issue #1 POPOLNOMA izveden: P0 (1,2,3) + P1 (4,5,6) + P2 (7) ✓; P2 §8 (distributed rate limiting) = sprejeta strategija: Vercel hobby = ena regija/en proces → process-local limiter učinkovit; za multi-instanco je centralizacija na infrastrukturi (documented in DEPLOYMENT.md)
 - Deliveroti: v1.21.0 · dokumentacija DEPLOYMENT.md + RECOVERY.md §9 · CI z obveznim regression gateom
+
+---
+Task ID: R470
+Agent: main (Z.ai Code)
+Task: GitHub issue #8 §5 — SMART VISION: mere predmetov in človeška figura
+
+Work Log:
+- sanbox ponastavljen (predloga v /home/z/my-project); razvojno okolje OBNOVLJENO iz GitHuba: repo v /home/z/roksal na R469, dev strežnik :3000 zdrav, embedded PG :54329, Vercel CLI povezan (prj_gADsin7EWWetd1gTYshTgVDXEvQA)
+- preverjeno stanje: GitHub main = R469 (c7be3ca, tag v1.25.0); produkcija roksal-railing-manager.vercel.app ŽIVI na R469 (health OK, endpoint iz R469 odgovarja 401, deployment 14:41 UTC > commit 14:37 UTC); GitLab še vedno blokiran (CDN 403, tudi anonimno)
+- implementiran R470 (issue #8 §5):
+  • CORE: MEASURE_METHODS (DEPTH_AR/KALIBRIRANA_FOTOGRAFIJA/VEC_POGLEDOV/ROCNI_VNOS/ROCNO_POPRAVLJENO), DimAxis + proposeAxes (osi BREZ cm — poštenost §5), axisCmFromReference (referenčna skala), consolidateMeasures (popravka zmaga, konflikt > 15 % se prijavi), looksLikePerson + personHeightNote, sanitize izpusti OSEBA (zasebnost — živa zaznava se ne persistira), applyEdits izpelje metodo mere (DEPTH_AR rezerviran za senzorje)
+  • PERCEPCIJA: gibanje + razmerje stranic → OSEBA (NEJASNO, 0,3), sicer OVIRA; dokumentirana meja: mirujoče osebe brez ML niso zaznane
+  • UI: kartica Mere (vnos ročne izmere po osi, referenčna skala z ocenami, konsolidirane mere z metodo/toleranco/konflikti), kartica Oseba (samo zakritje + zasebnost), overlay merilne črte osi + chip mere + »morebitna oseba«, zajem obogoti elemente z osmi in preskoči OSEBO
+  • API: PATCH scene-element sprejema measure {label, valueCm, toleranceCm?}; revizija SCENE_EDIT z before.measures; izvirnik ostaja nedotaknjen
+- testi: tests/r470.py 59/59 ✓ (RBAC fail-closed, sanitizacija osi/mer, zasebnost OSEBA, PATCH mere z izpeljavo metode, core logika, regresija F2/F3)
+- regresija: r465 90/90, r467 41/41, r468 40/40, r469 47/47 ✓ (skupaj 277 kontrol zelenih); tsc 0 napak; lint čisto
+- popravki robustnosti testov: bun_ts v r465/r467–r470 sprejme samo postgres URL iz okolja (sqlite ostanki sandbox lupine so prej prelomili Prisma klienta)
+- CI matrika preimenovana v r465-r470 (+ r470.py); run-all.sh dopolnjen z r465–r470 (prej manjkali)
+- commit 0f0a159 + tag v1.26.0 potisnjena na GitHub; CI zagnan (run 38063740253)
+
+Stage Summary:
+- issue #8 §5 POPOLNOMA izveden po faznem redu (F0–F3 + §5); naslednja faza po §11: Faza 4 — senzorji (ARCore Depth adapter), optimizacija in integracija, ali #9 HOVER PARITY (P1)
+- ključne odločitve: OSEBA se ne persistira (zasebnost §5); DEPTH_AR metoda rezervirana za prihodnjo integracijo senzorjev; osi nikoli ne nosijo cm brez reference
+- deliveroti: tag v1.26.0, CI skupina r465-r470, tests/r470.py
