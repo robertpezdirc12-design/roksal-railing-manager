@@ -16,6 +16,11 @@
 //   • človeška figura: živa hevristika (gibanje + razmerje stranic) SAMO
 //     za razumevanje zakritja — NE shranjuje se v posnetek (zasebnost §5),
 //     NE identificira oseb, višino NE trdi brez veljavne reference.
+// R471 (issue #8 — Faza 4 „Senzorji“): ARCORE DEPTH / WEBXR — manifest
+//   senzorja globine (provider/format/ločljivost/skala/fokus/čas), čista
+//   matematika unproject+razdalja in pravilo, da je DEPTH_AR mera veljavna
+//   SAMO z veljavnim manifestom (element in popravek); ročna pot ga nikoli
+//   ne ponudi (invarianta R470 ohranjena).
 // Čista logika brez DOM/React — enako testirljiva kot measure-engine/prefab-core.
 //
 // Načelo celotnega modula (issue #8 §2, §6): AVTOMATIKA JE PREDLOG, NE
@@ -138,6 +143,11 @@ export interface SceneEdit {
     toleranceCm?: number
     /** izvor izračuna (KALIBRIRANA_FOTOGRAFIJA) — drugače izpeljano */
     method?: MeasureMethod
+    /**
+     * R471 (F4): manifest senzorja globine — če je veljaven, metoda postane
+     * DEPTH_AR (senzorska pot; ročni vnos tega polja v UI ni mogoč).
+     */
+    depth?: DepthManifest
     at?: number
   }
   by: string
@@ -475,6 +485,8 @@ export interface SceneMeasure {
   method: MeasureMethod
   /** Dokazljiva toleranca (cm), če jo monter pozna (npr. podatki proizvajalca). */
   toleranceCm?: number
+  /** R471 (F4): manifest senzorja globine — obvezno pri metodi DEPTH_AR. */
+  sensor?: DepthManifest
   at: number
   by?: string
 }
@@ -524,6 +536,106 @@ export function axisCmFromReference (
   const ratio = axisSpan(targetAxis, aspect) / refSpan
   if (!Number.isFinite(ratio) || ratio <= 0) return null
   return Math.round(Math.min(SCENE_LIMITS.measureCmMax, refCm * ratio) * 10) / 10
+}
+
+// ── R471 (issue #8 Faza 4 — §11 „Senzorji“): ARCORE DEPTH / WEBXR ────────────
+//
+// MANIFEST SENZORJA GLOBINE: DEPTH_AR mera je veljavna SAMO z zapisanim
+// manifestom (ponudnik, format, ločljivost, skala, goriščna razdalja, čas
+// zajema) — sledljivost izvora po verigi dokazov (issue §6). Manifest je
+// KNJIŽENJE izvora, ne kriptografski dokaz: enaka raven zaupanja kot pri
+// metodi KALIBRIRANA_FOTOGRAFIJA (odjemalec izjavi izvor, strežnik ga
+
+
+// zapiše). Ročni popravek v UI manifesta NE ponudi — invarianta R470
+// („ročni popravek ne more pretendati DEPTH_AR“) ostane nespremenjena.
+//
+// Matematika spodaj je ČISTA (enako testirljiva kot ostalo jedro):
+// unprojectDepthSample/depthDistanceCm/pointsDistanceCm uporablja adapter
+// globine (src/lib/depth-adapter.ts) na NAPRAVI; tukaj le izračun.
+
+/** Ponudniki globine — WebXR depth-sensing je spletna pot do ARCore. */
+export const DEPTH_PROVIDERS = ['WEBXR_DEPTH'] as const
+export type DepthProvider = (typeof DEPTH_PROVIDERS)[number]
+
+/** Manifest zajema globine (sledljivost DEPTH_AR mere). */
+export interface DepthManifest {
+  provider: DepthProvider
+  /** format globinske slike (npr. 'luminance-alpha', 'float32'). */
+  depthFormat: string
+  /** skala surove vrednosti v metre (> 0, končno). */
+  rawValueToMeters: number
+  /** širina globinske slike v px. */
+  width: number
+  /** višina globinske slike v px. */
+  height: number
+  /** goriščna razdalja kamere v px ob zajemu (> 0) — za unproject. */
+  focalPx: number
+  /** čas zajema (epoch ms). */
+  timestamp: number
+}
+
+/** Pragova veljavne globine v metrih (ARCore full-range ~ do 8 m). */
+export const DEPTH_MIN_M = 0.05
+export const DEPTH_MAX_M = 8
+
+/** Vzorec globine na točki kadra (u, v v 0..1, izvor zgoraj-levo) z globino v m. */
+export interface DepthSample { u: number; v: number; depthM: number }
+
+/** Defenzivna validacija manifesta senzorja globine (isti vzorec kot ostala sanitizacija). */
+export function isDepthManifest (raw: unknown): DepthManifest | null {
+  if (!raw || typeof raw !== 'object') return null
+  const q = raw as Record<string, unknown>
+  if (!DEPTH_PROVIDERS.includes(q.provider as DepthProvider)) return null
+  if (typeof q.depthFormat !== 'string' || !q.depthFormat || q.depthFormat.length > 32) return null
+  const rawValueToMeters = typeof q.rawValueToMeters === 'number' && Number.isFinite(q.rawValueToMeters) && q.rawValueToMeters > 0
+    ? q.rawValueToMeters : null
+  const width = typeof q.width === 'number' && Number.isFinite(q.width) && Number.isInteger(q.width) && q.width >= 1 && q.width <= 4096 ? q.width : null
+  const height = typeof q.height === 'number' && Number.isFinite(q.height) && Number.isInteger(q.height) && q.height >= 1 && q.height <= 4096 ? q.height : null
+  const focalPx = typeof q.focalPx === 'number' && Number.isFinite(q.focalPx) && q.focalPx > 0 ? q.focalPx : null
+  const timestamp = typeof q.timestamp === 'number' && Number.isFinite(q.timestamp) ? Math.round(q.timestamp) : null
+  if (rawValueToMeters == null || width == null || height == null || focalPx == null || timestamp == null) return null
+  return { provider: q.provider as DepthProvider, depthFormat: q.depthFormat.slice(0, 32), rawValueToMeters, width, height, focalPx, timestamp }
+}
+
+/** Točka v prostoru kamere (desnosučno, kamera gleda −z). */
+export interface DepthPoint3 { x: number; y: number; z: number }
+
+/**
+ * Unproject vzorca globine v prostor kamere: px = u·w − w/2, py = v·h − h/2
+ * (y raste navzdol — dosledno z orientacijo slike), z = −globina.
+ * Vrne null, če vzorec ni uporaben (u/v izven 0..1, globina izven meja) —
+ * nikoli ne ugibamo (§5/§6 poštenost).
+ */
+export function unprojectDepthSample (s: DepthSample, m: DepthManifest): DepthPoint3 | null {
+  if (!s || typeof s !== 'object') return null
+  if (typeof s.depthM !== 'number' || !Number.isFinite(s.depthM)) return null
+  if (s.depthM < DEPTH_MIN_M || s.depthM > DEPTH_MAX_M) return null
+  if (typeof s.u !== 'number' || !Number.isFinite(s.u) || s.u < 0 || s.u > 1) return null
+  if (typeof s.v !== 'number' || !Number.isFinite(s.v) || s.v < 0 || s.v > 1) return null
+  const px = s.u * m.width - m.width / 2
+  const py = s.v * m.height - m.height / 2
+  return { x: (px * s.depthM) / m.focalPx, y: (py * s.depthM) / m.focalPx, z: -s.depthM }
+}
+
+/** Metrična razdalja med točkama v cm (zaokroženo na 0,1) ali null. ČISTA. */
+export function pointsDistanceCm (a: DepthPoint3, b: DepthPoint3): number | null {
+  const dx = a.x - b.x; const dy = a.y - b.y; const dz = a.z - b.z
+  const cm = Math.sqrt(dx * dx + dy * dy + dz * dz) * 100
+  if (!Number.isFinite(cm) || cm <= 0 || cm > SCENE_LIMITS.measureCmMax) return null
+  return Math.round(cm * 10) / 10
+}
+
+/**
+ * Razdalja med dvema točkama IZ GLOBINE istega kadra/poze (cm) ali null,
+ * če katerikoli vzorec ni uporaben. Za mere čez DVE POZI (dva tapa v AR)
+ * adapter točke najprej pretvori v skupni prostor — glej depth-adapter.ts.
+ */
+export function depthDistanceCm (a: DepthSample, b: DepthSample, m: DepthManifest): number | null {
+  const pa = unprojectDepthSample(a, m)
+  const pb = unprojectDepthSample(b, m)
+  if (pa == null || pb == null) return null
+  return pointsDistanceCm(pa, pb)
 }
 
 /**
@@ -878,17 +990,24 @@ export function applyEdits (result: SceneUnderstandingResult): SceneElement[] {
     // odjemalca in strežnik): ponovni vnos istega naziva je POPRAVEK.
     // DEPTH_AR je REZERVIRAN za prihodnjo integracijo senzorja globine —
     // ročni popravek ga ne more „pretentati“ (issue §5: mera z metodo).
+    // R471 (F4): senzorska pot — VELJAVEN manifest globine (edit.measure.depth)
+    // metodo postavi v DEPTH_AR; manifest se zapiše na mero (sledljivost §6).
+    // Ročni vnos (brez manifesta) pomeni POPRAVEK prejšnje mere →
+    // ROCNO_POPRAVLJENO (konsolidacija: popravka prevlada, tudi nad DEPTH_AR).
     if (edit.measure && typeof edit.measure.label === 'string' && edit.measure.label &&
         typeof edit.measure.valueCm === 'number' && Number.isFinite(edit.measure.valueCm) &&
         edit.measure.valueCm > 0) {
       const label = edit.measure.label.slice(0, SCENE_LIMITS.measureLabelMaxLen)
       const value = Math.max(0.1, Math.min(SCENE_LIMITS.measureCmMax, Math.round(edit.measure.valueCm * 10) / 10))
       const existing = (el.measures ?? []).some((m) => m.label === label)
-      const method: MeasureMethod = existing
-        ? 'ROCNO_POPRAVLJENO'
-        : (edit.measure.method === 'KALIBRIRANA_FOTOGRAFIJA' || edit.measure.method === 'VEC_POGLEDOV'
-            ? edit.measure.method
-            : 'ROCNI_VNOS')
+      const depthManifest = edit.measure.depth != null ? isDepthManifest(edit.measure.depth) : null
+      const method: MeasureMethod = depthManifest != null
+        ? 'DEPTH_AR'
+        : existing
+          ? 'ROCNO_POPRAVLJENO'
+          : (edit.measure.method === 'KALIBRIRANA_FOTOGRAFIJA' || edit.measure.method === 'VEC_POGLEDOV'
+              ? edit.measure.method
+              : 'ROCNI_VNOS')
       const tolRaw = edit.measure.toleranceCm
       const toleranceCm = typeof tolRaw === 'number' && Number.isFinite(tolRaw) && tolRaw >= 0 && tolRaw <= value
         ? Math.round(tolRaw * 10) / 10
@@ -898,6 +1017,7 @@ export function applyEdits (result: SceneUnderstandingResult): SceneElement[] {
         valueCm: value,
         method,
         ...(toleranceCm != null ? { toleranceCm } : {}),
+        ...(depthManifest != null ? { sensor: depthManifest } : {}),
         at: edit.measure.at ?? edit.at,
         ...(edit.by ? { by: edit.by } : {}),
       }].slice(-SCENE_LIMITS.maxMeasuresPerElement)
@@ -1017,12 +1137,17 @@ export function sanitizeSceneResult (raw: unknown): SceneUnderstandingResult | n
           ? Math.round(measureRaw.toleranceCm * 10) / 10 : undefined
         const mMethod = (MEASURE_METHODS.includes(measureRaw.method as MeasureMethod) && measureRaw.method !== 'DEPTH_AR')
           ? measureRaw.method as MeasureMethod : undefined
+        // R471 (F4): manifest senzorja globine preživi sanitizacijo popravka —
+        // iz njega applyEdits izpelje metodo DEPTH_AR (ne iz zahteve). Neveljaven
+        // manifest se TIHO izpusti (mera ostane ročna pot — enako kot R470).
+        const mDepth = measureRaw.depth != null ? isDepthManifest(measureRaw.depth) : undefined
         if (mLabel && mVal != null && mVal >= 0.1 && mVal <= SCENE_LIMITS.measureCmMax) {
           measure = {
             label: mLabel,
             valueCm: mVal,
             ...(mTol != null ? { toleranceCm: mTol } : {}),
             ...(mMethod ? { method: mMethod } : {}),
+            ...(mDepth != null ? { depth: mDepth } : {}),
           }
         }
       }
@@ -1114,7 +1239,12 @@ function sanitizeMeasures (raw: unknown): SceneMeasure[] {
     const label = typeof q.label === 'string' && q.label.trim() ? q.label.trim().slice(0, SCENE_LIMITS.measureLabelMaxLen) : null
     const valueRaw = typeof q.valueCm === 'number' && Number.isFinite(q.valueCm) ? Math.round(q.valueCm * 10) / 10 : null
     const valueCm = valueRaw != null && valueRaw >= 0.1 && valueRaw <= SCENE_LIMITS.measureCmMax ? valueRaw : null
-    const method = MEASURE_METHODS.includes(q.method as MeasureMethod) ? q.method as MeasureMethod : null
+    // R471 (F4): DEPTH_AR velja SAMO z veljavnim manifestom senzorja —
+    // mera z „AR globina“ brez dokazljivega izvora se IZPUSTI (§6 poštenost).
+    const sensor = isDepthManifest(q.sensor)
+    const method = MEASURE_METHODS.includes(q.method as MeasureMethod)
+      ? (q.method === 'DEPTH_AR' && sensor == null ? null : q.method as MeasureMethod)
+      : null
     if (!label || valueCm == null || !method) continue
     if (out.length >= SCENE_LIMITS.maxMeasuresPerElement) break
     const toleranceRaw = typeof q.toleranceCm === 'number' && Number.isFinite(q.toleranceCm) &&
@@ -1124,6 +1254,7 @@ function sanitizeMeasures (raw: unknown): SceneMeasure[] {
     out.push({
       label, valueCm, method,
       ...(toleranceRaw != null ? { toleranceCm: toleranceRaw } : {}),
+      ...(method === 'DEPTH_AR' && sensor != null ? { sensor } : {}),
       at,
       ...(by != null ? { by } : {}),
     })

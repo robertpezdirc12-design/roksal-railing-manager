@@ -1268,3 +1268,28 @@ Stage Summary:
 - DEPLOY R470: Vercel CLI (token uporabnika) → dpl_HDzm6G12eHRgxk3Bxv4NFRHEuVgr READY; health OK
 - PRODUKCIJSKA SANACIJA: Neon baza je bila PRAZNA (0 uporabnikov/nastavitev/projektov — prijava na produkciji NI bila mogoča nikoli!). Izveden popoln seed (7 skript) prek dešifriranega DATABASE_URL (vercel env pull, poverilnice po uporabi POBRISANE). Prijava monter@roksal.si na produkciji zdaj deluje; R470 smoke na produkciji: mere/osi persistirane, OSEBA izpuščena (zasebnost), PATCH measure → ROCNO_POPRAVLJENO; smoke posnetek počiščen
 - brskalniška verifikacija (agent-browser): prijava monter → AR modul se izriše brez napak (namizje + mobilni 390×844); issue #8 komentar objavljen (6099223617)
+
+---
+Task ID: R471
+Agent: main (Z.ai Code)
+Task: GitHub issue #8 Faza 4 (§11) — SMART VISION: senzorji (ARCore Depth), optimizacija in integracija
+
+Work Log:
+- seja nadaljevana (nov Vercel žeton od uporabnika — a ta NIMA scope-a projekta: 403 »robertpezdirc12-designs-projects«, limited token brez tima; stari žeton še deluje in je bil uporabljen za operacije; obnovitev okolja: repo /home/z/roksal na R470, dev :3000 zdrav, PG :54329)
+- preverjeno stanje: GitHub main = R470 (27849e0, worklog-only commit; koda = b35d1dfa že v produkciji dpl_HDzm6G12 READY); GitLab ŠE VEDNO blokiran (anonimni GET 403)
+- implementiran R471 (issue #8 Faza 4):
+  • CORE (scene-understanding-core.ts): DepthManifest + isDepthManifest (provider WEBXR_DEPTH/format/skala/ločljivost/fokus/čas), DEPTH_MIN_M/DEPTH_MAX_M (0,05–8 m), DepthSample + unprojectDepthSample (pinhole, y navzdol, z = −globina), pointsDistanceCm, depthDistanceCm; SceneMeasure.sensor + SceneEdit.measure.depth; applyEdits izpelje metodo DEPTH_AR IZKLJUČNO iz veljavnega manifesta (ročna pot ostane ROCNI_VNOS/ROCNO_POPRAVLJENO — invarianta R470); sanitizeMeasures izpusti DEPTH_AR brez manifesta (poštenost §6); edit-sanitizacija ohrani measure.depth
+  • ADAPTER (src/lib/depth-adapter.ts, NOV): WebXR depth-sensing pot do ARCore — detectDepthSupport (isSessionSupported immersive-ar; iOS Safari pošteno NI podprt → padec na referenco), startDepthMeasurement (AR seja z optionalFeatures depth-sensing + cpu-optimized/luminance-alpha, XRWebGLLayer tanko čistjenje, select dogodki = tap; žarek tapa → prostor kamere (view.transform.inverse) → slikovna točka (u,v) → getDepthInMeters → unproject → SVETOVNA točka (skupni prostor) → razdalja po dveh tapih; timeout 60 s; tap brez veljavne globine SE NE ŠTEJE); čiste pomožne focalPxFromProjection/multiplyPoint/transformRay; brez novih odvisnosti (lokalni WebXR vmesti — @types/webxr ni nameščen)
+  • OPTIMIZACIJA (scene-perception.ts): GUVERNER nextPerfPlan (čista, testirljiva) — proračun 60 % intervala, 3 zaporedni počasni kadrčki → degradacija EN korak (interval ×1,4 do 750 ms, širina ÷1,3 do 160 px), enosmerno (brez toplotnega nihanja), null tick resetira; startSceneLoop ponovno uporablja sivinska medpomnilnika (swap/recikliranje — brez alokacije Float32Array na kadrčku), applyTimer ob degradaciji, onPerf poročilo (opcijsko)
+  • API (scene-element/route.ts): PATCH sprejema { measure, depth } — veljaven manifest → senzorska pot (metodo izpelje applyEdits iz manifesta, method trditev za DEPTH_AR se IGNORIRA); neveljaven manifest → 400; depth brez measure → 400; revizija SCENE_EDIT z depthSource {provider, format, ločljivost, čas}
+  • UI (ar.tsx): zaznava podpore ob odprtju modula (neblokirajoče), kartica »AR globina (senzor)« v Mere (pošteno sporočilo podprto/zakaj ne), gumb »AR globina« na osi SAMO če naprava dejansko podpira immersive-ar (issue §0), AR seja z dvema tapoma (napredek »Točka 1/2 …«), ob napaki/koncu seje kamera samodejno vrne; čiščenje seje ob odklopu
+- testi: tests/r471.py 39/39 ✓ (RBAC fail-closed, core logika bun: manifest/unproject/razdalje/guverner/applyEdits/konsolidacija/sanitize/adapter, API PATCH z globino + revizija, POST sanitizacija, regresija F2/F3/zasebnost)
+- regresija: r465 90/90, r467 41/41, r468 40/40, r469 47/47, r470 59/59 ✓ (skupaj 316 kontrol zelenih); tsc 0 napak; lint čisto
+- CI: matrika preimenovana v r465-r471 (+ r471.py); run-all.sh dopolnjen z r471
+- brskalniška verifikacija (agent-browser): prijava monter → AR modul se izriše BREZ napak (namizje 1280×800 + mobilni 390×844, screenshots posneti); WebXR sonda v peskovniku pošteno vrne »ni podprto« (fallback pot deluje); testni snapshot iz brskalnika počiščen
+
+Stage Summary:
+- issue #8 Faza 4 (senzorji + optimizacija + integracija) POPOLNOMA izvedena; naslednja faza po §11: Faza 5 — uporabniško testiranje na resničnih objektih (zahteva fizične naprave z ARCore), ali #9 HOVER PARITY (P1)
+- ključne odločitve: DEPTH_AR mera je veljavna SAMO z manifestom senzorja (sledljivost §6); iOS brez WebXR-AR ostaja na referenčni poti (brez lažnega obljubljanja §0); degradacija guvernerja enosmerna (toplotna stabilnost); native iOS adapter NI dodan (ni potrebe — obstoječa pot mer pokriva)
+- deliveroti: tests/r471.py, src/lib/depth-adapter.ts (nov), CI skupina r465-r471
+- ODPRTA TEŽAVA (za uporabnika): novi Vercel žeton vcp_0Iw9… NIMA scope-a »robertpezdirc12-designs-projects« (SAML) — za prihodnje API operacije je treba ustvariti žeton z izbranim timom/scope-om; stari žeton še velja (do preklica)

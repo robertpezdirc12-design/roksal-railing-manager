@@ -20,6 +20,16 @@
 //   • STABILIZACIJA: povlek z nizkofrekvenčnim glajenjem (rAF low-pass) +
 //     ZAKLEP položaja (prepreči nerodni pomik ob zajemu).
 //   • IZVOZ ZAJEMA: prenos PNG (zadnji zajem + zgodovina) — data URL → a[download].
+// R471 (issue #8 Faza 4 — SENZORJI + INTEGRACIJA):
+//   • ZAZNAVA PODPORE AR GLOBINE (detectDepthSupport — WebXR/ARCore). Gumb
+//     „Izmeri z globino“ se prikaže SAMO, ko naprava dejansko podpira immersive-ar
+//     (issue §0: brez lažnega obljubljanja); sicer kartica pove razlog in ponudi
+//     obstoječi poti (referenca / ročni vnos).
+//   • MERA Z GLOBINO: AR seja z depth-sensing (dva tapa) → razdalja v cm →
+//     sceneEdit z manifestom senzorja → metoda DEPTH_AR (izpelje applyEdits).
+//     Ob napaki/izstopu iz seje monter ostane na obstoječem toku (brez izgube).
+//   • GUVERNER PERCEPCIJE (R471 core): zanka se ob preobremenitvi sama
+//     umiri (daljši interval, ožja slika) — toplotna stabilnost na telefonu.
 // Monter (measurements.write) vidi vse; skladiščnik/proizvodnja samo zgodovino.
 
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type Ref } from 'react'
@@ -45,6 +55,7 @@ import {
   axisCmFromReference, consolidateMeasures, personHeightNote, proposeAxes,
   type SceneClass, type SceneEdit, type SceneElement, type SurfaceKind,
 } from '@/lib/scene-understanding-core'
+import { detectDepthSupport, startDepthMeasurement, type DepthSupportInfo } from '@/lib/depth-adapter'
 import { hasPerm } from '@/lib/permissions-core'
 
 const ANTHRACITE = '#2b2f36'
@@ -171,6 +182,12 @@ export default function ArModule () {
   const [refCmInput, setRefCmInput] = useState('')
   /** R470 (§5): razmerje stranic žive slike — za izračun dolžin osi v px. */
   const [videoAspect, setVideoAspect] = useState(4 / 3)
+  /** R471 (F4): zaznana podpora AR globine (WebXR/ARCore) — null = še preverjam. */
+  const [depthSupport, setDepthSupport] = useState<DepthSupportInfo | null>(null)
+  /** R471 (F4): koliko tapov je že zabeleženih v tekoči AR meri (0..2). */
+  const [depthTaps, setDepthTaps] = useState(0)
+  /** R471 (F4): AR seja za mero z globino je v teku. */
+  const [depthBusy, setDepthBusy] = useState(false)
   /** elementi z apliciranimi popravki (za prikaz/detalj) */
   const sceneDisplayed = sceneState.elements.length > 0
     ? applyEdits({ version: 1, at: Date.now(), elements: sceneState.elements, edits: sceneEdits })
@@ -211,6 +228,8 @@ export default function ArModule () {
   const posRef = useRef({ x: 0, y: 20 })
   const targetRef = useRef({ x: 0, y: 20 })
   const rafRef = useRef<number | null>(null)
+  /** R471 (F4): stop-funkcija tekoče AR seje globine (čiščenje ob odklopu). */
+  const depthStopRef = useRef<(() => void) | null>(null)
 
   // R454: AI analiza prizora
   const [analysis, setAnalysis] = useState<ArAnalysis | null>(null)
@@ -246,13 +265,77 @@ export default function ArModule () {
   const heightCm = Math.min(250, Math.max(40, Math.round(Number(heightS) || 110)))
 
   // POČIŠČENJE: ob odklopu ustavi vse steze kamere + morebitni rAF glajenja
+  // + R471: morebitno AR sejo globine
   useEffect(() => {
     return () => {
       streamRef.current?.getTracks().forEach((t) => t.stop())
       streamRef.current = null
       if (rafRef.current != null) cancelAnimationFrame(rafRef.current)
+      if (depthStopRef.current != null) { try { depthStopRef.current() } catch { /* n/a */ } depthStopRef.current = null }
     }
   }, [])
+
+  // R471 (F4): ENKRATNA zaznava podpore AR globine (WebXR immersive-ar) —
+  // neblokirajoče: odgovor pride, ko pride; medtem UI ne obljublja nič.
+  useEffect(() => {
+    let alive = true
+    void detectDepthSupport()
+      .then((info) => { if (alive) setDepthSupport(info) })
+      .catch(() => { if (alive) setDepthSupport({ supported: false, provider: null, reason: 'Podpore za AR globino ni bilo mogoče preveriti — merite z referenco.' }) })
+    return () => { alive = false }
+  }, [])
+
+  /**
+   * R471 (F4): MERA Z AR GLOBINO — odpre WebXR AR sejo (depth-sensing),
+   * monter tapne dve točki, adapter izračuna metrično razdaljo in vrne
+   * manifest senzorja. Rezultat se zapiše kot sceneEdit z manifestom →
+   * applyEdits izpelje metodo DEPTH_AR. Napake so poštene (razlog + padec
+   * na obstoječi tok) — merjenje nikoli ne ostane „obviseno“.
+   */
+  async function runDepthMeasure (label: string): Promise<void> {
+    if (depthBusy) return
+    setDepthBusy(true)
+    setDepthTaps(0)
+    const cameraWasOn = mode === 'on'
+    if (cameraWasOn) stopCamera() // WebXR seja prevzame kamero
+    try {
+      await new Promise<void>((resolve) => {
+        void startDepthMeasurement((result) => {
+          if (result.ok) {
+            setSceneEdits((prev) => [...prev, {
+              elementId: sceneSelectedId ?? '',
+              measure: { label, valueCm: result.distanceCm, depth: result.manifest },
+              by: user?.name ?? 'monter',
+              at: Date.now(),
+            }])
+            toast({
+              title: 'Mera iz AR globine zabeležena.',
+              description: `${label}: ${result.distanceCm.toFixed(1).replace('.', ',')} cm (AR globina, ${result.manifest.depthFormat}) — shrani se z zajemom AR posnetka.`,
+            })
+          } else {
+            toast({
+              title: 'Mera z globino ni uspela.',
+              description: `${result.reason} Podatki ostajajo — merite z referenco ali ročno.`,
+            })
+          }
+          resolve()
+        }, {
+          onTap: (count) => { setDepthTaps(count) },
+        }).then((stop) => {
+          // če se komponenta odklopi med sejo, jo zapri (memory leak varnost)
+          depthStopRef.current = stop
+        }).catch(() => {
+          toast({ title: 'Mera z globino ni uspela.', description: 'AR seje ni bilo mogoče odpreti na tej napravi — merite z referenco ali ročno.' })
+          resolve()
+        })
+      })
+    } finally {
+      setDepthBusy(false)
+      setDepthTaps(0)
+      depthStopRef.current = null
+      if (cameraWasOn) await startCamera()
+    }
+  }
 
   function stopCamera (): void {
     streamRef.current?.getTracks().forEach((t) => t.stop())
@@ -1051,6 +1134,21 @@ export default function ArModule () {
                                       Prevzemi ≈ {computed.toFixed(1).replace('.', ',')} cm
                                     </Button>
                                   ) : null}
+                                  {/* R471 (F4): MERA Z AR GLOBINO — samo, ko naprava DEJANSKO podpira
+                                      immersive-ar (issue §0); drugače gumba preprosto ni. */}
+                                  {depthSupport?.supported === true ? (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-8"
+                                      disabled={depthBusy}
+                                      aria-label={`Izmeri ${a.label} z AR globino (dva tapa v AR pogledu)`}
+                                      onClick={() => { void runDepthMeasure(a.label) }}
+                                    >
+                                      {depthBusy ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <ScanLine className="size-3.5" aria-hidden />}
+                                      {depthBusy ? (depthTaps > 0 ? `Točka ${depthTaps}/2 …` : 'AR seja …') : 'AR globina'}
+                                    </Button>
+                                  ) : null}
                                   <span id={`scene-measure-${i}-help`} className="sr-only">
                                     Vnesite z merilnim trakom ali laserjem izmerjeno dolžino te osi v centimetrih.
                                   </span>
@@ -1060,6 +1158,21 @@ export default function ArModule () {
                           })}
                         </ul>
                       ) : null}
+
+                      {/* R471 (F4): zmožnost AR globine — pošteno sporočilo o senzorju
+                          (podprto / zakaj ne); mere ostanejo možne tudi brez njega. */}
+                      <div className="mt-2 rounded border bg-secondary/30 px-2 py-1.5">
+                        <p className="text-[11px] font-medium">AR globina (senzor)</p>
+                        {depthSupport == null ? (
+                          <p className="mt-0.5 text-[10px] text-muted-foreground">Preverjam podporo senzorja globine …</p>
+                        ) : depthSupport.supported ? (
+                          <p className="mt-0.5 text-[10px] text-muted-foreground">
+                            Podprta prek WebXR/ARCore — gumb „AR globina“ pri osi odpre AR mero z dvema tapoma; rezultat se zapiše z metodo „AR globina“ in manifestom senzorja.
+                          </p>
+                        ) : (
+                          <p className="mt-0.5 text-[10px] text-muted-foreground">{depthSupport.reason}</p>
+                        )}
+                      </div>
 
                       {/* referenčna skala: ena znana dolžina → izračun ostalih osi */}
                       {selectedAxes.length >= 1 ? (

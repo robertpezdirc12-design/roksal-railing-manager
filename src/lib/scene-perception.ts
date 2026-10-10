@@ -22,6 +22,15 @@
 //
 // Zmogljivost: canvas ≤ 320 px, interval privzeto 250 ms (~4 Hz), izklop ob
 // document.hidden — namenjeno telefonom brez pregrevanja (issue §10).
+//
+// R471 (issue #8 — Faza 4 „Optimizacija“): GUVERNER ZMOGLJIVOSTI — meri čas
+//   obdelave vsake sličice in ob 3 zaporednih POČASNIH kadrčkih (> 60 %
+//   intervala) enostopenjsko degradira (interval ×1,4 do 750 ms, delovna
+//   širina ÷1,3 do 160 px). DEGRADACIJA JE ENOSMERNA znotraj seje: brez
+//   avtomatskega okrevanja — izognemo se nihanju obremenitve in toplotnim
+//   sunkom (issue §10: „temperatura, pomnilnik, delovanje offline“). Nova
+//   seja začne spet od osnovnega načrta. Medpomnilniki sivin se PONOVNO
+//   uporabijo (ni alokacije Float32Array na vsakem kadrčku — manj GC pritiska).
 
 import {
   analyzeStairPattern, classifySurface, estimateSlope, looksLikePerson, newSceneId, stabilizeElements,
@@ -52,7 +61,81 @@ export interface SceneLoopOptions {
    * priskrbei lastno DeviceOrientation poslušanje — percepcija ostane čista.
    */
   getPhoneRollDeg?: () => number | null
+  /**
+   * R471 (F4): poročanje o stanju guvernerja (opcijsko — HUD brez šuma).
+   *   Kliče se ob vsaki SPREMEMBI načrta (degradacija), ne na vsakem kadrčku.
+   */
+  onPerf?: (perf: PerceptionPerf) => void
   onFrame: (frame: PerceptionFrame) => void
+}
+
+/** R471 (F4): poročilo guvernerja — za prikaz/diagnostiko. */
+export interface PerceptionPerf {
+  intervalMs: number
+  workWidth: number
+  /** zadnji čas obdelave sličice (ms) ali null (preskočena). */
+  lastTickMs: number | null
+  /** kolikokrat je guverner degradiral v tej seji. */
+  degradations: number
+}
+
+// ── R471 (F4): GUVERNER ZMOGLJIVOSTI — ČISTA ODLOČITEV (testirljiva) ──────
+
+/** Načrt izvajanja percepcije (meje: interval 120..750 ms, širina 160..640). */
+export interface PerceptionPlan {
+  intervalMs: number
+  workWidth: number
+  /** zaporedni počasni kadrčki (interni števec degradacije). */
+  slowRun: number
+}
+
+export const PERCEPTION_LIMITS = {
+  intervalMinMs: 120,
+  intervalMaxMs: 750,
+  workWidthMin: 160,
+  workWidthMax: 640,
+  /** obdelava naj poje največ ta delež intervala, sicer je kadrček „počasen“. */
+  budgetRatio: 0.6,
+  /** koliko zaporednih počasnih kadrčkov sproži degradacijo (prag proti GC sunkom). */
+  slowThreshold: 3,
+} as const
+
+function clampPlan (p: PerceptionPlan): PerceptionPlan {
+  const intervalMs = Math.round(Math.min(PERCEPTION_LIMITS.intervalMaxMs, Math.max(PERCEPTION_LIMITS.intervalMinMs, p.intervalMs)))
+  const workWidth = Math.round(Math.min(PERCEPTION_LIMITS.workWidthMax, Math.max(PERCEPTION_LIMITS.workWidthMin, p.workWidth)))
+  const slowRun = Number.isFinite(p.slowRun) && p.slowRun > 0 ? Math.min(99, Math.floor(p.slowRun)) : 0
+  return { intervalMs, workWidth, slowRun }
+}
+
+/**
+ * Naslednji korak guvernerja (ČISTO, brez DOM):
+ *  • tickMs = null → kadrček brez obdelave (skrit zavihek) — števci se
+ *    ponastavijo, načrt ostane;
+ *  • tickMs > intervalMs · 0,6 → počasen kadrček; po 3 zaporednih SE
+ *    degradira EN korak (interval ×1,4 do 750, širina ÷1,3 do 160) in
+ *    števec ponastavi;
+ *  • sicer → udoben kadrček, števec počasnih se ponastavi.
+ * Degradacija je NAMENOMA enosmerna (glej glavo datoteke — toplotna
+ * stabilnost). Rezultat je VEDNO znotraj meja PERCEPTION_LIMITS.
+ */
+export function nextPerfPlan (plan: PerceptionPlan, tickMs: number | null): PerceptionPlan {
+  const p = clampPlan(plan)
+  if (tickMs == null || !Number.isFinite(tickMs) || tickMs < 0) {
+    return { intervalMs: p.intervalMs, workWidth: p.workWidth, slowRun: 0 }
+  }
+  const budget = p.intervalMs * PERCEPTION_LIMITS.budgetRatio
+  if (tickMs > budget) {
+    const slowRun = p.slowRun + 1
+    if (slowRun < PERCEPTION_LIMITS.slowThreshold) {
+      return { intervalMs: p.intervalMs, workWidth: p.workWidth, slowRun }
+    }
+    return clampPlan({
+      intervalMs: Math.round((p.intervalMs * 1.4) / 10) * 10,
+      workWidth: Math.round((p.workWidth / 1.3) / 10) * 10,
+      slowRun: 0,
+    })
+  }
+  return { intervalMs: p.intervalMs, workWidth: p.workWidth, slowRun: 0 }
 }
 
 const SOBEL_THRESHOLD = 52 // jakost roba na 0..255 sivinah
@@ -79,33 +162,53 @@ const EDGE_SEARCH_BOT = 0.92 // pas iskanja robov (od zgoraj)
 /**
  * Zažene živo percepcijo nad <video>. Vrne stop(). Varno: ob napaki zanka
  * utihne, kamera ostane pri uporabniku — zajem nikoli ni odvisen od percepcije.
+ *
+ * R471 (F4 — optimizacija): zanka sledi guvernerju (nextPerfPlan) — ob
+ * preobremenitvi se interval podaljša in delovna širina zmanjša (toplotna
+ * stabilnost). Sivinski medpomnilnik se ponovno uporablja (brez alokacij
+ * na vsakem kadrčku); ob spremembi mere se zgodovina (prejšnji kadrček)
+ * ponastavi — gibanje se meri samo znotraj istih mer.
  */
 export function startSceneLoop (video: HTMLVideoElement, opts: SceneLoopOptions): () => void {
-  const intervalMs = Math.max(120, opts.intervalMs ?? 250)
-  const workWidth = Math.min(640, Math.max(160, opts.workWidth ?? 320))
   const getPhoneRollDeg = typeof opts.getPhoneRollDeg === 'function' ? opts.getPhoneRollDeg : null
   const onFrame = opts.onFrame
+  const onPerf = typeof opts.onPerf === 'function' ? opts.onPerf : null
+
+  // guverner: osnovni načrt iz želje odjemalca, znotraj meja
+  let plan = clampPlan({ intervalMs: opts.intervalMs ?? 250, workWidth: opts.workWidth ?? 320, slowRun: 0 })
+  let degradations = 0
 
   const canvas = document.createElement('canvas')
   const ctx = canvas.getContext('2d', { willReadFrequently: true })
-  let prevGray: Float32Array | null = null
+  // R471: PONOVNA UPORABA medpomnilnikov — dva sivinska medpomnilnika se
+  // zamenjata (swap), alokacija samo ob spremembi mere (degradacija).
+  let grayBuf: Float32Array | null = null
+  let prevBuf: Float32Array | null = null
   let prevW = 0
   let prevElements: SceneElement[] = []
   let timer: ReturnType<typeof setInterval> | null = null
   let running = true
 
+  function applyTimer (): void {
+    if (timer != null) clearInterval(timer)
+    timer = setInterval(tick, plan.intervalMs)
+  }
+
   function tick (): void {
     if (!running) return
     if (document.hidden || !ctx || video.videoWidth === 0) return
+    const t0 = typeof performance !== 'undefined' && typeof performance.now === 'function' ? performance.now() : null
     try {
-      const w = workWidth
+      const w = plan.workWidth
       const h = Math.max(1, Math.round((video.videoHeight / video.videoWidth) * w)) || 1
       if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h }
       ctx.drawImage(video, 0, 0, w, h)
       const data = ctx.getImageData(0, 0, w, h).data
 
       // sivine + kakovost (isti vzorec kot meritve-kamera — advisory)
-      const gray = new Float32Array(w * h)
+      if (grayBuf == null || grayBuf.length !== w * h) { grayBuf = new Float32Array(w * h); prevBuf = null }
+      const gray = grayBuf
+      gray.fill(0)
       let sum = 0
       for (let i = 0; i < w * h; i++) {
         const g = 0.299 * data[i * 4] + 0.587 * data[i * 4 + 1] + 0.114 * data[i * 4 + 2]
@@ -131,13 +234,17 @@ export function startSceneLoop (video: HTMLVideoElement, opts: SceneLoopOptions)
         blurry: blurScore < 45,
       }
 
-      const hasPrev = prevGray != null && prevW === w
+      const hasPrev = prevBuf != null && prevW === w
       let phoneRollDeg: number | null = null
       if (getPhoneRollDeg) {
         try { phoneRollDeg = getPhoneRollDeg() } catch { phoneRollDeg = null }
       }
-      const raw = analyzeFrame(data, gray, w, h, hasPrev ? prevGray : null, phoneRollDeg)
-      prevGray = gray
+      const raw = analyzeFrame(data, gray, w, h, hasPrev ? prevBuf : null, phoneRollDeg)
+      // R471: SWAP — trenutni kadrček postane prejšnji, STARI prejšnji pa
+      // naslednji delovni medpomnilnik (recikliranje — brez alokacije)
+      const recycled = prevBuf
+      prevBuf = gray
+      grayBuf = recycled
       prevW = w
 
       // stabilizacija: isti element obdrži ID med sličicami (oznake ne skačejo)
@@ -146,16 +253,32 @@ export function startSceneLoop (video: HTMLVideoElement, opts: SceneLoopOptions)
       onFrame({ elements, quality })
     } catch {
       // tiho — percepcija je dodatek; zajem mora vedno delovati (issue §7)
+    } finally {
+      // R471: GUVERNER — meri čas obdelave in po potrebi degradira
+      const tickMs = t0 != null && typeof performance !== 'undefined' && typeof performance.now === 'function'
+        ? performance.now() - t0
+        : null
+      const next = nextPerfPlan(plan, tickMs)
+      if (next.intervalMs !== plan.intervalMs || next.workWidth !== plan.workWidth) {
+        degradations += 1
+        plan = next
+        if (running) applyTimer()
+        if (onPerf) {
+          try { onPerf({ intervalMs: plan.intervalMs, workWidth: plan.workWidth, lastTickMs: tickMs, degradations }) } catch { /* HUD ne sme ustaviti zanke */ }
+        }
+      }
     }
   }
 
-  timer = setInterval(tick, intervalMs)
+  timer = setInterval(tick, plan.intervalMs)
   tick()
 
   return () => {
     running = false
     if (timer != null) clearInterval(timer)
-    prevGray = null
+    grayBuf = null
+    prevBuf = null
+    prevW = 0
   }
 }
 
