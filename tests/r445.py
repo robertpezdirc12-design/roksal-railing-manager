@@ -15,7 +15,7 @@ PASS, FAIL = 0, 0
 def bun (script):
     """Požene PrismaClient skripto prek bun -e (vzorec iz tests/r452.py)."""
     subprocess.run(['bun', '-e', script], capture_output=True, text=True,
-                   env={**__import__('os').environ, 'DATABASE_URL': os.environ.get('TEST_DB_URL', 'file:' + REPO + '/db/roksal.db')})
+                   env={**__import__('os').environ, 'DATABASE_URL': os.environ.get('TEST_DB_URL') or 'postgresql://roksal:roksal@localhost:54329/roksal'})
 
 def call (method, path, token=None, body=None):
     data = json.dumps(body).encode() if body is not None else None

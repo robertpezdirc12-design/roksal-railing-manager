@@ -34,7 +34,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 BASE = os.environ.get('BASE_URL', 'http://localhost:3030')
 PORT = int(re.search(r':(\d+)$', BASE).group(1)) if re.search(r':(\d+)$', BASE) else 3030
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DB = os.environ.get('TEST_DB_URL', 'file:' + REPO + '/db/roksal.db')
+DB = os.environ.get('TEST_DB_URL') or 'postgresql://roksal:roksal@localhost:54329/roksal'
 HOOK_PORT = 5998          # lokalni webhook sprejemnik (faza B)
 DEAD_HOOK = 'http://127.0.0.1:59999/neobstoja'  # nihče ne posluša (faza C)
 DEV_LOG = '/tmp/r464-dev.log'

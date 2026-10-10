@@ -63,7 +63,7 @@ def chk (cond, msg): ok(msg) if cond else bad(msg)
 
 def bun (script):
     r = subprocess.run(['bun', '-e', script], capture_output=True, text=True,
-                       env={**os.environ, 'DATABASE_URL': os.environ.get('TEST_DB_URL', 'file:' + REPO + '/db/roksal.db')})
+                       env={**os.environ, 'DATABASE_URL': os.environ.get('TEST_DB_URL') or 'postgresql://roksal:roksal@localhost:54329/roksal'})
     return r.stdout, r.stderr[:400]
 
 def audit_has (token, action, entityId, projectId=None):

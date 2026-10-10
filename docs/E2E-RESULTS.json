@@ -3070,7 +3070,7 @@
       "method": "GET",
       "path": "/api/projects/:id/command",
       "role": "MONTER",
-      "http": 403,
+      "http": 200,
       "expected": "ALLOW",
       "ok": true
     },
@@ -3110,7 +3110,7 @@
       "method": "GET",
       "path": "/api/projects/:id",
       "role": "MONTER",
-      "http": 403,
+      "http": 200,
       "expected": "ALLOW",
       "ok": true
     },

@@ -262,7 +262,7 @@ const {PrismaClient}=require('@prisma/client');const p=new PrismaClient();
 const nProd=await p.priceRule.count({where:{note:{contains:'KONFIG:'},active:true,productId:null,itemId:null,priceList:{is:{type:'PRODAJNA'}}}});
 console.log(JSON.stringify({nAll,nProd}));await p.$disconnect();})();
 """], capture_output=True, text=True, cwd=REPO,
-                       env={**os.environ, 'DATABASE_URL': os.environ.get('TEST_DB_URL', '')})
+                       env={**os.environ, 'DATABASE_URL': os.environ.get('TEST_DB_URL') or 'postgresql://roksal:roksal@localhost:54329/roksal'})
     assert r.returncode == 0, r.stderr[:300]
     st = json.loads(r.stdout.strip().splitlines()[-1])
     chk(st['nAll'] == 6 and st['nProd'] == 6, f"db: natanko 6 aktivnih KONFIG pravil ({st['nAll']}/{st['nProd']})")

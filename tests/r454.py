@@ -61,7 +61,7 @@ def skip (msg): global SKIP; SKIP += 1; print(f'  ⏭ SKIP: {msg}')
 
 def bun (script):
     r = subprocess.run(['bun', '-e', script], capture_output=True, text=True,
-                       env={**os.environ, 'DATABASE_URL': os.environ.get('TEST_DB_URL', 'file:' + REPO + '/db/roksal.db')})
+                       env={**os.environ, 'DATABASE_URL': os.environ.get('TEST_DB_URL') or 'postgresql://roksal:roksal@localhost:54329/roksal'})
     return 'CLEAN_DONE' in r.stdout, r.stderr[:300]
 
 # ── fixture fotografija terase (pravi JPEG za VLM analizo) ───────────────────

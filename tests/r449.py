@@ -238,7 +238,7 @@ const {PrismaClient}=require('@prisma/client');const p=new PrismaClient();
 '''.replace('__TAG__', TAG)
 import subprocess
 r = subprocess.run(['bun', '-e', CLEAN], capture_output=True, text=True,
-                   env={**__import__('os').environ, 'DATABASE_URL': os.environ.get('TEST_DB_URL', 'file:' + REPO + '/db/roksal.db')})
+                   env={**__import__('os').environ, 'DATABASE_URL': os.environ.get('TEST_DB_URL') or 'postgresql://roksal:roksal@localhost:54329/roksal'})
 print('čiščenje:', 'OK' if 'CLEAN_DONE' in r.stdout else ('NAPAKA: ' + r.stderr[:200]))
 
 print(f'═══ R449: {PASS} ✓ / {FAIL} ✗ ═══')

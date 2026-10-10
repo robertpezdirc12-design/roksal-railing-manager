@@ -71,6 +71,9 @@ export const SECTIONS: SectionDef[] = [
       // R461 (issue #16): DIGITALNI DVOJČEK — AS-MEASURED → AS-DESIGNED →
       // AS-PRODUCED → AS-INSTALLED, geometrijski diff + cross-check virov.
       { id: 'dvojcek', label: 'Digitalni dvojček', gate: 'projects.read', desc: 'Digitalni dvojček projekta — AS-BUILT (R461)' },
+      // R473 (issue #9 §3): MERILNI MODEL — geometrija iz tekača s svetovnimi
+      // koordinatami, verzijo in σ; tloris/profil/3D, izbira segmenta z viri.
+      { id: 'model', label: 'Model', gate: 'measurements.read', desc: 'Merilni model — tloris/profil/3D (R473)' },
       { id: 'ar', label: 'AR', gate: 'projects.read', desc: 'Dopolnjena resničnost na terenu' },
       { id: 'signatura', label: 'Signatura', gate: 'quotes.create', desc: 'Zajem podpisa stranke' },
       { id: 'dokumenti', label: 'Dokumenti', gate: 'documents.read', desc: 'Arhiv dokumentov' },

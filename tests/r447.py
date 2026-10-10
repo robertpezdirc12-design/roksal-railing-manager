@@ -74,7 +74,7 @@ const {PrismaClient}=require('@prisma/client');const p=new PrismaClient();
 (async()=>{const pk=await p.projectPackage.count();const bm=await p.bom.count();
 console.log(JSON.stringify({pk,bm}));await p.$disconnect();})();
 '''], capture_output=True, text=True, cwd=REPO,
-                       env={**os.environ, 'DATABASE_URL': os.environ.get('TEST_DB_URL', '')})
+                       env={**os.environ, 'DATABASE_URL': os.environ.get('TEST_DB_URL') or 'postgresql://roksal:roksal@localhost:54329/roksal'})
     assert r.returncode == 0, r.stderr[:300]
     d = json.loads(r.stdout.strip().splitlines()[-1])
     return d['pk'], d['bm']
@@ -304,7 +304,7 @@ const {PrismaClient}=require('@prisma/client');const p=new PrismaClient();
   await p.$disconnect();
 })().catch(e=>{console.error(e);process.exit(1)});
 '''], capture_output=True, text=True, cwd=REPO,
-                       env={**os.environ, 'DATABASE_URL': os.environ.get('TEST_DB_URL', '')})
+                       env={**os.environ, 'DATABASE_URL': os.environ.get('TEST_DB_URL') or 'postgresql://roksal:roksal@localhost:54329/roksal'})
     assert r.returncode == 0, r.stderr[:300]
     st = json.loads(r.stdout.strip().splitlines()[-1])
     ok(f"počiščeno: {st['pkgs']} paketov, {st['boms']} kosovnic ({st['lines']} vrstic), {st['quotes']} ponudb")

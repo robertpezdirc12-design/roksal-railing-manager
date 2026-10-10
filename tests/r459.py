@@ -60,7 +60,7 @@ def chk (cond, msg): ok(msg) if cond else bad(msg)
 
 def bun (script):
     r = subprocess.run(['bun', '-e', script], capture_output=True, text=True,
-                       env={**os.environ, 'DATABASE_URL': os.environ.get('TEST_DB_URL', 'file:' + REPO + '/db/roksal.db')})
+                       env={**os.environ, 'DATABASE_URL': os.environ.get('TEST_DB_URL') or 'postgresql://roksal:roksal@localhost:54329/roksal'})
     return 'CLEAN_DONE' in r.stdout, r.stderr[:400]
 
 # veljaven minimalen JPEG (1×1, DCTDecode)
@@ -145,7 +145,7 @@ const {{PrismaClient}}=require('@prisma/client');const p=new PrismaClient();
 }})()
 '''
 r = subprocess.run(['bun', '-e', M2], capture_output=True, text=True,
-                   env={**os.environ, 'DATABASE_URL': os.environ.get('TEST_DB_URL', 'file:' + REPO + '/db/roksal.db')})
+                   env={**os.environ, 'DATABASE_URL': os.environ.get('TEST_DB_URL') or 'postgresql://roksal:roksal@localhost:54329/roksal'})
 MONTER2_ID = [l for l in r.stdout.splitlines() if l.startswith('M2=')]
 chk(bool(MONTER2_ID), 'monter2 uporabnik pripravljen')
 MONTER2_ID = MONTER2_ID[0][3:] if MONTER2_ID else ''
@@ -293,7 +293,7 @@ const {{PrismaClient}}=require('@prisma/client');const p=new PrismaClient();
 }})()
 '''
 r = subprocess.run(['bun', '-e', REV], capture_output=True, text=True,
-                   env={**os.environ, 'DATABASE_URL': os.environ.get('TEST_DB_URL', 'file:' + REPO + '/db/roksal.db')})
+                   env={**os.environ, 'DATABASE_URL': os.environ.get('TEST_DB_URL') or 'postgresql://roksal:roksal@localhost:54329/roksal'})
 out = r.stdout
 chk('PHOTO_VIZ_CREATE' in out and 'PHOTO_VIZ_UPDATE' in out and 'PHOTO_VIZ_SELECT' in out, f'revizije PHOTO_VIZ_CREATE/UPDATE/SELECT zapisane ({out.strip()[:120]})')
 chk('V1HAS420=true' in out, 'v1 posnetek vsebuje staro dolžino 420 (brez tihega prepisa)')
@@ -359,7 +359,7 @@ const {{PrismaClient}}=require('@prisma/client');const p=new PrismaClient();
   const pr=await p.project.count({{where:{{title:{{contains:'{TAG}'}}}}}});
   console.log('N='+n+' M='+m+' U='+u+' P='+pr);return p.$disconnect();
 }})()
-'''], capture_output=True, text=True, env={**os.environ, 'DATABASE_URL': os.environ.get('TEST_DB_URL', 'file:' + REPO + '/db/roksal.db')})
+'''], capture_output=True, text=True, env={**os.environ, 'DATABASE_URL': os.environ.get('TEST_DB_URL') or 'postgresql://roksal:roksal@localhost:54329/roksal'})
 out = r.stdout.strip()
 chk('N=0' in out and 'M=0' in out and 'U=0' in out and 'P=0' in out, f'ni ostankov ({out})')
 

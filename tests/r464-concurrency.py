@@ -66,14 +66,14 @@ def bun (script):
     """Požene PrismaClient skripto prek bun -e (vzorec iz tests/r452.py)."""
     r = subprocess.run(['bun', '-e', script], capture_output=True, text=True,
                        cwd=REPO,
-                       env={**os.environ, 'DATABASE_URL': os.environ.get('TEST_DB_URL', 'file:' + REPO + '/db/roksal.db')})
+                       env={**os.environ, 'DATABASE_URL': os.environ.get('TEST_DB_URL') or 'postgresql://roksal:roksal@localhost:54329/roksal'})
     return 'FIXTURE_DONE' in r.stdout or 'CLEAN_DONE' in r.stdout, r.stderr[:400]
 
 def db_json (script):
     """Izvede skripto in vrne zadnjo vrstico stdout kot JSON."""
     r = subprocess.run(['bun', '-e', script], capture_output=True, text=True,
                        cwd=REPO,
-                       env={**os.environ, 'DATABASE_URL': os.environ.get('TEST_DB_URL', 'file:' + REPO + '/db/roksal.db')})
+                       env={**os.environ, 'DATABASE_URL': os.environ.get('TEST_DB_URL') or 'postgresql://roksal:roksal@localhost:54329/roksal'})
     assert r.returncode == 0, 'bun skripta: ' + r.stderr[:400]
     return json.loads(r.stdout.strip().splitlines()[-1])
 

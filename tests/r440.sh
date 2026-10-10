@@ -10,7 +10,7 @@
 # Uporaba: bash tests/r440.sh  (dev strežnik mora teči na :3000)
 set -u
 BASE="${BASE_URL:-http://localhost:3000}"
-DB_URL="${TEST_DB_URL:-file:$(cd "$(dirname "$0")/.." && pwd)/db/roksal.db}"
+DB_URL="${TEST_DB_URL:-postgresql://roksal:roksal@localhost:54329/roksal}"
 PASS=0; FAIL=0
 CODE=""; BODY=""
 

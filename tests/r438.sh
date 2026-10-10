@@ -6,7 +6,7 @@
 set -u
 BASE="${BASE_URL:-http://localhost:3000}"
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-DB_URL="${TEST_DB_URL:-file:$REPO/db/roksal.db}"
+DB_URL="${TEST_DB_URL:-postgresql://roksal:roksal@localhost:54329/roksal}"
 PASS=0; FAIL=0
 CODE=""; BODY=""
 TEST_START=$(date -u +%Y-%m-%dT%H:%M:%S)

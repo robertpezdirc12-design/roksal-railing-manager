@@ -1330,3 +1330,28 @@ Stage Summary:
 - Faza 0 POPOLNOMA izvedena (audit z dokazi file:line); načrt faz: F1 §3 model-core geometrija, F2 §5 količine iz segmentov + invalidacija, F3 §4 2D→3D preslikava, F4 §6 PDF merilni paket + izvozi, F5 §7–§10
 - odločitve poštenosti prenesene iz #8: SVG/parametrično nikoli ni »registriran model«; nezajeto vidno označeno; tolerance izključno iz EngineeringRule
 - deliveroti: docs/AUDIT-9.md; issue #9 komentar z auditom
+
+---
+Task ID: R473
+Agent: main (Z.ai Code)
+Task: GitHub issue #9 Faza 1 (§3) — MERILNI MODEL: svetovna geometrija iz tekača, verzija/kakovost/σ, projekcije, izbira segmenta
+
+Work Log:
+- implementiran model-core (src/lib/model-core.ts, NOV — čist lib, brez strežniških uvozov):
+  • buildPlanModel: hoja po verigi tekača → svetovne XY (izvor = prvo vozlišče, +X = prvi segment), Z iz terena; segmenti s ključi seg-N USKLADENI z dvojčkom/prefab (prostorska AS-* primerjava in F2 količine po segmentu)
+  • POŠTENOST: smeri zavojev tekač NE beleži → LEVO/DESNO je IZRECNA predpostavka klicatelja (turns), zapisana v quality.assumptions (ZAVOJ_SMER_PRIVZETA OPOZORILO / ZAVOJ_SMER_NASTAVLJENA INFO / VOGAL_BREZ_KOTA / BREZ_KALIBRACIJE / BREZ_TERENA)
+  • σ (napaka položaja): pravilo EngineeringRule tol_pozicija_modela > OCENA_METODE (LIDAR 3 / ZUNANJA 5 / MARKER 8 / ZNANA 12 / ROCNO 25 — pisno označene ocene) > NI_PODATKA; verifiedShare/unverified iz statusov segmentov 1:1
+  • projekcije: projectPlan (tloris), projectProfile (elevacija odvita ob teku), project3d (pinhole yaw/pitch); nearestSegment (zadetek za klik); diffModels (DOLZINA/VISINA/NAGIB/STEBRI po seg ključih, toleranca iz klicalca ali odkrito null); parseTurns (fail-closed na neveljavne znake)
+- API: GET /api/fence-run/[id]/model (measurements.read + fenceRunZaUporabnika IDOR obseg) — model se NE persistira (tekač je vir resnice; deterministična regeneracija z ENGINE_VERSION model-core/1.0); turns query; σ iz AKTIVNIH pravil (findFirst active: true — API DELETE je sicer deaktivacija); quality gate tekača preveden v odgovor
+- UI: NOV modul Model (src/components/roksal/modules/model.tsx + registracija v nav-registry/module-view): izbora projekt/tekač; kartice kakovosti (gate/verifiedShare/σ/višine+odprtina); predpostavke IZRECNO; smeri zavojev z LEVO/DESNO + Zrcali (ponoven izračun); pogledi TLORIS (SVG: segmenti po statusih, vozlišča z glifi Z/S/V/Vr/St/K, mreža, merilec, smer +X) / PROFIL (teren + vrhovi stebrov črtkano) / 3D (painterjev algoritem: teren vedno za ograjo, ploskve po globini, ZVEZNI ročnik + talna črta povežeta segmente; yaw/pitch sliderja); klik segmenta → panel z merami/virom/statusom/vozlišči/vrati/izdelkom; chips segmentov (dostopnost); fallback »projekt nima tekača« usmerja na Ogradnja (nič ne blokira)
+- testi: tests/r473.py 66/66 ✓ (RBAC fail-closed + IDOR monter2, core logika bun: kolinearnost/ključi/σ viri/vogal LEVO-DESNO/predpostavke/teren/verifiedShare/diff/nearestSegment/turnFromInterior/project3d, API: izpeljava (400,400), turns=D → (400,−400), neveljaven turns 400, 404, verifikacija → VERIFIED v modelu, pravilo σ=4 RULE, tolerance v odgovoru, regresija health; trdo čiščenje pravila — API DELETE je deaktivacija)
+- regresija: r465-r473 7/7 skupin ✓ (r465 90, r467 41, r468 40, r469 47, r470 59, r471, r473 66); tsc 0 napak; lint čisto
+- POPRAVKI ROBUSTNOSTI TESTOV (okolje sandboxa izvozi onesnažen DATABASE_URL): 18 python suite-ov (TEST_DB_URL fallback '' oz. sqlite → postgres :54329) + 4 bash suite-i (r437-r440 DB_URL) poenoteni po vzorcu iz R470; lokalno sedaj zelene r437-r473 razen r437 (2 — zaokroževanje na umazanih lokalnih podatkih) in r441 (4 — okoljsko odvisen off-site backup), obe NEPOVEZANI s spremembami (preverjeno z git stash) in v CI zeleni (TEST_DB_URL je tam nastavljen)
+- DEBOG: dev strežnik je med testi padel na OOM (jedro ubilo next-server ~2 GB) — vzrok množičnih lažnih odpovedi r438-r441; ponovno zagnan s pravim DATABASE_URL; vzrok ugotovljen v dmesg
+- brskalniška verifikacija (agent-browser + VLM): modul se izriše namizje + mobilni 390×844; izbora delujeta; fallback brez tekača; kartice/predpostavke/smeri; preklop DESNO spremeni predpostavko OPOZORILO→INFO; izbira seg-3 → polne mere (201,8 cm, padina 7,6°, σ ± 8, vozlišča VOGAL→VRATA, vrata 100 cm, izdelek OGR-K-002); profil + 3D (popravljen painterjev algoritem — VLM potrdil POVEZANO L-obliko); sliderja yaw/pitch delujeta; lepljiva noga; brez napak v konzoli
+- demo tekač »Demo ograja — terasa L« (P-2026-004) ustvarjen v razvojni bazi za takojšen ogled modula
+
+Stage Summary:
+- issue #9 §3 Faza 1 POPOLNOMA izvedena: merilno skalirana geometrija z izvorom/enotami/verzijo/σ in opredeljenimi mejami, projekcije tloris/profil/3D, izbira segmenta z viri; naslednja faza: F2 (§5 — količine iz segmentov, odpad, Quote↔paket FK + invalidacija)
+- ključne odločitve: tekač ostaja vir resnice (model = deterministična izpeljava, brez persistiranje); smeri zavojev so IZRECNE predpostavke (nikoli tihe); σ izključno iz aktivnega EngineeringRule ali pisno označena ocena metode
+- deliveroti: src/lib/model-core.ts, /api/fence-run/[id]/model, modul Model, tests/r473.py (66), CI skupina r465-r473, popravki robustnosti testov (22 datotek), tag v1.29.0
