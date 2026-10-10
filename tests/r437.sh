@@ -81,8 +81,8 @@ req "$TOKEN" POST "$BASE/api/measurements/$MID/share"
 t "POST share 201" 201 "$CODE"
 STOKEN=$(echo "$BODY" | jq -r '.data.token // empty')
 SURL=$(echo "$BODY" | jq -r '.data.url // empty')
-t "žeton ima predpono jm-" 1 $(echo "$STOKEN" | rg -q '^jm-' && echo 1 || echo 0)
-t "url kaže na public/measure" 1 $(echo "$SURL" | rg -q '^/api/public/measure\?token=' && echo 1 || echo 0)
+t "žeton ima predpono jm-" 1 $(grep -Eq '^jm-' <<<"$STOKEN" && echo 1 || echo 0)
+t "url kaže na public/measure" 1 $(grep -Eq '^/api/public/measure\?token=' <<<"$SURL" && echo 1 || echo 0)
 pub GET "$BASE/api/public/measure?token=$STOKEN"
 t "javni GET 200" 200 "$CODE"
 t "javni payload BREZ authorId" false "$(echo "$BODY" | jq -r '.data | has("authorId")')"
@@ -286,8 +286,8 @@ req "$TOKEN" POST "$BASE/api/security/rate-limit" '{"action":"list"}'
 t "rate-limit list 200" 200 "$CODE"
 t "bucket prisoten (≥1)" true "$(echo "$BODY" | jq -r '.data.total >= 1')"
 MASK=$(echo "$BODY" | jq -r '[.data.items[] | select(.bucket | startswith("measure:test"))][0].bucket // empty')
-t "ključ prikrit (measure:testto…)" 1 $(echo "$MASK" | rg -q 'measure:testto' && echo 1 || echo 0)
-t "prikrit ključ ne razkrije žetona" 1 $(echo "$MASK" | rg -q 'testtoken123' && echo 0 || echo 1)
+t "ključ prikrit (measure:testto…)" 1 $(grep -Eq 'measure:testto' <<<"$MASK" && echo 1 || echo 0)
+t "prikrit ključ ne razkrije žetona" 1 $(grep -Eq 'testtoken123' <<<"$MASK" && echo 0 || echo 1)
 req "$TOKEN" POST "$BASE/api/security/rate-limit" "{\"action\":\"clear\",\"bucket\":\"$MASK\"}"
 t "clear specifičen bucket ≥1" true "$(echo "$BODY" | jq -r '.data.cleared >= 1')"
 req "$TOKEN" POST "$BASE/api/security/rate-limit" '{"action":"clear"}'
@@ -395,3 +395,5 @@ echo
 echo "══════════════════════════════════════════"
 echo "REZULTAT: $PASS ✓ / $FAIL ✗"
 [ "$FAIL" -eq 0 ] && echo "VSI TESTI USPEŠNI" || echo "NEUSPEŠNI TESTI!"
+# exit koda = uspešnost (CI mora padati ob neuspešnih asercijah)
+[ "$FAIL" -eq 0 ]

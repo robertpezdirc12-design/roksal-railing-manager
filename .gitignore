@@ -63,3 +63,6 @@ agent-ctx/
 env.sh
 .pgdata/
 .icu-libs
+
+# python test cache
+tests/__pycache__/

@@ -18,11 +18,11 @@ gett() { # gett <opis> <pričakovano> <dejansko> — ≥ primerjava za številke
   else FAIL=$((FAIL+1)); echo "  ✗ $1 — pričakovano ≥ $2, dobljeno $3"; fi
 }
 contains() { # contains <opis> <niz> <vzorec>
-  if echo "$2" | rg -q "$3"; then PASS=$((PASS+1)); echo "  ✓ $1"
+  if grep -Eq "$3" <<<"$2"; then PASS=$((PASS+1)); echo "  ✓ $1"
   else FAIL=$((FAIL+1)); echo "  ✗ $1 — vzorca '$3' ni v odgovoru"; fi
 }
 notcontains() { # notcontains <opis> <niz> <vzorec>
-  if echo "$2" | rg -q "$3"; then FAIL=$((FAIL+1)); echo "  ✗ $1 — vzorec '$3' NE sme biti v odgovoru, pa je"
+  if grep -Eq "$3" <<<"$2"; then FAIL=$((FAIL+1)); echo "  ✗ $1 — vzorec '$3' NE sme biti v odgovoru, pa je"
   else PASS=$((PASS+1)); echo "  ✓ $1"; fi
 }
 req() { # req <žeton> <metoda> <url> [json-telo] → nastavi CODE in BODY

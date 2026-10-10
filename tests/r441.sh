@@ -39,11 +39,11 @@ gett() { # gett <opis> <min> <dejansko>
   else FAIL=$((FAIL+1)); echo "  ✗ $1 — pričakovano ≥ $2, dobljeno $3"; fi
 }
 contains() {
-  if echo "$2" | rg -q "$3"; then PASS=$((PASS+1)); echo "  ✓ $1"
+  if grep -Eq "$3" <<<"$2"; then PASS=$((PASS+1)); echo "  ✓ $1"
   else FAIL=$((FAIL+1)); echo "  ✗ $1 — vzorca '$3' ni v odgovoru"; fi
 }
 notcontains() {
-  if echo "$2" | rg -q "$3"; then FAIL=$((FAIL+1)); echo "  ✗ $1 — vzorec '$3' NE sme biti, pa je"
+  if grep -Eq "$3" <<<"$2"; then FAIL=$((FAIL+1)); echo "  ✗ $1 — vzorec '$3' NE sme biti, pa je"
   else PASS=$((PASS+1)); echo "  ✓ $1"; fi
 }
 req() {
@@ -119,7 +119,7 @@ echo "── 4. job varnostna-kopija (izvedba)"
 # ŠIFRIRNO GESLO: backup.sh ga prebere iz okolja ali .env.recovery (gitignored).
 # V testnem okolju ga (še) ni — ustvarimo ga, če manjka, da je šifrirana pot
 # preverljiva (obnova --verify isto geslo prebere iz istega vira).
-if ! rg -q '^ROKSAL_BACKUP_PASSPHRASE=' "$ROOT/.env.recovery" 2>/dev/null; then
+if ! grep -q '^ROKSAL_BACKUP_PASSPHRASE=' "$ROOT/.env.recovery" 2>/dev/null; then
   echo 'ROKSAL_BACKUP_PASSPHRASE=r441-test-geslo' >> "$ROOT/.env.recovery"
 fi
 req "$TOKEN" POST "$BASE/api/jobs" '{"job":"varnostna-kopija"}'
@@ -133,7 +133,7 @@ contains "detail: šifrirano" "$DETAIL" '"sifrirano":true'
 # OFF-SITE je odvisnost okolja (žeton + dosegljiv GitLab) — POŠTENO preverjamo
 # poročanje: če je bilo naloženo, so zapisani tudi kosi; sicer mora biti
 # zapisan RAZLOG (opomba). Obe stanji sta legitimni izidiji joba.
-if echo "$DETAIL" | rg -q '"off_site":true'; then
+if grep -Eq '"off_site":true' <<<"$DETAIL"; then
   contains "detail: off-site naloženo (žeton prisoten)" "$DETAIL" '"kosov_off_site":'
 else
   contains "detail: off-site poroča razlog (odvisno od okolja)" "$DETAIL" '"opomba":'
@@ -149,7 +149,7 @@ t "last-backup.json obstaja" 1 $([ -f "$ROOT/db/backups/last-backup.json" ] && e
 LB=$(cat $ROOT/db/backups/last-backup.json)
 # isti pogoj kot pri detailu: uploaded:true/false + razlog, če ni naloženo
 contains "status: off-site stanje zapisano (upload odvisen od okolja)" "$LB" '"uploaded": *(true|false)'
-if echo "$LB" | rg -q '"uploaded": *true'; then
+if grep -Eq '"uploaded": *true' <<<"$LB"; then
   contains "off-site verzija zapisana" "$LB" '"version": *"[^"]+"'
 else
   contains "off-site razlog (opomba) zapisan" "$LB" '"note": *"[^"]+"'
@@ -240,7 +240,7 @@ fi
 echo "── 8. CI"
 # CI definicija je lahko na GITLABU (.gitlab-ci.yml, zgodovina) ALI GITHUBU
 # (.github/** — R464: CI piše glavni agent) — pomembno je, da je v repu.
-CI_N=$(git -C $ROOT ls-files | rg '^(\.gitlab-ci\.yml|\.github/)' | wc -l | tr -d '[:space:]')
+CI_N=$(git -C $ROOT ls-files | grep -E '^(\.gitlab-ci\.yml|\.github/)' | wc -l | tr -d '[:space:]')
 gett "CI definicija sledena v repu (GitLab in/ali GitHub)" 1 "$CI_N"
 if [ "$GITLAB_API_OK" = 1 ]; then
   GAPI="https://gitlab.com/api/v4/projects/87314539"

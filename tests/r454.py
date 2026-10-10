@@ -30,7 +30,7 @@ BASE = os.environ.get('BASE_URL', 'http://localhost:3000')
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TAG = 'R454-TEST'
 HERE = os.path.dirname(os.path.abspath(__file__))
-PASS, FAIL = 0, 0
+PASS, FAIL, SKIP = 0, 0, 0
 
 def call (method, path, token=None, body=None, timeout=30):
     data = json.dumps(body).encode() if body is not None else None
@@ -57,6 +57,7 @@ def login (email, pw):
 def ok (msg):  global PASS; PASS += 1; print(f'  ✓ {msg}')
 def bad (msg): global FAIL; FAIL += 1; print(f'  ✗ {msg}')
 def chk (cond, msg): ok(msg) if cond else bad(msg)
+def skip (msg): global SKIP; SKIP += 1; print(f'  ⏭ SKIP: {msg}')
 
 def bun (script):
     r = subprocess.run(['bun', '-e', script], capture_output=True, text=True,
@@ -188,8 +189,17 @@ print('  … pravi VLM klic (do 90 s) …')
 t0 = time.time()
 s, b = call('POST', '/api/ar/analyze', admin, {'photo': PHOTO, 'hint': 'vhodna terasa'}, timeout=90)
 dt = time.time() - t0
-chk(s == 200, f'POST s fixture fotografijo → 200 v {dt:.0f} s (dobil {s}: {b[:150]})')
-if s == 200:
+# VLM je NEOBVEZNA odvisnost (issue #10): brez konfiguracije (npr. CI brez
+# .z-ai-config) mora endpoint deterministično vrniti 502 z jasnim sporočilom
+# „Analiza prizora trenutno ni na voljo“ — to ni uspeh in ni napaka testa,
+# VLM pot je v tem okolju NEPREVERJENA (SKIP), nikoli pa se ne šteje kot
+# dokaz, da prepoznava deluje.
+VLM_OK = (s == 200)
+if s == 502 and 'ni na voljo' in b:
+    skip(f'VLM klic → 502 „ni na voljo“ ({dt:.0f} s) — VLM analiza v tem okolju ni preverjena')
+elif not VLM_OK:
+    bad(f'POST s fixture fotografijo → 200 v {dt:.0f} s (dobil {s}: {b[:150]})')
+if VLM_OK:
     d = json.loads(b)['data']
     chk(isinstance(d.get('scene'), str) and len(d['scene']) > 0, f'scene je neprazen niz: „{d.get("scene", "")[:60]}"')
     pl = d.get('placement')
@@ -278,8 +288,11 @@ for action, eid in [
 
 chk(dup_id is not None and audit_find('VIZ_PROJECT_DUPLICATE', dup_id),
     'revizija VIZ_PROJECT_DUPLICATE obstaja za kopijo')
-an_audit = jget('/api/audit?action=AR_ANALYZE&limit=50', admin)
-chk(an_audit is not None and len(an_audit['data']) >= 1, 'revizija AR_ANALYZE zapisana (VLM klic)')
+if VLM_OK:
+    an_audit = jget('/api/audit?action=AR_ANALYZE&limit=50', admin)
+    chk(an_audit is not None and len(an_audit['data']) >= 1, 'revizija AR_ANALYZE zapisana (VLM klic)')
+else:
+    skip('revizija AR_ANALYZE — VLM klic v tem okolju ni bil izveden')
 
 # ══ 6. regresija ════════════════════════════════════════════════════════════
 print('── 6. regresija ──')
@@ -297,5 +310,5 @@ chk(not any(TAG in (r.get('name') or '') or TAG in (r.get('note') or '') for r i
 chk(not any(TAG in (r.get('note') or '') or TAG in (r.get('scene') or '') for r in (left_snap['data'] if left_snap else [])),
     'ni ostankov AR posnetkov s TAG')
 
-print(f'═══ R454: {PASS} ✓ / {FAIL} ✗ ═══')
+print(f'═══ R454: {PASS} ✓ / {FAIL} ✗ / {SKIP} ⏭ ═══')
 sys.exit(1 if FAIL else 0)

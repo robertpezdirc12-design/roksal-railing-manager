@@ -23,7 +23,7 @@ import json, os, subprocess, sys, urllib.request, urllib.error
 BASE = os.environ.get('BASE_URL', 'http://localhost:3000')
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TAG = 'R455-TEST'
-PASS, FAIL = 0, 0
+PASS, FAIL, SKIP = 0, 0, 0
 
 def call (method, path, token=None, body=None, timeout=30):
     data = json.dumps(body).encode() if body is not None else None
@@ -50,6 +50,7 @@ def login (email, pw):
 def ok (msg):  global PASS; PASS += 1; print(f'  ✓ {msg}')
 def bad (msg): global FAIL; FAIL += 1; print(f'  ✗ {msg}')
 def chk (cond, msg): ok(msg) if cond else bad(msg)
+def skip (msg): global SKIP; SKIP += 1; print(f'  ⏭ SKIP: {msg}')
 
 def bun (script):
     r = subprocess.run(['bun', '-e', script], capture_output=True, text=True,
@@ -249,13 +250,19 @@ chk(s == 400, f'detect brez measurementId → 400 (dejansko {s})')
 
 # detect na drocni testni sliki: VLM cevovod teče, a nič uporabnih točk → 422
 # s poštenim sporočilom (ročni vnos ostane fallback) — pravilno vedenje.
+# Če VLM ni konfiguriran (npr. CI brez .z-ai-config), vrne endpoint PO
+# DOGOVORJENEM KONTRAKTU (issue #10) 502 „Samodejna zaznava trenutno ni na
+# voljo“ — jasna napaka, nikoli lažni uspeh; VLM pot je tu NEPREVERJENA (SKIP).
 s, b = call('POST', '/api/measurement/detect', monter, {'measurementId': photo_id})
-chk(s == 422 and 'ni prepoznala' in b, f'detect na prazni sliki → 422 z navodilom (dejansko {s}: {b[:80]})')
+if s == 502 and 'ni na voljo' in b:
+    skip('detect na prazni sliki → 502 „ni na voljo“ — VLM zaznava v tem okolju ni preverjena (ročni vnos je fallback)')
+else:
+    chk(s == 422 and 'ni prepoznala' in b, f'detect na prazni sliki → 422 z navodilom (dejansko {s}: {b[:80]})')
 
 # ══ E. Čiščenje ══════════════════════════════════════════════════════════════
 print('── E. čiščenje ──')
 done, err = bun(CLEAN)
 chk(done, f'čiščenje po testu {"" if done else " — " + err}')
 
-print(f'\n══ R455: {PASS} ✓ / {FAIL} ✗ ══')
+print(f'\n══ R455: {PASS} ✓ / {FAIL} ✗ / {SKIP} ⏭ ══')
 sys.exit(1 if FAIL else 0)
