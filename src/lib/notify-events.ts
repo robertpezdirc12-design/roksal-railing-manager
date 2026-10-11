@@ -2,7 +2,10 @@
 // Čist konstantni modul (NIČ strežniških uvozov) — skupen vir za API (src/lib/notify.ts)
 // in UI (profil.tsx nastavitve, varnost.tsx dnevnik dostav).
 
-/** Tipi poslovnih dogodkov → obvestil (en dogodek = en vir resnice). */
+/** Tipi poslovnih dogodkov → obvestil (en dogodek = en vir resnice).
+ *  R481 (issue #9 §9): +4 prehodi, ki jih webhook integracijska plast izrecno
+ *  zahteva — zajem obdelan, model spremenjen, proizvodnja pripravljena,
+ *  naročilo potrjeno (IN_APP obvestila + webhook dostava prek emitEvent). */
 export const NOTIFICATION_EVENT_TYPES = [
   'WO_ASSIGNED',
   'WO_TERMIN',
@@ -16,6 +19,11 @@ export const NOTIFICATION_EVENT_TYPES = [
   'QC_NOK',
   'SURVEY_NEW',
   'VIZ_CHOICE',
+  // R481 (issue #9 §9 — webhook dogodki):
+  'CAPTURE_PROCESSED',
+  'MODEL_CHANGED',
+  'PRODUCTION_READY',
+  'ORDER_CONFIRMED',
 ] as const
 
 export type NotificationEventType = (typeof NOTIFICATION_EVENT_TYPES)[number]
@@ -34,6 +42,11 @@ export const NOTIFICATION_EVENT_LABELS: Record<string, string> = {
   QC_NOK: 'QC neustrezno',
   SURVEY_NEW: 'Novo povpraševanje',
   VIZ_CHOICE: 'Izbor stranke v vizualizatorju',
+  // R481 (issue #9 §9 — webhook dogodki):
+  CAPTURE_PROCESSED: 'Zajem obdelan',
+  MODEL_CHANGED: 'Model spremenjen',
+  PRODUCTION_READY: 'Proizvodnja pripravljena',
+  ORDER_CONFIRMED: 'Naročilo potrjeno',
 }
 
 /** Oznaka za '*' (privzeto za vse dogodke). */

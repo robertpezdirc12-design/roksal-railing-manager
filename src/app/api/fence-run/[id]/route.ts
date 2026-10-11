@@ -15,6 +15,7 @@ import { writeAudit } from '@/lib/audit'
 import { parseCalibration, parseNodes, parseTerrain } from '@/lib/fence-run-engine'
 import { analyzeContext, loadRunContext, snapshotVersion, syncSegments } from '@/lib/fence-run-service'
 import { fenceRunZaUporabnika } from '@/lib/fence-run-access'
+import { emitEvent } from '@/lib/notify'
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -166,6 +167,22 @@ export async function PATCH (req: NextRequest, { params }: Params) {
     projectId: scope.run.projectId,
     detail: { fields: Object.keys(data), version },
   })
+
+  // R481 (issue #9 §9 — „model spremenjen"): dogodek SAMO ob spremembi
+  // model-relevantnih polj (nodes/terrain/calibration/productId/variantId —
+  // ime/opomba/status modela NE spremenijo). Ključ nosi verzijo (vsaka
+  // sprememba = nov dogodek, deterministično).
+  const MODEL_FIELDS = ['nodes', 'terrain', 'calibration', 'productId', 'variantId']
+  if (MODEL_FIELDS.some((f) => f in data)) {
+    await emitEvent({
+      type: 'MODEL_CHANGED',
+      key: `model-changed:${id}:${version}`,
+      title: 'Model spremenjen',
+      body: `Tekač ${scope.run.name}: model-relevantna sprememba (${Object.keys(data).filter((f) => MODEL_FIELDS.includes(f)).join(', ')}) — verzija v${version}.`,
+      projectId: scope.run.projectId,
+      audience: 'OFFICE',
+    })
+  }
 
   const fresh = await loadRunContext(id)
   return NextResponse.json({ data: { version, analysis: fresh ? analyzeContext(fresh) : null } })

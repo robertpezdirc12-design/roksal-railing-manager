@@ -1397,8 +1397,8 @@
       "note": "allow=201 dobil=409"
     },
     "GET /api/weather": {
-      "status": "PASS_EXTERNAL",
-      "http": 502,
+      "status": "PASS",
+      "http": 200,
       "permission": "nalog.read",
       "roles": [
         "ADMIN",
@@ -1406,7 +1406,7 @@
         "MONTER",
         "PROIZVODNJA"
       ],
-      "note": "allow=200 dobil=502"
+      "note": ""
     }
   },
   "rbac": [
@@ -2510,7 +2510,7 @@
       "method": "GET",
       "path": "/api/measurements/:id",
       "role": "MONTER",
-      "http": 200,
+      "http": 403,
       "expected": "ALLOW",
       "ok": true
     },
@@ -3070,7 +3070,7 @@
       "method": "GET",
       "path": "/api/projects/:id/command",
       "role": "MONTER",
-      "http": 200,
+      "http": 403,
       "expected": "ALLOW",
       "ok": true
     },
@@ -3110,7 +3110,7 @@
       "method": "GET",
       "path": "/api/projects/:id",
       "role": "MONTER",
-      "http": 200,
+      "http": 403,
       "expected": "ALLOW",
       "ok": true
     },
@@ -3654,7 +3654,7 @@
       "method": "GET",
       "path": "/api/weather",
       "role": "ADMIN",
-      "http": 502,
+      "http": 200,
       "expected": "ALLOW",
       "ok": true
     },
@@ -3662,7 +3662,7 @@
       "method": "GET",
       "path": "/api/weather",
       "role": "VODJA",
-      "http": 502,
+      "http": 200,
       "expected": "ALLOW",
       "ok": true
     },
@@ -3670,7 +3670,7 @@
       "method": "GET",
       "path": "/api/weather",
       "role": "MONTER",
-      "http": 502,
+      "http": 200,
       "expected": "ALLOW",
       "ok": true
     },
@@ -3686,7 +3686,7 @@
       "method": "GET",
       "path": "/api/weather",
       "role": "PROIZVODNJA",
-      "http": 502,
+      "http": 200,
       "expected": "ALLOW",
       "ok": true
     }
@@ -3694,10 +3694,9 @@
   "summary": {
     "endpoints": 127,
     "smoke": {
-      "PASS": 84,
+      "PASS": 85,
       "SKIPPED_SAFE": 8,
-      "PASS_VALIDATION": 34,
-      "PASS_EXTERNAL": 1
+      "PASS_VALIDATION": 34
     },
     "rbacChecks": 285,
     "rbacFailures": 0

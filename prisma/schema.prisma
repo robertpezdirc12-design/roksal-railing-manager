@@ -63,6 +63,7 @@ model User {
   reviewLinksCreated ReviewLink[] @relation("reviewLinkCreator") // R479: izdajatelji javnih pregledov (§7)
   consentedProjects Project[] @relation("projectPhotoConsent") // R479: projekti, kjer je zabeležil GDPR soglasje (§10)
   vizLinksCreated   VizLink[] @relation("vizLinkCreator") // R480: izdajatelji javnih vizualizatorjev (§10)
+  webhookSubscriptions WebhookSubscription[] @relation("webhookCreator") // R481: naročnine webhook dogodkov (§9)
 }
 
 model Session {
@@ -1655,6 +1656,65 @@ model VisualizationChoice {
   @@index([projectId, chosenAt])
   @@index([visualizationId])
   @@index([leadId])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// WEBHOOK INTEGRACIJSKA PLAST (R481 — issue #9 §9)
+// Poslovno-dogodkovni WEBHOOK IZHOD za partnerje — LOČENO od notify-providers
+// (NOTIFY_WEBHOOK_URL je R464 obvestilni kanal; to je per-naročnina plast z
+// lastno skrivnostjo, podpisi, outboxom in retry). Naročnina je globalna za
+// pisarno; payload nosi projectId + varni podskup (publicWebhookPayload v
+// webhook-core) — naročnica NE razširi obsega projekta (§9 RBAC/IDOR alinea).
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Naročnina partnerja na izbrane tipe dogodkov (WEBHOOK_EVENTS v webhook-core).
+// secretHash = SHA-256 hex hasha skrivnosti — skrivnost se NE shranjuje
+// (prikaz 1× ob ustvaritvi, vzorec pv-/rv- žetonov); hask je hkrati PODPISNI
+// KLJUČ: partner izpelje isti ključ iz svoje skrivnosti in preveri
+// X-ROKSAL-Signature (HMAC-SHA256, webhook-sign.ts).
+// events = JSON niz seznama tipov (vzorec JSON v String stolpcih — FenceRun.nodes).
+model WebhookSubscription {
+  id            String    @id @default(cuid())
+  url           String // https (SSRF vrata: validWebhookUrl v webhook-core)
+  secretHash    String // SHA-256 hex skrivnosti (podpisni ključ — skrivnost NI shranjena)
+  events        String // JSON niz tipov dogodkov, npr. ["QUOTE_SIGNED",…]
+  active        Boolean   @default(true)
+  description   String?
+  createdById   String?
+  createdBy     User?     @relation("webhookCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  lastSuccessAt DateTime? // zadnja USPEŠNA dostava (2xx)
+  lastFailureAt DateTime? // zadnja NEUSPEŠNA dostava
+  revokedAt     DateTime? // preklic (naročnina ostane za zgodovino dostav)
+  createdAt     DateTime  @default(now())
+
+  deliveries WebhookDelivery[]
+}
+
+// Dostava (outbox): en poslovni dogodek na naročnino = ENA vrstica —
+// idempotenca @@unique([subscriptionId, eventKey]); retry posodablja ISTO
+// vrstico (NE ustvarja nove). status: PENDING | SENT | FAILED | DEAD
+// (mrtvo pismo po 5 poskusih — deliveryBackoff 1/5/30 min v webhook-core).
+// payload = JSON niz POSLANEGA telesa (varni podskup — brez internih
+// cen/marž/kontaktov strank). error skrajšan na 200 znakov (vzorec notify).
+model WebhookDelivery {
+  id             String            @id @default(cuid())
+  subscriptionId String
+  subscription   WebhookSubscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  eventKey       String // idempotenca ključ dogodka (partner deduplicira po njem)
+  eventType      String
+  payload        String // JSON niz poslanega telesa
+  status         String            @default("PENDING") // PENDING | SENT | FAILED | DEAD
+  attempts       Int               @default(0)
+  lastAttemptAt  DateTime?
+  responseStatus Int? // HTTP status odgovorja partnerja
+  nextAttemptAt  DateTime? // naslednji poskus po backoffu (null = ni več poskusov)
+  deliveredAt    DateTime?
+  error          String?
+  createdAt      DateTime          @default(now())
+
+  @@unique([subscriptionId, eventKey]) // dedup: isti dogodek NE gre 2× na isto naročnino
+  @@index([status, nextAttemptAt]) // retry: PENDING/FAILED z nextAttemptAt <= zdaj
+  @@index([subscriptionId, createdAt])
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

@@ -41,7 +41,7 @@ export default function VodjaEkipaModule () {
     <div className="space-y-4">
       <PageHeader
         title="Vodja / ekipa"
-        desc="Uporabniki, vloge in dovoljenja (permissions-core katalog: 38 pravic)."
+        desc={`Uporabniki, vloge in dovoljenja (permissions-core katalog: ${PERMISSIONS.length} pravic).`}
       />
 
       <ErrorBox error={list.error} />

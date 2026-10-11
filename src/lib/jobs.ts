@@ -8,6 +8,7 @@ import { db } from '@/lib/db'
 import { writeAudit } from '@/lib/audit'
 import { retryPending } from '@/lib/notify'
 import { runBackup } from '@/lib/backup'
+import { retryWebhookDeliveries } from '@/lib/webhook-delivery'
 
 export interface JobDef {
   job: string
@@ -22,6 +23,7 @@ export const JOB_DEFS: JobDef[] = [
   { job: 'portal-gc', label: 'Čiščenje portala', desc: 'Odstrani potekle/preklicane povezave portala strank po 30 dneh.', cron: 'vsak teden (izvirnik: viz/gc)' },
   { job: 'obvestila-gc', label: 'Čiščenje obvestil', desc: 'Izbriše prebrana obvestila, starejša od 30 dni.', cron: 'vsak dan 03:10 (izvirnik)' },
   { job: 'obvestila-retry', label: 'Ponovitev obvestil', desc: 'Ponovi neuspešne/čakajoče dostave obvestil (max 3 poskusi, varno pred podvajanjem).', cron: 'vsakih 15 min (issue #5)' },
+  { job: 'webhook-retry', label: 'Ponovitev webhookov', desc: 'Ponovi neuspešne webhook dostave partnerjem (backoff 1/5/30 min, mrtvo pismo po 5 poskusih — R481 issue #9 §9).', cron: 'dnevno ob 03:30 (jobs/run) — zamuda dokumentirana v docs/webhooks.md' },
   { job: 'varnostna-kopija', label: 'Varnostna kopija', desc: 'Šifrirana kopija (baza + cel repozitorij) z off-site nalaganjem na GitLab — recovery v docs/RECOVERY.md.', cron: 'vsak dan 04:00 (issue #3)' },
 ]
 
@@ -63,6 +65,11 @@ export async function runJob (key: string, userId: string | null): Promise<RunJo
       const res = await retryPending(50)
       affected = res.processed
       detail = { obdelanih: res.processed, poslanih: res.sent, spodletelih: res.failed }
+    } else if (key === 'webhook-retry') {
+      // R481 (issue #9 §9): ponovitev PENDING/FAILED webhook dostav (backoff)
+      const res = await retryWebhookDeliveries(50)
+      affected = res.processed
+      detail = { obdelanih: res.processed, poslanih: res.sent, spodletelih: res.failed, mrtvih: res.dead }
     } else if (key === 'varnostna-kopija') {
       // R441 (issue #3): šifrirana varnostna kopija + off-site nalaganje (ops/backup.sh)
       const res = await runBackup()

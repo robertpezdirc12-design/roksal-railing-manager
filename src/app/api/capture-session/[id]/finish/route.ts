@@ -12,6 +12,7 @@ import { jsonError, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
 import { captureSessionZaUporabnika } from '@/lib/capture-qa-access'
 import { analyzeSession, finishCaptureSession, loadCaptureContext } from '@/lib/capture-qa-service'
+import { emitEvent } from '@/lib/notify'
 
 export async function POST (req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requirePermission(req, 'measurements.write')
@@ -63,6 +64,18 @@ export async function POST (req: NextRequest, { params }: { params: Promise<{ id
     entityId: result.snapshotId as string,
     projectId: access.session.projectId,
     detail: { kind: 'AS_MEASURED', version: result.version, reason: 'Zaključek zajema' },
+  })
+
+  // R481 (issue #9 §9 — „zajem obdelan"): dogodek ob zaključku obdelave zajema
+  // (IN_APP pisarni + webhook dostava prek emitEvent). Ključ vključuje snapshotId
+  // (deterministično — ponoven klic ne podvoji).
+  await emitEvent({
+    type: 'CAPTURE_PROCESSED',
+    key: `capture-processed:${id}:${result.snapshotId}`,
+    title: 'Zajem obdelan',
+    body: `Zajem ${access.session.name} je obdelan — AS-MEASURED snapshot v${result.version} (${access.session.mode}).`,
+    projectId: access.session.projectId,
+    audience: 'OFFICE',
   })
 
   return NextResponse.json({

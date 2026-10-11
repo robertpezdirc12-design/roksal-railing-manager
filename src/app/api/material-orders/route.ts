@@ -11,6 +11,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { jsonError, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
+import { emitEvent } from '@/lib/notify'
 
 const STATUSES = ['PRIPRAVA', 'POSLANO', 'PREJETO', 'PREKINJENO']
 
@@ -170,6 +171,17 @@ export async function POST (req: NextRequest) {
       entityId: order.id,
       detail: { code: order.code, from: order.status, to: status, lotsCreated, linesSkipped: linesSkipped.length, linesSkippedNames: linesSkipped },
     })
+    // R481 (issue #9 §9 — „naročilo potrjeno"): dogodek ob prejemu blaga
+    // (PREJETO je končni status — prehod enkraten, ključ po naročilu).
+    if (status === 'PREJETO') {
+      await emitEvent({
+        type: 'ORDER_CONFIRMED',
+        key: `order-confirmed:${order.id}`,
+        title: 'Naročilo potrjeno',
+        body: `Nabavno naročilo ${order.code} je prejeto — ${lotsCreated} ${lotsCreated === 1 ? 'lot' : 'loti'} v zalogi.`,
+        audience: 'OFFICE',
+      })
+    }
     return NextResponse.json({
       data: updated,
       lotsCreated,

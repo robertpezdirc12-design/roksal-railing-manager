@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { jsonError, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
+import { emitEvent } from '@/lib/notify'
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -58,6 +59,18 @@ export async function PATCH (req: NextRequest, { params }: Params) {
       projectId: updated.projectId,
       detail: { code: existing.code, from: existing.status, to: patch.status },
     })
+    // R481 (issue #9 §9 — „proizvodnja pripravljena"): dogodek ob prehodu v
+    // DOKONCAN (linearni tok — prehod je enkraten, ključ po nalogu).
+    if (patch.status === 'DOKONCAN') {
+      await emitEvent({
+        type: 'PRODUCTION_READY',
+        key: `production-ready:${id}`,
+        title: 'Proizvodnja pripravljena',
+        body: `Proizvodni nalog ${existing.code} je dokončan — pripravljen za odpošiljanje${updated.project ? ` (${updated.project.code})` : ''}.`,
+        projectId: updated.projectId,
+        audience: 'OFFICE',
+      })
+    }
   } else {
     await writeAudit({
       userId: auth.user.id, action: 'PRODUCTION_UPDATE', entity: 'productionOrder', entityId: id,

@@ -16,6 +16,7 @@ import {
   type NotificationEventType,
 } from '@/lib/notify-events'
 import { providerConfigured, resolveProvider, type ProviderDelivery } from '@/lib/notify-providers'
+import { emitWebhookEvent } from '@/lib/webhook-delivery'
 
 // ─── Vhod emitEvent ──────────────────────────────────────────────────────────
 
@@ -219,6 +220,21 @@ export async function emitEvent (input: EmitEventInput): Promise<void> {
         payload: JSON.stringify(payload),
         projectId: input.projectId ?? null,
       },
+    })
+
+    // 3b) R481 (issue #9 §9): poslovno-dogodkovni WEBHOOK IZHOD — eno mesto v
+    //     emitEvent, vseh 15 klicnih točk samodejno pokrito (brez dvojnega
+    //     emitiranja: dogodek je ŽE dedupliciran po key zgoraj). Dostava je
+    //     ognjevarena (emitWebhookEvent lovi sama) in NE odvisa uporabniških
+    //     obvestil — partner dobi varni podskup telesa (publicWebhookPayload).
+    await emitWebhookEvent({
+      type: input.type,
+      eventKey: event.key,
+      projectId: input.projectId ?? null,
+      title: input.title,
+      body: input.body,
+      customerName: input.customerName ?? null,
+      occurredAt: event.createdAt,
     })
 
     // 4) dostave za uporabnike: IN_APP vedno (prek prefs), EMAIL prek prefs (privzeto IZKLOPLJEN)

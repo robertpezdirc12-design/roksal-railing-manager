@@ -1,6 +1,7 @@
 // permissions-core — REKONSTRUKCIJA R431 (vir: R240/R425–R426 blueprint)
 // EN VIR resnice o dovoljenih. Čist client-safe lib — NIČ strežniških uvozov.
-// Katalog: 38 pravic (R425: 35 → 38 z payments.read, payments.manage, audit.read)
+// Katalog: 39 pravic (R425: 35 → 38 z payments.read/manage, audit.read;
+// R481: 39 z integrations.manage — samo ADMIN/VODJA, vzorec portal.manage)
 
 export const PERMISSIONS = [
   // projekti
@@ -37,6 +38,8 @@ export const PERMISSIONS = [
   'audit.read',
   // portal, varnost, galerija, oprema
   'portal.manage', 'security.read', 'gallery.read', 'equipment.read',
+  // integracije (R481: webhook naročnine/dostave — issue #9 §9)
+  'integrations.manage',
 ] as const
 
 export type Permission = (typeof PERMISSIONS)[number]
