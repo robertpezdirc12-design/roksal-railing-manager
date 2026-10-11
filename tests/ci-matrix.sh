@@ -27,6 +27,7 @@ case "$GRUPA" in
   r483)       run_py r483.py ;;
   r484)       run_py r484.py ;;
   r485)       run_py r485.py ;;
+  r486)       run_py r486.py ;;
   *) echo "neznana skupina: $GRUPA"; exit 2 ;;
 esac
 echo "═══ $GRUPA: $PASS ✓ / $FAILED ✗ ═══"

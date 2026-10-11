@@ -18,7 +18,7 @@
 // kontrolni seznam, poraba materiala (IZDAJA prek skladiščnega jedra), težave
 // (dogodek TEZAVA), povezave na meritve/foto in povzetek predaje.
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   ArrowRight, CalendarCheck, Camera, Check, CheckCircle2, CheckCheck, ChevronDown, ChevronRight, Circle,
   ClipboardList, CloudRain, CloudSnow, Cloudy, HardHat, Loader2, MapPin, Package,
@@ -37,12 +37,14 @@ import { cn } from '@/lib/utils'
 import { apiPatch, apiPost, fmtDate, fmtDateTime, useApi } from '@/lib/api-client'
 import { EmptyState, ErrorBox, LoadingRows, PageHeader, StatusBadge } from '@/components/roksal/ui-bits'
 import { hasPerm } from '@/lib/permissions-core'
+import { loadDraft } from '@/lib/measure-draft'
+import { KameraMeritevDialog } from '@/components/roksal/modules/meritve-kamera'
 
 interface WorkOrderRow {
   id: string; code: string; title: string; status: string
   scheduledFor: string | null; startedAt: string | null; completedAt: string | null; summary: string | null
   instructions: string | null
-  project: { code: string; title: string; address: string | null; customer: { name: string } | null } | null
+  project: { id?: string; code: string; title: string; address: string | null; customer: { name: string } | null } | null
   assignee: { name: string } | null
   _count: { measurements: number; events: number }
 }
@@ -371,10 +373,16 @@ function WorkOrderDetail ({ woId, onTransitioned }: {
   const user = useAppStore((s) => s.user)
   const setTab = useAppStore((s) => s.setTab)
   const setSection = useAppStore((s) => s.setSection)
+  const setMeasureCtx = useAppStore((s) => s.setMeasureCtx)
   const { toast } = useToast()
   const [busy, setBusy] = useState(false)
   const [finalNote, setFinalNote] = useState('')
   const [showFinal, setShowFinal] = useState(false)
+
+  // ── R486 (issue #7 §3): ZAČNI MERITEV — kamera dialog z avtomatskim kontekstom ──
+  const [kameraOpen, setKameraOpen] = useState(false)
+  const [autoResume, setAutoResume] = useState(false)
+  const [draftAt, setDraftAt] = useState<string | null>(null)
 
   const detail = useApi<{ data: WorkOrderDetailRow }>(`/api/nalog/${woId}`)
   const checklist = useApi<{ data: ChecklistRow[] }>(`/api/nalog/${woId}/checklist`)
@@ -387,6 +395,28 @@ function WorkOrderDetail ({ woId, onTransitioned }: {
   const canUseMaterial = hasPerm(user?.perms, 'inventory.write') || (!!wo && !!user && wo.assignee?.id === user.id)
 
   const troubles = (wo?.events ?? []).filter((e) => e.type === 'TEZAVA')
+
+  const canMeasure = hasPerm(user?.perms, 'measurements.write')
+
+  // R486 (issue #7 §3): nedokončana meritev (IndexedDB osnutek) → Nadaljuj nedokončano
+  useEffect(() => {
+    if (kameraOpen) return
+    setDraftAt(null)
+    const uid = user?.id
+    if (!uid) return
+    let cancelled = false
+    void loadDraft(uid).then((d) => {
+      if (!cancelled && d && Array.isArray(d.views) && d.views.length > 0) setDraftAt(d.savedAt)
+    }).catch(() => {})
+    return () => { cancelled = true }
+  }, [user?.id, kameraOpen])
+
+  function odpriKamero (resume: boolean): void {
+    setAutoResume(resume)
+    // merilni kontekst za module (vzorec playbookRunId R458) — kamera prejme predpolnite
+    setMeasureCtx({ projectId: wo?.project?.id ?? '', workOrderId: woId })
+    setKameraOpen(true)
+  }
 
   async function transition (to: string, label: string, note?: string) {
     setBusy(true)
@@ -452,6 +482,28 @@ function WorkOrderDetail ({ woId, onTransitioned }: {
       <TroubleSection woId={woId} troubles={troubles} canWrite={canChecklist} onReload={() => void detail.reload()} />
 
       {/* meritve + foto — povezava na zajem */}
+      {/* R486 (issue #7 §3): ZAČNI MERITEV — en velik primarni gumb z avtomatskim
+          kontekstom naloga (projekt/nalog NE izbira ročno) + sekundarno
+          Nadaljuj nedokončano (osnutek) in Dodaj fotografijo */}
+      {canMeasure && (wo.status === 'V_TEKU' || wo.status === 'V_ZAJEMU') ? (
+        <div className="space-y-2">
+          <Button
+            size="lg" className="h-12 w-full text-base"
+            onClick={() => odpriKamero(false)}
+          >
+            <Ruler className="size-5" aria-hidden /> ZAČNI MERITEV
+          </Button>
+          {draftAt ? (
+            <Button
+              size="lg" variant="outline" className="h-11 w-full"
+              onClick={() => odpriKamero(true)}
+            >
+              <Camera className="size-4 text-roksal-amber" aria-hidden />
+              Nadaljuj nedokončano{draftAt ? ` (shranjeno ${new Date(draftAt).toLocaleTimeString('sl-SI', { hour: '2-digit', minute: '2-digit' })})` : ''}
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
       <div className="grid grid-cols-2 gap-2">
         <Button
           variant="outline" className="h-11 justify-start gap-2"
@@ -469,11 +521,21 @@ function WorkOrderDetail ({ woId, onTransitioned }: {
         >
           <Camera className="size-4 text-roksal-amber" aria-hidden />
           <span className="flex min-w-0 flex-col items-start">
-            <span className="text-sm font-medium leading-tight">Foto zajem</span>
+            <span className="text-sm font-medium leading-tight">Dodaj fotografijo</span>
             <span className="text-[11px] text-muted-foreground">dokumentacija terena</span>
           </span>
         </Button>
       </div>
+
+      {/* R486: kamera meritev — odprta z avtomatskim kontekstom iz tega naloga */}
+      <KameraMeritevDialog
+        open={kameraOpen}
+        onClose={() => { setKameraOpen(false) }}
+        onSaved={async () => { await Promise.all([detail.reload(), onTransitioned()]) }}
+        initialProjectId={wo.project?.id}
+        initialWorkOrderId={wo.id}
+        autoResumeDraft={autoResume}
+      />
 
       {/* PREDAJA — poročilo o predaji (R444) */}
       {wo.status === 'ZAKLJUCEN' ? <PredajaReport wo={wo} clDone={clDone} clTotal={clRows.length} usageCount={usageTotal} /> : null}

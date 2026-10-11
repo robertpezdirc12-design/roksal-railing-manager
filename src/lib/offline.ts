@@ -10,12 +10,15 @@
 //   • queue  (keyPath opId)    — vrsta operacij { opId, kind, payload, clientTs, status }
 //   • photos (keyPath photoId) — fotografije { photoId, dataUrl (kompresiran), status }
 //   • cache  (key-value)       — zadnji seznam nalogov, lastSync, deviceId, števec seq
+//   • drafts (keyPath userId)  — R486: osnutek meritve s kamero (1 na uporabnika)
 
 import { useSyncExternalStore } from 'react'
 import { useAppStore } from '@/lib/store'
 
-const DB_NAME = 'roksal-offline'
-const DB_VERSION = 1
+export const DB_NAME = 'roksal-offline'
+// v2 (R486): + shramba 'drafts' (osnutek meritve — measure-draft.ts); starejše
+// namestitve se nadgradijo brezizgubno (onupgradeneeded doda le manjkajočo).
+export const DB_VERSION = 2
 const MAX_PHOTO_BYTES = 8 * 1024 * 1024 // 8 MB dataURL-a — enako strežniški meji
 
 export type OfflineOpKind = 'meritev' | 'foto' | 'nalog-opomba' | 'nalog-status' | 'nalog-zakljucek'
@@ -80,13 +83,14 @@ function openDb (): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains('queue')) db.createObjectStore('queue', { keyPath: 'opId' })
       if (!db.objectStoreNames.contains('photos')) db.createObjectStore('photos', { keyPath: 'photoId' })
       if (!db.objectStoreNames.contains('cache')) db.createObjectStore('cache', { keyPath: 'key' })
+      if (!db.objectStoreNames.contains('drafts')) db.createObjectStore('drafts', { keyPath: 'userId' })
     }
     req.onsuccess = () => resolve(req.result)
     req.onerror = () => reject(req.error ?? new Error('IndexedDB ni dosegljiva.'))
   })
 }
 
-function tx<T> (store: 'queue' | 'photos' | 'cache', mode: IDBTransactionMode, fn: (s: IDBObjectStore) => IDBRequest): Promise<T> {
+function tx<T> (store: 'queue' | 'photos' | 'cache' | 'drafts', mode: IDBTransactionMode, fn: (s: IDBObjectStore) => IDBRequest): Promise<T> {
   return openDb().then((db) => new Promise<T>((resolve, reject) => {
     const t = db.transaction(store, mode)
     const req = fn(t.objectStore(store))
@@ -173,6 +177,17 @@ export interface QueuePhotoInput {
   posts?: number | null
   segments?: number | null
   slopeDeg?: number | null
+  // R486 (issue #7 §6): offline dopolnitev — isti paket kot confirm (params meritev):
+  // točke, kalibracija, dodatni pogledi, kakovost, zaupanje, ročni popravek,
+  // način izmere in rezultat engine-a (samo DODATEK polj — ne preimenovanja).
+  points?: { x: number; y: number }[] | null
+  calibration?: Record<string, unknown> | null
+  views?: Record<string, unknown>[] | null
+  quality?: Record<string, unknown> | null
+  confidence?: number | null
+  manualOverride?: { computedLengthCm: number; reason: string } | null
+  mode?: string | null
+  engine?: Record<string, unknown> | null
 }
 
 /**
@@ -198,6 +213,22 @@ export async function queuePhoto (input: QueuePhotoInput): Promise<{ photoId: st
     const v = input[k]
     if (typeof v === 'number' && Number.isFinite(v)) payload[k] = v
   }
+  // R486: merilni paket (enaka struktura kot /api/measurement/confirm) —
+  // strežniška veja 'foto' ga zapiše v params meritev (kalibracija NE izgine).
+  for (const k of ['points', 'calibration', 'views', 'quality', 'engine'] as const) {
+    const v = input[k]
+    if (v !== null && v !== undefined && (Array.isArray(v) || typeof v === 'object')) payload[k] = v
+  }
+  if (typeof input.confidence === 'number' && Number.isFinite(input.confidence)) {
+    payload.confidence = Math.round(input.confidence)
+  }
+  if (input.manualOverride && typeof input.manualOverride === 'object' && Number.isFinite(input.manualOverride.computedLengthCm)) {
+    payload.manualOverride = {
+      computedLengthCm: Math.round(input.manualOverride.computedLengthCm * 10) / 10,
+      reason: String(input.manualOverride.reason ?? '').slice(0, 200),
+    }
+  }
+  if (typeof input.mode === 'string' && input.mode.trim()) payload.mode = input.mode.trim()
   const op = await queueOp('foto', payload)
   return { photoId, opId: op.opId }
 }
@@ -414,8 +445,10 @@ export async function getCachedNalogi<T> (): Promise<CachedNalogi<T> | null> {
 
 // ─── Varnost: izbris VSEH shramb ob odjavi (zahteva issue #6) ────────────────
 
+// R486: 'drafts' (osnutek meritve s kamero) se pobriše Z ostalimi shrambami —
+// ob odjavi/zamenjavi uporabnika osnutek NE sme ostati na napravi.
 export async function clearOfflineData (): Promise<void> {
-  for (const store of ['queue', 'photos', 'cache'] as const) {
+  for (const store of ['queue', 'photos', 'cache', 'drafts'] as const) {
     await tx(store, 'readwrite', (s) => s.clear()).catch(() => {})
   }
 }

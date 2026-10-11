@@ -22,6 +22,7 @@ import { getSessionUser, jsonError, readsAllData, type SessionUser } from '@/lib
 import { writeAudit } from '@/lib/audit'
 import { emitEvent } from '@/lib/notify'
 import { izvediAkcijo, type AkcijaVhod } from '@/lib/playbook-engine'
+import { MEASURE_MODES } from '@/lib/measure-engine'
 
 // R439: terenski tok — VERBATIM iz /api/nalog/[id]/transition
 const FLOW: Record<string, { next: string; event: string; label: string }[]> = {
@@ -101,6 +102,99 @@ async function customerOf (projectId: string | null): Promise<{ email: string | 
   return { email: p?.customer?.email ?? null, name: p?.customer?.name ?? null }
 }
 
+/** R486: normalizira en pogled (enako parseView iz confirm). */
+function parseViewSync (v: unknown): Record<string, unknown> | null {
+  if (!v || typeof v !== 'object') return null
+  const o = v as { photoId?: unknown; points?: unknown; calibration?: unknown }
+  const out: Record<string, unknown> = {}
+  if (typeof o.photoId === 'string' && o.photoId) out.photoId = o.photoId
+  if (Array.isArray(o.points)) {
+    const pts = o.points.slice(0, 64).filter((p) => {
+      if (!p || typeof p !== 'object') return false
+      const q = p as { x?: unknown; y?: unknown }
+      return Number.isFinite(Number(q.x)) && Number.isFinite(Number(q.y))
+    })
+    if (pts.length > 0) out.points = pts
+  }
+  if (o.calibration && typeof o.calibration === 'object') {
+    const c = o.calibration as { px?: unknown; cm?: unknown; imgW?: unknown; imgH?: unknown }
+    const cal: Record<string, number> = {}
+    if (Number.isFinite(Number(c.px)) && Number(c.px) > 0) cal.px = Number(c.px)
+    if (Number.isFinite(Number(c.cm)) && Number(c.cm) > 0) cal.cm = Number(c.cm)
+    if (Number.isFinite(Number(c.imgW)) && Number(c.imgW) > 0) cal.imgW = Math.round(Number(c.imgW))
+    if (Number.isFinite(Number(c.imgH)) && Number(c.imgH) > 0) cal.imgH = Math.round(Number(c.imgH))
+    if (Object.keys(cal).length > 0) out.calibration = cal
+  }
+  return Object.keys(out).length > 0 ? out : null
+}
+
+/**
+ * R486 (issue #7 §6): offline dopolnitev — merilni paket 'foto' opa prenesi v
+ * params meritev ENAKO kot /api/measurement/confirm (kalibracija/pogledi/
+ * kakovost/zaupanje/ročni popravek/način/engine pri offline poti NE izginejo).
+ * Samo DODATEK polj: brez teh podatkov je params identičen prejšnjemu (r439).
+ * Neveljavni kosi se tiho izpustijo (vrsta ne sme pasti zaradi starejšega odjemalca).
+ */
+function parseExtras (payload: Record<string, unknown>): Record<string, unknown> {
+  const extra: Record<string, unknown> = {}
+  if (Array.isArray(payload.points)) {
+    const pts = payload.points.slice(0, 64).filter((p) => {
+      if (!p || typeof p !== 'object') return false
+      const q = p as { x?: unknown; y?: unknown }
+      return Number.isFinite(Number(q.x)) && Number.isFinite(Number(q.y))
+    })
+    if (pts.length > 0) extra.points = pts
+  }
+  if (payload.calibration && typeof payload.calibration === 'object' && !Array.isArray(payload.calibration)) {
+    const c = payload.calibration as { px?: unknown; cm?: unknown; imgW?: unknown; imgH?: unknown; method?: unknown; refObject?: unknown }
+    const cal: Record<string, unknown> = {}
+    if (Number.isFinite(Number(c.px)) && Number(c.px) > 0) cal.px = Number(c.px)
+    if (Number.isFinite(Number(c.cm)) && Number(c.cm) > 0) cal.cm = Number(c.cm)
+    if (Number.isFinite(Number(c.imgW)) && Number(c.imgW) > 0) cal.imgW = Math.round(Number(c.imgW))
+    if (Number.isFinite(Number(c.imgH)) && Number(c.imgH) > 0) cal.imgH = Math.round(Number(c.imgH))
+    if (typeof c.method === 'string' && ['MARKER', 'ZNANA_MERA', 'ZUNANJA_NAPRAVA', 'LIDAR', 'ROCNO'].includes(c.method)) cal.method = c.method
+    if (typeof c.refObject === 'string' && c.refObject.trim()) cal.refObject = c.refObject.trim().slice(0, 80)
+    if (Object.keys(cal).length > 0) extra.calibration = cal
+  }
+  if (Array.isArray(payload.views)) {
+    const vs = payload.views.slice(0, 4).map(parseViewSync).filter((v): v is Record<string, unknown> => v !== null)
+    if (vs.length > 0) extra.views = vs
+  }
+  if (payload.quality && typeof payload.quality === 'object' && !Array.isArray(payload.quality)) {
+    const q = payload.quality as { brightness?: unknown; blurScore?: unknown; dark?: unknown; bright?: unknown; blurry?: unknown }
+    const out: Record<string, unknown> = {}
+    const b = Number(q.brightness); const bl = Number(q.blurScore)
+    if (Number.isFinite(b) && b >= 0 && b <= 255) out.brightness = Math.round(b)
+    if (Number.isFinite(bl) && bl >= 0 && bl <= 10000) out.blurScore = Math.round(bl)
+    if (typeof q.dark === 'boolean') out.dark = q.dark
+    if (typeof q.bright === 'boolean') out.bright = q.bright
+    if (typeof q.blurry === 'boolean') out.blurry = q.blurry
+    if (Object.keys(out).length > 0) extra.quality = out
+  }
+  const conf = num(payload.confidence)
+  if (conf !== null && conf >= 0 && conf <= 100) extra.confidence = Math.round(conf)
+  if (payload.manualOverride && typeof payload.manualOverride === 'object' && !Array.isArray(payload.manualOverride)) {
+    const mo = payload.manualOverride as { computedLengthCm?: unknown; reason?: unknown }
+    const computed = Number(mo.computedLengthCm)
+    const reason = typeof mo.reason === 'string' ? mo.reason.trim() : ''
+    if (Number.isFinite(computed) && computed > 0 && computed <= 10000 && reason.length >= 3) {
+      extra.manualOverride = { computedLengthCm: Math.round(computed * 10) / 10, reason: reason.slice(0, 200) }
+    }
+  }
+  const mode = str(payload.mode)
+  if (mode && (MEASURE_MODES as string[]).includes(mode)) extra.mode = mode
+  if (payload.engine && typeof payload.engine === 'object' && !Array.isArray(payload.engine)) {
+    const e = payload.engine as Record<string, unknown>
+    const picked: Record<string, unknown> = {}
+    if (e.domain && typeof e.domain === 'object') picked.domain = e.domain
+    if (Array.isArray(e.validation)) picked.validation = e.validation.slice(0, 40)
+    if (e.confidence && typeof e.confidence === 'object') picked.confidence = e.confidence
+    if (e.captureGuide && typeof e.captureGuide === 'object') picked.captureGuide = e.captureGuide
+    if (Object.keys(picked).length > 0 && JSON.stringify(picked).length <= 8000) extra.engine = picked
+  }
+  return extra
+}
+
 /** Meritev (ISTA logika kot /api/measurement/confirm) + verzija v1 + revizija + obvestilo. */
 async function opMeritev (
   user: SessionUser,
@@ -151,7 +245,9 @@ async function opMeritev (
       segments,
       handrail,
       slopeDeg,
-      params: JSON.stringify({ ...(photoId ? { photoId } : {}), synced: true }),
+      // R486 (issue #7 §6): razširjeni merilni podatki iz offline vrste —
+      // ENAKA struktura kot confirm (brez njih params ostane kot prej).
+      params: JSON.stringify({ ...(photoId ? { photoId } : {}), ...parseExtras(payload), synced: true }),
       note: str(payload.note),
     },
     include: {

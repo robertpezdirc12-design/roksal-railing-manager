@@ -54,6 +54,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { useToast } from '@/hooks/use-toast'
 import { apiPost, fmtDate, useApi } from '@/lib/api-client'
 import { getCachedNalogi, queuePhoto, useOnline } from '@/lib/offline'
+import { clearDraft, loadDraft, saveDraft, type MeasureDraft, type MeasureDraftSnapshot } from '@/lib/measure-draft'
 import { useAppStore } from '@/lib/store'
 import {
   CALIB_METHODS, MEASURE_MODES, MODE_RULES, captureGuide, detectDeviceCaps, recommendMethod,
@@ -266,10 +267,16 @@ function domainRows (d: AnalyzeResult['domain']): [string, string][] {
   }
 }
 
-export function KameraMeritevDialog ({ open, onClose, onSaved }: {
+export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId, initialWorkOrderId, autoResumeDraft }: {
   open: boolean
   onClose: () => void
   onSaved: () => void | Promise<void>
+  /** R486 (issue #7 §3): predpolnjen kontekst iz naloga (ZAČNI MERITEV v DANES)
+   *  — monter NE izbira projekta/naloga ročno (enostaven privzeti potek). */
+  initialProjectId?: string
+  initialWorkOrderId?: string
+  /** R486: »Nadaljuj nedokončano« iz DANES — osnutek obnovi TAKOJ ob odprtju. */
+  autoResumeDraft?: boolean
 }) {
   const { toast } = useToast()
 
@@ -359,6 +366,92 @@ export function KameraMeritevDialog ({ open, onClose, onSaved }: {
     void getCachedNalogi<CachedWoRow>().then((c) => { if (c) setCachedOrders(c.list) }).catch(() => {})
   }, [open])
 
+  // ── R486 (issue #7 §3): predpolnjen kontekst iz naloga (ZAČNI MERITEV v DANES) ──
+  useEffect(() => {
+    if (!open) return
+    if (initialProjectId) setProjectId(initialProjectId)
+    if (initialWorkOrderId) setWorkOrderId(initialWorkOrderId)
+  }, [open, initialProjectId, initialWorkOrderId])
+
+  // ── R486 (issue #7 §3/§6): nedokončana meritev — pasica NADALJUJ / ZAČNI NOVO ──
+  // osvežitev/zaprtje/klic sred merjenja NE izgubi točk/kalibracije/pogledov
+  const [pendingDraft, setPendingDraft] = useState<MeasureDraft | null>(null)
+  useEffect(() => {
+    if (!open) return
+    setPendingDraft(null)
+    const uid = useAppStore.getState().user?.id
+    if (!uid) return
+    void loadDraft(uid).then((d) => {
+      if (!d) return
+      if (!Array.isArray(d.views) || d.views.length === 0) { void clearDraft(uid); return }
+      if (autoResumeDraft) { resumeDraft(d); return }
+      setPendingDraft(d)
+    }).catch(() => {})
+  }, [open, autoResumeDraft])
+
+  /** R486: obnovi stanje iz osnutka (točke, kalibracija, pogledi, faza, kakovost). */
+  function resumeDraft (d: MeasureDraft): void {
+    const modes = MEASURE_MODES as string[]
+    const validMode = modes.includes(d.mode) ? (d.mode as MeasureMode) : 'OGRAJA'
+    const types = ['OGRAJA', 'BALUSTRADA', 'NAGIB', 'OSTANEO']
+    const validType = typeof d.type === 'string' && types.includes(d.type) ? d.type : null
+    const restored: View[] = d.views.map((v, i) => ({ ...v, key: viewKey.current + i }))
+    viewKey.current += d.views.length
+    if (validMode !== mode) typeRestoreRef.current = true
+    setMode(validMode)
+    if (validType) setType(validType)
+    setViews(restored)
+    setActiveView(Math.max(0, Math.min(d.activeView ?? 0, restored.length - 1)))
+    const ph = Math.min(5, Math.max(1, Math.round(d.phase ?? 1)))
+    setPhase(ph as 1 | 2 | 3 | 4 | 5)
+    if (d.projectId) setProjectId(d.projectId)
+    if (d.workOrderId) setWorkOrderId(d.workOrderId)
+    if (typeof d.location === 'string') setLocation(d.location)
+    const cal = CALIB_METHODS.find((c) => c.id === d.calibMethod)
+    if (cal) setCalibMethod(cal.id)
+    if (typeof d.heightS === 'string' && d.heightS) setHeightS(d.heightS)
+    if (typeof d.note === 'string' && d.note) setNote(d.note)
+    if (typeof d.maxTilt === 'number' && Number.isFinite(d.maxTilt)) setMaxTilt(d.maxTilt)
+    past.current = []; future.current = []
+    setServerLayout(null)
+    setPendingDraft(null)
+    toast({ title: 'Nedokončana meritev obnovljena.', description: 'Točke, kalibracija in pogledi so nazaj — nadaljuj, kjer si končal.' })
+  }
+
+  /** R486: trenutno stanje dialoga → osnutek (IndexedDB, 1 na uporabnika). */
+  function draftSnapshot (): MeasureDraftSnapshot {
+    return {
+      projectId: projectId !== 'none' ? projectId : null,
+      workOrderId: workOrderId !== 'none' ? workOrderId : null,
+      mode,
+      phase,
+      views,
+      activeView,
+      location,
+      calibMethod,
+      type,
+      heightS,
+      note,
+      maxTilt,
+    }
+  }
+
+  // R486 (issue #7 §6): samodejni osnutek — debounce 500 ms; nov dogodek (foto,
+  // točke, kalibracija, faza) vedno prepíše starejši osnutek istega uporabnika.
+  const draftTimer = useRef<number | null>(null)
+  useEffect(() => {
+    if (!open) return
+    const uid = useAppStore.getState().user?.id
+    if (!uid || views.length === 0) return
+    if (draftTimer.current !== null) window.clearTimeout(draftTimer.current)
+    draftTimer.current = window.setTimeout(() => {
+      void saveDraft(uid, draftSnapshot())
+        .then(() => setPendingDraft(null))
+        .catch(() => { /* osnutek ne sme blokirati merjenja */ })
+    }, 500)
+    return () => { if (draftTimer.current !== null) { window.clearTimeout(draftTimer.current); draftTimer.current = null } }
+  }, [open, phase, views, activeView, projectId, workOrderId, mode, location, calibMethod, type, heightS, note, maxTilt])
+
   // R457 (§16): zmogljivosti naprave ob odprtju pogovornega okna
   useEffect(() => {
     if (!open) return
@@ -366,8 +459,14 @@ export function KameraMeritevDialog ({ open, onClose, onSaved }: {
   }, [open])
 
   // R457 (§2): način izmere določi priporočeni legacy tip + počisti analizo
+  // R486: ob obnovitvi osnutka tip pusti, kot je bil shranjen (typeRestoreRef)
+  const typeRestoreRef = useRef(false)
   useEffect(() => {
-    setType(MODE_RULES[mode].legacyType)
+    if (typeRestoreRef.current) {
+      typeRestoreRef.current = false
+    } else {
+      setType(MODE_RULES[mode].legacyType)
+    }
     setStairMode(mode === 'STOPNICE')
     setAnalysis(null)
   }, [mode])
@@ -831,6 +930,9 @@ export function KameraMeritevDialog ({ open, onClose, onSaved }: {
       } else {
         await onSaved()
         resetAll()
+        // R486 (issue #7 §6): uspešno potrjena meritev → osnutek ni več potreben
+        const uid = useAppStore.getState().user?.id
+        if (uid) void clearDraft(uid)
       }
     } catch (e) {
       toast({ title: 'Napaka pri shranjevanju meritve', description: e instanceof Error ? e.message : undefined, variant: 'destructive' })
@@ -859,12 +961,46 @@ export function KameraMeritevDialog ({ open, onClose, onSaved }: {
         posts: null,
         segments: calc.segs.length,
         slopeDeg: calc.segs.length === 1 ? Math.round(calc.segs[0].angleDeg * 10) / 10 : null,
+        // R486 (issue #7 §6 — dopolnitev offline poti): kalibracija/pogledi/kakovost/
+        // zaupanje/ročni popravek/način/engine se izgubijo SAMO če jih NE pošljemo —
+        // struktura je IDENTIČNA confirm (:771-819), /api/sync pa jih zapiše v params.
+        points: calc.pts.map((p) => ({ x: p.x, y: p.y })),
+        calibration: view.calib
+          ? { ...view.calib, method: calibMethod, refObject: refObject.trim() || undefined, imgW: Math.round(view.imgW), imgH: Math.round(view.imgH) }
+          : null,
+        views: views.length > 1
+          ? views.slice(1).map((v) => ({
+            photoId: v.photoId ?? undefined,
+            points: v.points.filter((p) => p.src !== 'PREDLOG').map((p) => ({ x: p.x, y: p.y })),
+            calibration: v.calib ? { ...v.calib, imgW: Math.round(v.imgW), imgH: Math.round(v.imgH) } : undefined,
+          }))
+          : null,
+        quality: views[0].quality
+          ? {
+            brightness: views[0].quality.brightness,
+            blurScore: views[0].quality.blurScore,
+            dark: views[0].quality.dark,
+            bright: views[0].quality.bright,
+            blurry: views[0].quality.blurry,
+          }
+          : null,
+        confidence: multi.conf,
+        manualOverride: overrideOn
+          ? { computedLengthCm: multi.mean !== null && multi.lengths.length > 1 ? Math.round(multi.mean * 10) / 10 : calc.totalCm ?? 0, reason: overrideReason.trim() }
+          : null,
+        mode,
+        engine: analysis
+          ? { domain: analysis.domain, validation: analysis.validation, confidence: analysis.confidence }
+          : null,
       })
       toast({
         title: 'Shranjeno lokalno — sinhroniziralo se bo samodejno',
         description: `${finalLengthCm ? `Meritev ${fmt1(finalLengthCm / 100)} m in fotografija` : 'Fotografija'} bosta poslani, ko se signal vrne.`,
       })
       resetAll()
+      // R486 (issue #7 §6): offline shranjeno v vrsto → osnutek ni več potreben
+      const uid = useAppStore.getState().user?.id
+      if (uid) void clearDraft(uid)
       onClose()
     } catch (e) {
       toast({
@@ -1040,6 +1176,41 @@ export function KameraMeritevDialog ({ open, onClose, onSaved }: {
           )
         })}
       </ol>
+
+      {/* R486 (issue #7 §3/§6): nedokončana meritev — pasica nadaljevanja */}
+      {pendingDraft && views.length === 0 ? (() => {
+        const pts = pendingDraft.views.reduce((s, v) => s + (Array.isArray(v.points) ? v.points.length : 0), 0)
+        const at = new Date(pendingDraft.savedAt)
+        const hm = Number.isFinite(at.getTime())
+          ? at.toLocaleTimeString('sl-SI', { hour: '2-digit', minute: '2-digit' })
+          : ''
+        return (
+          <div
+            className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 dark:border-amber-900 dark:bg-amber-950/40"
+            role="status"
+            aria-label="Nedokončana meritev shranjena v telefonu"
+          >
+            <p className="text-sm font-medium text-amber-900 dark:text-amber-200">
+              Imaš nedokončano meritev{hm ? ` (shranjeno ${hm})` : ''} — {pendingDraft.views.length} {pendingDraft.views.length === 1 ? 'pogled' : 'pogleda/pogledi'}, {pts} točk.
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <Button size="sm" className="h-9" onClick={() => resumeDraft(pendingDraft)}>
+                <Redo2 className="size-4" aria-hidden /> NADALJUJ
+              </Button>
+              <Button
+                size="sm" variant="outline" className="h-9"
+                onClick={() => {
+                  const uid = useAppStore.getState().user?.id
+                  if (uid) void clearDraft(uid)
+                  setPendingDraft(null)
+                }}
+              >
+                <Trash2 className="size-4" aria-hidden /> ZAČNI NOVO
+              </Button>
+            </div>
+          </div>
+        )
+      })() : null}
 
       {/* R457 (§19): izvoz zadnje shranjene meritve — viden v vseh fazah po potrditvi */}
       {savedId ? (

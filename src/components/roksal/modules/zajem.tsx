@@ -8,7 +8,7 @@
 // R465 (issue #4 §2): CAPTURE REPLAY — predvajanje zajema po korakih za
 // revizijo/izobraževanje (read-only, kumulativna pokritost/drift po posnetku).
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Boxes, Camera, CheckCircle2, ChevronLeft, ChevronRight, Circle, Compass, Film, FlagTriangleRight,
   Loader2, MapPin, Pause, Play, Plus, RadioTower, RefreshCw, Ruler, Satellite, Trash2,
@@ -25,6 +25,7 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useToast } from '@/hooks/use-toast'
 import { useAppStore } from '@/lib/store'
+import { compressImage } from '@/lib/offline'
 import { apiDelete, apiGet, apiPatch, apiPost, useApi } from '@/lib/api-client'
 import { EmptyState, ErrorBox, LoadingRows, PageHeader } from '@/components/roksal/ui-bits'
 import { hasPerm } from '@/lib/permissions-core'
@@ -744,6 +745,43 @@ function SessionDetailBody ({ detail, mayWrite, onReload, onDelete }: {
   const [qBright, setQBright] = useState(false)
   const [qBlurry, setQBlurry] = useState(false)
 
+  // ── R486 (issue #7 §4A): posnetek s SLIČICO — file input BREZ capture atributa
+  // (izbira iz galerije ali kamere), canvas skrčitev ≤ 120 KB → POST thumb
+  // (API photo/route.ts sprejema; prej so bili posnetki SAMO metapodatki).
+  const thumbRef = useRef<HTMLInputElement>(null)
+  const [pendingZone, setPendingZone] = useState<string | null>(null)
+
+  const THUMB_MAX_BYTES = 120 * 1024
+
+  /** Skrči sliko na ≤ 120 KB (canvas JPEG, postopno nižja kvaliteta). */
+  async function shrinkThumb (dataUrl: string): Promise<string | null> {
+    let cur = dataUrl
+    for (const q of [0.6, 0.45, 0.3, 0.18]) {
+      cur = await compressImage(cur, 640, q)
+      if (cur.length <= THUMB_MAX_BYTES) return cur
+    }
+    return null // ni šlo spraviti pod mejo — posnetek gre brez sličice
+  }
+
+  function dodajPosnetek (zone: string): void {
+    setPendingZone(zone)
+    thumbRef.current?.click()
+  }
+
+  // preklic izbire datoteke (DOM 'cancel' — React tipi ga ne poznajo na inputu)
+  // → posnetek brez sličice (kot prej — tok NI blokiran, §6 »napaka ene slike«)
+  useEffect(() => {
+    const el = thumbRef.current
+    if (!el) return
+    const onCancel = (): void => {
+      const z = pendingZone
+      setPendingZone(null)
+      if (z) void addPhoto(z, null)
+    }
+    el.addEventListener('cancel', onCancel)
+    return () => el.removeEventListener('cancel', onCancel)
+  }, [pendingZone])
+
   const coverableKinds = new Set(['START', 'SEGMENT', 'VOGAL', 'VRATA', 'TEREN', 'PODLAGA', 'KONEC'])
 
   async function act (fn: () => Promise<void>) {
@@ -753,15 +791,37 @@ function SessionDetailBody ({ detail, mayWrite, onReload, onDelete }: {
     } finally { setBusy(false) }
   }
 
-  async function addPhoto (zone: string) {
+  async function addPhoto (zone: string, thumb: string | null = null) {
     await act(async () => {
       const clientKey = `ph-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
       await apiPost(`/api/capture-session/${detail.id}/photo`, {
         zone, clientKey, quality: { dark: qDark, bright: qBright, blurry: qBlurry },
+        ...(thumb ? { thumb } : {}),
       })
-      toast({ title: 'Posnetek dodan', description: `Cona: ${a.plan.find((p) => p.id === zone)?.label ?? zone}` })
+      toast({
+        title: 'Posnetek dodan',
+        description: `Cona: ${a.plan.find((p) => p.id === zone)?.label ?? zone}${thumb ? ` · sličica ${Math.round(thumb.length / 1024)} KB` : ''}`,
+      })
       onReload()
     })
+  }
+
+  /** R486: izbrana datoteka → skrči → posnetek S sličico; preklic → brez nje. */
+  async function onThumbFile (f: File | undefined): Promise<void> {
+    const zone = pendingZone
+    setPendingZone(null)
+    if (!zone) return
+    let thumb: string | null = null
+    if (f) {
+      const url = await new Promise<string>((resolve) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(String(reader.result))
+        reader.onerror = () => resolve('')
+        reader.readAsDataURL(f)
+      })
+      if (url) thumb = await shrinkThumb(url)
+    }
+    await addPhoto(zone, thumb)
   }
 
   async function markStop (stopId: string, done: boolean) {
@@ -922,13 +982,20 @@ function SessionDetailBody ({ detail, mayWrite, onReload, onDelete }: {
                 </div>
                 <p className="mt-0.5 text-xs">{ZONE_STATES[z.state].label} · {z.photoCount} posnetkov ({z.goodCount} dobrih)</p>
                 {mayWrite && !zaklenjen && (
-                  <Button size="sm" variant="outline" className="mt-1.5 h-7 w-full bg-white/60" disabled={busy} onClick={() => addPhoto(z.stopId)}>
+                  <Button size="sm" variant="outline" className="mt-1.5 h-7 w-full bg-white/60" disabled={busy} onClick={() => dodajPosnetek(z.stopId)}>
                     <Camera className="mr-1 h-3 w-3" />Dodaj posnetek
                   </Button>
                 )}
               </div>
             ))}
           </div>
+          {/* R486 (issue #7 §4A): skriti file input za sličico posnetka — EN
+              skupen (cono nosi pendingZone), brez capture atributa (galerija/kamera) */}
+          <input
+            ref={thumbRef} type="file" accept="image/*" className="hidden"
+            aria-label="Sličica posnetka (izbira iz galerije ali kamere)"
+            onChange={(e) => { void onThumbFile(e.target.files?.[0]); e.target.value = '' }}
+          />
           <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
             <span>Kakovost naslednjega posnetka:</span>
             {([['temno', qDark, setQDark], ['svetlo', qBright, setQBright], ['zamegljeno', qBlurry, setQBlurry]] as const).map(([label, val, set]) => (
