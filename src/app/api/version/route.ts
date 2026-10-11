@@ -12,7 +12,7 @@ export async function GET (req: NextRequest) {
   return NextResponse.json({
     data: {
       app: 'Roksal Railing Manager',
-      build: process.env.ROKSAL_BUILD ?? process.env.ROKSAL_BUILD_RESOLVED ?? 'neznano', // R478: VERCEL_GIT_COMMIT_SHA ob buildu
+      build: process.env.ROKSAL_BUILD_RESOLVED ?? process.env.ROKSAL_BUILD ?? 'neznano', // R478: VERCEL_GIT_COMMIT_SHA ob buildu
       branch: process.env.VERCEL_GIT_COMMIT_REF ?? 'main',
       user: user.email,
     },

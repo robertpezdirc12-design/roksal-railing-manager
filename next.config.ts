@@ -3,15 +3,16 @@ import type { NextConfig } from "next";
 
 // R478 (issue #9 §6): build oznaka se razreši OB BUILDU/ZAGONU — ne več
 // statična env vrednost, ki jo je treba ročno osveževati na Vercelu.
-// Prednost: ROKSAL_BUILD (izrecna) → VERCEL_GIT_COMMIT_SHA (git deploy:
-// "main-9f980c4") → dev-v<verzija> (lokalni razvoj).
+// Prednost: VERCEL_GIT_COMMIT_SHA (git deploy: "main-31e4f4d" — PRAVI sha
+// builda, ročna env oznaka ga NE sme pasti, ker zastara) → ROKSAL_BUILD
+// (izrecna ročna oznaka — samo brez git deploya) → dev-v<verzija> (lokalno).
 function resolveBuildLabel (): string {
-  if (process.env.ROKSAL_BUILD) return process.env.ROKSAL_BUILD
   const sha = process.env.VERCEL_GIT_COMMIT_SHA
   if (sha) {
     const ref = process.env.VERCEL_GIT_COMMIT_REF ?? "main"
     return `${ref}-${sha.slice(0, 7)}`
   }
+  if (process.env.ROKSAL_BUILD) return process.env.ROKSAL_BUILD
   try {
     const pkg = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8")) as { version?: string }
     return `dev-v${pkg.version ?? "0"}`
