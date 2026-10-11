@@ -34,12 +34,13 @@
 
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type Ref } from 'react'
 import {
-  Camera, CameraOff, Download, History, ImageIcon, Lightbulb, Loader2, Lock, LockOpen, MapPin, Move, Ruler, ScanLine,
+  Camera, CameraOff, ChevronDown, ChevronRight, Download, History, ImageIcon, Lightbulb, Loader2, Lock, LockOpen, MapPin, Move, Ruler, ScanLine,
   Save, Sparkles, Trash2, Video, Waypoints, X,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Slider } from '@/components/ui/slider'
@@ -172,6 +173,9 @@ export default function ArModule () {
   const [sceneEdits, setSceneEdits] = useState<SceneEdit[]>([])
   /** R468 (F2 §9): pripnjeni (zaklenjeni) elementi — vedno prikazani. */
   const [scenePinned, setScenePinned] = useState<Set<string>>(new Set())
+  /** R483 (issue #8 F5 §11-3): zložljiva navodila ob nezadostnih podatkih —
+   *  privzeto ZAPRTO (naslov vedno viden pod AR predogledom). */
+  const [helpOpen, setHelpOpen] = useState(false)
   /** R468 (F2 §3): vnos ročno izmerjenega naklona v kartici elementa. */
   const [slopeInput, setSlopeInput] = useState('')
   /** R469 (F3 §4): vnos ročno potrjenega števila stopnic. */
@@ -863,6 +867,56 @@ export default function ArModule () {
                   ? 'Kamera ni na voljo — predogled na demo ozadju. Zajem shrani enak sestavek (demo ozadje + ograja).'
                   : 'Ograjo premikajte z vlečenjem po predogledu; velikost in prosojnost nastavite z drsnikoma levo.'}
               </p>
+
+              {/* R483 (issue #8 F5 §11-3): KRATKA NAVODILA OB NEZADOSTNIH PODATKIH —
+                  zložljiva ploščica POD AR predogledom (NE čez kamero; naslov
+                  vedno viden, vsebina privzeto zložena; enoročni tap).
+                  NAMENOMA samo ta ena ploščica — vodena navodila širom programa
+                  so issue #11 SMART GUIDE (ne gradimo splošnega sistema pomoči). */}
+              <Collapsible open={helpOpen} onOpenChange={setHelpOpen}>
+                <div className="rounded-lg border border-dashed">
+                  <CollapsibleTrigger asChild>
+                    <button
+                      type="button"
+                      className="flex min-h-11 w-full items-center gap-2 rounded-lg px-3 py-2 text-left transition hover:bg-secondary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-roksal-amber"
+                      aria-expanded={helpOpen}
+                      aria-controls="ar-nezadostni-podatki"
+                    >
+                      {helpOpen ? <ChevronDown className="size-4 shrink-0 text-roksal-amber" aria-hidden /> : <ChevronRight className="size-4 shrink-0 text-roksal-amber" aria-hidden />}
+                      <Lightbulb className="size-4 shrink-0 text-roksal-amber" aria-hidden />
+                      <span className="text-xs font-bold uppercase tracking-wide">Nezadostni podatki — kaj zdaj?</span>
+                      <span className="ml-auto shrink-0 text-[10px] font-medium text-muted-foreground">{helpOpen ? 'skrči' : 'razpri'}</span>
+                    </button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <ol id="ar-nezadostni-podatki" className="space-y-1.5 border-t px-3 py-2.5">
+                      <li className="flex items-start gap-1.5 text-xs leading-snug">
+                        <span aria-hidden className="mt-0.5 shrink-0 font-bold text-roksal-amber">1.</span>
+                        <span><strong>Posnemite dodatni pogled z drugega kota</strong> — zakriti rob ali konec se pogosto pokaže že z malo drugačnega stališča.</span>
+                      </li>
+                      <li className="flex items-start gap-1.5 text-xs leading-snug">
+                        <span aria-hidden className="mt-0.5 shrink-0 font-bold text-roksal-amber">2.</span>
+                        <span><strong>Določite referenčno mero</strong> — znana dolžina v kadru (miknik, plošča, stopnica) omogoči izpeljavo centimetrov.</span>
+                      </li>
+                      <li className="flex items-start gap-1.5 text-xs leading-snug">
+                        <span aria-hidden className="mt-0.5 shrink-0 font-bold text-roksal-amber">3.</span>
+                        <span><strong>Manjkajoči rob ali točko označite ročno</strong> — popravek razreda ali vrste se shrani kot označen podatek, izvirna zaznava ostane.</span>
+                      </li>
+                      <li className="flex items-start gap-1.5 text-xs leading-snug">
+                        <span aria-hidden className="mt-0.5 shrink-0 font-bold text-roksal-amber">4.</span>
+                        <span><strong>Pri naklonu uporabite nivelir ali referenčno metodo</strong> — brez globinskih podatkov je naklon samo ocena (ročni vnos šteje kot izmera).</span>
+                      </li>
+                      <li className="flex items-start gap-1.5 text-xs leading-snug">
+                        <span aria-hidden className="mt-0.5 shrink-0 font-bold text-roksal-amber">5.</span>
+                        <span><strong>Kritična mera brez dokaza NE gre v kosovnico</strong> — izmerite ročno ali iz tekača; prepoznava je samo predlog.</span>
+                      </li>
+                    </ol>
+                    <p className="border-t px-3 py-1.5 text-[10px] text-muted-foreground">
+                      Velja vsem zaznavam: to je predlog prepoznave, še ni proizvodna mera (issue #8 §8).
+                    </p>
+                  </CollapsibleContent>
+                </div>
+              </Collapsible>
 
               {/* R467 (issue #8 F1 §2): popravek zaznanega elementa — OZNAČEN PODATEK,
                   izvirni zajem ostaja; shrani se z naslednjim AR posnetkom.
