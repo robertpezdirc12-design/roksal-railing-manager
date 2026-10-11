@@ -118,6 +118,8 @@ jobs:
         run: |
           bunx prisma migrate deploy
           bun run db:seed
+      - name: sistemski paketi (poppler-utils — pdftotext za teste PDF)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq poppler-utils
       - name: zagon aplikacije
         run: |
           bunx next dev -p 3000 > dev.log 2>&1 &
