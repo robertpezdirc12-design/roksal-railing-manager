@@ -928,11 +928,15 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
         past.current = []; future.current = []
         setPhase(2)
       } else {
+        // R486 (issue #7 §6/§7): uspešno potrjena meritev → osnutek ni več potreben.
+        // clearDraft ŠELEJ SEDAJ (meritev JE shranjena) a PRED onSaved()/resetAll() —
+        // onSaved sproži reload podatkov, ob katerem se lahko dialog zapre in DANES
+        // ponovno naloži osnutek; če izbris IndexedDB še ni rezultiran, bi se pokazala
+        // LAŽNA pasika »Nadaljuj nedokončano« (issue #7 §7 brez lažnih stanj).
+        const uid = useAppStore.getState().user?.id
+        if (uid) await clearDraft(uid).catch(() => { /* osnutek ni kritičen */ })
         await onSaved()
         resetAll()
-        // R486 (issue #7 §6): uspešno potrjena meritev → osnutek ni več potreben
-        const uid = useAppStore.getState().user?.id
-        if (uid) void clearDraft(uid)
       }
     } catch (e) {
       toast({ title: 'Napaka pri shranjevanju meritve', description: e instanceof Error ? e.message : undefined, variant: 'destructive' })
@@ -999,8 +1003,9 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
       })
       resetAll()
       // R486 (issue #7 §6): offline shranjeno v vrsto → osnutek ni več potreben
+      // (await — isti razlog kot v confirm: brez lažnega NADALJUJ gumba po shranjevanju)
       const uid = useAppStore.getState().user?.id
-      if (uid) void clearDraft(uid)
+      if (uid) await clearDraft(uid).catch(() => { /* osnutek ni kritičen */ })
       onClose()
     } catch (e) {
       toast({
