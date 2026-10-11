@@ -74,6 +74,10 @@ export const SECTIONS: SectionDef[] = [
       // R473 (issue #9 §3): MERILNI MODEL — geometrija iz tekača s svetovnimi
       // koordinatami, verzijo in σ; tloris/profil/3D, izbira segmenta z viri.
       { id: 'model', label: 'Model', gate: 'measurements.read', desc: 'Merilni model — tloris/profil/3D (R473)' },
+      // R479 (issue #9 §7): ENOTNI PREGLEDOVALNIK — model + fotografije + meritve
+      // + pripeti komentarji (pini) na enem mestu; javna delitev z žetonom +
+      // GDPR soglasje za fotografije.
+      { id: 'pregled', label: 'Pregled', gate: 'measurements.read', desc: 'Enotni pregledovalnik — model/foto/pini (R479)' },
       { id: 'ar', label: 'AR', gate: 'projects.read', desc: 'Dopolnjena resničnost na terenu' },
       { id: 'signatura', label: 'Signatura', gate: 'quotes.create', desc: 'Zajem podpisa stranke' },
       { id: 'dokumenti', label: 'Dokumenti', gate: 'documents.read', desc: 'Arhiv dokumentov' },

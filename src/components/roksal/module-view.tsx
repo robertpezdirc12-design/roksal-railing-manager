@@ -26,6 +26,7 @@ const MODULES: Record<string, () => Promise<{ default: ComponentType<TabProps> }
   zajem: () => import('@/components/roksal/modules/zajem'), // R461: reality capture QA (issue #16)
   dvojcek: () => import('@/components/roksal/modules/dvojcek'), // R461: digitalni dvojček (issue #16)
   model: () => import('@/components/roksal/modules/model'), // R473: merilni model (issue #9 §3)
+  pregled: () => import('@/components/roksal/modules/pregled'), // R479: enotni pregledovalnik (issue #9 §7)
   foto: () => import('@/components/roksal/modules/foto'),
   nagib: () => import('@/components/roksal/modules/nagib'),
   konfigurator: () => import('@/components/roksal/modules/konfigurator'), // R447: konfigurator po družinah (nadomestil kalkulator)

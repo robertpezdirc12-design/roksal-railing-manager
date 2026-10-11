@@ -4,7 +4,7 @@
 // FOTO meritve na projektih ZAKLJUCEN/ARHIV; filter po projektu; lightbox s podatki.
 
 import { useState } from 'react'
-import { Camera, ImageIcon, MapPin, User } from 'lucide-react'
+import { Camera, ImageIcon, MapPin, ShieldAlert, User } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -18,11 +18,20 @@ interface GalleryItem {
   note: string | null
   createdAt: string
   photo: string | null
-  project: { id: string; code: string; title: string; status: string } | null
+  project: { id: string; code: string; title: string; status: string; consentStatus: string } | null
   author: { name: string } | null
 }
 
 interface ProjectRow { id: string; code: string; title: string; status: string }
+
+// R479 (issue #9 §10 — GDPR): če projekt nima veljavnega soglasja za objavo
+// fotografij, galerija pokaže opozorilo (rumeno) — interno vse ostane vidno,
+// javne poti (portal, javna povezava pregleda) pa fotografije zamaknejo.
+const consentBadge = (it: GalleryItem): string | null => {
+  if (!it.project) return null
+  if (it.project.consentStatus === 'VELJAVNO') return null
+  return it.project.consentStatus === 'POTEKLO' ? 'Soglasje za javne fotografije je poteklo' : 'Manjka soglasje za javne fotografije'
+}
 
 export default function GalerijaModule () {
   const [projectId, setProjectId] = useState('all')
@@ -91,6 +100,12 @@ export default function GalerijaModule () {
                 <CardContent className="space-y-1.5 p-4">
                   <p className="truncate font-medium text-foreground">{it.location ?? it.project?.title ?? 'Brez naslova'}</p>
                   {it.project ? <p className="truncate text-xs text-muted-foreground">{it.project.title}</p> : null}
+                  {consentBadge(it) ? (
+                    <p className="flex items-center gap-1.5 rounded-md border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-200" role="note">
+                      <ShieldAlert className="size-3 shrink-0" aria-hidden />
+                      <span className="truncate">{consentBadge(it)}</span>
+                    </p>
+                  ) : null}
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                     {it.author ? (
                       <span className="inline-flex items-center gap-1"><User className="size-3" aria-hidden />{it.author.name}</span>
