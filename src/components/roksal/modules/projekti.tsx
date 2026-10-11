@@ -5,8 +5,8 @@
 // R435: portal stranke — povezave + predogled javnega pogleda (/api/portal, /api/public/portal).
 // R436: 3D predogled — zadnja shranjena konfiguracija iz zavihka Vizualizacija.
 
-import { useMemo, useState } from 'react'
-import { Box, CalendarCheck, ClipboardList, Copy, ExternalLink, Eye, FolderKanban, HardHat, History, Layers, Link2, Loader2, MapPin, Package, Plus, Ruler, Scale, Search, FileDown, FileText, Banknote, ShieldCheck } from 'lucide-react'
+import { useMemo, useRef, useState } from 'react'
+import { Box, CalendarCheck, ClipboardList, Copy, ExternalLink, Eye, FolderKanban, HardHat, History, Layers, Link2, Loader2, MapPin, Package, Plus, Ruler, Scale, Search, FileDown, FileText, Banknote, ShieldCheck, Upload } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
@@ -1274,6 +1274,8 @@ function PackageBomDialog ({ pkg }: { pkg: PackageRow | null }) {
   const token = useAppStore((s) => s.token)
   const { toast } = useToast()
   const [expBusy, setExpBusy] = useState<string | null>(null)
+  const [importOpen, setImportOpen] = useState(false)
+  const [importTick, setImportTick] = useState(0)
 
   // R477 (issue #9 §6): izvoz kosovnice — CSV (podpično, vejica, BOM) ali
   // XLSX (xlsx-mini) s preverjanji pravil pred izvozom (vidna opozorila)
@@ -1310,7 +1312,7 @@ function PackageBomDialog ({ pkg }: { pkg: PackageRow | null }) {
   }
 
   const bom = useApi<{ data: { lines: { id: string; itemId: string; qty: number; unit: string; note: string | null; segmentKey: string | null; group: string | null; wastePct: number | null; sourceRule: string | null; item: { sku: string; name: string; unit: string; qty: number } }[]; product: { sku: string; name: string }; qty: number; unit: string; code: string; status: string } }>(
-    pkg?.bom ? `/api/bom/${pkg.bom.id}` : null, [pkg?.bom?.id]
+    pkg?.bom ? `/api/bom/${pkg.bom.id}` : null, [pkg?.bom?.id, importTick]
   )
   const d = bom.data?.data
   const calcJson = pkg?.calcJson
@@ -1369,6 +1371,10 @@ function PackageBomDialog ({ pkg }: { pkg: PackageRow | null }) {
           <Button size="sm" variant="outline" onClick={() => { void exportBom('xlsx') }} disabled={expBusy != null}>
             {expBusy === 'xlsx' ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <FileDown className="size-3.5" aria-hidden />}
             Izvozi XLSX
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => setImportOpen(true)}>
+            <Upload className="size-3.5" aria-hidden />
+            Uvozi …
           </Button>
           <span className="text-[11px] text-muted-foreground">CSV: podpično, decimalna vejica (SI) · XLSX: kosovnica + sume + preverjanja</span>
         </div>
@@ -1451,6 +1457,160 @@ function PackageBomDialog ({ pkg }: { pkg: PackageRow | null }) {
           </p>
         </div>
       ) : null}
+      {/* R478: uvoz kosovnice (round-trip) — preveri (dry-run) nato uvozi */}
+      <ImportBomDialog
+        pkg={pkg}
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        onImported={() => { setImportTick((t) => t + 1) }}
+      />
     </DialogContent>
+  )
+}
+
+// ── R478: UVOZ KOSOVNICE (CSV/XLSX/JSON → paket) ─────────────────────────────
+
+interface BomImportResult {
+  mode: 'preveri' | 'uvozi'
+  lines: number
+  skus?: number
+  diff?: {
+    unchanged: number
+    entries: { sku: string; segmentKey: string | null; kind: 'DODANO' | 'ODSTRANJENO' | 'SPREMENJENA_KOLICINA'; fromQty?: number; toQty?: number }[]
+  }
+  warnings?: string[]
+  bom?: { code: string; lines: number }
+  invalidated?: { reset: number; flagged: number; codes: string[] }
+}
+
+function ImportBomDialog ({ pkg, open, onOpenChange, onImported }: {
+  pkg: PackageRow | null
+  open: boolean
+  onOpenChange: (o: boolean) => void
+  onImported: () => void
+}) {
+  const token = useAppStore((s) => s.token)
+  const { toast } = useToast()
+  const inputRef = useRef<HTMLInputElement>(null)
+  const [file, setFile] = useState<File | null>(null)
+  const [result, setResult] = useState<BomImportResult | null>(null)
+  const [rowErrors, setRowErrors] = useState<{ row: number; field: string; problem: string }[] | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  function reset (): void {
+    setFile(null); setResult(null); setRowErrors(null)
+    if (inputRef.current != null) inputRef.current.value = ''
+  }
+
+  async function run (mode: 'preveri' | 'uvozi'): Promise<void> {
+    if (!pkg || !file || !token) return
+    setBusy(true)
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      fd.append('packageId', pkg.id)
+      fd.append('mode', mode)
+      const res = await fetch('/api/import/bom', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: fd,
+      })
+      const raw = await res.json().catch(() => ({})) as { data?: BomImportResult; error?: string; rowErrors?: { row: number; field: string; problem: string }[] }
+      const data = raw.data ?? (raw as unknown as BomImportResult) // API ovijalnik { data } ali golo
+      if (!res.ok) {
+        setRowErrors(raw.rowErrors ?? null)
+        throw new Error(raw.error ?? `Napaka strežnika (${res.status}).`)
+      }
+      setRowErrors(null)
+      if (mode === 'preveri') {
+        setResult(data)
+      } else {
+        toast({
+          title: `Kosovnica ${data.bom?.code ?? ''} uvožena (${data.lines} vrstic).`,
+          description: data.invalidated != null && data.invalidated.reset + data.invalidated.flagged > 0
+            ? `Povezane ponudbe invalidirane: ${(data.invalidated.codes ?? []).join(', ')}.`
+            : 'Kalkulacija (cena/marža) se ni spremenila — cene izračuna ponudba.',
+        })
+        reset()
+        onOpenChange(false)
+        onImported()
+      }
+    } catch (e) {
+      toast({ title: 'Uvoz ni uspel.', description: e instanceof Error ? e.message : 'Neznana napaka.', variant: 'destructive' })
+    } finally { setBusy(false) }
+  }
+
+  const diffRows = result?.diff?.entries ?? []
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!o) { reset(); onOpenChange(false) } else { onOpenChange(true) } }}>
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-xl">
+        <DialogHeader className="min-w-0">
+          <DialogTitle>Uvoz kosovnice — {pkg?.code ?? ''}</DialogTitle>
+          <DialogDescription>
+            CSV (podpično, vejica), XLSX (tudi iz Excela) ali JSON izvoz. Najprej PREVERI (brez zapisov) — diff se pokaže spodaj.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <input
+            ref={inputRef}
+            type="file"
+            accept=".csv,.xlsx,.json"
+            className="block w-full rounded-md border border-input bg-background px-3 py-2 text-sm file:mr-3 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-1 file:text-sm file:font-medium hover:file:bg-secondary/80"
+            aria-label="Datoteka kosovnice (CSV, XLSX ali JSON)"
+            onChange={(e) => { setFile(e.target.files?.[0] ?? null); setResult(null); setRowErrors(null) }}
+          />
+          {file != null ? (
+            <p className="text-xs text-muted-foreground">{file.name} · {Math.max(1, Math.round(file.size / 1024))} KB</p>
+          ) : (
+            <p className="text-xs text-muted-foreground">Vsak SKU mora obstajati v katalogu; segmenti seg-N; skupine STEBRI/ROCNIK/POLNILO/OSTALO.</p>
+          )}
+
+          {rowErrors != null && rowErrors.length > 0 ? (
+            <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-900 dark:border-red-900 dark:bg-red-950 dark:text-red-200" role="alert">
+              <p className="mb-1 font-bold">Napake v vrsticah ({rowErrors.length}):</p>
+              <ul className="max-h-32 space-y-0.5 overflow-y-auto">
+                {rowErrors.map((e, i) => <li key={i}>Vrsta {e.row} · {e.field}: {e.problem}</li>)}
+              </ul>
+            </div>
+          ) : null}
+
+          {result != null ? (
+            <div className="space-y-2 rounded-lg border bg-secondary/30 p-3 text-xs">
+              <p className="font-bold">Preverjanje: {result.lines} vrstic · {result.skus} SKU</p>
+              <p className={diffRows.length === 0 ? 'font-medium text-emerald-700 dark:text-emerald-400' : 'font-medium text-amber-700 dark:text-amber-400'}>
+                {diffRows.length === 0
+                  ? `BREZ SPREMEMB — identično trenutni kosovnici (${result.diff?.unchanged ?? 0} vrstic).`
+                  : `${diffRows.length} razlik: ${diffRows.filter((e) => e.kind === 'DODANO').length} dodanih, ${diffRows.filter((e) => e.kind === 'ODSTRANJENO').length} odstranjenih, ${diffRows.filter((e) => e.kind === 'SPREMENJENA_KOLICINA').length} spremenjenih količin.`}
+              </p>
+              {diffRows.length > 0 ? (
+                <ul className="max-h-40 space-y-0.5 overflow-y-auto font-mono">
+                  {diffRows.slice(0, 50).map((e, i) => (
+                    <li key={i}>
+                      {e.kind === 'DODANO' ? '+' : e.kind === 'ODSTRANJENO' ? '−' : '±'} {e.sku}{e.segmentKey != null ? ` · ${e.segmentKey}` : ''}
+                      {e.kind === 'SPREMENJENA_KOLICINA' ? `: ${e.fromQty} → ${e.toQty}` : e.kind === 'DODANO' ? `: ${e.toQty}` : `: ${e.fromQty}`}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              {(result.warnings ?? []).length > 0 ? (
+                <ul className="space-y-0.5 text-amber-700 dark:text-amber-400">
+                  {(result.warnings ?? []).map((w, i) => <li key={i}>⚠ {w}</li>)}
+                </ul>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => { void run('preveri') }} disabled={busy || file == null}>
+            {busy ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <Search className="size-3.5" aria-hidden />}
+            Preveri
+          </Button>
+          <Button onClick={() => { void run('uvozi') }} disabled={busy || file == null}>
+            {busy ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <Upload className="size-3.5" aria-hidden />}
+            Uvozi (novo verzijo)
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }

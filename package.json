@@ -1,6 +1,6 @@
 {
   "name": "nextjs_tailwind_shadcn_ts",
-  "version": "0.2.1",
+  "version": "1.34.0",
   "private": true,
   "scripts": {
     "dev": "next dev -p 3000 2>&1 | tee dev.log",
@@ -14,7 +14,7 @@
     "db:migrate:deploy": "prisma migrate deploy",
     "db:migrate:status": "prisma migrate status",
     "db:migrate:diff": "prisma migrate diff --from-schema-datasource prisma/schema.prisma --to-schema-datamodel prisma/schema.prisma --script --shadow-database-url",
-    "db:push": "echo '[db:push] OPOZORILO: prisma db push --accept-data-loss je RAZVOJNO/RECOVERY orodje \u2014 produkcija uporablja db:migrate:deploy. Za nadaljevanje po\u017eeni: bunx prisma db push --accept-data-loss' && exit 1",
+    "db:push": "echo '[db:push] OPOZORILO: prisma db push --accept-data-loss je RAZVOJNO/RECOVERY orodje — produkcija uporablja db:migrate:deploy. Za nadaljevanje poženi: bunx prisma db push --accept-data-loss' && exit 1",
     "db:push:force": "prisma db push --accept-data-loss",
     "db:generate": "prisma generate",
     "db:seed": "node prisma/seed.cjs && node prisma/seed-r437.cjs && node prisma/seed-r442.cjs && node prisma/seed-r445.cjs && node prisma/seed-r446.cjs && node prisma/seed-r447.cjs && node prisma/seed-r449.cjs",

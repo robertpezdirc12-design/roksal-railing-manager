@@ -5,8 +5,8 @@
 // R476 (issue #9 §5): POPUST na celotno ponudbo — prikaz v zneskih + urejanje
 // na osnutku (PATCH discountPct); DDV je že izračunan iz osnove PO popustu.
 
-import { useMemo, useState } from 'react'
-import { BadgeCheck, FileDown, FileText, Loader2, Lock, Percent, Search, Send, TriangleAlert, User } from 'lucide-react'
+import { useMemo, useRef, useState } from 'react'
+import { BadgeCheck, FileDown, FileText, Loader2, Lock, Percent, Search, Send, TriangleAlert, Upload, User } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -62,6 +62,7 @@ export default function PonudbeModule () {
   const [status, setStatus] = useState('all')
   const [selected, setSelected] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [importOpen, setImportOpen] = useState(false)
 
   const list = useApi<{ data: QuoteRow[] }>(
     `/api/quotes?q=${encodeURIComponent(q)}${status !== 'all' ? `&status=${status}` : ''}`,
@@ -112,7 +113,20 @@ export default function PonudbeModule () {
             {STATUSES.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
           </SelectContent>
         </Select>
+        {canCreate ? (
+          <Button variant="outline" onClick={() => setImportOpen(true)}>
+            <Upload className="size-4" aria-hidden />
+            Uvozi ponudbo
+          </Button>
+        ) : null}
       </div>
+
+      {/* R478: uvoz ponudbe iz JSON izvoza (round-trip) */}
+      <ImportQuoteDialog
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        onImported={() => { void list.reload() }}
+      />
 
       <ErrorBox error={list.error} />
       {list.loading ? <LoadingRows /> : !list.error && rows.length === 0 ? (
@@ -417,5 +431,120 @@ function QuoteDetailDialog ({ detail, canCreate, canApprove, busy, onStatus, onD
         </DialogFooter>
       ) : null}
     </>
+  )
+}
+
+// ── R478: UVOZ PONUDBE (JSON izvoz → nova ponudba OSNUTEK) ──────────────────
+
+interface QuoteImportResult {
+  mode: 'preveri' | 'uvozi'
+  original?: { code: string | null; status: string | null }
+  lines: number
+  totals: { subtotal: number; discount: number; vat: number; total: number; discountPct: number | null }
+  resolution?: { projectId: string | null; customerId: string | null; packageId: string | null }
+  warnings?: string[]
+  quote?: { id: string; code: string; status: string; lines: number }
+}
+
+function ImportQuoteDialog ({ open, onOpenChange, onImported }: {
+  open: boolean
+  onOpenChange: (o: boolean) => void
+  onImported: () => void
+}) {
+  const token = useAppStore((s) => s.token)
+  const { toast } = useToast()
+  const inputRef = useRef<HTMLInputElement>(null)
+  const [file, setFile] = useState<File | null>(null)
+  const [result, setResult] = useState<QuoteImportResult | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  function reset (): void {
+    setFile(null); setResult(null)
+    if (inputRef.current != null) inputRef.current.value = ''
+  }
+
+  async function run (mode: 'preveri' | 'uvozi'): Promise<void> {
+    if (!file || !token) return
+    setBusy(true)
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      fd.append('mode', mode)
+      const res = await fetch('/api/import/quote', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: fd,
+      })
+      const raw = await res.json().catch(() => ({})) as { data?: QuoteImportResult; error?: string; detail?: string }
+      const data = raw.data ?? (raw as unknown as QuoteImportResult) // API ovijalnik { data } ali golo
+      if (!res.ok) throw new Error(raw.detail ?? raw.error ?? `Napaka strežnika (${res.status}).`)
+      if (mode === 'preveri') {
+        setResult(data)
+      } else {
+        toast({
+          title: `Ponudba ${data.quote?.code ?? ''} uvožena (${data.quote?.lines ?? data.lines} pozicij).`,
+          description: `SKUPAJ ${fmtEUR(data.totals.total)} · status OSNUTEK — izvirnik${result?.original?.code != null ? ` ${result.original.code}` : ''} ostaja nedotaknjen.`,
+        })
+        reset()
+        onOpenChange(false)
+        onImported()
+      }
+    } catch (e) {
+      toast({ title: 'Uvoz ponudbe ni uspel.', description: e instanceof Error ? e.message : 'Neznana napaka.', variant: 'destructive' })
+    } finally { setBusy(false) }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!o) { reset(); onOpenChange(false) } else { onOpenChange(true) } }}>
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
+        <DialogHeader className="min-w-0">
+          <DialogTitle>Uvoz ponudbe (JSON)</DialogTitle>
+          <DialogDescription>
+            Iz JSON izvoza (Ponudbe → Izvozi JSON). Ustvari NOVO ponudbo kot osnutek — obstoječa se nikoli ne prepiše. Zneski se preračunajo.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <input
+            ref={inputRef}
+            type="file"
+            accept=".json,application/json"
+            className="block w-full rounded-md border border-input bg-background px-3 py-2 text-sm file:mr-3 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-1 file:text-sm file:font-medium hover:file:bg-secondary/80"
+            aria-label="Datoteka ponudbe (JSON)"
+            onChange={(e) => { setFile(e.target.files?.[0] ?? null); setResult(null) }}
+          />
+          {result != null ? (
+            <div className="space-y-2 rounded-lg border bg-secondary/30 p-3 text-xs">
+              <p className="font-bold">
+                Preverjanje: {result.lines} pozicij{result.original?.code != null ? ` · izvirnik ${result.original.code}` : ''}
+              </p>
+              <p>
+                Osnova {fmtEUR(result.totals.subtotal)}
+                {result.totals.discountPct != null && result.totals.discountPct > 0 ? ` · popust ${result.totals.discountPct} % (−${fmtEUR(result.totals.discount)})` : ''}
+                {' '}· DDV {fmtEUR(result.totals.vat)} · <span className="font-bold">SKUPAJ {fmtEUR(result.totals.total)}</span>
+              </p>
+              {(result.warnings ?? []).length > 0 ? (
+                <ul className="space-y-0.5 text-amber-700 dark:text-amber-400">
+                  {(result.warnings ?? []).map((w, i) => <li key={i}>⚠ {w}</li>)}
+                </ul>
+              ) : null}
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              Stranka se veže po imenu iz datoteke (ali eksplicitno po ID); projekt po kodi — odstopanja so vidna v opozorilih.
+            </p>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => { void run('preveri') }} disabled={busy || file == null}>
+            {busy ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <Search className="size-3.5" aria-hidden />}
+            Preveri
+          </Button>
+          <Button onClick={() => { void run('uvozi') }} disabled={busy || file == null}>
+            {busy ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <Upload className="size-3.5" aria-hidden />}
+            Uvozi (nova ponudba)
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }

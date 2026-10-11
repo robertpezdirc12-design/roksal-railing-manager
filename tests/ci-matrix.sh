@@ -20,6 +20,7 @@ case "$GRUPA" in
   r459-r462) run_py r459.py; run_py r460.py; run_py r461.py; run_py r462.py ;;
   r464)       run_py r464-pricing.py; run_py r464-concurrency.py ;;
   r465-r474)  run_py r465.py; run_py r467.py; run_py r468.py; run_py r469.py; run_py r470.py; run_py r471.py; run_py r473.py; run_py r474.py ;;
+  r475-r478)  run_py r475.py; run_py r476.py; run_py r477.py; run_py r478.py ;;
   *) echo "neznana skupina: $GRUPA"; exit 2 ;;
 esac
 echo "═══ $GRUPA: $PASS ✓ / $FAILED ✗ ═══"

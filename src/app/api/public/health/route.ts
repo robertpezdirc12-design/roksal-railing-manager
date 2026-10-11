@@ -11,5 +11,9 @@ export async function GET () {
   } catch {
     dbOk = false
   }
-  return NextResponse.json({ ok: dbOk, db: dbOk ? 'ok' : 'napaka', build: process.env.ROKSAL_BUILD ?? 'rekonstrukcija-R431', generatedAt: new Date().toISOString() })
+  // R478: build oznaka iz VERCEL_GIT_COMMIT_SHA (razreši se ob buildu v
+  // next.config.ts → env ROKSAL_BUILD_RESOLVED); izrecni ROKSAL_BUILD ima
+  // prednost (nadomestitev za testiranje).
+  const build = process.env.ROKSAL_BUILD ?? process.env.ROKSAL_BUILD_RESOLVED ?? 'neznano'
+  return NextResponse.json({ ok: dbOk, db: dbOk ? 'ok' : 'napaka', build, generatedAt: new Date().toISOString() })
 }
