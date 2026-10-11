@@ -45,6 +45,15 @@
 //   (4) STOPNICA: monotonost zaporedja (y + smer središč, jedro) in
 //       enakomeren lamelni niz v KADRU gre v OGRAJO, ne v STOPNICO;
 //   (5) PODLAGA: bbox iz točk dejanske maske tal (ne fiksna spodnja tretjina).
+//
+// R485 (issue #8 — manjkajoče zmožnosti zaznavanja): NAVPIČNI DETEKTOR
+//   STEBOV — periodične navpičnice (≥ 3 enakomerno razmaknjene, podoben
+//   vertikalni razpon) → element OGRAJA (zrceljenje detectStairLines:
+//   horizontalni gradient po vrsticah → dolgi teki po stolpcih). Sproži se
+//   SAMO, kadar horizontalne poti (STOPNICA/OGRAJA iz črt) niso zadeli —
+//   brez podvajanja elementov. KONSERVATIVNO: NEJASNO / 0,25, NIKOLI
+//   PREPOZNANO (okenski križi in drevesa so lažni pozitivi; periodičnost
+//   je edini dokaz). Število stebrov je OCENA (postCount).
 
 import {
   analyzeStairPattern, classifySurface, estimateSlope, looksLikePerson, newSceneId, stabilizeElements,
@@ -179,6 +188,17 @@ const EDGE_LINE_MAX_STEP = 3 // px skoka med sosednjima stolpcema (sledenje)
 const EDGE_LINE_MAX_COUNT = 2 // najdaljši 2 črti → ROB elementa
 const EDGE_SEARCH_TOP = 0.18 // pas iskanja robov (od zgoraj)
 const EDGE_SEARCH_BOT = 0.92 // pas iskanja robov (od zgoraj)
+
+// ── R485: NAVPIČNI DETEKTOR STEBOV (OGRAJA iz stebrov) ────────────────────
+const POST_SEARCH_TOP = 0.08 // pas iskanja stebrov (od zgoraj) — širše kot ROB
+const POST_SEARCH_BOT = 0.97 // pas iskanja stebrov (od zgoraj)
+const POST_MIN_SPAN = 0.25 // navpičnica ≥ 25 % višine kadra = kandidat steber
+const POST_MIN_LINES = 3 // ≥ 3 enakomerno razmaknjene navpičnice = dokaz (2 = lahko okno)
+const POST_MIN_GAP = 0.04 // stolpci bliže kot 4 % širine = EN steber (ne razdeljuj)
+const POST_GAP_TOL = 0.25 // razmiki znotraj ±25 % mediana = „enakomerno“ (kot lamele)
+const POST_SPAN_TOL = 0.25 // vertikalni razponi znotraj ±25 % mediana (podobna višina)
+const POST_MAX_COUNT = 24 // več kot toliko kandidatov = tekstura/žaluzije, ne ograja
+const POST_MIN_WIDTH = 0.3 // vrsta stebrov pokriva ≥ 30 % širine kadra (dokaz vrste)
 
 /**
  * Zažene živo percepcijo nad <video>. Vrne stop(). Varno: ob napaki zanka
@@ -464,6 +484,34 @@ export function analyzeFrame (
       ],
       at,
     })
+  } else {
+    // R485: OGRAJA iz NAVPIČNIH STEBOV — zadnja veja (SAMO če horizontalne
+    // poti niso zadeli: STOPNICA/OGRAJA iz črt imajo prednost — brez
+    // podvajanja elementov na kader). Periodične navpičnice so dokaz o
+    // vrsti stebrov; število je OCENA (postCount), nikoli izmera.
+    const postDetect = detectPostLines(gray, w, h)
+    if (postDetect != null) {
+      const xs = postDetect.posts.map((p) => p.x)
+      const px0 = Math.max(0, xs[0] / w - 0.01)
+      const px1 = Math.min(1, (xs[xs.length - 1] + 1) / w + 0.01)
+      const py0 = Math.max(0, (postDetect.yTop - 1) / h - 0.02)
+      const py1 = Math.min(1, (postDetect.yBot + 1) / h + 0.02)
+      elements.push({
+        id: newSceneId(),
+        cls: 'OGRAJA',
+        status: 'NEJASNO',
+        source: 'LOKALNO',
+        confidence: 0.25,
+        bbox: [
+          Math.max(0, Math.round(px0 * 1000) / 1000),
+          Math.max(0, Math.round(py0 * 1000) / 1000),
+          Math.max(0.02, Math.round((px1 - px0) * 1000) / 1000),
+          Math.max(0.02, Math.round((py1 - py0) * 1000) / 1000),
+        ],
+        postCount: postDetect.posts.length,
+        at,
+      })
+    }
   }
 
   return elements
@@ -738,6 +786,101 @@ function detectStairLines (gray: Float32Array, w: number, h: number): StairDetec
     }
   }
   return { lines, strongRowRatio: rs.overallRatio }
+}
+
+// ── R485: NAVPIČNICE (STEBRI) — zrceljenje detectStairLines ────────────────
+// Za vsak stolpec najdi najdaljši ZAPOREDNI TEK močnih HORIZONTALNIH
+// gradientov (|gray[x−1] − gray[x+1]| > prag — navpična črta ima močan
+// prehod v x smeri). Tek ≥ 25 % višine = kandidat steber. Sosednji stolpci
+// (< 4 % širine narazen) se ZDROŽIJO v en steber (rob 3-px stebra da DVA
+// močna stolpca). Iz x-položajev nato zahtevamo PERIODIČNOST:
+//   • ≥ 3 stebri (2 navpičnici sta lahko okvir okna — ne zadostujeta);
+//   • razmiki med sosedi znotraj ±25 % mediana (enakomerna vrsta);
+//   • vertikalni razponi znotraj ±25 % mediana (podobna višina stebrov);
+//   • vrsta pokriva ≥ 30 % širine kadra in ima ≤ 24 kandidatov
+//     ( gostejše = tekstura/žaluzije).
+// Brez katerega koli pogoja → null (konservativno: brez dokaza ni elementa).
+
+interface PostDetect { posts: Array<{ x: number; yTop: number; yBot: number }>; yTop: number; yBot: number }
+
+/** Detekcija periodične vrste navpičnih stebrov → null ali {posts, yTop, yBot}.
+ * ČISTA funkcija (brez DOM) — izvožena za enotsko testiranje v bun. */
+export function detectPostLines (gray: Float32Array, w: number, h: number): PostDetect | null {
+  const yTop = Math.max(1, Math.floor(h * POST_SEARCH_TOP))
+  const yBot = Math.min(h - 2, Math.floor(h * POST_SEARCH_BOT))
+  if (yBot - yTop < h * POST_MIN_SPAN) return null
+
+  const minLen = Math.floor(h * POST_MIN_SPAN)
+  const raw: Array<{ x: number; yTop: number; yBot: number; len: number }> = []
+  for (let x = 1; x < w - 1; x++) {
+    let bestFrom = -1
+    let bestLen = 0
+    let runFrom = -1
+    for (let y = yTop; y <= yBot + 1; y++) {
+      let strong = false
+      if (y <= yBot) {
+        const i = y * w + x
+        const gx = Math.abs(gray[i - 1] - gray[i + 1])
+        if (gx > SOBEL_THRESHOLD) strong = true
+      }
+      if (strong) {
+        if (runFrom < 0) runFrom = y
+      } else if (runFrom >= 0) {
+        if (y - runFrom > bestLen) { bestLen = y - runFrom; bestFrom = runFrom }
+        runFrom = -1
+      }
+    }
+    if (bestFrom >= 0 && bestLen >= minLen) {
+      raw.push({ x, yTop: bestFrom, yBot: bestFrom + bestLen - 1, len: bestLen })
+    }
+  }
+  if (raw.length < POST_MIN_LINES) return null
+
+  // združi sosednje stolpce v EN steber (rob steba daje 2 močna stolpca)
+  const minGap = Math.max(2, Math.floor(w * POST_MIN_GAP))
+  const posts: Array<{ x: number; sumX: number; n: number; yTop: number; yBot: number }> = []
+  for (const c of raw) {
+    const last = posts[posts.length - 1]
+    if (last && c.x - last.x <= minGap) {
+      last.sumX += c.x
+      last.n += 1
+      last.x = Math.round(last.sumX / last.n)
+      if (c.yTop < last.yTop) last.yTop = c.yTop
+      if (c.yBot > last.yBot) last.yBot = c.yBot
+    } else {
+      posts.push({ x: c.x, sumX: c.x, n: 1, yTop: c.yTop, yBot: c.yBot })
+    }
+  }
+  if (posts.length < POST_MIN_LINES || posts.length > POST_MAX_COUNT) return null
+
+  // periodičnost razmikov (mediana ±25 %) — vzorec isUniformLamellaStack
+  const gaps: number[] = []
+  for (let i = 1; i < posts.length; i++) gaps.push(posts[i].x - posts[i - 1].x)
+  const median = (arr: number[]): number => {
+    const s = [...arr].sort((a, b) => a - b)
+    const m = Math.floor(s.length / 2)
+    return s.length % 2 === 1 ? s[m] : (s[m - 1] + s[m]) / 2
+  }
+  const g = median(gaps)
+  if (!(g > 0)) return null
+  const gapsOk = gaps.every((x) => Math.abs(x - g) <= POST_GAP_TOL * g)
+  if (!gapsOk) return null
+
+  // podobni vertikalni razponi (mediana ±25 %) — stebri so približno enako visoki
+  const spans = posts.map((p) => p.yBot - p.yTop)
+  const sp = median(spans)
+  if (!(sp > 0)) return null
+  const spansOk = spans.every((x) => Math.abs(x - sp) <= POST_SPAN_TOL * sp)
+  if (!spansOk) return null
+
+  // vrsta mora pokrivati ≥ 30 % širine kadra (3 drevesna debla skupaj niso ograja)
+  if ((posts[posts.length - 1].x - posts[0].x) / w < POST_MIN_WIDTH) return null
+
+  return {
+    posts: posts.map((p) => ({ x: p.x, yTop: p.yTop, yBot: p.yBot })),
+    yTop: Math.min(...posts.map((p) => p.yTop)),
+    yBot: Math.max(...posts.map((p) => p.yBot)),
+  }
 }
 
 // ── R468 (F2 §3): MASKA TAL — segmentacija z regijo rasti ──────────────────

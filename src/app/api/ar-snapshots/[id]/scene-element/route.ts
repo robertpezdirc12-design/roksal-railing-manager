@@ -11,7 +11,13 @@
 //   manifestom senzorja (depth) se zapiše kot senzorska pot: applyEdits iz
 //   manifesta izpelje metodo DEPTH_AR (izjava izvora, ne trditev metode —
 //   method polje ostane prezrto za DEPTH_AR). Neveljaven manifest → 400.
-// PATCH (measurements.write) { elementId, cls?, status?, kind?, slopeDeg?, steps?, ascent?, measure?, depth? } →
+// R485 (issue #8 — §1/§2): POST — ROČNO DODANA OZNAKA: zaznavanje nikoli ne
+//   producira NEZNANO (poštenost), a je bila pot »tapni za označitev« slepa
+//   ulica (monter ni mogel dodati elementa). { cls, bbox, label?, status? }
+//   → nov element v sceneJson.elements z virom ROCNO; OSEBA ZAVRNJEN
+//   (zasebnost §5); revizija SCENE_ELEMENT_ADD. PATCH — popravek kota ROBA
+//   (angleDeg −90..360, normalizacija mod 180 v applyEdits).
+// PATCH (measurements.write) { elementId, cls?, status?, kind?, slopeDeg?, steps?, ascent?, angleDeg?, measure?, depth? } →
 //   popravek se shrani kot OZNAČEN PODATEK (append v sceneJson.edits),
 //   izvirni element iz zajema SE NIKOLI NE PREPIŠE (revizija SCENE_EDIT).
 // GET  (projects.read) — elementi z apliciranimi popravki (applyEdits) +
@@ -23,8 +29,8 @@ import { jsonError, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
 import {
   SCENE_CLASSES, SCENE_LIMITS, SCENE_STATUSES, STAIR_ASCENTS, SURFACE_KINDS,
-  applyEdits, isDepthManifest, sanitizeSceneResult, serializeSceneResult,
-  type SceneUnderstandingResult,
+  applyEdits, isDepthManifest, newSceneId, sanitizeSceneResult, serializeSceneResult,
+  type SceneElement, type SceneUnderstandingResult,
 } from '@/lib/scene-understanding-core'
 
 type Params = { params: Promise<{ id: string }> }
@@ -87,6 +93,15 @@ export async function PATCH (req: NextRequest, { params }: Params) {
   const stepsRaw = typeof body.steps === 'number' && Number.isFinite(body.steps) ? Math.round(body.steps) : null
   const steps = stepsRaw != null && stepsRaw >= 1 && stepsRaw <= SCENE_LIMITS.maxSteps ? stepsRaw : undefined
   const ascent = STAIR_ASCENTS.includes(body.ascent) ? body.ascent : undefined
+  // R485 (issue #8 §2): popravek kota ROBA — sprejme −90..360 (črta roba je
+  // neusmerjena: applyEdits normalizira mod 180 v [-90, 90]); 1 decimala.
+  // IZVEN obsega → izrecen 400 (NE tiho ignoriraj — monter mora vedeti).
+  if (typeof body.angleDeg === 'number' && (!Number.isFinite(body.angleDeg) || Math.abs(body.angleDeg) > 360)) {
+    return jsonError(400, 'Neveljaven kot roba: angleDeg mora biti med −90 in 360 (stopinj).')
+  }
+  const angleDeg = typeof body.angleDeg === 'number' && Number.isFinite(body.angleDeg)
+    ? Math.round(body.angleDeg * 10) / 10
+    : undefined
   // R470 (§5): izmerjena mera — { label, valueCm, toleranceCm? }; metodo izpelje
   // applyEdits pri prikazu (ROCNI_VNOS oz. ROCNO_POPRAVLJENO) — surov vnos se
   // shrani kot označen podatek (edit.measure), izvirni element ostaja nedotaknjen.
@@ -117,8 +132,8 @@ export async function PATCH (req: NextRequest, { params }: Params) {
       return jsonError(400, 'Manifest globine zahteva tudi measure { label, valueCm }.')
     }
   }
-  if (!cls && !status && !kind && slopeDeg == null && steps == null && ascent == null && measure == null) {
-    return jsonError(400, `Podajte vsaj en popravek: cls (${SCENE_CLASSES.join('/')}), status (${SCENE_STATUSES.join('/')}), kind, slopeDeg (±${SCENE_LIMITS.slopeAbsMax}°), steps (1..${SCENE_LIMITS.maxSteps}), ascent (${STAIR_ASCENTS.join('/')}) ali measure ({label, valueCm} [,{depth}]).`)
+  if (!cls && !status && !kind && slopeDeg == null && steps == null && ascent == null && angleDeg == null && measure == null) {
+    return jsonError(400, `Podajte vsaj en popravek: cls (${SCENE_CLASSES.join('/')}), status (${SCENE_STATUSES.join('/')}), kind, slopeDeg (±${SCENE_LIMITS.slopeAbsMax}°), steps (1..${SCENE_LIMITS.maxSteps}), ascent (${STAIR_ASCENTS.join('/')}), angleDeg (−90..360°) ali measure ({label, valueCm} [,{depth}]).`)
   }
 
   // element mora obstajati v izvirniku — popravek brez izvirnika je sumljiv
@@ -129,7 +144,7 @@ export async function PATCH (req: NextRequest, { params }: Params) {
     return jsonError(409, 'Dosežen največji število popravkov na posnetku.')
   }
 
-  const edit = { elementId, cls, status, kind, slopeDeg, steps, ascent, measure: measure != null ? { ...measure, ...(depth != null ? { depth } : {}) } : undefined, by: user.name || user.id, at: Date.now() }
+  const edit = { elementId, cls, status, kind, slopeDeg, steps, ascent, angleDeg, measure: measure != null ? { ...measure, ...(depth != null ? { depth } : {}) } : undefined, by: user.name || user.id, at: Date.now() }
   const updated: SceneUnderstandingResult = { ...result, edits: [...result.edits, edit] }
 
   await db.arSnapshot.update({
@@ -153,6 +168,7 @@ export async function PATCH (req: NextRequest, { params }: Params) {
         slopeDeg: element.slopeDeg ?? null,
         steps: element.steps ?? null,
         ascent: element.ascent ?? null,
+        angleDeg: element.angleDeg ?? null,
         // R470 (§5): prejšnje mere istega naziva (transparentnost popravka)
         measures: (element.measures ?? []).map((m) => ({ label: m.label, valueCm: m.valueCm, method: m.method })),
       },
@@ -160,4 +176,99 @@ export async function PATCH (req: NextRequest, { params }: Params) {
   })
 
   return NextResponse.json({ data: { ok: true, edit } })
+}
+
+// R485 (issue #8 §1): ROČNO DODANA OZNAKA — »neprepoznano, tapni za
+// označitev« prej ni imela poti: edini vir elementov je bila živa zanka,
+// PATCH pa zahteva OBSTOJEČI elementId. Ta vrata omogočajo monterju, da na
+// PERSISTIRANEM posnetku doda element, ki ga zaznavanje ni prepoznalo
+// (privzeti razred NEZNANO — razred potem popravi PATCH/izbirnik).
+// Nov element ima vir ROCNO in confidence 1 (izjava monterja) in gre MED
+// elemente (NE med edits — ne prepisuje ničesar izvirnega). OSEBA je
+// ZAVRNJENA (zasebnost §5: živa zaznava oseb se NE persistira).
+export async function POST (req: NextRequest, { params }: Params) {
+  const auth = await requirePermission(req, 'measurements.write')
+  if (auth instanceof NextResponse) return auth
+  const { user } = auth
+
+  const { id } = await params
+  const snapshot = await db.arSnapshot.findUnique({ where: { id }, select: { id: true, sceneJson: true, projectId: true } })
+  if (!snapshot) return jsonError(404, 'AR posnetek ne obstaja.')
+
+  // IDOR: posnetek vezan na projekt — vezava mora biti veljavna (projekt
+  // obstaja); revizija se zapiše pod projekt posnetka (sledljivost).
+  if (snapshot.projectId != null) {
+    const project = await db.project.findUnique({ where: { id: snapshot.projectId }, select: { id: true } })
+    if (!project) return jsonError(404, 'Projekt posnetka ne obstaja.')
+  }
+
+  const result = parseStored(snapshot.sceneJson)
+  if (!result) return jsonError(404, 'Posnetek nima razumevanja prizora.')
+
+  const body = await req.json().catch(() => null)
+  if (!body || typeof body !== 'object') return jsonError(400, 'Neveljavno telo zahteve.')
+
+  // razred: beli seznam BREZ OSEBA (zasebnost §5 — ročna oznaka ne sme odpreti
+  // poti za persistenco podatkov o ljudeh)
+  const manualClasses = SCENE_CLASSES.filter((c) => c !== 'OSEBA')
+  const cls = manualClasses.includes(body.cls) ? body.cls : null
+  if (!cls) {
+    return jsonError(400, `Razred mora biti iz: ${manualClasses.join('/')} (OSEBA ni dovoljen — živa zaznava oseb se ne persistira).`)
+  }
+
+  // status: neobvezen iz seznama; privzeto PREPOZNANO — ročno dodana oznaka je
+  // potrjena izjava monterja (vir ROCNO, confidence 1)
+  const status = SCENE_STATUSES.includes(body.status) ? body.status : 'PREPOZNANO'
+
+  // bbox: [x, y, w, h] 0..1, w/h > 0 — ročni vnos se NE tiho popravlja
+  const bboxRaw = Array.isArray(body.bbox) ? body.bbox : null
+  if (!bboxRaw || bboxRaw.length !== 4 ||
+      bboxRaw.some((v) => typeof v !== 'number' || !Number.isFinite(v) || v < 0 || v > 1)) {
+    return jsonError(400, 'bbox mora biti [x, y, w, h] z vrednostmi 0..1.')
+  }
+  if (bboxRaw[2] <= 0 || bboxRaw[3] <= 0) {
+    return jsonError(400, 'bbox širina in višina morata biti večji od 0.')
+  }
+  const bbox = bboxRaw.map((v) => Math.round(v * 1000) / 1000) as [number, number, number, number]
+
+  // opomba monterja (neobvezna, ≤ elementLabelMaxLen znakov)
+  const labelTrim = typeof body.label === 'string' ? body.label.trim().slice(0, SCENE_LIMITS.elementLabelMaxLen) : ''
+  const label = labelTrim || undefined
+
+  if (result.elements.length >= SCENE_LIMITS.maxElements) {
+    return jsonError(409, 'Doseženo največje število elementov na posnetku.')
+  }
+
+  const element: SceneElement = {
+    id: newSceneId(),
+    cls,
+    status,
+    source: 'ROCNO',
+    confidence: 1,
+    bbox,
+    at: Date.now(),
+    ...(label != null ? { label } : {}),
+  }
+  const updated: SceneUnderstandingResult = { ...result, elements: [...result.elements, element] }
+
+  await db.arSnapshot.update({
+    where: { id },
+    data: { sceneJson: serializeSceneResult(updated) },
+    select: { id: true },
+  })
+
+  await writeAudit({
+    userId: user.id,
+    action: 'SCENE_ELEMENT_ADD',
+    entity: 'arSnapshot',
+    entityId: id,
+    projectId: snapshot.projectId,
+    detail: {
+      element: { id: element.id, cls: element.cls, status: element.status, source: element.source, bbox: element.bbox, label: label ?? null },
+      // stanje pred dodajanjem — transparentnost koliko elementov je bilo izvirnih
+      elementsBefore: result.elements.length,
+    },
+  })
+
+  return NextResponse.json({ data: { ok: true, element } }, { status: 201 })
 }

@@ -111,6 +111,12 @@ export interface SceneElement {
   stepIrregular?: boolean
   /** Večja vrzel med nastopi — morebiten podest (issue §4). */
   landing?: boolean
+  // — R485 (issue #8 §2): OGRAJA iz stebrov —
+  /** Število zaznanih navpičnih stebrov (≈ ograja iz stebrov) — OCENA, ne izmera. */
+  postCount?: number
+  // — R485 (issue #8 §1): ročno dodana oznaka —
+  /** Opomba monterja ob ročno dodani oznaki (≤ elementLabelMaxLen znakov). */
+  label?: string
   // ── R470 (§5): MERE PREDMETOV ──
   /** Predlogi dimenzijskih osi (0..1, BREZ cm — fizična vrednost samo v measures). */
   axes?: DimAxis[]
@@ -131,6 +137,13 @@ export interface SceneEdit {
   steps?: number
   /** R469 (F3 §4): ročno potrjena smer vzpenjanja — vir postane ROCNO. */
   ascent?: StairAscent
+  /**
+   * R485 (issue #8 §2): ročno popravljen kot ROBA (stopinje). Sprejme
+   * −90..360 — črta roba je NEUSMERJENA, applyEdits normalizira mod 180
+   * v [−90, 90] (350° je enako −10°); 1 decimala. Vir postane ROCNO
+   * (analog slopeDeg — izjava monterja, ne izračun).
+   */
+  angleDeg?: number
   /**
    * R470 (§5): izmerjena mera na elementu (ROČNI_VNOS ali iz kalibrirane
    * fotografije). METODO izpelje applyEdits: prvi vnos na naziv → ROCNI_VNOS
@@ -172,6 +185,9 @@ export const SCENE_LIMITS = {
   slopeAbsMax: 45, // stopinj
   angleAbsMax: 90, // stopinj
   maxSteps: 20, // R469 (F3): največje razumno število vidnih nastopov
+  maxPosts: 24, // R485: največje število zaznanih stebrov (OCENA)
+  elementLabelMaxLen: 60, // R485: dolžina opombe ročno dodane oznake
+  truncationMargin: 0.02, // R485: odrezan rob — meja proti šumu bbox ob robu kadra
   maxStepLines: 12, // R469 (F3): nastopne črte za risanje
   maxAxesPerElement: 4, // R470 (§5): dimenzijske osi na element
   maxMeasuresPerElement: 8, // R470 (§5): mere na element (po nazivu se konsolidirajo)
@@ -980,6 +996,21 @@ export function nextStepGuidance (elements: SceneElement[], quality?: SceneQuali
   if (quality?.bright === true) return 'Presvetljen kader — poševno stojite glede na sonce.'
   if (quality?.blurry === true) return 'Slika je mehka — pridržite telefon mirno pred zajemom.'
 
+  // R485 (issue #8 §8/7 + §6 :94): ODREZAN ROB — objekt sega čez rob kadra →
+  // zajemni napotek ima prednost pred vsebinskimi (stopi nazaj in posnemi znova).
+  // NE velja za: talni ravnini (PODLAGA/TLA — tla segajo do dna kadra po naravi),
+  // ROB (rob površine je legitimno lahko ob robu kadra), OSEBA (njen lasten
+  // napotek o zakritju) in SKRITO (element že ni viden).
+  const m = SCENE_LIMITS.truncationMargin
+  const truncated = elements.some((e) => {
+    if (e.status === 'SKRITO' || e.cls === 'PODLAGA' || e.cls === 'TLA' || e.cls === 'ROB' || e.cls === 'OSEBA') return false
+    if (!Array.isArray(e.bbox) || e.bbox.length !== 4) return false
+    const [x, y, bw, bh] = e.bbox
+    if (![x, y, bw, bh].every((v) => typeof v === 'number' && Number.isFinite(v))) return false
+    return x < m || x + bw > 1 - m || y + bh > 1 - m
+  })
+  if (truncated) return 'Objekt ni v celoti v kadru — stopite nazaj in posnemite še en kader.'
+
   const byCls = new Map<SceneClass, SceneElement[]>()
   for (const e of elements) {
     const arr = byCls.get(e.cls) ?? []
@@ -1050,6 +1081,14 @@ export function applyEdits (result: SceneUnderstandingResult): SceneElement[] {
     }
     if (edit.ascent != null) {
       el.ascent = edit.ascent
+    }
+    // R485 (issue #8 §2): ročno popravljen kot ROBA — normalizacija mod 180
+    // v [-90, 90] (črta roba je neusmerjena: 350° ≡ −10°, 180° ≡ 0°), 1 dec.
+    // Vir ROCNO + IZMERJENO — analog naklonu (izjava monterja, ne izračun).
+    if (typeof edit.angleDeg === 'number' && Number.isFinite(edit.angleDeg)) {
+      const raw = Math.round(edit.angleDeg * 10) / 10
+      el.angleDeg = Math.round((((raw + 90) % 180 + 180) % 180 - 90) * 10) / 10
+      el.geomStatus = 'IZMERJENO'
     }
     // R470 (§5): izmerjena mera — METODA se izpelje TU (enotna pravila za
     // odjemalca in strežnik): ponovni vnos istega naziva je POPRAVEK.
@@ -1142,6 +1181,10 @@ export function sanitizeSceneResult (raw: unknown): SceneUnderstandingResult | n
     const stepsRaw = typeof e.steps === 'number' && Number.isFinite(e.steps) ? Math.round(e.steps) : null
     const steps = stepsRaw != null && stepsRaw >= 1 && stepsRaw <= SCENE_LIMITS.maxSteps ? stepsRaw : undefined
     const ascent = STAIR_ASCENTS.includes(e.ascent as StairAscent) ? (e.ascent as StairAscent) : undefined
+    // R485: stebri (OCENA — število nikoli ni izmera) + opomba ročne oznake
+    const postRaw = typeof e.postCount === 'number' && Number.isFinite(e.postCount) ? Math.round(e.postCount) : null
+    const postCount = postRaw != null && postRaw >= 1 && postRaw <= SCENE_LIMITS.maxPosts ? postRaw : undefined
+    const label = typeof e.label === 'string' && e.label.trim() ? e.label.trim().slice(0, SCENE_LIMITS.elementLabelMaxLen) : undefined
     const stepLines = sanitizeStepLines(e.stepLines)
     const stepGapRaw = typeof e.stepGap === 'number' && Number.isFinite(e.stepGap) ? Math.round(e.stepGap * 1000) / 1000 : null
     const stepGap = stepGapRaw != null && stepGapRaw > 0 && stepGapRaw <= 1 ? stepGapRaw : undefined
@@ -1162,6 +1205,8 @@ export function sanitizeSceneResult (raw: unknown): SceneUnderstandingResult | n
       ...(!hasSlope && geomStatus ? { geomStatus } : {}),
       ...(steps != null ? { steps } : {}),
       ...(ascent != null ? { ascent } : {}),
+      ...(postCount != null ? { postCount } : {}),
+      ...(label != null ? { label } : {}),
       ...(stepLines.length >= 1 ? { stepLines } : {}),
       ...(stepGap != null ? { stepGap } : {}),
       ...(stepIrregular ? { stepIrregular: true } : {}),
@@ -1189,6 +1234,10 @@ export function sanitizeSceneResult (raw: unknown): SceneUnderstandingResult | n
       const stepsRaw = typeof e.steps === 'number' && Number.isFinite(e.steps) ? Math.round(e.steps) : null
       const steps = stepsRaw != null && stepsRaw >= 1 && stepsRaw <= SCENE_LIMITS.maxSteps ? stepsRaw : undefined
       const ascent = STAIR_ASCENTS.includes(e.ascent as StairAscent) ? (e.ascent as StairAscent) : undefined
+      // R485: kot roba — sprejme −90..360 (črta je neusmerjena; applyEdits
+      // normalizira mod 180 v [-90, 90]), 1 decimala; neveljaven se IZPUSTI
+      const angleDeg = typeof e.angleDeg === 'number' && Number.isFinite(e.angleDeg) &&
+        Math.abs(e.angleDeg) <= 360 ? Math.round(e.angleDeg * 10) / 10 : undefined
       // R470 (§5): popravek mere — surovi vnos {label, valueCm, toleranceCm?};
       // metodo izpelje applyEdits (ne zaupa se odjemalcu/strežniku posebej).
       const measureRaw = e.measure && typeof e.measure === 'object' ? e.measure as Record<string, unknown> : null
@@ -1216,8 +1265,8 @@ export function sanitizeSceneResult (raw: unknown): SceneUnderstandingResult | n
           }
         }
       }
-      if (!cls && !status && !kind && slopeDeg == null && steps == null && ascent == null && measure == null) continue
-      edits.push({ elementId: e.elementId, cls, status, kind, slopeDeg, steps, ascent, measure, by: e.by, at: atEdit })
+      if (!cls && !status && !kind && slopeDeg == null && steps == null && ascent == null && angleDeg == null && measure == null) continue
+      edits.push({ elementId: e.elementId, cls, status, kind, slopeDeg, steps, ascent, angleDeg, measure, by: e.by, at: atEdit })
     }
   }
 
