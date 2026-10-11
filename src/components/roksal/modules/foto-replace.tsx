@@ -34,6 +34,8 @@ import { useAppStore } from '@/lib/store'
 import { apiGet, apiPatch, apiPost, fmtDate, useApi } from '@/lib/api-client'
 import { EmptyState, ErrorBox, LoadingRows, PageHeader, StatusBadge } from '@/components/roksal/ui-bits'
 import { hasPerm } from '@/lib/permissions-core'
+// R480 (issue #9 §10): javna povezava vizualizatorja + zgodovina izborov stranke
+import { VizLinksPanel } from '@/components/roksal/modules/foto-replace-links'
 import {
   VIZ_ZIG, generirajRazpored, izrisiOgrajo, izrisiPrimerjavo, lameleIzTecha,
   materialIzTecha, oceniKakovost, oceniSvetlobo, ralHex, visinaIzTecha,
@@ -1308,6 +1310,9 @@ export default function FotoReplaceModule () {
           ) : null}
         </CardContent>
       </Card>
+
+      {/* R480 (§10): javna povezava vizualizatorja + zgodovina izborov stranke */}
+      {projectId ? <VizLinksPanel projectId={projectId} projectCode={project?.code ?? null} /> : null}
     </div>
   )
 }
