@@ -1,7 +1,8 @@
 // nav-registry — REKONSTRUKCIJA R431 → IA R448 (issue #7 §11, ciljna struktura)
 // EN VIR navigacije. Čist client-safe lib — NIČ strežniških uvozov.
 // IA (R448 §11): DANES | PRODAJA | PROJEKTI | OPERATIVA | SKLADIŠČE | KATALOG |
-// FINANCE | SERVIS | POROČILA | VARNOST | PROFIL — 28 zavihkov v 11 sekcijah.
+// FINANCE | SERVIS | POROČILA | VARNOST | PROFIL — 29 zavihkov v 11 sekcijah
+// (R481: +Integracije v Varnost).
 // Zavihki (id + gate) so NEspremenjeni — spreminja se samo razvrstitev.
 
 import type { Permission } from './permissions-core'
@@ -23,7 +24,7 @@ export interface SectionDef {
   tabs: TabDef[]
 }
 
-// 28 zavihkov v 11 sekcijah — ciljna poslovna IA (R448, issue #7 §11)
+// 29 zavihkov v 11 sekcijah — ciljna poslovna IA (R448, issue #7 §11; R481: +1)
 export const SECTIONS: SectionDef[] = [
   {
     id: 'danes',
@@ -151,6 +152,9 @@ export const SECTIONS: SectionDef[] = [
     tabs: [
       { id: 'varnost', label: 'Revizija', gate: 'audit.read', desc: 'Revizijski dnevnik (R428)' },
       { id: 'vodja-ekipa', label: 'Uporabniki in vloge', gate: 'users.read', desc: 'Uporabniki in vloge' },
+      // R481 (issue #9 §9): INTEGRACIJE — webhook naročnine za partnerje
+      // (integrations.manage = ADMIN/VODJA, vzorec portal.manage).
+      { id: 'integracije', label: 'Integracije', gate: 'integrations.manage', desc: 'Webhook naročnine (R481)' },
     ],
   },
   {

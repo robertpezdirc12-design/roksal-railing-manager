@@ -48,6 +48,7 @@ const MODULES: Record<string, () => Promise<{ default: ComponentType<TabProps> }
   galerija: () => import('@/components/roksal/modules/galerija'),
   varnost: () => import('@/components/roksal/modules/varnost'),
   'vodja-ekipa': () => import('@/components/roksal/modules/vodja-ekipa'),
+  integracije: () => import('@/components/roksal/modules/integracije'), // R481: webhook naročnine (issue #9 §9)
   pdf: () => import('@/components/roksal/modules/pdf'),
   postsig: () => import('@/components/roksal/modules/postsig'),
   profil: () => import('@/components/roksal/modules/profil'),
