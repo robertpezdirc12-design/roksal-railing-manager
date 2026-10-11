@@ -3,7 +3,7 @@ import { db } from '@/lib/db'
 import { jsonError, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
 
-const SOURCES = ['SPLET', 'TELEFON', 'PRIPOROČILO', 'SEJEM']
+const SOURCES = ['SPLET', 'TELEFON', 'PRIPOROČILO', 'SEJEM', 'VIZUALIZATOR']
 
 // GET /api/crm — vodi in priložnosti skupaj (crm.read)
 export async function GET (req: NextRequest) {

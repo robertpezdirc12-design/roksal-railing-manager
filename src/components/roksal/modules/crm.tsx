@@ -38,6 +38,7 @@ const SOURCES = [
   { value: 'TELEFON', label: 'Telefon' },
   { value: 'PRIPOROČILO', label: 'Priporočilo' },
   { value: 'SEJEM', label: 'Sejem' },
+  { value: 'VIZUALIZATOR', label: 'Vizualizator' },
 ]
 
 export default function CrmModule () {

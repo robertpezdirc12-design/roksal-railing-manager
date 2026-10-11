@@ -62,6 +62,7 @@ model User {
   reviewPinsResolved ReviewPin[] @relation("reviewPinResolver") // R479: kdo je rešil/zaprl pin
   reviewLinksCreated ReviewLink[] @relation("reviewLinkCreator") // R479: izdajatelji javnih pregledov (§7)
   consentedProjects Project[] @relation("projectPhotoConsent") // R479: projekti, kjer je zabeležil GDPR soglasje (§10)
+  vizLinksCreated   VizLink[] @relation("vizLinkCreator") // R480: izdajatelji javnih vizualizatorjev (§10)
 }
 
 model Session {
@@ -99,12 +100,13 @@ model Lead {
   name       String
   email      String?
   phone      String?
-  source     String    @default("SPLET") // SPLET | TELEFON | PRIPOROČILO | SEJEM
+  source     String    @default("SPLET") // SPLET | TELEFON | PRIPOROČILO | SEJEM | VIZUALIZATOR (R480: javni vizualizator §10)
   status     String    @default("NOV") // NOV | KONTAKTIRAN | KVALIFIKACIJAN | IZGUBLJEN | PRETVORJEN
   note       String?
   createdAt  DateTime  @default(now())
 
   opportunities Opportunity[]
+  choices        VisualizationChoice[] // R480: strankini izbori iz vizualizatorja (§10)
 }
 
 model Opportunity {
@@ -161,6 +163,8 @@ model Project {
   fenceRuns        FenceRun[] // R460: ograjni tekači projekta (issue #15)
   captureSessions  CaptureSession[] // R461: zajemi QA projekta (issue #16)
   twinSnapshots    DigitalTwinSnapshot[] // R461: digitalni dvojček projekta (issue #16)
+  vizLinks         VizLink[] // R480: javne povezave vizualizatorja (issue #9 §10)
+  vizChoices       VisualizationChoice[] // R480: strankini izbori variant — append-only (issue #9 §10)
 }
 
 model Quote {
@@ -1338,6 +1342,7 @@ model PhotoVisualization {
   updatedAt     DateTime @updatedAt
 
   versions PhotoVisualizationVersion[]
+  choices  VisualizationChoice[] // R480: strankini izbori te variante (§10; SetNull — izbor preživi brisanje)
 
   @@index([projectId, status])
   @@index([projectId, variantLabel])
@@ -1593,6 +1598,63 @@ model ReviewLink {
   revokedAt   DateTime?
   createdAt   DateTime  @default(now())
   expiresAt   DateTime
+}
+
+// R480 (issue #9 §10): JAVNA POVEZAVA VIZUALIZATORJA — vzorec ReviewLink (R479),
+// NE PortalLink (portal ima svojo semantiko: časovnica projekta; mešanje scopov
+// bi zapletlo preklic/veljavnost in GDPR vrata portala). Žeton 'pv-' + cryptorandom;
+// veljaven: ni pretekel (expiresAt) in ni preklican (revokedAt). Javni odgovor
+// (/api/public/viz) je VARNI podskup: brez internih opomb, brez renderParams, brez
+// avtorjev, brez cen; fotografije (sourcePhoto + rendered) SAMO ob VELJAVNEM
+// GDPR soglasju (pin-core.consentStatus — en vir resnice za vsa vrata).
+model VizLink {
+  id          String    @id @default(cuid())
+  token       String    @unique // 'pv-' + cryptorandom (enak vzorec kot 'pt-'/'rv-')
+  projectId   String
+  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdById String?
+  createdBy   User?     @relation("vizLinkCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  note        String? // interna opomba pisarne (NIKOLI na javni poti)
+  viewCount   Int       @default(0)
+  lastViewAt  DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  expiresAt   DateTime  // 1..90 dni, privzeto 14 (R480)
+
+  choices VisualizationChoice[] // izbire, opravljene prek te povezave (atribucija)
+}
+
+// R480 (issue #9 §10): STRANKIN IZBOR variante — APPEND-ONLY dnevnik („pisarna
+// ne prepisuje podatkov" — NI PATCH/DELETE API-ja; „urejanja" so nova vrstica;
+// zadnji zapis na projektu = trenutni izbor). NE mešati s PhotoVisualization.
+// status IZBRANA — to je izbira PISARNE (measurements.write, R459).
+// variantLabel = SNAPSHOT oznake ob izbiri: (projectId, variantLabel) je v
+// PhotoVisualization SAMO index (ne unique) — črka se lahko ponovno uporabi po
+// ARHIV; če se vizualizacija izbriše, izbor OSTANE (visualizationId → SetNull).
+model VisualizationChoice {
+  id              String    @id @default(cuid())
+  projectId       String
+  project         Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  visualizationId String?
+  visualization   PhotoVisualization? @relation(fields: [visualizationId], references: [id], onDelete: SetNull)
+  variantLabel    String // snapshot A|B|C ob izbiri
+  chosenAt        DateTime  @default(now()) // čas strankinega izbora (§10 „s časom")
+  chosenVia       String    @default("VIZUALIZATOR") // VIZUALIZATOR | PORTAL | PISARNA
+  requestType     String    @default("PONUDBA") // PONUDBA | OGLED | IZMERA (zahteva stranke)
+  leadId          String?
+  lead            Lead?     @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  linkId          String?
+  link            VizLink?  @relation(fields: [linkId], references: [id], onDelete: SetNull)
+  note            String? // strankina opomba (≤ 500)
+  contactName     String? // kontakt, ki ga je stranka pustila ob zahtevi
+  contactPhone    String?
+  contactEmail    String?
+  consentAcceptedAt DateTime // stranka potrdila obvestilo o obdelavi (GDPR §10 zadnja alinea)
+  createdAt       DateTime  @default(now())
+
+  @@index([projectId, chosenAt])
+  @@index([visualizationId])
+  @@index([leadId])
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

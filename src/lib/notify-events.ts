@@ -15,6 +15,7 @@ export const NOTIFICATION_EVENT_TYPES = [
   'PORTAL_PUBLISHED',
   'QC_NOK',
   'SURVEY_NEW',
+  'VIZ_CHOICE',
 ] as const
 
 export type NotificationEventType = (typeof NOTIFICATION_EVENT_TYPES)[number]
@@ -32,6 +33,7 @@ export const NOTIFICATION_EVENT_LABELS: Record<string, string> = {
   PORTAL_PUBLISHED: 'Objava portala',
   QC_NOK: 'QC neustrezno',
   SURVEY_NEW: 'Novo povpraševanje',
+  VIZ_CHOICE: 'Izbor stranke v vizualizatorju',
 }
 
 /** Oznaka za '*' (privzeto za vse dogodke). */
