@@ -1,10 +1,11 @@
-# SMART VISION #8 — Kamera razume prizor: implementacija, omejitve, terenski protokol (R483, issue #8)
+# SMART VISION #8 — Kamera razume prizor: implementacija, omejitve, terenski protokol (R483→R485, issue #8)
 
-**Datum:** R483 · **Revizija kode:** main = R483 (lokalni commit e222374 nad 84a608f, tag v1.37.1)
-· **Verzija:** package.json 1.38.0 (minor — zaključek Faze 5)
+**Datum:** R483, dopolnjeno R485 · **Revizija kode:** main = R485 (commit 06dc20c nad 9b48e86, tag v1.39.0)
+· **Verzija:** package.json 1.40.0 (minor — dopolnitev manjkajočih zmožnosti zaznavanja)
 **Metoda:** dobesedno branje §11/§12/§8/§10 (GitHub issue #8, 214 vrstic) + vseh 6 komentarjev
 (F0 6096763027 · R467 6096990018 · R468 6097827368 · R469 6098702062 · R470 6099223617 ·
-R471 6099754892) + pregled kode z dokazi `file:line` po fazah R466–R483.
+R471 6099754892) + revizija vrzeli 1-a-R485 (»dokončaj in preveri SAMO manjkajoče zmožnosti«) +
+pregled kode z dokazi `file:line` po fazah R466–R485.
 **Izhodišče:** SMART VISION = klasična CV hevristika **v brskalniku** (Sobel/histogram/gibanje —
 BREZ ML knjižnic, BREZ novih odvisnosti); vsaka avtomatika je **PREDLOG**, človek potrjuje.
 
@@ -27,9 +28,10 @@ BREZ ML knjižnic, BREZ novih odvisnosti); vsaka avtomatika je **PREDLOG**, člo
 | **§5 — mere predmetov/osebe** | R470 (0f0a159) | `proposeAxes` — dimenzijske osi iz okvirja BREZ cm vrednosti; referenčna skala (znana dolžina v kadru → izpeljava cm); ročni vnos mere; `consolidateMeasures` s konfliktom >15 % (več mer iste osi se NE povpreči tiho); zasebnost: OSEBA živi samo v živem prizoru — izpuščena iz AR posnetkov (`ar-snapshots` sanitizacija), brez identifikacije. |
 | **F4 — senzorji/optimizacija/integracija** | R471 (82e705d) | `depth-adapter.ts`: WebXR immersive-ar dvotapna razdalja (globina 0 < d ≤ 8 m, seja ≤60 s, samo ob dejanski podpori — iOS Safari POŠTENO »ni podprto« `:5-10,:107`); `DepthManifest` (vir senzorja zapisan ob meri, metoda DEPTH_AR); guverner `nextPerfPlan` (ob preobremenitvi: interval ×1,4 → 750 ms, širina ÷1,3 → 160 px, enosmerno — samo degradacija) — toplotna stabilnost brez prekinitev. |
 | **F5 — popravki + docs + navodila** | R483 (e222374) | 5 konservativnih popravkov (vsak zmanjša lažne pozitive ali izpelje podatek iz dejanske detekcije): OGRAJA zahteva ≥2 vzporedni črti in bbox iz detekcije (`FENCE_MIN_LINES` `scene-perception.ts:161,:437`); gibanje = povezane komponente ≥2 % kadra, max 4/kader (`detectMotionBoxes` `:546`); PLOŠČICE/LES samo z izmerjeno anizotropijo vlaken (`grainAnisotropy`, `scene-perception.ts:515-538` → `classifySurface` `core:226-259`, zaupanje ≤0,5); STOPNICA monotonost smeri (`STAIR_MONO_*` `core:375-433`) + lamelna stapnica → OGRAJA (`isUniformLamellaStack` `perception:637`); PODLAGA bbox iz meja maske. + ta dokument + kratka navodila v AR modulu (§B spodaj) + `tests/r483.py` (61 kontrol) + CI skupina r483. |
+| **R485 — dopolnilo F5: manjkajuče zmožnosti** | R485 (06dc20c) | 4 zmožnosti iz revizije vrzeli (1-a-R485): (1) **§9 preklop pogledov** ŽIVO/PREPOZNANO/MERE/PREGLED v `ar.tsx` (segmentirani nadzornik pod predogledom; ŽIVO privzeto = sedanje obnašanje; PREPOZNANO = samo semantika, mere skrite; MERE = osi+mere z metodo, razredi manj vidni; PREGLED = tapljivi seznam vseh elementov — »druge podrobnosti so v tapljivem seznamu« §9:137) — SAMO pogled, ne nov podatkovni model; (2) **navpični detektor stebrov** `detectPostLines` (`scene-perception.ts:789`): periodika ≥3 stebrov, razmiki ±25 % mediana → OGRAJA NEJASNO/0,25 z `postCount` OCENO (zadnja veja `analyzeFrame` — horizontalni dokazi imajo vedno prednost); (3) **ročna oznaka NEZNANO**: gumb »Dodaj oznako ročno« v AR (živi element vir ROCNO + POST `/api/ar-snapshots/[id]/scene-element` na posnetku; OSEBA zavrnjena — zasebnost §5, revizija SCENE_ELEMENT_ADD); (4) **kot roba angleDeg**: popravek −90..360 z normalizacijo mod 180 v applyEdits + odrezan rob hint (»Objekt ni v celoti v kadru — stopite nazaj …«). + `tests/r485.py` (63 kontrol) + CI skupina r485. |
 
-**Testna pokritost scene suite:** r467 41 + r468 40 + r469 47 + r470 59 + r471 39 + r483 61 =
-**287 kontrol** (CI skupini `r465-r474` in `r483`); vsi zeleni na R483.
+**Testna pokritost scene suite:** r467 41 + r468 40 + r469 47 + r470 59 + r471 39 + r483 61 +
+r485 63 = **350 kontrol** (CI skupine `r465-r474`, `r483` in `r485`); vsi zeleni na R485.
 
 ## 2. Znane omejitve prepoznavanja (po razredih)
 
@@ -39,14 +41,28 @@ pozitiva, ker mere gredo v proizvodnjo.
 ### OGRAJA
 - Zahteva **≥2 vzporedni črti** v kadru (ročaj + lef, seznam lamel — `FENCE_MIN_LINES=2`,
   `scene-perception.ts:161`). Ena sama črta (senca, strešni rob) NE sproži ograje.
-- **NE detektira ograd iz navpičnih stebrov** — ni detektorja navpičnih črt/periodičnosti
-  stebrov (prihodnja izboljšava, §5). Ograja, ki jo v kadru »dokazujejo« samo stebri brez
-  vodoravnih črt, ostaja NEZNANO.
+- **Stebri so zdaj detektirani** (R485): `detectPostLines` (`scene-perception.ts:789-883`) išče
+  navpične črte (horizontalni gradient po stolpcu, tek ≥25 % višine kadra) in zahteva
+  **periodiko ≥3 stebrov** z razmiki znotraj ±25 % mediane ter podobnim vertikalnim razponom
+  → element OGRAJA, status **NEJASNO / 0,25**, `postCount` = OCENA števila stebrov. KONSERVATIVNO:
+  nikoli PREPOZNANO; sproži se SAMO kadar horizontalne črte (STOPNICA/OGRAJA) niso zadeli
+  (zadnja veja `analyzeFrame`) — nikoli ne podvaja elementov. Pasti lažnih pozitivov (okenski
+  križi, drevesa, vogali) odbija periodika + enakomernost; okenski križ brez periodike ostane
+  NEOZNAČEN (pošteno). Ograja iz samih stebrov brez vodoravnih črt ni več slepa ulica.
 - **Lamelna ograja z detekcijo obeh robov vsake lamele** (pari črt z majhnimi razmiki) ni zajeta —
   `isUniformLamellaStack` (`scene-perception.ts:637`) prepozna enolični niz lamel kot OGRAJO,
   a ne izmeri širine posamezne lamele iz para robov. Ročno se da popraviti razred prek kartice.
+- **Multi-instance NE obstaja** (odloženo, dokumentirano): STOPNICA, PODLAGA/TLA in OGRAJA so
+  vedno **največ 1 element na kader** (ena analiza vzorca / ena regija rasti / en bbox iz vseh
+  črt) — »trije možni odseki« iz §8/1 niso ločljivi. Segmentacija vzorcev na več instanc je
+  zavestno odložena (tveganje lažnih delitev, regresija starejših fixturejev; terensko
+  nepreverjeno).
+- **SKRITO ob zakritju je ODLOŽENO** (R485): status SKRITO obstaja v enumu (`core:46`), a ga
+  zaznavanje ne nastavlja — menjavanje statusa ob premikajoči oviri bi **utripalo** (prikaz
+  izloča SKRITO iz oznak, maxMisses=1 bi rabil višjo vrednost); praktično potrebo pokrivata
+  guidance »Oseba zakriva merilno točko …« in stabilizacija IoU (1 sličica).
 - Zaupanje ostaja **NEJASNO / 0,25** — nikoli se ne dvigne v »prepoznano«, ker je dokaz
-  (dve črti) šibek. Izjema: popravek človeka (vir ROCNO) ima višjo težo.
+  (dve črti oz. periodika stebrov) šibek. Izjema: popravek človeka (vir ROCNO) ima višjo težo.
 
 ### PODLAGA (9 vrst)
 - Klasifikacija je kaskada (trava → les → zemlja → asfalt → ploščice → tlak → gramoz → beton;
@@ -194,7 +210,7 @@ issue #8 kot povzetek PO razredih in napravah.
 | 8 | Licence knjižnic/uteži primernе | ✅ | Odvisnosti: samo obstoječe (MIT/Apache-2.0/ISC, 0 copyleft); ML uteži NI dodanih (prihodnja opcija §5). |
 | 9 | Rezultati natančnosti po razredih/okoljih/napravah | ⛔ **ČAKA** | V peskovniku ni fizičnih naprav. Protokol §3 (nabor scen, reference, obrazec) je pripravljen in čaka izvedbo na terenu. |
 | 10 | Mobilni test: odzivnost, FPS, viri, toplota, offline | 🟡 delno | Guverner degradacije enotsko testiran (`r481` vzorec `nextPerfPlan` v r471) + offline zajem obstaja; IZMERJENE vrednosti (FPS/toplota/baterija) čakajo teren (§3.5). |
-| 11 | Testi z dejanskimi izidi/omejitvami; ne trdimo, da kamera vidi vse | ✅ | 287 kontrol scene suite z zelenimi/temno opisanimi mejami; §2 tega dokumenta izrecno našteva, česa kamera NE vidi. |
+| 11 | Testi z dejanskimi izidi/omejitvami; ne trdimo, da kamera vidi vse | ✅ | 350 kontrol scene suite (r467–r471, r483, r485) z zelenimi/temno opisanimi mejami; §2 tega dokumenta izrecno našteva, česa kamera NE vidi. |
 | 12 | Integrirano v obstoječi tok, brez podvajanja | ✅ | Živi v AR modulu (OPERATIVA → AR); hrani se v obstoječih AR posnetkih + tekač/merilni engine/katalog/AR sistem NISO podvojeni. |
 
 **Sklep:** 10/12 točk pošteno zelenih, točki 9–10 terenski (⛔/🟡). Issue #8 ostaja odprt
@@ -202,22 +218,30 @@ dokler terenska validacija ne potrdi ali popravi omejitev iz §2.
 
 ## 5. Prihodnje izboljšave (brez obljub)
 
-1. **Navpični detektor stebrov** — periodičnost navpičnih črt → OGRAJA iz stebrov brez
-   vodoravnih črt (danes NEZNANO, §2).
+1. **Natančnost detektorja stebrov na terenu** — detektor obstaja (R485), a pragovi
+   (≥3 stebri, ±25 % razmiki, ≥25 % višine) so ugani iz sintetičnih kadrov; terenski
+   protokol §3 naj potrdi ali popravi meje (okenski križi, žaluzije, drevesa).
 2. **Detekcija obeh robov vsake lamele** — pari črt z majhnim razmakom → širina lamele iz
    kadra (danes enolični niz → OGRAJA brez mere).
-3. **WebXR depth na več naprav** — ARCore depth-api točkovni oblaki (zasnova v
+3. **Multi-instance (STOPNICA/PODLAGA/OGRAJA)** — segmentacija vzorcev na več ločenih
+   elementov na kader (odloženo; tveganje lažnih delitev, glej §2).
+4. **SKRITO ob zakritju** — status obstaja, producent odložen (utripanje; glej §2).
+5. **VRATA kot razred** — danes jih VLM analiza (`POST /api/ar/analyze`) omeni v besedilu,
+   žive zaznave jih ne poznajo (odloženo: podvajanje z VLM potjo; nov razred bi šel skozi
+   celotno verigo).
+6. **Odsev-detektor** — svetlost ≠ odsev; tveganje lažnih pozitivov visoko (odloženo).
+7. **Urejanje točk/maske z vlečenjem** — maskPoints/stepLines/osi danes niso vlečljivi
+   (samo razred/vrsta/naklon/kot/število/mere; obsežna UI naloga — odloženo).
+8. **WebXR depth na več naprav** — ARCore depth-api točkovni oblaki (zasnova v
    `docs/PROSTOR-9.md` §3); iOS ostaja izven (platforma ne ponuja WebXR-AR).
-4. **ML segmentacija on-device** (MediaPipe/ONNX, Apache-2.0) kot LOČENA faza z lastno izdajo —
+9. **ML segmentacija on-device** (MediaPipe/ONNX, Apache-2.0) kot LOČENA faza z lastno izdajo —
    uteži bi zahtevale lastno licenčno preveritev (F0/F1 komentarji #8).
-5. **Ekspliciten preklop ŽIVO/PREPOZNANO/MERE/PREGLED** — danes so to sloji (živi overlay
-   vedno + mere v kartici izbranega elementa), ne preklop; §9 ga omenja, DoD ga ne zahteva.
-6. **Vodena navodila širom programa** — issue #11 SMART GUIDE (onboarding tok); ploščica
-   »Nezadostni podatki« v AR (R483) je NAMENOMA samo kontekstna pomoč tega modula, ne začetek
-   splošnega sistema pomoči.
+10. **Vodena navodila širom programa** — issue #11 SMART GUIDE (onboarding tok); ploščica
+    »Nezadostni podatki« v AR (R483) je NAMENOMA samo kontekstna pomoč tega modula, ne začetek
+    splošnega sistema pomoči.
 
 ---
 
 *Dokumenti: `docs/SMART-VISION-8.md` (ta) · sorodni: `docs/AUDIT-9.md` (F0 issue #9),
-`docs/PROSTOR-9.md` §3 (senzorji). Testi: `tests/r467–r471.py`, `tests/r483.py`
-(CI skupini `r465-r474`, `r483`).*
+`docs/PROSTOR-9.md` §3 (senzorji). Testi: `tests/r467–r471.py`, `tests/r483.py`,
+`tests/r485.py` (CI skupine `r465-r474`, `r483`, `r485`).*

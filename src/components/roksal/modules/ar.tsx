@@ -32,9 +32,9 @@
 //     umiri (daljši interval, ožja slika) — toplotna stabilnost na telefonu.
 // Monter (measurements.write) vidi vse; skladiščnik/proizvodnja samo zgodovino.
 
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type Ref } from 'react'
+import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type Ref } from 'react'
 import {
-  Camera, CameraOff, ChevronDown, ChevronRight, Download, History, ImageIcon, Lightbulb, Loader2, Lock, LockOpen, MapPin, Move, Ruler, ScanLine,
+  Camera, CameraOff, ChevronDown, ChevronRight, Download, History, ImageIcon, Lightbulb, Loader2, Lock, LockOpen, MapPin, Move, Plus, Ruler, ScanLine,
   Save, Sparkles, Trash2, Video, Waypoints, X,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
@@ -49,11 +49,11 @@ import { useToast } from '@/hooks/use-toast'
 import { useAppStore } from '@/lib/store'
 import { apiDelete, apiGet, apiPost, useApi } from '@/lib/api-client'
 import { EmptyState, ErrorBox, LoadingRows, PageHeader } from '@/components/roksal/ui-bits'
-import SceneOverlay, { geomStatusText, slopeSourceText } from '@/components/roksal/scene-overlay'
+import SceneOverlay, { geomStatusText, slopeSourceText, SCENE_CLS_COLOR, SCENE_CLS_ICON, SCENE_CLS_LABEL, SCENE_STATUS_TEXT } from '@/components/roksal/scene-overlay'
 import { useSceneUnderstanding } from '@/hooks/use-scene-understanding'
 import {
-  AXIS_KIND_TEXT, MEASURE_METHOD_TEXT, SCENE_CLASSES, SURFACE_KINDS, applyEdits, ascentText,
-  axisCmFromReference, consolidateMeasures, personHeightNote, proposeAxes,
+  AXIS_KIND_TEXT, MEASURE_METHOD_TEXT, SCENE_CLASSES, SCENE_LIMITS, SURFACE_KINDS, applyEdits, ascentText,
+  axisCmFromReference, consolidateMeasures, newSceneId, personHeightNote, proposeAxes,
   type SceneClass, type SceneEdit, type SceneElement, type SurfaceKind,
 } from '@/lib/scene-understanding-core'
 import { detectDepthSupport, startDepthMeasurement, type DepthSupportInfo } from '@/lib/depth-adapter'
@@ -65,6 +65,29 @@ const OVERLAY_H = 220
 const DEMO_GRAD = 'linear-gradient(160deg, #e7e5e4 0%, #a8a29e 55%, #78716c 100%)'
 
 type Mode = 'off' | 'on' | 'demo'
+
+/** R485 (issue #8 §9): pogled AR predogleda — SAMO pogled na obstoječe
+ * elemente (filter/prikaz, NE nov podatkovni model). ŽIVO je privzet in
+ * enak sedanjemu obnašanju; PREGLED doda tapljivi seznam vseh elementov. */
+type SceneView = 'ZIVO' | 'PREPOZNANO' | 'MERE' | 'PREGLED'
+
+const SCENE_VIEWS: { id: SceneView; text: string; hint: string }[] = [
+  { id: 'ZIVO', text: 'Živo', hint: 'Oznake, mere in osi čez sliko (sedanji prikaz).' },
+  { id: 'PREPOZNANO', text: 'Prepoznano', hint: 'Samo razredi, statusi in zaupanje — mere skrite.' },
+  { id: 'MERE', text: 'Mere', hint: 'Samo osi in zabeležene mere z metodo — razredi manj vidni.' },
+  { id: 'PREGLED', text: 'Pregled', hint: 'Tapljivi seznam vseh zaznanih elementov (issue §9:137).' },
+]
+
+/** R485 (issue #8 §1, zasebnost §5): razredi za ROČNO dodajanje oznake —
+ * beli seznam BREZ OSEBA (enak seznam kot na strežniku: POST scene-element). */
+const MANUAL_CLASSES: SceneClass[] = SCENE_CLASSES.filter((c) => c !== 'OSEBA')
+
+/** Privzeti bbox ročne oznake (sredina kadra) — števci so 0..1. */
+const MANUAL_BBOX_DEFAULT: [number, number, number, number] = [0.35, 0.35, 0.3, 0.3]
+const MANUAL_BBOX_DEFAULT_STR = { x: '0,35', y: '0,35', w: '0,30', h: '0,30' }
+
+/** R485: dolžina opombe ročne oznake (ista meja kot strežnik — SCENE_LIMITS). */
+const SCENE_LABEL_MAX = SCENE_LIMITS.elementLabelMaxLen
 
 interface ProjectRow { id: string; code: string; title: string }
 
@@ -180,6 +203,16 @@ export default function ArModule () {
   const [slopeInput, setSlopeInput] = useState('')
   /** R469 (F3 §4): vnos ročno potrjenega števila stopnic. */
   const [stepsInput, setStepsInput] = useState('')
+  /** R485 (issue #8 §2): vnos ročno potrjenega kota ROBA (−90..360, normalizira se mod 180). */
+  const [angleInput, setAngleInput] = useState('')
+  /** R485 (issue #8 §9): izbrani pogled AR predogleda (ŽIVO privzeto). */
+  const [sceneView, setSceneView] = useState<SceneView>('ZIVO')
+  /** R485 (issue #8 §1): ročno dodane oznake v ŽIVI seji (vir ROCNO) —
+   *  persistirajo se z zajemom (elementsToSave), ob izklopu kamere umrejo
+   *  (enako kot žive zaznave). NE morejo biti OSEBA (beli seznam). */
+  const [manualElements, setManualElements] = useState<SceneElement[]>([])
+  const [manualOpen, setManualOpen] = useState(false)
+  const [manualBBox, setManualBBox] = useState<[number, number, number, number] | null>(null)
   /** R470 (§5): vnosi mer po osi (index osi → vrednost v cm) + referenčna skala. */
   const [measureInputs, setMeasureInputs] = useState<Record<number, string>>({})
   const [refAxisIdx, setRefAxisIdx] = useState('')
@@ -192,10 +225,16 @@ export default function ArModule () {
   const [depthTaps, setDepthTaps] = useState(0)
   /** R471 (F4): AR seja za mero z globino je v teku. */
   const [depthBusy, setDepthBusy] = useState(false)
-  /** elementi z apliciranimi popravki (za prikaz/detalj) */
-  const sceneDisplayed = sceneState.elements.length > 0
-    ? applyEdits({ version: 1, at: Date.now(), elements: sceneState.elements, edits: sceneEdits })
+  /** elementi z apliciranimi popravki (za prikaz/detalj) — R485: žive zaznave
+   *  + ročno dodane oznake (ISTI tok: ista applyEdits, isti zajem) */
+  const sceneDisplayed = sceneState.elements.length > 0 || manualElements.length > 0
+    ? applyEdits({ version: 1, at: Date.now(), elements: [...sceneState.elements, ...manualElements], edits: sceneEdits })
     : []
+  // R485: v pogledu MERE overlay pokaže SAMO elemente z merami (+ izbrani za
+  // osi) — ostale izpusti iz PRIKAZA (podatki ostanejo; to je samo pogled).
+  const sceneOverlayElements = sceneView === 'MERE'
+    ? sceneDisplayed.filter((e) => (e.measures?.length ?? 0) > 0 || e.id === sceneSelectedId)
+    : sceneDisplayed
   const sceneSelected = sceneDisplayed.find((e) => e.id === sceneSelectedId) ?? null
   // R470 (§5): osi izbranega elementa (persistirane imajo prednost pred predlogom)
   const selectedAxes = sceneSelected
@@ -241,9 +280,13 @@ export default function ArModule () {
 
   // R454: zgodovina AR posnetkov (projects.read — tudi za skladišče/proizvodnjo)
   const snapshots = useApi<{ data: SnapshotRow[] }>('/api/ar-snapshots', [])
-  const [detail, setDetail] = useState<{ row: SnapshotRow; photo: string | null; analysis: ArAnalysis | null } | null>(null)
+  const [detail, setDetail] = useState<{ row: SnapshotRow; photo: string | null; analysis: ArAnalysis | null; elements: SceneElement[] | null } | null>(null)
   const [detailBusy, setDetailBusy] = useState(false)
   const [deleting, setDeleting] = useState<string | null>(null)
+  /** R485 (§1): obrazec ročne oznake na PERSISTIRANEM posnetku (POST scene-element). */
+  const [detailTagOpen, setDetailTagOpen] = useState(false)
+  const [detailTagBusy, setDetailTagBusy] = useState(false)
+  const [detailBBox, setDetailBBox] = useState<[number, number, number, number] | null>(null)
 
   const projects = useApi<{ data: ProjectRow[] }>('/api/projects', [])
 
@@ -267,6 +310,80 @@ export default function ArModule () {
 
   const posts = Math.min(20, Math.max(2, Math.round(Number(postsS) || 5)))
   const heightCm = Math.min(250, Math.max(40, Math.round(Number(heightS) || 110)))
+
+  // R485: ročne oznake živijo v seji kamere — ob izklopu se počistijo
+  // (persistirajo se SAMO z zajemom; enako pravilo kot žive zaznave).
+  useEffect(() => {
+    if (mode !== 'on') setManualElements([])
+  }, [mode])
+
+  /** R485 (§9): izbira elementa — SKUPNA pot za overlay oznake in PREGLED
+   *  seznam (tap na vrstico odpre obstoječi tap-detail). */
+  function selectSceneElement (el: SceneElement): void {
+    setSceneSelectedId(el.id === sceneSelectedId ? null : el.id)
+    setSlopeInput(''); setStepsInput(''); setAngleInput('')
+    setMeasureInputs({}); setRefAxisIdx(''); setRefCmInput('')
+  }
+
+  /** R485: bbox predogleda ročne oznake (stabilen callback — brez render zank). */
+  const handleManualBBox = useCallback((b: [number, number, number, number] | null): void => {
+    setManualBBox(b)
+  }, [])
+  const handleDetailBBox = useCallback((b: [number, number, number, number] | null): void => {
+    setDetailBBox(b)
+  }, [])
+
+  /** R485 (issue #8 §1): ROČNA OZNAKA v živi seji — lokalni element (vir ROCNO,
+   *  confidence 1 — izjava monterja). Zaznavanje samo NE producira NEZNANO
+   *  (poštenost); ta pot omogoči monterju označiti, kaj kamera ni prepoznala.
+   *  Razred popravi v kartici; persistira se z zajemom (elementsToSave). */
+  function addManualElementLive (v: ManualTagValues): void {
+    const el: SceneElement = {
+      id: newSceneId(),
+      cls: v.cls,
+      status: 'PREPOZNANO',
+      source: 'ROCNO',
+      confidence: 1,
+      bbox: v.bbox,
+      at: Date.now(),
+      ...(v.label ? { label: v.label } : {}),
+    }
+    setManualElements((prev) => [...prev, el])
+    setManualOpen(false)
+    setManualBBox(null)
+    selectSceneElement(el)
+    toast({
+      title: 'Oznaka dodana.',
+      description: `${v.cls} na (${v.bbox.map((n) => n.toFixed(2).replace('.', ',')).join(' · ')}) — vir: ročno. Razred popravite v kartici; shrani se z zajemom AR posnetka.`,
+    })
+  }
+
+  /** R485 (issue #8 §1): ROČNA OZNAKA na PERSISTIRANEM posnetku — POST
+   *  /api/ar-snapshots/[id]/scene-element (2-a ruta; OSEBA zavrnjena na
+   *  strežniku) → osvežen prikaz (element se pojavi z virom ROCNO). */
+  async function addManualElementToSnapshot (v: ManualTagValues): Promise<void> {
+    if (!detail || detailTagBusy) return
+    setDetailTagBusy(true)
+    try {
+      await apiPost(`/api/ar-snapshots/${detail.row.id}/scene-element`, {
+        cls: v.cls,
+        bbox: v.bbox,
+        ...(v.label ? { label: v.label } : {}),
+      })
+      const se = await apiGet<{ data: { displayed: SceneElement[] } }>(`/api/ar-snapshots/${detail.row.id}/scene-element`)
+      if (Array.isArray(se.data?.displayed)) {
+        const displayed = se.data.displayed
+        setDetail((prev) => (prev && prev.row.id === detail.row.id ? { ...prev, elements: displayed } : prev))
+      }
+      setDetailTagOpen(false)
+      setDetailBBox(null)
+      toast({ title: 'Oznaka dodana na posnetek.', description: `${v.cls} — vir: ročno (ROCNO). Element je takoj viden v seznamu zaznav.` })
+    } catch (e) {
+      toast({ title: 'Dodajanje oznake ni uspelo.', description: e instanceof Error ? e.message : undefined, variant: 'destructive' })
+    } finally {
+      setDetailTagBusy(false)
+    }
+  }
 
   // POČIŠČENJE: ob odklopu ustavi vse steze kamere + morebitni rAF glajenja
   // + R471: morebitno AR sejo globine
@@ -522,6 +639,7 @@ export default function ArModule () {
       setSceneSelectedId(null)
       setScenePinned(new Set())
       setSlopeInput('')
+      setAngleInput('')
 
       setLastShot(photo)
       toast({
@@ -536,8 +654,15 @@ export default function ArModule () {
   }
 
   // ── R454: zgodovina — ogled podrobnosti s fotografijo ──
+  // R485 (§1/§9): ob ogledu naloži tudi ZAZNAVE PRIZORA (GET scene-element →
+  //  displayed) za seznam + ročno oznako (POST); brez razumevanja = brez bloka.
   async function viewSnapshot (row: SnapshotRow): Promise<void> {
-    if (detail?.row.id === row.id) { setDetail(null); return }
+    if (detail?.row.id === row.id) {
+      setDetail(null)
+      setDetailTagOpen(false)
+      setDetailBBox(null)
+      return
+    }
     setDetailBusy(true)
     try {
       const res = await apiGet<{ data: { id: string; params: string | null; scene: string | null; analysis: string | null; note: string | null; createdAt: string } }>(`/api/ar-snapshots/${row.id}`)
@@ -548,7 +673,14 @@ export default function ArModule () {
           if (typeof p.photo === 'string' && p.photo.startsWith('data:image/')) photo = p.photo
         } catch { /* brez fotografije */ }
       }
-      setDetail({ row, photo, analysis: parseAnalysis(res.data.analysis) })
+      let elements: SceneElement[] | null = null
+      try {
+        const se = await apiGet<{ data: { displayed: SceneElement[] } }>(`/api/ar-snapshots/${row.id}/scene-element`)
+        if (Array.isArray(se.data?.displayed)) elements = se.data.displayed
+      } catch { /* posnetek brez razumevanja prizora — blok se ne prikaže */ }
+      setDetailTagOpen(false)
+      setDetailBBox(null)
+      setDetail({ row, photo, analysis: parseAnalysis(res.data.analysis), elements })
     } catch (e) {
       toast({ title: 'Podrobnosti ni bilo mogoče naložiti.', description: e instanceof Error ? e.message : undefined, variant: 'destructive' })
     } finally {
@@ -781,18 +913,31 @@ export default function ArModule () {
                 />
 
                 {/* R467 (issue #8 F1): žive zaznave prizora — samo z živo kamero;
-                    POD ograjinim overlayjem (ograja ostane glavni interakcijski objekt) */}
-                {mode === 'on' && sceneDisplayed.length > 0 ? (
+                    POD ograjinim overlayjem (ograja ostane glavni interakcijski objekt).
+                    R485 (§9): pogled (ŽIVO/PREPOZNANO/MERE) — SAMO prikaz istih elementov. */}
+                {mode === 'on' && sceneOverlayElements.length > 0 ? (
                   <SceneOverlay
-                    elements={sceneDisplayed}
+                    elements={sceneOverlayElements}
                     quality={sceneState.quality}
                     selectedId={sceneSelectedId}
                     pinnedIds={scenePinned}
-                    onSelect={(el) => {
-                      setSceneSelectedId(el.id === sceneSelectedId ? null : el.id)
-                      setSlopeInput(''); setStepsInput('')
-                      setMeasureInputs({}); setRefAxisIdx(''); setRefCmInput('')
+                    view={sceneView === 'PREPOZNANO' ? 'PREPOZNANO' : sceneView === 'MERE' ? 'MERE' : 'ZIVO'}
+                    onSelect={selectSceneElement}
+                  />
+                ) : null}
+
+                {/* R485 (issue #8 §1): živi predogled bboxa ročne oznake — kam
+                    bo oznaka postavljena (števci 0..1 → delež kadra). */}
+                {mode === 'on' && manualOpen && manualBBox != null ? (
+                  <div
+                    className="pointer-events-none absolute rounded-md border-2 border-dashed border-roksal-amber bg-roksal-amber/10"
+                    style={{
+                      left: `${Math.round(manualBBox[0] * 100)}%`,
+                      top: `${Math.round(manualBBox[1] * 100)}%`,
+                      width: `${Math.round(manualBBox[2] * 100)}%`,
+                      height: `${Math.round(manualBBox[3] * 100)}%`,
                     }}
+                    aria-hidden
                   />
                 ) : null}
 
@@ -861,6 +1006,100 @@ export default function ArModule () {
                   </div>
                 ) : null}
               </div>
+
+              {/* R485 (issue #8 §9): PREKLOP POGLEDOV — ŽIVO | PREPOZNANO | MERE |
+                  PREGLED. Pod predogledom (NE čez kamero); ŽIVO privzeto = sedanje
+                  obnašanje. To je SAMO pogled na obstoječe elemente — brez novih
+                  nastavitev (§9 „ne sili monterja v množico nastavitev“). */}
+              {mode === 'on' ? (
+                <div className="space-y-2">
+                  <div
+                    role="group"
+                    aria-label="Pogled zaznav v AR predogledu"
+                    className="grid grid-cols-4 gap-1 rounded-lg border bg-secondary/40 p-1"
+                  >
+                    {SCENE_VIEWS.map((v) => {
+                      const active = sceneView === v.id
+                      return (
+                        <button
+                          key={v.id}
+                          type="button"
+                          title={v.hint}
+                          aria-pressed={active}
+                          className={`flex min-h-11 items-center justify-center rounded-md px-1 text-[11px] font-bold uppercase tracking-wide transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-roksal-amber ${active ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-secondary hover:text-foreground'}`}
+                          onClick={() => { setSceneView(v.id) }}
+                        >
+                          {v.text.toUpperCase()}
+                        </button>
+                      )
+                    })}
+                  </div>
+                  <p className="text-[10px] leading-snug text-muted-foreground" role="note">
+                    {SCENE_VIEWS.find((v) => v.id === sceneView)?.hint}
+                  </p>
+
+                  {/* R485 (issue #8 §1): ROČNA OZNAKA — »neprepoznano, tapni za
+                      označitev« prej ni imela poti (zaznavanje NE producira
+                      NEZNANO — poštenost). V ŽIVO/PREPOZNANO/PREGLED pogledu. */}
+                  {canWrite && sceneView !== 'MERE' && !manualOpen ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => { setManualOpen(true); setManualBBox(MANUAL_BBOX_DEFAULT) }}
+                    >
+                      <Plus className="size-3.5" aria-hidden /> Dodaj oznako ročno
+                    </Button>
+                  ) : null}
+                  {manualOpen && canWrite ? (
+                    <ManualTagForm
+                      onSubmit={addManualElementLive}
+                      onCancel={() => { setManualOpen(false); setManualBBox(null) }}
+                      onBBoxChange={handleManualBBox}
+                    />
+                  ) : null}
+
+                  {/* PREGLED (§9 :137): tapljivi seznam VSEH elementov — vrstica
+                      na element (ikona/razred, opomba, status, zaupanje, mere,
+                      vir); tap odpre obstoječi tap-detail pod predogledom. */}
+                  {sceneView === 'PREGLED' ? (
+                    <div className="rounded-lg border">
+                      <p className="flex items-center justify-between border-b px-3 py-2 text-xs font-bold uppercase tracking-wide text-muted-foreground">
+                        <span>Pregled elementov</span>
+                        <span className="font-semibold" aria-label={`${sceneDisplayed.length} elementov`}>{sceneDisplayed.length}</span>
+                      </p>
+                      {sceneDisplayed.length === 0 ? (
+                        <div className="space-y-2 p-3">
+                          <p className="text-sm text-muted-foreground">
+                            V tem kadru ni zaznanih elementov — zaznavanje je namenoma konservativno
+                            (brez dokaza ne trdi razreda; NEZNANO je poštena zadnja možnost).
+                          </p>
+                          {canWrite ? (
+                            <Button variant="outline" size="sm" onClick={() => { setManualOpen(true); setManualBBox(MANUAL_BBOX_DEFAULT) }}>
+                              <Plus className="size-3.5" aria-hidden /> Dodaj oznako ročno
+                            </Button>
+                          ) : null}
+                        </div>
+                      ) : (
+                        <ul className="max-h-96 divide-y overflow-y-auto pr-1" aria-label="Seznam zaznanih elementov prizora">
+                          {sceneDisplayed.map((el) => (
+                            <li key={el.id}>
+                              <SceneElementRow el={el} selected={sceneSelectedId === el.id} onSelect={selectSceneElement} />
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  ) : null}
+
+                  {/* MERE brez mer — pošteno prazno stanje (osi so predlog brez cm) */}
+                  {sceneView === 'MERE' && !sceneDisplayed.some((e) => (e.measures?.length ?? 0) > 0) ? (
+                    <p className="rounded-lg border border-dashed px-3 py-2 text-xs text-muted-foreground" role="note">
+                      V tem kadru še ni zabeleženih mer — izberite element in zabeležite mero
+                      (ročni vnos, referenčna skala ali AR globina). Osi brez metode ostanejo brez cm.
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
 
               <p className="text-xs text-muted-foreground">
                 {mode === 'demo'
@@ -1032,6 +1271,32 @@ export default function ArModule () {
                     </div>
                   ) : null}
 
+                  {/* R485 (issue #8 §2/§9): OGRAJA — lastna sekcija: število stebrov
+                      (postCount = OCENA iz periodike navpičnic, detectPostLines)
+                      + pošteno o mejah enega kadra. Mere so v razdelku Mere. */}
+                  {sceneSelected.cls === 'OGRAJA' ? (
+                    <div className="mt-2 rounded-md border border-dashed px-2.5 py-2 text-xs">
+                      <p className="font-semibold">Geometrija ograje</p>
+                      <ul className="mt-1 space-y-0.5 text-muted-foreground">
+                        <li>
+                          Zaznanih stebrov: {sceneSelected.postCount != null
+                            ? `${sceneSelected.postCount} (ocena iz periodike navpičnih črt)`
+                            : 'nezaznani v tem kadru (dokaz so vodoravne črte, ne stebri)'}
+                        </li>
+                        <li>
+                          Status geometrije: <span className="font-medium text-foreground">{geomStatusText(sceneSelected) ?? 'ni podatka'}</span>
+                          {sceneSelected.source === 'ROCNO'
+                            ? ' — razred ročno potrjen.'
+                            : ' — dokaz je šibek, zato hevristika ostaja NEJASNO (nikoli samodejno prepoznano).'}
+                        </li>
+                        <li className="text-foreground">
+                          Odseki, vogali, vrata in pritrdilna mesta niso ločljivi iz enega kadra — več objektov iste vrste ostane en element (znana meja, SMART-VISION-8 §2).
+                        </li>
+                        <li>Mere segmenta so v razdelku Mere (osi brez cm, dokler ni veljavne metode).</li>
+                      </ul>
+                    </div>
+                  ) : null}
+
                   {/* R468 (F2 §3): geometrija površine — ločena od prepoznave (§2/§6) */}
                   {(sceneSelected.cls === 'TLA' || sceneSelected.cls === 'PODLAGA' || sceneSelected.cls === 'ROB') ? (
                     <div className="mt-2 rounded-md border border-dashed px-2.5 py-2 text-xs">
@@ -1045,7 +1310,7 @@ export default function ArModule () {
                         {sceneSelected.cls === 'ROB' ? (
                           <li>
                             Kot roba v kadru: {sceneSelected.angleDeg != null
-                              ? `${sceneSelected.angleDeg.toFixed(1).replace('.', ',')}° (ocena iz vizualne geometrije)`
+                              ? `${sceneSelected.angleDeg.toFixed(1).replace('.', ',')}°${sceneSelected.source === 'ROCNO' ? ' (ročno potrjeno)' : ' (ocena iz vizualne geometrije)'}`
                               : 'neznan'}
                           </li>
                         ) : (
@@ -1060,7 +1325,54 @@ export default function ArModule () {
                           {sceneSelected.geomStatus === 'GEOMETRIJA_OCENJENA' ? ' — ocena, ne izmera; potrdite z referenco.' : ''}
                         </li>
                       </ul>
-                      {sceneSelected.cls !== 'ROB' ? (
+                      {sceneSelected.cls === 'ROB' ? (
+                        /* R485 (issue #8 §2): POPRAVEK KOTA ROBA — vnos −90..360;
+                           črta roba je NEUSMERJENA: normalizacija mod 180 v
+                           [−90, 90] (350° ≡ −10°) se izvede v applyEdits
+                           (jedro, enako na strežniku); vir ROCNO + IZMERJENO. */
+                        <div className="mt-2 flex flex-wrap items-end gap-1.5">
+                          <div className="space-y-0.5">
+                            <Label htmlFor="scene-angle" className="text-[11px]">Popravek kota roba (°, −90..360; npr. −8 ali 350)</Label>
+                            <Input
+                              id="scene-angle"
+                              inputMode="decimal"
+                              className="h-8 w-32 text-xs"
+                              placeholder="Stopinje"
+                              value={angleInput}
+                              onChange={(e) => { setAngleInput(e.target.value) }}
+                              aria-describedby="scene-angle-help"
+                            />
+                          </div>
+                          <Button
+                            size="sm"
+                            className="h-8"
+                            disabled={Number.isNaN(Number(angleInput.replace(',', '.'))) || angleInput.trim() === '' ||
+                              !(Number(angleInput.replace(',', '.')) >= -90) || !(Number(angleInput.replace(',', '.')) <= 360)}
+                            onClick={() => {
+                              const v = Number(angleInput.replace(',', '.'))
+                              if (!Number.isFinite(v) || v < -90 || v > 360) return
+                              setSceneEdits((prev) => [...prev.filter((e) => e.elementId !== sceneSelected.id), {
+                                elementId: sceneSelected.id,
+                                angleDeg: v,
+                                by: user?.name ?? 'monter',
+                                at: Date.now(),
+                              }])
+                              const norm = Math.round((((v + 90) % 180 + 180) % 180 - 90) * 10) / 10
+                              toast({
+                                title: 'Popravek kota roba zabeležen.',
+                                description: `Kot ${v.toFixed(1).replace('.', ',')}° → shranjen kot ${norm.toFixed(1).replace('.', ',')}° (črta roba je neusmerjena — mod 180; ročno, IZMERJENO). Shrani se z zajemom AR posnetka.`,
+                              })
+                              setAngleInput('')
+                            }}
+                          >
+                            <Save className="size-3.5" aria-hidden />
+                            Zabeleži
+                          </Button>
+                          <span id="scene-angle-help" className="sr-only">
+                            Vnesite preštani ali izmerjeni kot roba glede na vodoravnico kadra v stopinjah; veljavno od −90 do 360, normalizira se na −90 do 90.
+                          </span>
+                        </div>
+                      ) : (
                         <div className="mt-2 flex flex-wrap items-end gap-1.5">
                           <div className="space-y-0.5">
                             <Label htmlFor="scene-slope" className="text-[11px]">Izmerjeni naklon (°, npr. 3,5 ali −2)</Label>
@@ -1098,7 +1410,7 @@ export default function ArModule () {
                             Vnesite z nivelirjem ali referenčno metodo izmerjen naklon tal v stopinjah; veljavno od −45 do 45.
                           </span>
                         </div>
-                      ) : null}
+                      )}
                     </div>
                   ) : null}
 
@@ -1470,7 +1782,23 @@ export default function ArModule () {
                     <div className="grid gap-3 border-t p-3 md:grid-cols-[minmax(0,320px)_minmax(0,1fr)]">
                       {detail.photo ? (
                         <div className="space-y-1.5">
-                          <img src={detail.photo} alt={`AR posnetek — ${row.scene ?? 'brez opisa'}`} className="w-full rounded-lg border" />
+                          {/* R485 (§1): relativni ovoj — živi predogled bboxa ročne
+                              oznake čez fotografijo posnetka (isti števci 0..1). */}
+                          <div className="relative">
+                            <img src={detail.photo} alt={`AR posnetek — ${row.scene ?? 'brez opisa'}`} className="w-full rounded-lg border" />
+                            {detailTagOpen && detailBBox != null ? (
+                              <div
+                                className="pointer-events-none absolute rounded-md border-2 border-dashed border-roksal-amber bg-roksal-amber/10"
+                                style={{
+                                  left: `${Math.round(detailBBox[0] * 100)}%`,
+                                  top: `${Math.round(detailBBox[1] * 100)}%`,
+                                  width: `${Math.round(detailBBox[2] * 100)}%`,
+                                  height: `${Math.round(detailBBox[3] * 100)}%`,
+                                }}
+                                aria-hidden
+                              />
+                            ) : null}
+                          </div>
                           <Button
                             variant="outline"
                             size="sm"
@@ -1504,6 +1832,49 @@ export default function ArModule () {
                           <p className="text-xs text-muted-foreground">Posnetek je bil zajet brez AI analize prizora.</p>
                         )}
                       </div>
+
+                      {/* R485 (issue #8 §1/§9): ZAZNAVE PRIZORA na posnetku —
+                          seznam displayed elementov (GET scene-element) + ROČNA
+                          OZNAKA prek POST scene-element (vir ROCNO; OSEBA na
+                          strežniku zavrnjena — zasebnost §5). */}
+                      {detail.elements != null ? (
+                        <div className="border-t p-3 md:col-span-2">
+                          <div className="rounded-lg border">
+                            <p className="flex items-center justify-between border-b px-3 py-2 text-xs font-bold uppercase tracking-wide text-muted-foreground">
+                              <span>Zaznave prizora</span>
+                              <span className="font-semibold" aria-label={`${detail.elements.length} elementov`}>{detail.elements.length}</span>
+                            </p>
+                            {detail.elements.length === 0 ? (
+                              <p className="p-3 text-sm text-muted-foreground">
+                                Posnetek ne vsebuje zaznav — zajet je bil, preden je razumevanje prizora našlo elemente.
+                              </p>
+                            ) : (
+                              <ul className="max-h-72 divide-y overflow-y-auto pr-1" aria-label="Zaznave prizora na posnetku">
+                                {detail.elements.map((el) => (
+                                  <li key={el.id}><SceneElementRow el={el} /></li>
+                                ))}
+                              </ul>
+                            )}
+                            {canWrite ? (
+                              <div className="border-t p-3">
+                                {detailTagOpen ? (
+                                  <ManualTagForm
+                                    onSubmit={(v) => { void addManualElementToSnapshot(v) }}
+                                    onCancel={() => { setDetailTagOpen(false); setDetailBBox(null) }}
+                                    busy={detailTagBusy}
+                                    onBBoxChange={handleDetailBBox}
+                                    helpNote="Oznaka se takoj zapiše na posnetek (vir: ročno — ROCNO) in je takoj vidna v seznamu. OSEBA ni na voljo (zasebnost)."
+                                  />
+                                ) : (
+                                  <Button variant="outline" size="sm" aria-expanded={detailTagOpen} onClick={() => { setDetailTagOpen(true); setDetailBBox(MANUAL_BBOX_DEFAULT) }}>
+                                    <Plus className="size-3.5" aria-hidden /> Dodaj oznako ročno
+                                  </Button>
+                                )}
+                              </div>
+                            ) : null}
+                          </div>
+                        </div>
+                      ) : null}
                     </div>
                   ) : null}
                 </div>
@@ -1512,6 +1883,177 @@ export default function ArModule () {
           )}
         </CardContent>
       </Card>
+    </div>
+  )
+}
+
+// ─── R485 (issue #8 §9 :137): VRSTICA ELEMENTA — tapljivi seznam (PREGLED) ──
+// Ista vrstica za živi PREGLED in zaznave posnetka: ikona/razred, opomba,
+// status chip, zaupanje, mere če so, vir. Tap → obstoječi tap-detail.
+
+function SceneElementRow ({ el, selected, onSelect }: {
+  el: SceneElement
+  selected?: boolean
+  onSelect?: (el: SceneElement) => void
+}): React.ReactElement {
+  const Icon = SCENE_CLS_ICON[el.cls]
+  const color = SCENE_CLS_COLOR[el.cls]
+  const measures = el.cls === 'OSEBA' ? [] : consolidateMeasures(el.measures ?? [])
+  const name = el.cls === 'OSEBA' ? 'Morebitna oseba' : SCENE_CLS_LABEL[el.cls]
+  return (
+    <button
+      type="button"
+      className={`flex min-h-11 w-full items-center gap-2 px-3 py-2 text-left transition hover:bg-secondary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-roksal-amber ${selected ? 'bg-secondary/60' : ''}`}
+      aria-current={selected ? 'true' : undefined}
+      aria-label={`${name}${el.label ? `, opomba: ${el.label}` : ''} — ${SCENE_STATUS_TEXT[el.status]}, zaupanje ${Math.round(el.confidence * 100)} %, vir: ${el.source === 'ROCNO' ? 'ročno' : el.source === 'VLM' ? 'AI predlog' : 'lokalna hevristika'}`}
+      onClick={onSelect != null ? () => { onSelect(el) } : undefined}
+    >
+      <Icon className="size-4 shrink-0" style={{ color }} aria-hidden />
+      <span className="min-w-0 flex-1">
+        <span className="flex flex-wrap items-baseline gap-x-1.5">
+          <span className="truncate text-sm font-medium">{name}</span>
+          {el.label ? <span className="truncate text-xs italic text-muted-foreground">„{el.label}“</span> : null}
+        </span>
+        <span className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[10px] leading-snug text-muted-foreground">
+          <span>{el.source === 'ROCNO' ? 'ročno potrjeno' : el.source === 'VLM' ? 'AI predlog' : 'lokalna hevristika'}</span>
+          <span aria-hidden>·</span>
+          <span>zaupanje {Math.round(el.confidence * 100)} %</span>
+          {measures.length > 0 ? (
+            <>
+              <span aria-hidden>·</span>
+              <span className="font-semibold text-foreground">
+                ≈ {measures[0].valueCm.toFixed(1).replace('.', ',')} cm{measures.length > 1 ? ` (+${measures.length - 1})` : ''}
+              </span>
+            </>
+          ) : null}
+        </span>
+      </span>
+      <Badge variant="outline" className="ml-auto shrink-0 text-[10px]">{SCENE_STATUS_TEXT[el.status]}</Badge>
+    </button>
+  )
+}
+
+// ─── R485 (issue #8 §1): OBRAZEC ROČNE OZNAKE — razred iz belenga seznama ────
+// BREZ OSEBA (zasebnost §5 — enak seznam kot POST scene-element na strežniku),
+// bbox kot 4 števci 0..1 (x, y, širina, višina — delež kadra) z živim
+// predogledom pravokotnika (onBBoxChange) in neobvezno opombo (≤ 60 znakov).
+
+interface ManualTagValues {
+  cls: SceneClass
+  bbox: [number, number, number, number]
+  label: string
+}
+
+function parseBBoxPart (raw: string): number | null {
+  const v = Number(raw.replace(',', '.'))
+  return raw.trim() !== '' && Number.isFinite(v) && v >= 0 && v <= 1 ? v : null
+}
+
+function ManualTagForm ({ onSubmit, onCancel, busy = false, onBBoxChange, helpNote }: {
+  onSubmit: (v: ManualTagValues) => void
+  onCancel: () => void
+  busy?: boolean
+  onBBoxChange?: (bbox: [number, number, number, number] | null) => void
+  helpNote?: string
+}): React.ReactElement {
+  const [cls, setCls] = useState<SceneClass>('NEZNANO')
+  const [bx, setBx] = useState(MANUAL_BBOX_DEFAULT_STR.x)
+  const [by, setBy] = useState(MANUAL_BBOX_DEFAULT_STR.y)
+  const [bw, setBw] = useState(MANUAL_BBOX_DEFAULT_STR.w)
+  const [bh, setBh] = useState(MANUAL_BBOX_DEFAULT_STR.h)
+  const [label, setLabel] = useState('')
+
+  const x = parseBBoxPart(bx)
+  const y = parseBBoxPart(by)
+  const w = parseBBoxPart(bw)
+  const h = parseBBoxPart(bh)
+  const bbox: [number, number, number, number] | null =
+    x != null && y != null && w != null && h != null && w > 0 && h > 0
+      ? [Math.round(x * 1000) / 1000, Math.round(y * 1000) / 1000, Math.round(w * 1000) / 1000, Math.round(h * 1000) / 1000]
+      : null
+
+  function updateBBox (next: Partial<Record<'x' | 'y' | 'w' | 'h', string>>): void {
+    const vals = { x: bx, y: by, w: bw, h: bh, ...next }
+    const nx = parseBBoxPart(vals.x); const ny = parseBBoxPart(vals.y)
+    const nw = parseBBoxPart(vals.w); const nh = parseBBoxPart(vals.h)
+    onBBoxChange?.(nx != null && ny != null && nw != null && nh != null && nw > 0 && nh > 0
+      ? [Math.round(nx * 1000) / 1000, Math.round(ny * 1000) / 1000, Math.round(nw * 1000) / 1000, Math.round(nh * 1000) / 1000]
+      : null)
+  }
+
+  return (
+    <div className="space-y-2 rounded-lg border border-dashed border-roksal-amber/50 bg-secondary/30 p-3">
+      <p className="text-xs font-bold uppercase tracking-wide">Dodaj oznako ročno</p>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <div className="space-y-1">
+          <Label htmlFor="manual-cls">Razred</Label>
+          <Select value={cls} onValueChange={(v) => { setCls(v as SceneClass) }}>
+            <SelectTrigger id="manual-cls" aria-label="Razred ročno dodane oznake">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="max-h-48">
+              {MANUAL_CLASSES.map((c) => (
+                <SelectItem key={c} value={c}>{c === 'NEZNANO' ? 'NEZNANO (razred določite kasneje)' : c}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="manual-label">Opomba (neobvezno, do 60 znakov)</Label>
+          <Input
+            id="manual-label"
+            value={label}
+            maxLength={SCENE_LABEL_MAX}
+            onChange={(e) => { setLabel(e.target.value) }}
+            placeholder="npr. vogal terase"
+          />
+        </div>
+      </div>
+      <div className="space-y-1">
+        <p className="text-[11px] font-medium" id="manual-bbox-label">
+          Položaj v kadru (0..1): levo X · zgoraj Y · širina W · višina H — delež kadra
+        </p>
+        <div className="grid grid-cols-4 gap-2" role="group" aria-labelledby="manual-bbox-label">
+          <div className="space-y-1">
+            <Label htmlFor="manual-bx" className="text-[10px]">X</Label>
+            <Input id="manual-bx" inputMode="decimal" className="h-8 text-xs" value={bx}
+              aria-label="Bbox X — levi rob (0..1)"
+              onChange={(e) => { setBx(e.target.value); updateBBox({ x: e.target.value }) }} />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="manual-by" className="text-[10px]">Y</Label>
+            <Input id="manual-by" inputMode="decimal" className="h-8 text-xs" value={by}
+              aria-label="Bbox Y — zgornji rob (0..1)"
+              onChange={(e) => { setBy(e.target.value); updateBBox({ y: e.target.value }) }} />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="manual-bw" className="text-[10px]">W</Label>
+            <Input id="manual-bw" inputMode="decimal" className="h-8 text-xs" value={bw}
+              aria-label="Bbox W — širina (0..1)"
+              onChange={(e) => { setBw(e.target.value); updateBBox({ w: e.target.value }) }} />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="manual-bh" className="text-[10px]">H</Label>
+            <Input id="manual-bh" inputMode="decimal" className="h-8 text-xs" value={bh}
+              aria-label="Bbox H — višina (0..1)"
+              onChange={(e) => { setBh(e.target.value); updateBBox({ h: e.target.value }) }} />
+          </div>
+        </div>
+      </div>
+      <p className="text-[10px] leading-snug text-muted-foreground">
+        {helpNote ?? 'Oznaka se zapiše z virom ROCNO in shrani z zajemom AR posnetka. OSEBA ni na voljo (zasebnost — živa zaznava oseb se ne persistira).'}
+      </p>
+      <div className="flex flex-wrap justify-end gap-2">
+        <Button variant="ghost" size="sm" onClick={onCancel}>Prekliči</Button>
+        <Button
+          size="sm"
+          disabled={busy || bbox == null}
+          onClick={() => { if (bbox != null) onSubmit({ cls, bbox, label: label.trim().slice(0, SCENE_LABEL_MAX) }) }}
+        >
+          {busy ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <Plus className="size-3.5" aria-hidden />}
+          Dodaj oznako
+        </Button>
+      </div>
     </div>
   )
 }

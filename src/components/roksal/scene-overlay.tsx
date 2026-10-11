@@ -18,10 +18,21 @@
 // z zapisano metodo, §5 poštenost); chip izmerjene mere „≈ 120,5 cm
 // (ročni vnos)“; OSEBA se izrecno imenuje „morebitna oseba“ (hevristika
 // ne trdi identitete) in se NE shranjuje (zasebnost).
+//
+// R485 (issue #8 §9): PREKLOP POGLEDOV — ZIVO (privzeto: oznake, mere, osi
+// izbranega), PREPOZNANO (samo semantične oznake — razredi/statusi/zaupanje;
+// mere in osi SKRITE), MERE (samo osi in čipi mer z metodo — razredi manj
+// vidni). Pogled je SAMO prikaz istih elementov (NE nov podatkovni model).
 
 import { HelpCircle, Layers, MapPin, MoveHorizontal, Ruler, TriangleAlert, User, Waypoints } from 'lucide-react'
 import type { DimAxis, SceneClass, SceneElement, SceneStatus } from '@/lib/scene-understanding-core'
-import { consolidateMeasures, nextStepGuidance, pickLabels, proposeAxes } from '@/lib/scene-understanding-core'
+import { consolidateMeasures, MEASURE_METHOD_TEXT, nextStepGuidance, pickLabels, proposeAxes } from '@/lib/scene-understanding-core'
+
+/** R485 (issue #8 §9): pogled overlayja — ZIVO | PREPOZNANO | MERE. */
+export type SceneOverlayView = 'ZIVO' | 'PREPOZNANO' | 'MERE'
+
+/** R485: izvozi za tapljivi seznam PREGLED v ar.tsx (isti vir resnice). */
+export { CLS_LABEL as SCENE_CLS_LABEL, CLS_ICON as SCENE_CLS_ICON, CLS_COLOR as SCENE_CLS_COLOR, STATUS_TEXT as SCENE_STATUS_TEXT }
 
 export interface SceneOverlayProps {
   elements: SceneElement[]
@@ -34,6 +45,8 @@ export interface SceneOverlayProps {
   maxLabels?: number
   /** pripnjeni (zaklenjeni) elementi — vedno prikazani (issue §9). */
   pinnedIds?: ReadonlySet<string>
+  /** R485 (issue #8 §9): pogled overlayja (privzeto ZIVO = sedanje obnašanje). */
+  view?: SceneOverlayView
 }
 
 const CLS_LABEL: Record<SceneClass, string> = {
@@ -101,12 +114,15 @@ function stairChip (el: SceneElement): string | null {
   return `${el.steps} nastopov (ocena)`
 }
 
-/** R470 (§5): chip izmerjene mere — „≈ 120,5 cm (ročni vnos)“ — vedno z metodo. */
-function measureChip (el: SceneElement): string | null {
+/** R470 (§5): chip izmerjene mere — „≈ 120,5 cm (ročni vnos)“ — vedno z metodo.
+ *  R485 (§9): v pogledu MERE izpiše tudi metodo (vir mere), sicer samo vrednost;
+ *  v pogledu PREPOZNANO se chip NE izriše (mere skrite). */
+function measureChip (el: SceneElement, withMethod = false): string | null {
   const consolidated = consolidateMeasures(el.measures ?? [])
   if (consolidated.length === 0) return null
   const m = consolidated[0]
-  return `≈ ${m.valueCm.toFixed(1).replace('.', ',')} cm${m.conflict ? ' (!)' : ''}`
+  const method = withMethod ? ` (${MEASURE_METHOD_TEXT[m.method]})` : ''
+  return `≈ ${m.valueCm.toFixed(1).replace('.', ',')} cm${m.conflict ? ' (!)' : ''}${method}`
 }
 
 /** R470 (§5): SVG za eno dimenzijsko os — merilna črta s končnima črticama. */
@@ -138,17 +154,22 @@ function AxisLine ({ a, color, selected }: { a: DimAxis; color: string; selected
   )
 }
 
-export default function SceneOverlay ({ elements, quality, selectedId, onSelect, maxLabels = 4, pinnedIds }: SceneOverlayProps) {
+export default function SceneOverlay ({ elements, quality, selectedId, onSelect, maxLabels = 4, pinnedIds, view = 'ZIVO' }: SceneOverlayProps) {
   const shown = pickLabels(elements, maxLabels, pinnedIds)
   if (shown.length === 0) return null
   const guidance = nextStepGuidance(elements, quality ?? undefined)
-  // R470 (§5): dimenzijske osi SAMO za izbrani element (§9 čist pogled —
-  // osi ne zasipavajo kadra). Obstoječe (persistirane) osi imajo prednost,
-  // sicer se predlagajo iz geometrije elementa (proposeAxes).
-  const selectedEl = elements.find((e) => e.id === selectedId) ?? null
-  const selectedAxes: DimAxis[] = selectedEl
-    ? (selectedEl.axes && selectedEl.axes.length >= 1 ? selectedEl.axes : proposeAxes(selectedEl))
-    : []
+  // R485 (§9): pogled — PREPOZNANO skrije mere/osi (samo semantika), MERE
+  // pokaže osi VSEH prikazanih elementov (pogled mer); ŽIVO = osi izbranega
+  // (R470). Elementi so ISTI — spreminja se samo prikaz.
+  const semanticOnly = view === 'PREPOZNANO'
+  const measuresOnly = view === 'MERE'
+  const axesOf = (el: SceneElement): DimAxis[] =>
+    el.axes && el.axes.length >= 1 ? el.axes : proposeAxes(el)
+  const axesFor: SceneElement[] = semanticOnly
+    ? []
+    : measuresOnly
+      ? shown
+      : elements.filter((e) => e.id === selectedId)
 
   return (
     <>
@@ -264,12 +285,15 @@ export default function SceneOverlay ({ elements, quality, selectedId, onSelect,
             </g>
           )
         })}
-        {/* R470 (§5): dimenzijske osi izbranega elementa — merilne črte brez cm */}
-        {selectedEl && selectedAxes.length >= 1 ? (
+        {/* R470 (§5)/R485 (§9): dimenzijske osi — merilne črte brez cm;
+            ŽIVO: izbrani element; MERE: vsi prikazani; PREPOZNANO: nikoli */}
+        {axesFor.length >= 1 ? (
           <g aria-hidden>
-            {selectedAxes.map((a, i) => (
-              <AxisLine key={`axis-${selectedEl.id}-${i}`} a={a} color={CLS_COLOR[selectedEl.cls]} selected />
-            ))}
+            {axesFor.flatMap((el) =>
+              axesOf(el).map((a, i) => (
+                <AxisLine key={`axis-${el.id}-${i}`} a={a} color={CLS_COLOR[el.cls]} selected={selectedId === el.id} />
+              )),
+            )}
           </g>
         ) : null}
       </svg>
@@ -283,12 +307,14 @@ export default function SceneOverlay ({ elements, quality, selectedId, onSelect,
           const pinned = pinnedIds?.has(el.id) ?? false
           const slope = slopeChip(el)
           const stair = stairChip(el)
-          const measure = measureChip(el)
+          const measure = semanticOnly ? null : measureChip(el, measuresOnly)
+          const confPct = `${Math.round(el.confidence * 100)} %`
+          const name = el.cls === 'OSEBA' ? 'Morebitna oseba' : CLS_LABEL[el.cls]
           return (
             <button
               key={el.id}
               type="button"
-              className={`pointer-events-auto absolute flex min-h-[28px] items-center gap-1 rounded-full border bg-white/95 px-2 py-0.5 text-[10px] font-medium shadow-sm backdrop-blur transition dark:bg-zinc-900/95 ${selected ? 'ring-2 ring-offset-1' : ''} ${onSelect ? 'cursor-pointer hover:bg-white' : 'cursor-default'}`}
+              className={`pointer-events-auto absolute flex min-h-[28px] items-center gap-1 rounded-full border bg-white/95 px-2 py-0.5 text-[10px] font-medium shadow-sm backdrop-blur transition dark:bg-zinc-900/95 ${selected ? 'ring-2 ring-offset-1' : ''} ${onSelect ? 'cursor-pointer hover:bg-white' : 'cursor-default'} ${measuresOnly ? 'opacity-95' : ''}`}
               style={{
                 left: `${Math.min(92, Math.max(1, x * 100 + w * 50 - 12))}%`,
                 top: `${Math.min(94, Math.max(2, y * 100 - 4))}%`,
@@ -297,15 +323,16 @@ export default function SceneOverlay ({ elements, quality, selectedId, onSelect,
                 ...(selected ? ({ '--tw-ring-color': color } as React.CSSProperties) : {}),
               }}
               onClick={onSelect ? () => { onSelect(el) } : undefined}
-              aria-label={`${el.cls === 'OSEBA' ? 'Morebitna oseba' : CLS_LABEL[el.cls]}${el.kind ? ` (${el.kind.toLowerCase()})` : ''}${slope ? `, ${slope}` : ''}${stair ? `, ${stair}` : ''}${measure ? `, ${measure}` : ''} — ${STATUS_TEXT[el.status]}${pinned ? ' — pripeto' : ''}${el.cls === 'NEZNANO' ? ' — tapnite za označitev' : ''}`}
+              aria-label={`${name}${el.kind ? ` (${el.kind.toLowerCase()})` : ''}${slope ? `, ${slope}` : ''}${stair ? `, ${stair}` : ''}${measure ? `, ${measure}` : ''} — ${STATUS_TEXT[el.status]}${pinned ? ' — pripeto' : ''}${el.cls === 'NEZNANO' ? ' — tapnite za označitev' : ''}`}
             >
               {pinned ? <MapPin className="size-3" style={{ color }} aria-hidden /> : null}
               <Icon className="size-3" style={{ color }} aria-hidden />
-              <span>{el.cls === 'OSEBA' ? 'Morebitna oseba' : CLS_LABEL[el.cls]}{el.kind && el.kind !== 'NEZNANA' ? ` · ${el.kind.toLowerCase()}` : ''}</span>
+              <span className={measuresOnly ? 'text-[9px] font-normal text-zinc-500' : ''}>{name}{el.kind && el.kind !== 'NEZNANA' ? ` · ${el.kind.toLowerCase()}` : ''}</span>
               {stair ? <span className="font-semibold" style={{ color }}>{stair}</span> : null}
               {measure ? <span className="font-semibold" style={{ color }}>{measure}</span> : null}
               {slope ? <span className="font-semibold" style={{ color }}>{slope}</span> : null}
               <span className="font-normal text-zinc-500">· {STATUS_TEXT[el.status]}</span>
+              {semanticOnly ? <span className="font-normal text-zinc-500">· {confPct}</span> : null}
             </button>
           )
         })}
