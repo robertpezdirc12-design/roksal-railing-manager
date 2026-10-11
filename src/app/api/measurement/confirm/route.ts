@@ -24,13 +24,26 @@
 //   • engine — rezultat kanonične analize (POST /api/measure-engine/analyze):
 //     { domain?, validation?, confidence?, captureGuide? } — omejeno na 8 KB,
 //     zapisano v params.engine za revizijo/izvoz (§7 ena meritev — en vir resnice).
+//
+// R487 (issue #3 — MULTI-VIEW → KONSISTENTNA POTRDITEV) — aditivno:
+//   • strežniška konsolidacija: per-view dolžine se PRERAČUNAJO iz točk +
+//     kalibracij z obstoječim determinističnim computeGeometry (NE iz
+//     odjemalčeve izjave — ponovljivost §6: isti vhodi → isti rezultat);
+//   • params.multiView = { count, values, mean, spreadPct, conflict,
+//     manualOverride? } + revizija zapisa (konflikt je VIDEN, ne tih);
+//   • vrata: razpršenost > 15 % (prag AR konsolidatorja) BREZ ročnega popravka
+//     z razlogom → 409 (§4C »ne popravljaj geometrije tiho«, KPI »0 potrjenih
+//     mer z nerešenim kritičnim konfliktom«); manualOverride z razlogom (r455)
+//     je VELJAVNA rešitev → 201;
+//   • BREZ views ostane params BITNO enak staremu (r439/r455 legacy).
 
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { jsonError, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
 import { emitEvent } from '@/lib/notify'
-import { MEASURE_MODES } from '@/lib/measure-engine'
+import { MEASURE_MODES, computeGeometry, multiViewStats, type EngineCalib, type EnginePoint } from '@/lib/measure-engine'
+import { MEASURE_CONFLICT_PCT } from '@/lib/scene-understanding-core'
 
 const TYPES = ['OGRAJA', 'BALUSTRADA', 'NAGIB', 'OSTANEO']
 
@@ -65,6 +78,39 @@ function parseView (v: unknown): Record<string, unknown> | null {
 function num (v: unknown): number | null {
   return typeof v === 'number' && Number.isFinite(v) ? v : null
 }
+
+/** R487: dolžina enega pogleda iz točk + kalibracije — čisto tanek sloj nad
+ *  obstoječim determinističnim computeGeometry (merilno jedro NE podvajamo,
+ *  issue §2). Točke so normalizirane 0..1 z imgW/imgH (kot v kameri) ali že v
+ *  pikslih (kompatibilno z railing-layout). Predlogi (PREDLOG) ne štejejo. */
+function viewLengthCm (points: unknown, calibration: unknown): number | null {
+  if (!Array.isArray(points) || points.length < 2) return null
+  if (!calibration || typeof calibration !== 'object') return null
+  const c = calibration as { px?: unknown; cm?: unknown; imgW?: unknown; imgH?: unknown }
+  const px = Number(c.px)
+  const cm = Number(c.cm)
+  if (!Number.isFinite(px) || px <= 0 || !Number.isFinite(cm) || cm <= 0) return null
+  const imgW = Number(c.imgW)
+  const imgH = Number(c.imgH)
+  const calib: EngineCalib = {
+    px, cm,
+    ...(Number.isFinite(imgW) && imgW > 0 ? { imgW: Math.round(imgW) } : {}),
+    ...(Number.isFinite(imgH) && imgH > 0 ? { imgH: Math.round(imgH) } : {}),
+  }
+  const pts: EnginePoint[] = []
+  for (const p of points.slice(0, 64)) {
+    if (!p || typeof p !== 'object') continue
+    const q = p as { x?: unknown; y?: unknown; src?: unknown }
+    const x = Number(q.x)
+    const y = Number(q.y)
+    if (!Number.isFinite(x) || !Number.isFinite(y)) continue
+    pts.push({ x, y, ...(q.src === 'ROCNO' || q.src === 'PREDLOG' ? { src: q.src } : {}) })
+  }
+  if (pts.length < 2) return null
+  const total = computeGeometry(pts, calib).totalLengthCm
+  return total > 0 ? total : null
+}
+
 function int (v: unknown): number | null {
   const n = num(v)
   return n === null ? null : Math.round(n)
@@ -195,6 +241,44 @@ export async function POST (req: NextRequest) {
     engine = picked
   }
 
+  // ── R487 (issue #3): strežniška konsolidacija več pogledov (ADITIVNO) ──
+  // Dolžine vseh pogledov (primarni iz body.points+calibration, dodatni iz
+  // views[].points+calibration) se preračunajo z obstoječim computeGeometry,
+  // statistika (povprečje/razpršenost) pa z multiViewStats (lib) — NE iz
+  // odjemalčeve izjave. SAMO kadar so dodatni pogledi prisotni in je mogoče
+  // izračunati ≥ 2 dolžini (§4C »samo kadar podatki to omogočajo«).
+  let multiView: { count: number; values: number[]; mean: number; spreadPct: number; conflict: boolean; manualOverride?: boolean } | null = null
+  if (views) {
+    const lengths: number[] = []
+    const primary = viewLengthCm(body.points, body.calibration)
+    if (primary !== null) lengths.push(primary)
+    for (const v of views) {
+      const l = viewLengthCm(v.points, v.calibration)
+      if (l !== null) lengths.push(l)
+    }
+    const stats = multiViewStats(lengths)
+    if (stats) {
+      const conflict = stats.spreadPct > MEASURE_CONFLICT_PCT
+      multiView = {
+        count: stats.count,
+        values: stats.values,
+        mean: stats.mean,
+        spreadPct: stats.spreadPct,
+        conflict,
+        ...(manualOverride ? { manualOverride: true } : {}),
+      }
+      // §4C »konflikte prikaži uporabniku; ne popravljaj geometrije tiho« +
+      // KPI »0 potrjenih proizvodnih mer z nerešenim kritičnim konfliktom«:
+      // nerešeno razhajanje > 15 % BREZ ročnega popravka z razlogom →
+      // potrditev ZAVRNJENA. Ročni popravek z razlogom (r455) je veljavna
+      // rešitev — vrata ostanejo odprta (zavestna odločitev uporabnika).
+      if (conflict && !manualOverride) {
+        return jsonError(409, 'Pogledi se preveč razlikujejo.',
+          `Razpršenost ${multiView.spreadPct.toString().replace('.', ',')} % med ${multiView.count} pogledi presega ${MEASURE_CONFLICT_PCT} % — popravite točke ali kalibracijo na pogledih, ali podajte ročni popravek dolžine z razlogom (manualOverride).`)
+      }
+    }
+  }
+
   // points + calibration shranimo v params (zapis postopka za revizijo/ponovno izdelavo)
   // points: normalizirane koordinate 0..1; calibration dodatno nosi imgW/imgH za
   // pretvorbo v piksle pri ponovnem izračunu (GET /api/railing-layout?measurementId)
@@ -216,6 +300,8 @@ export async function POST (req: NextRequest) {
     }
     // R455: več pogledov, kakovost, zaupanje, ročni popravek — vse v params (revizija)
     if (views) extra.views = views
+    // R487: strežniško izračunana konsolidacija pogledov (revizija/izvoz)
+    if (multiView) extra.multiView = multiView
     if (quality) extra.quality = quality
     if (confidence !== null) extra.confidence = confidence
     if (manualOverride) extra.manualOverride = manualOverride
@@ -253,6 +339,7 @@ export async function POST (req: NextRequest) {
   const versionBits: string[] = []
   if (views) versionBits.push(`${views.length + 1} pogledov`)
   if (confidence !== null) versionBits.push(`zaupanje ${confidence} %`)
+  if (multiView) versionBits.push(`razpršenost ${multiView.spreadPct.toString().replace('.', ',')} %${multiView.conflict ? ' ⚠ konflikt' : ''}`)
   if (manualOverride) versionBits.push('ročni popravek dolžine')
   if (mode) versionBits.push(`način ${mode}`)
   await db.measurementVersion.create({
@@ -279,6 +366,8 @@ export async function POST (req: NextRequest) {
       // R455: razširjeni podatki o potrditvi (issue #10)
       ...(confidence !== null ? { confidence } : {}),
       ...(views ? { views: views.length } : {}),
+      // R487: strežniško izračunana konsolidacija v reviziji (konflikt VIDEN)
+      ...(multiView ? { multiView } : {}),
       ...(quality ? { qualityFlags: Object.keys(quality) } : {}),
       ...(manualOverride ? { manualOverride } : {}),
       // R457: način izmere + prisotnost engine rezultata (issue #12)

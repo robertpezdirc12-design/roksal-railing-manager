@@ -224,6 +224,31 @@ export function diagonalMetrics (ptsIn: EnginePoint[], calib: EngineCalib): Diag
   return pairs.map(([i, j]) => ({ i, j, lengthCm: r1(Math.hypot(px[j].x - px[i].x, px[j].y - px[i].y) * cmPerPx) }))
 }
 
+// ── R487 (issue #3 §4C): statistika strinjanja pogledov ──────────────────────
+// ISTA definicija povprečja/razpršenosti kot v kamera UI (multi memo) in AR
+// konsolidatorju (scene-understanding-core: (max−min)/mean, prag 15 %) — tanek
+// sloj NAD obstoječim computeGeometry (dolžine pogledov se izračunajo z njim),
+// NE nova konsolidacijska semantika. Uporabljena na strežniku (confirm) za
+// neodvisen, ponovljiv izračun (issue #3 §6 — ista koda, isti rezultat).
+
+export interface MultiViewStats {
+  count: number // število pogledov z izračunano dolžino
+  values: number[] // dolžine pogledov (cm, r1)
+  mean: number // povprečje (cm, r1)
+  spreadPct: number // razpršenost (max−min)/mean × 100 (r1)
+}
+
+/** Strinjanje dolžin pogledov: ≥ 2 veljavne vrednosti, sicer null (ni
+ *  konsolidacije, kadar podatki ne omogočajo — §4C »samo kadar podatki to
+ *  omogočajo«). Deterministična, brez stanja — ista na odjemalcu in strežniku. */
+export function multiViewStats (lengths: number[]): MultiViewStats | null {
+  const vals = lengths.filter((n) => Number.isFinite(n) && n > 0).map((n) => r1(n))
+  if (vals.length < 2) return null
+  const meanRaw = vals.reduce((a, b) => a + b, 0) / vals.length
+  const spreadPct = ((Math.max(...vals) - Math.min(...vals)) / meanRaw) * 100
+  return { count: vals.length, values: vals, mean: r1(meanRaw), spreadPct: r1(spreadPct) }
+}
+
 // ── §14: avtomatska geometrijska kontrola ────────────────────────────────────
 
 export function validateGeometry (
@@ -725,6 +750,8 @@ export interface ExportSource {
     confidence?: number | null
     quality?: Record<string, unknown> | null
     photoId?: string
+    /** R487 (issue #3): strežniško izračunana konsolidacija pogledov (confirm). */
+    multiView?: { count?: number; values?: number[]; mean?: number; spreadPct?: number; conflict?: boolean; manualOverride?: boolean } | null
     engine?: { domain?: DomainResult | null; validation?: ValidationIssue[] | null } | null
   } | null
 }
@@ -763,6 +790,15 @@ export function buildExportRows (m: ExportSource): ExportRow[] {
   const q = m.params?.quality
   if (q && typeof q.brightness === 'number') push('Zaupanje', 'Svetlost zajema', String(q.brightness), '0–255')
   if (q && typeof q.blurScore === 'number') push('Zaupanje', 'Ostrost (Laplace)', String(q.blurScore), '')
+  // R487 (issue #3 §4C): konsolidacija pogledov v izvozu — povprečje,
+  // razpršenost in izrecen zapis konflikta (NE tiho poravnano).
+  const mv = m.params?.multiView
+  if (mv) {
+    push('Pogledi', 'Število pogledov', mv.count != null ? String(Math.round(mv.count)) : '—', '')
+    if (mv.mean != null) push('Pogledi', 'Povprečje', f1(mv.mean), 'cm')
+    if (mv.spreadPct != null) push('Pogledi', 'Razpršenost', f1(mv.spreadPct), '%')
+    push('Pogledi', 'Strinjanje', mv.conflict ? (mv.manualOverride ? 'KONFLIKT — rešen z ročnim popravkom' : 'KONFLIKT') : 'strinjajo se', '')
+  }
   if (m.params?.photoId) push('Viri', 'Fotografija', m.params.photoId, 'id')
   if (m.note) push('Opombe', 'Opomba', m.note, '')
   // domenski rezultat (§8–§11)

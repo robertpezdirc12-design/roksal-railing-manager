@@ -343,6 +343,9 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
   const [overrideOn, setOverrideOn] = useState(false)
   const [overrideLen, setOverrideLen] = useState('')
   const [overrideReason, setOverrideReason] = useState('')
+  // R487 (issue #3): panel dodajanja pogleda — terenska pot (kamera/datoteka)
+  // OSTANE, poleg nje pa izbira obstoječe FOTO projekta (kot za 1. pogled)
+  const [addingView, setAddingView] = useState(false)
 
   const streamRef = useRef<MediaStream | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -641,6 +644,16 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
     void acceptImage(url)
   }
 
+  /** R487 (issue #3): izbere obstoječo FOTO kot DODATEN pogled — isti vzorec
+   *  kot izbira 1. pogleda (pickExisting), le da gre v addView namesto
+   *  acceptImage. Terenska pot (kamera/datoteka) ostaja neodvisno poleg. */
+  function pickExistingView (p: PhotoRow): void {
+    const url = parsePhoto(p.params)
+    if (!url) return
+    setAddingView(false)
+    void addView(url)
+  }
+
   /** Naloži fotografijo (POST /api/measure/photo) za AKTIVNI pogled. */
   async function uploadPhoto (): Promise<void> {
     if (!view) return
@@ -844,15 +857,28 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
     } finally { setBusy(false) }
   }
 
-  /** Končna dolžina: ročni popravek > povprečje pogledov > primarni pogled. */
+  /** Končna dolžina: ročni popravek > povprečje pogledov > primarni pogled.
+   *  R487 (issue #3 §4C): ob konfliktu pogledov (razpršenost > 5 %) BREZ
+   *  ročnega popravka vrednost NI na voljo — NE tiho povprečje (vrata POTRDI). */
   const finalLengthCm = useMemo(() => {
     if (overrideOn) {
       const v = Number(overrideLen.replace(',', '.'))
       return Number.isFinite(v) && v > 0 ? v : null
     }
-    if (multi.mean !== null && multi.lengths.length > 1) return Math.round(multi.mean * 10) / 10
+    if (multi.mean !== null && multi.lengths.length > 1) {
+      if (multi.spreadPct !== null && multi.spreadPct > 5) return null // konflikt → rešitev ali popravek
+      return Math.round(multi.mean * 10) / 10
+    }
     return calc.totalCm
   }, [overrideOn, overrideLen, multi, calc])
+
+  /** R487 (issue #3 §4C): konflikt pogledov (razpršenost > 5 %) brez rešitve —
+   *  POTRDI (in offline shranjevanje) onemogočena, dokler uporabnik NE popravi
+   *  točk/kalibracije na pogledih (→ razpršenost ≤ 5 %) ALI izrecno ne potrdi
+   *  razhajanja z ročnim popravkom dolžine z razlogom (manualOverride —
+   *  obstoječa r455 pot v tej fazi). 0 tihih povprečij ob konfliktu. */
+  const conflictBlocked = multi.lengths.length > 1 && multi.spreadPct !== null && multi.spreadPct > 5 &&
+    !(overrideOn && Number(overrideLen.replace(',', '.')) > 0 && overrideReason.trim().length >= 3)
 
   /** Potrditev in shranjevanje (POST /api/measurement/confirm) — R455 razširjeno. */
   async function confirm (again: boolean): Promise<void> {
@@ -1567,15 +1593,49 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
               {detecting ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Sparkles className="size-4" aria-hidden />}
               {detecting ? 'VLM …' : 'Zaznaj samodejno'}
             </Button>
-            {/* R455: dodatni pogled (§3) */}
+            {/* R455: dodatni pogled (§3) — R487 (issue #3): gumb odpre panel z
+                DVEMA potema — terenska (kamera/datoteka) in izbira obstoječe
+                FOTO projekta (isti vzorec kot 1. pogled) */}
             {views.length < MAX_VIEWS ? (
-              <Button size="sm" variant="outline" onClick={() => fileViewRef.current?.click()}>
+              <Button size="sm" variant="outline" onClick={() => setAddingView((a) => !a)} aria-expanded={addingView}>
                 <SquarePlus className="size-4" aria-hidden /> Dodaj pogled ({views.length}/{MAX_VIEWS})
               </Button>
             ) : null}
-            <input ref={fileViewRef} type="file" accept="image/*" capture="environment" className="hidden"
-              onChange={(e) => { void onFileView(e.target.files?.[0]); e.target.value = '' }} aria-label="Dodaj fotografijo istega objekta" />
           </div>
+
+          {/* R487 (issue #3): panel dodajanja pogleda — terenska pot OSTANE
+              (file/capture input) + alternativna izbira obstoječe FOTO */}
+          {addingView && views.length < MAX_VIEWS ? (
+            <div className="space-y-2 rounded-lg border border-amber-300 bg-amber-50/60 p-3 dark:border-amber-900 dark:bg-amber-950/30">
+              <p className="text-sm font-medium">Dodaj pogled istega objekta</p>
+              <p className="text-[11px] text-muted-foreground">
+                Vsak pogled ima svojo kalibracijo in točke — označite iste točke kot na prvem pogledu; pogledi se primerjajo v koraku Preverjanje.
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button size="sm" variant="outline" onClick={() => fileViewRef.current?.click()}>
+                  <Camera className="size-4" aria-hidden /> Posnemi / naloži iz telefona
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setAddingView(false)}>Prekliči</Button>
+              </div>
+              <input ref={fileViewRef} type="file" accept="image/*" capture="environment" className="hidden"
+                onChange={(e) => { setAddingView(false); void onFileView(e.target.files?.[0]); e.target.value = '' }} aria-label="Dodaj fotografijo istega objekta" />
+              {existingPhotos.length > 0 ? (
+                <div className="space-y-1.5">
+                  <p className="text-[11px] font-medium text-muted-foreground">Ali izberi obstoječo fotografijo:</p>
+                  <div className="grid max-h-56 grid-cols-3 gap-2 overflow-y-auto pr-1 sm:grid-cols-4" role="list">
+                    {existingPhotos.map((p) => (
+                      <button key={p.id} type="button" onClick={() => pickExistingView(p)} className="group overflow-hidden rounded-lg border text-left transition hover:border-roksal-amber" role="listitem">
+                        <img src={parsePhoto(p.params) ?? ''} alt={`Fotografija ${p.location ?? 'brez lokacije'}`} className="h-16 w-full object-cover" />
+                        <span className="block truncate px-1.5 py-1 text-[10px] text-muted-foreground group-hover:text-foreground">
+                          {p.location ?? p.project?.code ?? fmtDate(p.createdAt)}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
 
           {/* R457 (§2): vodilo načina za označevanje */}
           <p className="rounded-lg bg-muted/60 px-3 py-1.5 text-[11px] text-muted-foreground" role="note">
@@ -1834,7 +1894,7 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
                 <p className="text-xs text-muted-foreground">
                   Povprečje {fmt1((multi.mean ?? 0) / 100)} m · razpršenost {multi.spreadPct !== null ? `${fmt1(multi.spreadPct)} %` : '—'}
                   {multi.spreadPct !== null && multi.spreadPct > 5
-                    ? ' — ⚠ ocene se preveč razlikujejo: preverite kalibracijo ali dodajte jasen pogled'
+                    ? ' — ⚠ ocene se preveč razlikujejo: popravite točke ali kalibracijo na pogledih, ali vnesite lasersko meritev z razlogom v koraku Potrditev — potrditev je blokirana, dokler razhajanje ni rešeno'
                     : multi.spreadPct !== null && multi.spreadPct <= 2 ? ' — pogledi se odlično strinjajo' : ''}
                 </p>
               ) : (
@@ -2046,6 +2106,20 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
             </CardContent>
           </Card>
 
+          {/* R487 (issue #3 §4C): konflikt pogledov — VRATA potrditve. Razhajanje
+              > 5 % je VIDNO in blokira POTRDI, dokler ni rešeno (popravek
+              točk/kalibracije → strinjanje, ali ročna laserska mera z razlogom). */}
+          {conflictBlocked ? (
+            <div className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 dark:border-red-900 dark:bg-red-950/40" role="alert">
+              <p className="text-sm font-semibold text-red-900 dark:text-red-200">
+                ⚠ Pogledi se razlikujejo za {fmt1(multi.spreadPct ?? 0)} % — potrditev je blokirana.
+              </p>
+              <p className="mt-1 text-xs text-red-800 dark:text-red-300">
+                Popravite točke ali kalibracijo na pogledih (korak Meritev), ali izrecno potrdite razhajanje: vnesite lasersko meritev z razlogom prek »Ročno popravi dolžino« spodaj.
+              </p>
+            </div>
+          ) : null}
+
           <div className="grid gap-3 sm:grid-cols-3">
             <div className="space-y-2">
               <Label>Tip</Label>
@@ -2102,16 +2176,16 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
               {!online ? (
                 <Button
                   variant="outline" className="border-amber-400 bg-amber-50 text-amber-900 hover:bg-amber-100 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200 dark:hover:bg-amber-950"
-                  onClick={() => void saveOffline()} disabled={busy || !view.dataUrl}
+                  onClick={() => void saveOffline()} disabled={busy || !view.dataUrl || conflictBlocked}
                 >
                   {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <CloudUpload className="size-4" aria-hidden />}
                   Shrani (offline)
                 </Button>
               ) : null}
-              <Button variant="outline" onClick={() => void confirm(true)} disabled={busy || !views[0].photoId || finalLengthCm === null}>
+              <Button variant="outline" onClick={() => void confirm(true)} disabled={busy || !views[0].photoId || finalLengthCm === null || conflictBlocked}>
                 Shrani in meri naprej na isti fotografiji
               </Button>
-              <Button onClick={() => void confirm(false)} disabled={busy || !views[0].photoId || finalLengthCm === null}>
+              <Button onClick={() => void confirm(false)} disabled={busy || !views[0].photoId || finalLengthCm === null || conflictBlocked}>
                 {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Check className="size-4" aria-hidden />}
                 Potrdi in shrani meritev
               </Button>
