@@ -200,6 +200,14 @@ export interface SurfaceFeatures {
   textureVariance: number
   /** topel ton: deleč pikslov z R > B + 12 — 0..1 (zemlja/les) */
   warmth: number
+  /**
+   * R483 (F5): anizotropija smeri robov (−1..1) — (>0 pretežno VODORAVNE
+   * strukture/vlakna, <0 navpične, ~0 izotropno ali pravilna mreža obeh
+   * smeri). OPCIJSNO: če merilnik ni izračunal (starejši klicatelj), ga
+   * klasifikator NE uporabi — brez tega dokaza PLOŠČIC/LESA NE trdimo
+   * (poštenost §6: razred samo ob zanesljivi detekciji).
+   */
+  grainAnisotropy?: number
 }
 
 export interface SurfaceVerdict {
@@ -208,7 +216,13 @@ export interface SurfaceVerdict {
   note: string
 }
 
-/** Klasifikacija vrste podlage iz značilnic ROI (Faza 1 hevristika, brez ML). */
+/** Klasifikacija vrste podlage iz značilnic ROI (Faza 1 hevristika, brez ML).
+ *
+ * R483 (F5): PLOŠČICE (mreža fug v obeh smereh — izotropna gostota robov)
+ * in LES (topel ton + vzdolžna vlakna — anizotropija smeri). Oba razreda
+ * sta KONSERVATIVNA: zahtevata izmerjeno grainAnisotropy, zaupanje ≤ 0,5
+ * in sta vedno ročno popravljiva (predlog, ne trditev). Brez teh dokazov
+ * razreda NE vrneva (NEZNANA ostaja poštena zadnja možnost). */
 export function classifySurface (f: SurfaceFeatures): SurfaceVerdict {
   const dark = f.brightness < 60
   const veryGray = f.grayness > 0.72
@@ -217,15 +231,32 @@ export function classifySurface (f: SurfaceFeatures): SurfaceVerdict {
   const earthy = f.warmth > 0.42 && f.saturation < 0.38
   const gravelly = quiteGray && f.textureVariance > 950 && f.edgeDensity > 0.1
   const paved = quiteGray && f.edgeDensity > 0.055 && f.edgeDensity <= 0.16 && f.textureVariance > 220
+  // R483 (F5): smer teksture — samo, če jo je merilnik izračunal
+  const grain = typeof f.grainAnisotropy === 'number' && Number.isFinite(f.grainAnisotropy)
+    ? Math.max(-1, Math.min(1, f.grainAnisotropy))
+    : null
+  // LES: topel ton + izrazita vzdolžna vlakna (enosmerna tekstura)
+  const woody = grain != null && Math.abs(grain) > 0.18 &&
+    f.warmth > 0.5 && f.saturation < 0.45 && !veryGray
+  // PLOŠČICE: gosta mreža fug v OBEH smereh (uravnotežena smer) na
+  // raznoliki, a ne zelo grubi podlagi (gramoz ima višjo varianco)
+  const tiled = grain != null && Math.abs(grain) < 0.25 &&
+    f.edgeDensity > 0.16 && f.textureVariance > 300 && f.textureVariance < 900
 
   if (grassy) {
     return { kind: 'TRAVA', confidence: 0.62, note: 'zelena dominantna v spodnjem pasu' }
+  }
+  if (woody) {
+    return { kind: 'LES', confidence: 0.42, note: 'topel ton z vzdolžno teksturo (ocena)' }
   }
   if (earthy) {
     return { kind: 'ZEMLJA', confidence: 0.55, note: 'topel ton, zmerna nasičenost' }
   }
   if (dark && veryGray) {
     return { kind: 'ASFALT', confidence: 0.58, note: 'temna, skoraj brez barve' }
+  }
+  if (tiled) {
+    return { kind: 'PLOSCICE', confidence: 0.45, note: 'gosta mreža fuge v obeh smereh (ocena)' }
   }
   if (paved) {
     // fuge med ploščami/tlakovci dvigajo gostoto robov ob zmerni sivini
@@ -341,6 +372,13 @@ export const STAIR_MIN_LINES = 3
 export const STAIR_IRREGULAR_TOL = 0.35 // odstopanje razmaka od medija (delež)
 export const STAIR_LANDING_FACTOR = 1.9 // vrzel ≥ 1,9× medij → morebiten podest
 export const STAIR_DRIFT_MIN = 0.12 // drif središč ≥ 12 % širine → stranski pogled
+// R483 (F5): MONOTONOST — stopnice se VZPENJAJO v eni smeri:
+//   • y: vsaka naslednja črta za ≥ 0,5 % višine (strogo zaporedje — podvojena
+//     ali zlepljena detekcija vrhov ni stopnica);
+//   • smer vzpenjanja: središča črt se premikajo dosledno v ENO stran
+//     (cik-cak središč = izmenične detekcije, ne stopnišče).
+export const STAIR_MONO_MIN_GAP = 0.005 // min razmak med nastopoma (delež višine)
+export const STAIR_MONO_TOL_W = 0.01 // tolerantna meja "ni premika" (delež širine)
 
 /** Vhod percepcije: zaznana nastopna črta v delovnem canvasu (px). */
 export interface StairLineInput { y: number; xFrom: number; xTo: number }
@@ -358,7 +396,10 @@ export interface StairVerdict {
   note: string
 }
 
-/** Analiza vzorca nastopnih črt → predlog stopnišča (ali null, če ni vzorca). */
+/** Analiza vzorca nastopnih črt → predlog stopnišča (ali null, če ni vzorca).
+ * R483 (F5): vzorec ZAVRŽEN, če nastopne črte niso monotonne — vodoravne
+ * lamele/obloga (enakomeren niz brez smeri vzpenjanja) ne smejo več
+ * sprožiti STOPNICE (manj lažnih pozitivov, konservativna smer). */
 export function analyzeStairPattern (lines: StairLineInput[], w: number, h: number): StairVerdict | null {
   if (!Array.isArray(lines) || lines.length < STAIR_MIN_LINES) return null
   if (!Number.isFinite(w) || w < 16 || !Number.isFinite(h) || h < 16) return null
@@ -377,6 +418,30 @@ export function analyzeStairPattern (lines: StairLineInput[], w: number, h: numb
     ? gapsSorted[mid]
     : (gapsSorted[mid - 1] + gapsSorted[mid]) / 2
   if (!(medianGap >= 2)) return null // preplitko/gosto = šum, ne stopnice
+
+  // R483 (F5) MONOTONOST y: vsaka naslednja črta višje za ≥ 0,5 % višine —
+  // razmak pod tem je podvojena/zlepljena detekcija, ne ločena stopnica.
+  const minGapPx = Math.max(1, STAIR_MONO_MIN_GAP * h)
+  for (const g of gaps) {
+    if (g < minGapPx) return null
+  }
+
+  // R483 (F5) MONOTONOST smeri vzpenjanja: središča črt se med sosednjimi
+  // nastopi premikajo dosledno v eno stran (ali mirujejo — čelni pogled).
+  // Cik-cak (izmenično levo/desno čez tolerantno mejo) NI stopnišče.
+  const centersPre = sorted.map((l) => (l.xFrom + l.xTo) / 2)
+  const tolMono = STAIR_MONO_TOL_W * w
+  let monoDir = 0 // −1 = premiki levo, +1 = desno, 0 = miruje
+  for (let i = 1; i < centersPre.length; i++) {
+    const d = centersPre[i] - centersPre[i - 1]
+    if (d > tolMono) {
+      if (monoDir < 0) return null
+      monoDir = 1
+    } else if (d < -tolMono) {
+      if (monoDir > 0) return null
+      monoDir = -1
+    }
+  }
 
   // enakomernost in podest
   let stepIrregular = false

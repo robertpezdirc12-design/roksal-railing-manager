@@ -31,6 +31,20 @@
 //   sunkom (issue §10: „temperatura, pomnilnik, delovanje offline“). Nova
 //   seja začne spet od osnovnega načrta. Medpomnilniki sivin se PONOVNO
 //   uporabijo (ni alokacije Float32Array na vsakem kadrčku — manj GC pritiska).
+//
+// R483 (issue #8 — Faza 5 „popravki prepoznavanja“): PET konservativnih
+//   popravkov lažnih pozitivov (brez novih obljub — vsak samo ZMANJŠA
+//   napačne trditve ali izpelje podatke iz dejansko zaznanih dokazov):
+//   (1) OGRAJA: zahteva ≥ 2 vzporedni črti, bbox iz dejanskega obsega črt
+//       (prej: ena črta + namišljen polnoširinski bbox [0.05, …, 0.9, 0.14]);
+//   (2) gibanje: POVEZANE KOMPONENTE mreže zadetkov (≥ 2 % kadra) — vsaka
+//       svoj element (oseba ob robu + rastlina ≠ en velik okvir); stabilne
+//       ID-je čez sličice podari obstoječi stabilizeElements (IoU);
+//   (3) PLOŠČICE/LES: klasifikacija podlage iz anizotropije smeri robov
+//       (jedro) — brez izmerjene smeri razreda NE trdimo (NEZNANA);
+//   (4) STOPNICA: monotonost zaporedja (y + smer središč, jedro) in
+//       enakomeren lamelni niz v KADRU gre v OGRAJO, ne v STOPNICO;
+//   (5) PODLAGA: bbox iz točk dejanske maske tal (ne fiksna spodnja tretjina).
 
 import {
   analyzeStairPattern, classifySurface, estimateSlope, looksLikePerson, newSceneId, stabilizeElements,
@@ -142,6 +156,13 @@ const SOBEL_THRESHOLD = 52 // jakost roba na 0..255 sivinah
 const MOTION_PIXEL_THRESHOLD = 26 // |Δsivina| za "piksel se je spremenil"
 const MOTION_RATIO_MIN = 0.008 // ≥ 0,8 % spremenjenih pikslov = gibanje
 const HLINE_STRONG = 0.16 // delež močnih vodoravnih robov v vrstici = "črta"
+
+// ── R483 (F5): OGRAJA iz dejanskih dokazov + GIBANJE po komponentah ────────
+const FENCE_MIN_LINES = 2 // ≥ 2 vzporedni črti = dokaz o ograji (ročaj+lef)
+const MOTION_COMPONENT_MIN = 0.02 // komponenta gibanja < 2 % kadra = šum
+const MOTION_MAX_COMPONENTS = 4 // zgornja meja elementov gibanja na kader
+const LAMELLA_GAP_TOL = 0.25 // razmaki znotraj ±25 % mediana = "enakomerno"
+const LAMELLA_SPAN_TOL = 0.12 // razponi znotraj ±12 % mediana = "lamele"
 
 // ── R469 (F3 §4): STOPNICE — iskanje nastopnih črt ──────────────────────────
 const STAIR_SEARCH_TOP = 0.15 // pas iskanja nastopov (od zgoraj) — širše kot ROB
@@ -282,8 +303,10 @@ export function startSceneLoop (video: HTMLVideoElement, opts: SceneLoopOptions)
   }
 }
 
-/** Analiza ene sličice → novi elementi (brez stabilizacije). */
-function analyzeFrame (
+/** Analiza ene sličice → novi elementi (brez stabilizacije).
+ * R483 (F5): ČISTA funkcija (brez DOM) — izvožena za enotsko testiranje
+ * popravkov prepoznavanja (sintetični kadri v bun). */
+export function analyzeFrame (
   data: Uint8ClampedArray, gray: Float32Array, w: number, h: number,
   prevGray: Float32Array | null, phoneRollDeg: number | null,
 ): SceneElement[] {
@@ -315,7 +338,10 @@ function analyzeFrame (
     status: verdict.confidence >= 0.55 ? 'PREPOZNANO' : verdict.confidence >= 0.4 ? 'VERJETNO' : 'NEJASNO',
     source: 'LOKALNO',
     confidence: verdict.confidence,
-    bbox: [0, 2 / 3, 1, 1 / 3],
+    // R483 (F5): bbox iz dejanske maske tal (min/max točk poligona) — pri
+    // kameri pod kotom prikaz sledi zaznani regiji, ne fiksni tretjini.
+    // Fallback na staro območje samo, če maske ni (pošten padec).
+    bbox: bboxFromMaskPoints(floorMask?.maskPoints ?? []) ?? [0, 2 / 3, 1, 1 / 3],
     kind: verdict.kind,
     ...(floorMask != null ? { maskPoints: floorMask.maskPoints } : {}),
     ...(slope.slopeDeg != null
@@ -359,23 +385,32 @@ function analyzeFrame (
   //    Ostanek gibanja ostane OVIRA (hevristika NE trdi „oseba“ brez
   //    oblike figure — issue §5 poštenost). ────────────────────────────────
   if (prevGray) {
-    const motion = motionBox(gray, prevGray, w, h)
-    if (motion) {
-      const personLike = looksLikePerson(motion)
+    // R483 (F5): POVEZANE KOMPONENTE gibanja — vsaka komponenta svoj element
+    // (oseba ob robu + majhna rastlina = DVA objekta, ne en velik okvir, §2).
+    // Oseba/ovira klasifikacija po komponenti (looksLikePerson), stabilne
+    // ID-je čez sličice podari stabilizeElements — enako kot za vse elemente.
+    for (const box of detectMotionBoxes(gray, prevGray, w, h)) {
+      const personLike = looksLikePerson(box)
       elements.push({
         id: newSceneId(),
         cls: personLike ? 'OSEBA' : 'OVIRA',
         status: personLike ? 'NEJASNO' : 'VERJETNO',
         source: 'LOKALNO',
         confidence: personLike ? 0.3 : 0.35,
-        bbox: motion,
+        bbox: box,
         at,
       })
     }
   }
 
   // ── STRUKTURA: STOPNICA (F3 §4) z bogatimi podatki ALI OGRAJA (F1) ─────────
-  if (stair != null) {
+  // R483 (F5): enakomeren niz vzporednih črt (isti razmaki, isti razponi) je
+  // v enem 2D pogledu bolj verjetno ograja/lamele ali fasadna obloga kot
+  // stopnice — prave stopnice kažejo perspektivne razlike med nastopi. Tak
+  // vzorec NE sproži STOPNICE (konservativno zavračanje) in gre v OGRAJO,
+  // če ima ≥ 2 črti (dokaz o vzporednih letvah).
+  const lamellaLike = isUniformLamellaStack(stairDetect.lines)
+  if (stair != null && !lamellaLike) {
     // bbox iz unije nastopnih črt (+ blazina)
     const xs = stair.stepLines.flatMap((l) => [l.x1, l.x2])
     const ys = stair.stepLines.flatMap((l) => [l.y1, l.y2])
@@ -399,15 +434,34 @@ function analyzeFrame (
       geomStatus: 'GEOMETRIJA_OCENJENA',
       at,
     })
-  } else if (stairDetect.lines.length >= 1 && stairDetect.strongRowRatio > HLINE_STRONG) {
-    const p = stairDetect.lines[0].y
+  } else if (stairDetect.lines.length >= FENCE_MIN_LINES) {
+    // R483 (F5): OGRAJA iz DEJANSKO ZAZNANIH dokazov — ≥ 2 vzporedni črti
+    // (ročaj + vmesna letev / lamele), bbox iz dejanskega obsega črt. Brez
+    // dokazov element NI ustvarjen (prej: ena črta + namišljen
+    // polnoširinski bbox — senca/strešni rob je postal „ograja“).
+    let minX = w; let minY = h; let maxX = -1; let maxY = -1
+    for (const l of stairDetect.lines) {
+      if (l.xFrom < minX) minX = l.xFrom
+      if (l.xTo > maxX) maxX = l.xTo
+      if (l.y < minY) minY = l.y
+      if (l.y > maxY) maxY = l.y
+    }
+    const fx0 = Math.max(0, minX / w - 0.01)
+    const fx1 = Math.min(1, (maxX + 1) / w + 0.01)
+    const fy0 = Math.max(0, (minY - 1) / h - 0.02)
+    const fy1 = Math.min(1, (maxY + 1) / h + 0.02)
     elements.push({
       id: newSceneId(),
       cls: 'OGRAJA',
       status: 'NEJASNO',
       source: 'LOKALNO',
       confidence: 0.25,
-      bbox: [0.05, Math.max(0, p / h - 0.06), 0.9, 0.14],
+      bbox: [
+        Math.max(0, Math.round(fx0 * 1000) / 1000),
+        Math.max(0, Math.round(fy0 * 1000) / 1000),
+        Math.max(0.02, Math.round((fx1 - fx0) * 1000) / 1000),
+        Math.max(0.02, Math.round((fy1 - fy0) * 1000) / 1000),
+      ],
       at,
     })
   }
@@ -454,10 +508,15 @@ function computeSurfaceFeatures (data: Uint8ClampedArray, w: number, yFrom: numb
   }
 }
 
-/** Doda edgeDensity (delež močnih Sobel robov) obstoječim značilnicam pasu. */
+/** Doda edgeDensity (delež močnih Sobel robov) obstoječim značilnicam pasu.
+ * R483 (F5): doda še grainAnisotropy — ravnovesje smeri robov (Σ|gy|−Σ|gx|)
+ * glede na skupno jakost: >0 pretežno vodoravne strukture (vlakna lesa),
+ * <0 navpične, ~0 izotropno ali mreža obeh smeri (fuge ploščic). */
 function withEdgeDensity (f: SurfaceFeatures, gray: Float32Array, w: number, yFrom: number, yTo: number): SurfaceFeatures {
   let strong = 0
   let total = 0
+  let sumGx = 0
+  let sumGy = 0
   const yMax = Math.min(yTo, Math.floor(gray.length / Math.max(1, w)) - 1)
   for (let y = Math.max(1, yFrom); y < yMax; y++) {
     for (let x = 1; x < w - 1; x++) {
@@ -465,15 +524,29 @@ function withEdgeDensity (f: SurfaceFeatures, gray: Float32Array, w: number, yFr
       const gx = Math.abs(-gray[i - w - 1] - 2 * gray[i - 1] - gray[i + w - 1] + gray[i - w + 1] + 2 * gray[i + 1] + gray[i + w + 1])
       const gy = Math.abs(-gray[i - w - 1] - 2 * gray[i - w] - gray[i - w + 1] + gray[i + w - 1] + 2 * gray[i + w] + gray[i + w + 1])
       if (Math.max(gx, gy) > SOBEL_THRESHOLD) strong++
+      sumGx += gx
+      sumGy += gy
       total++
     }
   }
-  return { ...f, edgeDensity: total > 0 ? strong / total : 0 }
+  const denom = sumGx + sumGy
+  return {
+    ...f,
+    edgeDensity: total > 0 ? strong / total : 0,
+    grainAnisotropy: denom > 0 ? Math.max(-1, Math.min(1, (sumGy - sumGx) / denom)) : 0,
+  }
 }
 
-/** Box največjega območja sprememb med sličicami (0..1) ali null. */
-function motionBox (gray: Float32Array, prev: Float32Array, w: number, h: number): [number, number, number, number] | null {
-  const cell = 8 // groba mreža 8-px celic — dovolj za bbox ovire
+// ── R483 (F5): GIBANJE = POVEZANE KOMPONENTE mreže zadetkov ──────────────
+// Stara motionBox je ZDRAŽILA vse spremembe v EN okvir (oseba ob robu + majhna
+// rastlina = en velik OSEBA/OVIRA). Novo: mreža 8-px celic se razcepi na
+// povezane komponente (BFS po 4-sosednosti); komponenta < 2 % površine
+// kadra je šum. Vrne 0..N okvirjev (normaliziranih 0..1) — vsak postane
+// svoj element v analyzeFrame. ČISTA funkcija (testirljiva v bun).
+export function detectMotionBoxes (
+  gray: Float32Array, prev: Float32Array, w: number, h: number,
+): Array<[number, number, number, number]> {
+  const cell = 8 // groba mreža 8-px celic — ista kot pri segmentaciji tal
   const gw = Math.ceil(w / cell)
   const gh = Math.ceil(h / cell)
   const hit = new Uint8Array(gw * gh)
@@ -487,24 +560,95 @@ function motionBox (gray: Float32Array, prev: Float32Array, w: number, h: number
       }
     }
   }
-  if (changed / (w * h) < MOTION_RATIO_MIN) return null
-  let minX = gw; let minY = gh; let maxX = -1; let maxY = -1
+  if (changed / (w * h) < MOTION_RATIO_MIN) return []
+
+  // povezane komponente (4-sosednost, BFS z izrecnim skladom)
+  const seen = new Uint8Array(gw * gh)
+  const stack: number[] = []
+  const boxes: Array<{ cells: number; x0: number; y0: number; x1: number; y1: number }> = []
   for (let gy = 0; gy < gh; gy++) {
     for (let gx = 0; gx < gw; gx++) {
-      if (!hit[gy * gw + gx]) continue
-      if (gx < minX) minX = gx
-      if (gy < minY) minY = gy
-      if (gx > maxX) maxX = gx
-      if (gy > maxY) maxY = gy
+      const start = gy * gw + gx
+      if (hit[start] === 0 || seen[start] === 1) continue
+      seen[start] = 1
+      stack.length = 0
+      stack.push(start)
+      let cells = 0
+      let x0 = gx; let y0 = gy; let x1 = gx; let y1 = gy
+      while (stack.length > 0) {
+        const idx = stack.pop() as number
+        const cx = idx % gw
+        const cy = (idx - cx) / gw
+        cells++
+        if (cx < x0) x0 = cx
+        if (cx > x1) x1 = cx
+        if (cy < y0) y0 = cy
+        if (cy > y1) y1 = cy
+        const neighbours = [
+          cy > 0 ? idx - gw : -1,
+          cy < gh - 1 ? idx + gw : -1,
+          cx > 0 ? idx - 1 : -1,
+          cx < gw - 1 ? idx + 1 : -1,
+        ]
+        for (const nb of neighbours) {
+          if (nb < 0 || seen[nb] === 1 || hit[nb] === 0) continue
+          seen[nb] = 1
+          stack.push(nb)
+        }
+      }
+      boxes.push({ cells, x0, y0, x1, y1 })
     }
   }
-  if (maxX < 0) return null
-  return [
-    (minX * cell) / w,
-    (minY * cell) / h,
-    Math.min(1, ((maxX - minX + 1) * cell) / w),
-    Math.min(1, ((maxY - minY + 1) * cell) / h),
-  ]
+
+  const totalCells = gw * gh
+  return boxes
+    .filter((b) => b.cells / totalCells >= MOTION_COMPONENT_MIN)
+    .sort((a, b) => b.cells - a.cells)
+    .slice(0, MOTION_MAX_COMPONENTS)
+    .map((b) => [
+      Math.min(1, (b.x0 * cell) / w),
+      Math.min(1, (b.y0 * cell) / h),
+      Math.min(1, ((b.x1 - b.x0 + 1) * cell) / w),
+      Math.min(1, ((b.y1 - b.y0 + 1) * cell) / h),
+    ] as [number, number, number, number])
+}
+
+// ── R483 (F5): bbox iz točk maske (PODLAGA sledi zaznani regiji) ───────────
+function bboxFromMaskPoints (pts: ScenePoint[]): [number, number, number, number] | null {
+  if (pts.length < 3) return null
+  let minX = 1; let minY = 1; let maxX = 0; let maxY = 0
+  for (const p of pts) {
+    if (p.x < minX) minX = p.x
+    if (p.x > maxX) maxX = p.x
+    if (p.y < minY) minY = p.y
+    if (p.y > maxY) maxY = p.y
+  }
+  const bw = maxX - minX
+  const bh = maxY - minY
+  if (!(bw > 0) || !(bh > 0)) return null
+  return [minX, minY, bw, bh]
+}
+
+// ── R483 (F5): enakomeren niz vzporednih črt = lamelna stapnica ───────────
+// ≥ 3 črte z razmaki znotraj ±25 % mediana in razponi znotraj ±12 % mediana
+// so v enem 2D pogledu bolj verjetno lamele ograje / fasadna obloga kot
+// stopnice (prave stopnice kažejo perspektivno zoženje razmakov in razponov).
+// Konservativno: tak vzorec NE sproži STOPNICE (gre v OGRAJO po FENCE_MIN_LINES).
+function isUniformLamellaStack (lines: StairLineInput[]): boolean {
+  if (lines.length < 3) return false
+  const gaps: number[] = []
+  for (let i = 1; i < lines.length; i++) gaps.push(lines[i].y - lines[i - 1].y)
+  const median = (arr: number[]): number => {
+    const s = [...arr].sort((a, b) => a - b)
+    const m = Math.floor(s.length / 2)
+    return s.length % 2 === 1 ? s[m] : (s[m - 1] + s[m]) / 2
+  }
+  const g = median(gaps)
+  const sp = median(lines.map((l) => l.xTo - l.xFrom))
+  if (!(g > 0) || !(sp > 0)) return false
+  const gapsOk = gaps.every((x) => Math.abs(x - g) <= LAMELLA_GAP_TOL * g)
+  const spansOk = lines.every((l) => Math.abs((l.xTo - l.xFrom) - sp) <= LAMELLA_SPAN_TOL * sp)
+  return gapsOk && spansOk
 }
 
 interface RowStrength { rows: number[]; overallRatio: number }
