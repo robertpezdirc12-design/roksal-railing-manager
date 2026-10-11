@@ -46,8 +46,9 @@ local-*
 *.log
 dev.log
 dev.out.log
-test
-prompt
+# lokalne orodne mape v korenu (NE goli vzorci — ujeli so tudi src/app/api/webhooks/[id]/test/)
+/test
+/prompt
 
 server.log
 # Skills directory
