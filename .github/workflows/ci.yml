@@ -92,6 +92,7 @@ jobs:
           - grupa: r480
           - grupa: r481
           - grupa: r483
+          - grupa: r484
     services:
       postgres:
         image: postgres:16

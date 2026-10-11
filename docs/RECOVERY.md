@@ -2,6 +2,7 @@
 
 > Faza: R441 · Issue: GitLab #3 (DISASTER RECOVERY & SECURITY)
 > Datum vzpostavitve: 7. 10. 2026
+> ⚠️ Zastarelo glede vira resnice — glej docs/RECOVERY-STATUS.md (R484).
 
 ## 1. Cilji
 
