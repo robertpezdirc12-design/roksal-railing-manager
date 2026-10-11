@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { rateLimited } from '@/lib/rate-limit'
+import { consentStatus, photosBlockedReason } from '@/lib/pin-core'
 
 // /api/public/portal — JAVNI pogled portala stranke (route-map izvirnika: /p/[token])
 // Brez avtentikacije — dostop ureja neuraden žeton povezave (veljaven, ne preklican).
 // Payload je namerno VARNI podskupina: brez zneskov, internih opomb, dodelitev in revizije.
 // Šteje ogled (views, lastViewedAt) + tempomat na žeton (60 zahtev/min — skupni R437 lib).
+// R479 (issue #9 §10 — GDPR): fotografije stranke se javno izpišejo SAMO ob
+// VELJAVNEM soglasju (Project.photoConsentAt/…ExpiresAt); sicer so zamaknjene
+// in odgovor nosi photosBlocked z razlogom (risbe/časovnica ostanejo).
 
 export const dynamic = 'force-dynamic'
 
@@ -41,6 +45,7 @@ export async function GET (req: NextRequest) {
       project: {
         select: {
           code: true, title: true, status: true, address: true, createdAt: true,
+          photoConsentAt: true, photoConsentExpiresAt: true,
           customer: { select: { name: true } },
           quotes: { select: { code: true, signedAt: true, signedBy: true }, where: { signedAt: { not: null } }, orderBy: { signedAt: 'asc' } },
           workOrders: { select: { code: true, startedAt: true, completedAt: true }, orderBy: { createdAt: 'asc' } },
@@ -84,14 +89,21 @@ export async function GET (req: NextRequest) {
       }
     : null
 
-  const photos = p.measurements
-    .map((m) => {
-      try {
-        const params = m.params ? (JSON.parse(m.params) as { photo?: string }) : {}
-        return { location: m.location ?? 'Zaključeno delo', photo: params.photo ?? null, at: m.createdAt.toISOString() }
-      } catch { return null }
-    })
-    .filter((x): x is { location: string; photo: string | null; at: string } => x !== null && !!x.photo)
+  // R479 — GDPR consent gate: fotografije IZKLJUČNO ob veljavnem soglasju.
+  // Brez soglasja / po poteku: photos = [] + photosBlocked z razlogom
+  // (portal OSTANE dostopen — zamaknjene so samo fotografije, ne celotna pot).
+  const consent = consentStatus(p)
+  const photosBlocked = photosBlockedReason(consent)
+  const photos = consent === 'VELJAVNO'
+    ? p.measurements
+      .map((m) => {
+        try {
+          const params = m.params ? (JSON.parse(m.params) as { photo?: string }) : {}
+          return { location: m.location ?? 'Zaključeno delo', photo: params.photo ?? null, at: m.createdAt.toISOString() }
+        } catch { return null }
+      })
+      .filter((x): x is { location: string; photo: string | null; at: string } => x !== null && !!x.photo)
+    : []
 
   return NextResponse.json({
     data: {
@@ -106,6 +118,7 @@ export async function GET (req: NextRequest) {
       timeline,
       warranty,
       photos,
+      photosBlocked,
       company: COMPANY,
       link: { expiresAt: link.expiresAt.toISOString() },
     },

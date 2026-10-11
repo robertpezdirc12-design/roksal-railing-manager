@@ -58,6 +58,10 @@ model User {
   registrations   Registration[] @relation("regAuthor") // R462: avtorji registracij (issue #17 §3)
   loopClosures    LoopClosure[] @relation("loopAuthor") // R462: avtorji loop checkov (issue #17 §5)
   productionElements ProductionElement[] @relation("productionElements") // R465: zadnji spreminjalci prefab elementov (issue #4)
+  reviewPinsAuthored ReviewPin[] @relation("reviewPinAuthor") // R479: pripeti komentarji — avtor (issue #9 §7)
+  reviewPinsResolved ReviewPin[] @relation("reviewPinResolver") // R479: kdo je rešil/zaprl pin
+  reviewLinksCreated ReviewLink[] @relation("reviewLinkCreator") // R479: izdajatelji javnih pregledov (§7)
+  consentedProjects Project[] @relation("projectPhotoConsent") // R479: projekti, kjer je zabeležil GDPR soglasje (§10)
 }
 
 model Session {
@@ -127,6 +131,14 @@ model Project {
   customer   Customer? @relation(fields: [customerId], references: [id])
   address    String?
   note       String?
+  // R479 (issue #9 §10 osnova): GDPR soglasje za objavo fotografij projekta.
+  // Vsako javno pot (portal, javni pregled) sme fotografije izpisati SAMO ob
+  // VELJAVNEM soglasju (pin-core.consentStatus); interno (prijava) ostanejo
+  // vidne z opozorilom. V audit NE zapisujemo prostega teksta soglasja.
+  photoConsentAt        DateTime? // kdaj je bilo soglasje dano
+  photoConsentExpiresAt DateTime? // rok veljavnosti (null = brez roka)
+  photoConsentById      String? // kdo je soglasje zabeležil
+  photoConsentBy        User? @relation("projectPhotoConsent", fields: [photoConsentById], references: [id], onDelete: SetNull)
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
 
@@ -1469,6 +1481,8 @@ model FenceRun {
   segments FenceSegment[]
   versions FenceRunVersion[]
   captureSessions CaptureSession[] // R461: QA zajemi nad tekačem (issue #16 — sloj, ne podvajanje)
+  reviewPins ReviewPin[] // R479: pripeti komentarji pregleda (issue #9 §7)
+  reviewLinks ReviewLink[] // R479: javne delitve pregleda (issue #9 §7)
 
   @@index([projectId, updatedAt])
 }
@@ -1519,6 +1533,66 @@ model FenceRunVersion {
   createdAt  DateTime @default(now())
 
   @@index([fenceRunId, version])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// REVIEW PINS + JAVNI PRIKAZ PREGLEDA (R479 — issue #9 §7 + §10 osnova)
+// Pripeti komentarji (pini) na segment/vozlišče/fotografijo tekača + varna
+// javna delitev enotnega pregleda z žetonom. Pini so SAMO pripombe —
+// pripomba NIKOLI ne spremeni mere (to lahko samo obstoječi verify/confirm
+// tok tekača z revizijo). internalNote NIKOLI ne zapusti strežnika na javni
+// poti. Žetoni: omejeni (rok), preklicljivi, tempomat 60/min, štetje ogledov
+// (vzorec PortalLink R435).
+// ═══════════════════════════════════════════════════════════════════════════
+
+// PIN — pripomba pripeta na konkreten cilj tekača (§7: "skice/komentarje,
+// pripete na konkreten segment/točko/fotografijo, s statusom in avtorjem").
+// targetType SEGMENT | VOZLISCE | FOTOGRAFIJA; targetKey seg-N (N≥1, usklajeno
+// z model-core/dvojčkom) | node-N (N≥0) | capturePhotoId (cuid).
+// x/y = opcijsna pozicija pina na tlorisu v SVETOVNEM XY modela (cm; izvor =
+// prvo vozlišče, glej model-core). snapshot = JSON posnetek cilja ob
+// nastanku ({ segmentLabel, angleDeg, lengthCm } ipd.) — seg-N ključi so
+// izpeljava in se lahko premaknejo, zato pin hrani dokaz o takratni geometriji.
+model ReviewPin {
+  id           String    @id @default(cuid())
+  fenceRunId   String
+  fenceRun     FenceRun  @relation(fields: [fenceRunId], references: [id], onDelete: Cascade)
+  authorId     String?
+  author       User?     @relation("reviewPinAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  targetType   String // SEGMENT | VOZLISCE | FOTOGRAFIJA
+  targetKey    String // seg-N | node-N | capturePhotoId
+  x            Decimal?  @db.Decimal(10,2) // svetovni XY modela (cm) — opcijsno
+  y            Decimal?  @db.Decimal(10,2)
+  note         String // javna vidna opomba
+  internalNote String? // INTERNI — nikoli na javni poti (§7 javni žeton)
+  status       String    @default("ODPRTO") // ODPRTO | RESENO | ZAPRT
+  resolvedAt   DateTime?
+  resolvedById String?
+  resolvedBy   User?     @relation("reviewPinResolver", fields: [resolvedById], references: [id], onDelete: SetNull)
+  snapshot     String? // JSON posnetek cilja ob nastanku (past premika seg-N)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([fenceRunId, status])
+}
+
+// JAVNA DELITEV PREGLEDA — žeton enotnega pregledovalnika (vzorec PortalLink).
+// Veljaven: ni pretekel (expiresAt) in ni preklican (revokedAt). Javni odgovor
+// (/api/public/review) je VARNI podskup: brez internalNote, brez e-pošte
+// uporabnikov, brez cen/marž; fotografije SAMO ob VELJAVNEM GDPR soglasju.
+model ReviewLink {
+  id          String    @id @default(cuid())
+  token       String    @unique // 'rv-' + cryptorandom (enak vzorec kot 'pt-')
+  fenceRunId  String
+  fenceRun    FenceRun  @relation(fields: [fenceRunId], references: [id], onDelete: Cascade)
+  createdById String?
+  createdBy   User?     @relation("reviewLinkCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  note        String? // interna opomba (npr. "poslano stranki na e-pošto")
+  viewCount   Int       @default(0)
+  lastViewAt  DateTime?
+  revokedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  expiresAt   DateTime
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
