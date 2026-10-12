@@ -896,6 +896,46 @@ model Product {
   priceRules    PriceRule[]      @relation("productPriceRules")
   photoViz      PhotoVisualization[] @relation("photoVizProduct") // R459: foto-vizualizacije tega izdelka
   fenceRuns     FenceRun[] // R460: ograjni tekači v tem izdelku (issue #15)
+  assets        ProductAsset[] // R493: originalna produktna gradiva (issue #6)
+}
+
+// ─── Originalno produktno gradivo ROKSAL (R493, issue #6 §2) ───────────────
+// En zapis = ena datoteka z dokazljivo provenienco. Izvirniki se NE spreminjajo;
+// izpeljane optimizirane različice nosijo svojo pot in povezavo sem.
+
+model ProductAsset {
+  id          String    @id @default(cuid())
+  productId   String?
+  product     Product?  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variantSku  String? // povezava na ProductVariant.sku (ne FK — variant se lahko izbriše posebej)
+
+  // kaj gradivo prikazuje
+  kind        String // FOTO_IZDELEK | PROFIL_PRESEK | BARVNA_LESTVICA | DETAJL | GALERIJA | KOMPONENTA
+  orientation String? // POKOCNA | PRECNA | SPLOSNO
+  view        String? // SPREDAJ | STRAN | DETAJL | POGLED
+  colorName   String? // POTRJENO ime odtenka (samo, kadar ga potrjuje izvorni podatek)
+  colorApprox String? // VLM ocena družine barve — IZKLJUČNO približek, nikoli uradno ime
+
+  // datoteka (izvirnik);
+  filePath    String? // pot do nespremenjenega izvirnika v public/assets/roksal/src (null = datoteka še ni pridobljena)
+  cdnUrl      String? // OSS kopija, prek katere je bil izvirnik prenešen (z-ai image-search)
+  sourceUrl   String? // izvirni URL na roksal.com, kje je znan
+  sha256      String? // kontrolna vsota datoteke (null, če datoteke ni)
+  bytes       Int? // velikost izvirnika v bajtih
+
+  // provenienca in dovoljenje (issue #6 §2/§4)
+  sourceName  String // npr. »Roksal d.o.o. — roksal.com (javna produktna stran)«
+  capturedAt DateTime  @default(now())
+  permission String // podlaga dovoljenja za uporabo v aplikaciji
+  status      String // VERIFIED | NEEDS_REVIEW | MISSING | NOT_AUTHORIZED
+  note        String?
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([productId])
+  @@index([status])
+  @@index([kind])
 }
 
 // ─── Varianta produkta (barva/RAL, dimenzija; issue #7 §1) ──────────────────

@@ -1,6 +1,6 @@
 {
   "name": "nextjs_tailwind_shadcn_ts",
-  "version": "1.45.0",
+  "version": "1.46.0",
   "private": true,
   "scripts": {
     "dev": "next dev -p 3000 2>&1 | tee dev.log",
@@ -17,7 +17,7 @@
     "db:push": "echo '[db:push] OPOZORILO: prisma db push --accept-data-loss je RAZVOJNO/RECOVERY orodje — produkcija uporablja db:migrate:deploy. Za nadaljevanje poženi: bunx prisma db push --accept-data-loss' && exit 1",
     "db:push:force": "prisma db push --accept-data-loss",
     "db:generate": "prisma generate",
-    "db:seed": "node prisma/seed.cjs && node prisma/seed-r437.cjs && node prisma/seed-r442.cjs && node prisma/seed-r445.cjs && node prisma/seed-r446.cjs && node prisma/seed-r447.cjs && node prisma/seed-r449.cjs && node prisma/seed-r475.cjs",
+    "db:seed": "node prisma/seed.cjs && node prisma/seed-r437.cjs && node prisma/seed-r442.cjs && node prisma/seed-r445.cjs && node prisma/seed-r446.cjs && node prisma/seed-r447.cjs && node prisma/seed-r449.cjs && node prisma/seed-r475.cjs && node prisma/seed-r493.cjs",
     "db:seed:test": "node prisma/seed-test.cjs",
     "db:reset": "prisma migrate reset"
   },

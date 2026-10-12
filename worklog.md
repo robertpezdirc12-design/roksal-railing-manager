@@ -1691,3 +1691,29 @@ Stage Summary:
 - BREZ sprememb aplikacijske kode — samo operativna vzdrževalnost
 
 R492-dodatek: prvi CI poskus na 6ebb946 se je obesil na jobu Regresija (r480) (21+ min, običajno 1,1 min — ujet runner, ne koda) → preklic + rerun: run #43 USPEH, **21/21 jobov zeleno** (3,5 min).
+
+---
+Task ID: R493 (+ okoljska obnova po 2. resetu sandboxa)
+Agent: main (Z.ai Code)
+Task: Issue #6 — ORIGINAL ROKSAL PRODUCT ASSET LIBRARY: pravi izdelki, profili, barve (izvaja po smernici lastnika: »mas na spletu roksal kranj vse mas kaj ponujajo… ker za njih delamo«)
+
+Work Log:
+- OBNOVA OKOLJA (2. reset sandboxa tovrstne): klon fe11901 → bun install → embedded PG :54329 (pg_ctl ročno — dev-db.mjs se je obesil) → migrate deploy + polni seed + seed:test → dev :3000 prek DVOJNE VILICE (nohup/setsid/start-stop-daemon so umirali; vzrok: session cleanup — R493 lekcija: ops/dev-serve.sh + python daemonize)
+- regresija po obnovi: r484 37/37 (prvi zagon 31/37 — server se je še ogreval) · kasneje r483–r490 606/606 + r493 59/59 = 665/665 ✓
+- RAZISKAVA roksal.com (Roksal d.o.o., Savska Loka 21, Kranj — »Roksal Kranj«): WoodCore WPC (HDPE), 15-letna garancija; strani: pokončna/prečna ograja, terasa, barvni odtenki, FAQ, material
+- izvorni tehnični podatki (prebrani iz besedila strani): profili POKONČNA ograja = POLNA-57/32 (5,8 m, razmak 100 cm, skrito vijačenje), POLNA-100 (razmak 80 cm), POLNA-128 (2,2 m; prečna 110/pokončna 100 cm), ROMB-67 (2,8/5,8 m; prečna 145/pokončna 110 cm, skrito skozi alu cev); PREČNA = ROMB-67, POLNA-128, DESKA-150 (4/2,2 m, razmak 130 cm, vidno vijačenje); TERASA = KLASIK 150×25 (7 barv, 3 površine), RUSTIC (gladka/rebričena); KUBO fasada; material HDPE, barva posvetli 5–10 % prvo leto; vijak ≥3 cm od reza, na plošči ≤15 cm, bočno ≤10 cm
+- IMENA BARV: potrjena iz besedila vira SAMO Rustic Oak in Rustic Walnut (večbarvna, FAQ + barvna stran); števila odtenkov po profilih 7/7/4/8/3/5; 5 uradnih barvnih lestvic obstaja (URL + alt besedila) — DATOTEKE blokiral WAF (openresty 415/izziv) → iskreno status MISSING z izvornim URL-jem (brez izmišljanja imen)
+- 27 PRAVIH SLIK prek z-ai image-search (OSS kopije roksal.com slik, vir potrdila iskanja) → public/assets/roksal/src/ + MANIFEST.json (sha256); VLM klasifikacija vseh 27 (kaj prikazujejo, orientacija, približna barva) — colorApprox IZKLJUČNO kot približek
+- dovoljenje: izjava lastnika (izvajalec dela za Roksal) — zapisano v vsakem zapisu ProductAsset.permission
+- PODATKOVNI MODEL: ProductAsset (kind/orientation/view/colorName/colorApprox/filePath/cdnUrl/sourceUrl/sha256/bytes/sourceName/capturedAt/permission/status VERIFIED|NEEDS_REVIEW|MISSING|NOT_AUTHORIZED/note) + Product.assets; migracija 20261018000000_r493_product_assets
+- SEED prisma/seed-r493.cjs (idempotenten): 10 PRAVIH izdelkov ROK-* (KLASIK, RUSTIC, POLNA-57/32, POLNA-100, POLNA-128, ROMB-67, DESKA-150, KUBO, podložna+zaključna letev) z izvornimi tehničnimi podatki v tech JSON + vir URL; 14 variant SAMO s potrjenima imenoma (Rustic Oak/Walnut, ral=null — WPC odtenki niso RAL); 27 VERIFIED + 5 MISSING gradiv; db:seed razširjen
+- API: GET /api/product-assets (filter productId/kind/status; fail-closed 401) + ?matrix=1 (matrika pokritosti Produkt×Profil×Barva×Orientacija z legendo, statusi PREVERJENO/DELECNO/MANJKA)
+- UI (katalog.tsx): razdelek Produktna gradiva v podrobnosti izdelka — sličice, statusne značke (Preverjeno/V preverjanju/Manjka datoteka/Ni odobreno), sha256, povezava na izvirnik (roksal.com), provenienca+dovoljenje, VLM približek IZRECNO označen; opomba pri variantah da so imena potrjena z besedilom vira in da je prikaz brez uradnega vzorca približek; MANJKA lestvica je VIDNA z razlago
+- testi: tests/r493.py 59/59 (shema, fail-closed 401, 10 izdelkov + izvorni podatki ROMB, 27 VERIFIED s sha256 na disku, 5 lestvic MISSING z URL, matrika + legenda, 14 variant brez RAL, imena točno Rustic, UI nizi, RAL_HEX dokumentiran kot približek, idempotenca, regresija /api/guide)
+- CI: skupina r493 (ci.yml + tests/ci-matrix.sh) — 22. regresijska skupina
+- brskalniška preverba (390×844): katalog → Ograje prečne → ROK-OG-ROMB-67 → Podrobnosti → variante Rustic + poštena opomba + Produktna gradiva (3 slike naložene, sha256, izvirnik povezave, badge Manjka datoteka) + 0 konzolnih napak (ops/r493-katalog-romb.png)
+
+Stage Summary:
+- issue #6 izveden pošteno in v celoti, kar je bilo mogoče pridobiti brez datotek od Roksala: pravi izdelki z izvornimi tehničnimi podatki, 27 preverjenih fotografij z dokumentirano provenienco in dovoljenjem, iskrena matrika pokritosti, manjkajoče barvne lestvice VIDNO označene z izvornimi URL-ji (imena odtenkov NISO izmišljena)
+- ostaja (zavestno, needs Roksal): datoteke 5 barvnih lestvic (imena vseh odtenkov), več fotografij po kombinaciji profil×barva, uradni ceniški podatki (salePrice trenutno 0 za ROK-* dokler ne pridejo od Roksala)
+- verzija 1.46.0
