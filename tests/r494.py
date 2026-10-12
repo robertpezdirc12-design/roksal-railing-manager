@@ -86,7 +86,8 @@ for sku, n in PRICAKOVANE_BARVE.items():
     p = prods.get(sku)
     vs = [v for v in (p.get('variants') or []) if v.get('active', True)]
     chk(p is not None and len(vs) == n, f'{sku}: {n} barvnih variant (dejansko: {len(vs) if p else "MANJKA"})')
-chk(not (prods.get('ROK-OGP-POLNA-57') or {}).get('variants'), 'POLNA 57/32: BREZ barvnih variant (izbor ni naveden — iskreno)')
+# R495 posodobitev: raziskava je medtem POTRDILA izbor (stran ograj »štiri barve« + lestvica KUBO) → 4 variante
+chk(len((prods.get('ROK-OGP-POLNA-57') or {}).get('variants') or []) == 4, 'POLNA 57/32: 4 variante (R495: stran ograj »štiri barve« + lestvica KUBO)')
 polna100 = prods.get('ROK-OGP-POLNA-100', {})
 colors100 = set(v.get('color') for v in (polna100.get('variants') or []))
 chk('White' in colors100, 'POLNA 100: White med variantami (8 odtenkov s lestvice)')
@@ -136,7 +137,8 @@ chk('6 odtenkov' in t128.get('barvOpomba', ''), 'POLNA 128: barvOpomba dokumenti
 # ── 6. API colors (imena odtenkov za UI lestvice) ──
 s, d = callj('GET', f"/api/product-assets?productId={prods['ROK-OGP-POLNA-100']['id']}", tok_adm)
 chk(s == 200 and isinstance(d.get('colors'), list), 'API ?productId: polje colors prisotno')
-chk(set(d.get('colors', [])) == {'Amazon wood', 'Ash wood', 'Golden teak', 'Burma teak', 'Oak wood', 'White', 'Rustic Oak', 'Rustic Walnut'}, 'colors = 8 odtenkov POLNA 100')
+# R495: normalizirano na uradno obliko s lestvic (Rustic oak/walnut)
+chk(set(d.get('colors', [])) == {'Amazon wood', 'Ash wood', 'Golden teak', 'Burma teak', 'Oak wood', 'White', 'Rustic oak', 'Rustic walnut'}, 'colors = 8 odtenkov POLNA 100')
 s, d = callj('GET', '/api/product-assets', tok_mon)
 chk(s == 200 and isinstance(d.get('colors'), list) and len(d.get('colors', [])) == 0, 'brez productId: colors = [] (ne crashne)')
 
@@ -155,7 +157,8 @@ kat = src('src/components/roksal/modules/katalog.tsx')
 chk('Uradna barvna lestvica' in kat, 'UI: naslov Uradna barvna lestvica')
 chk('Imena odtenkov' in kat, 'UI: aria-label Imena odtenkov')
 chk('object-contain' in kat, 'UI: lestvica neskrčena (object-contain)')
-chk('datoteke prenešene 2026-10-12' in kat, 'UI: iskrena opomba o viru potrditve')
+# R495: opomba posodobljena (galerijske fotografije 2026-10-13 dodane k virom potrditve)
+chk('2026-10-12' in kat and 'galerijskih fotografij' in kat, 'UI: iskrena opomba o viru potrditve (lestvice + galerije)')
 chk('Golden teak in White' in kat, 'UI: opomba omejitve (Golden teak/White samo s slike)')
 
 # ── 9. seed idempotenca (z env.sh bazo) ──
@@ -172,10 +175,19 @@ chk(subenv.get('DATABASE_URL', '').startswith('postgresql://'), f'subenv DATABAS
 r = subprocess.run(['node', 'prisma/seed-r494.cjs'], cwd=REPO, capture_output=True, text=True, timeout=180, env=subenv)
 chk(r.returncode == 0 and 'KONEC: 5 lestvic VERIFIED' in r.stdout, 'seed-r494 idemponten: 5 lestvic, brez podvajanj')
 s, d = callj('GET', '/api/product-assets?status=VERIFIED', tok_adm)
-chk(len(d.get('data', [])) == 35, f'po ponovnem seedu: 35 VERIFIED (dejansko: {len(d.get("data", []))})')
+# R495: seed-r494 pobriše le ROK-VRT izdelke (cascade 10 r495 gradiv pohištva) → 85−10 = 75
+chk(len(d.get('data', [])) == 75, f'po ponovnem seedu: 75 VERIFIED (35 r494 + 40 preživelih r495; dejansko: {len(d.get("data", []))})')
 s, d = callj('GET', '/api/products?family=all&q=ROK-', tok_adm)
 chk(len(d.get('data', [])) == 18, 'po ponovnem seedu: 18 izdelkov')
-chk(len([v for p in d.get('data', []) for v in p.get('variants', [])]) == 46, 'po ponovnem seedu: 46 variant')
+chk(len([v for p in d.get('data', []) for v in p.get('variants', [])]) == 50, 'po ponovnem seedu: 50 variant (46 r494 + 4 nove 57/32 iz R495)')
+
+# R495: seed-r494 briše ROK-VRT izdelke (cascade na gradiva) → obnovimo najnovejše stanje
+r = subprocess.run(['node', 'prisma/seed-r495.cjs'], cwd=REPO, capture_output=True, text=True, timeout=180, env=subenv)
+chk(r.returncode == 0 and '50 povezav' in r.stdout, 'obnova stanja: seed-r495 po r494 preverbi (50 povezav)')
+s, d = callj('GET', '/api/product-assets?status=VERIFIED', tok_adm)
+chk(len(d.get('data', [])) == 85, f'obnova stanja: 85 VERIFIED (dejansko: {len(d.get("data", []))})')
+s, d = callj('GET', '/api/products?family=all&q=ROK-', tok_adm)
+chk(len([v for p in d.get('data', []) for v in p.get('variants', [])]) == 50, 'obnova stanja: 50 variant')
 
 # ── 10. regresija temeljev ──
 s, d = callj('GET', '/api/guide', tok_mon)

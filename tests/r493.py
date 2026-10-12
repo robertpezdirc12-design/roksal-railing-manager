@@ -80,7 +80,8 @@ chk(tech.get('maxRazmakPokoncnaMm') == 1100, 'ROMB 67: max razmak pokončna 110 
 s, d = callj('GET', '/api/product-assets?status=VERIFIED', tok_adm)
 chk(s == 200, 'GET /api/product-assets?status=VERIFIED → 200')
 assets = d.get('data', [])
-chk(len(assets) == 35, f'35 preverjenih gradiv — 27 fotografij + 8 zapisov lestvic (dejansko: {len(assets)})')
+# R495: 85 = 35 (r494) + 50 galerijskih povezav
+chk(len(assets) == 85, f'85 preverjenih gradiv — 27 fotografij + 8 lestvic + 50 galerijskih (dejansko: {len(assets)})')
 manjkajoce_datoteke = [a for a in assets if not a.get('filePath')]
 chk(len(manjkajoce_datoteke) == 0, 'vse VERIFIED gradive imajo filePath')
 # preveri 3 vzorčne datoteke po sha256
@@ -94,7 +95,8 @@ for a in random.sample(assets, min(3, len(assets))):
         sha = hashlib.sha256(open(fp, 'rb').read()).hexdigest()
         chk(sha == a['sha256'], f'sha256 ujema: {os.path.basename(a["filePath"])[:16]}…')
         chk(a.get('permission') and a.get('sourceName'), 'provenienca + dovoljenje zapisana')
-        chk(a.get('colorApprox') is None or 'VLM' not in json.dumps(a), 'VLM ocena je ločeno polje, ne ime')
+        # R495: preveri VLEKO colorApprox vrednosti (opomba v prozi sme omenjati VLM)
+chk(a.get('colorApprox') is None or 'VLM' not in str(a.get('colorApprox')), 'VLM ocena je ločeno polje, ne ime')
 
 # ── 6. barvne lestvice — R494: datoteke PRENESENE, status VERIFIED ──
 # (R493 je bile zabeležil iskreno MISSING zaradi WAF; R494 je datoteke prenesel
@@ -131,10 +133,12 @@ chk(all(r.get('fotografije', 0) >= 0 for r in rows), 'matrika: števec fotografi
 # (R493: samo Rustic Oak/Walnut iz besedila; R494: vsa imena iz lestvic + besedila)
 s, d = callj('GET', '/api/products?family=all&q=ROK-', tok_adm)
 allvars = [v for p in d.get('data', []) for v in p.get('variants', [])]
-chk(len(allvars) == 46, f'46 variant (dejansko: {len(allvars)})')
+# R495: 50 = 46 + 4 nove 57/32
+chk(len(allvars) == 50, f'50 variant (dejansko: {len(allvars)})')
 chk(all(v.get('ral') is None for v in allvars), 'Roksal variante BREZ RAL kode (WPC odtenki niso RAL — približek bi bil napačen)')
 barve = set(v.get('color') for v in allvars)
-pričakovane = {'Amazon wood', 'Ash wood', 'Golden teak', 'Burma teak', 'Oak wood', 'White', 'Rustic Oak', 'Rustic Walnut'}
+# R495: normalizirano na uradno obliko s lestvic (Rustic oak/walnut — vseh 5 lestvic VLM dosledno)
+pričakovane = {'Amazon wood', 'Ash wood', 'Golden teak', 'Burma teak', 'Oak wood', 'White', 'Rustic oak', 'Rustic walnut'}
 chk(barve == pričakovane, f'imena barv točno po uradnih lestvicah (dejansko: {barve})')
 
 # ── 9. UI — iskreni nizi v katalogu ──
@@ -171,6 +175,12 @@ chk(len(d.get('data', [])) == 35, f'po ponovnem seedu (r493→r494): 35 VERIFIED
 s, d = callj('GET', '/api/products?family=all&q=ROK-', tok_adm)
 chk(len(d.get('data', [])) == 18, 'po ponovnem seedu (r493→r494): 18 izdelkov (brez podvajanj)')
 chk(len([v for p in d.get('data', []) for v in p.get('variants', [])]) == 46, 'po ponovnem seedu (r493→r494): 46 variant (brez podvajanj)')
+
+# R495: po destruktivnem re-seedu obnovimo NAJNOVEJŠE stanje (r495 galerijske fotografije + 57/32 variante)
+r = subprocess.run(['node', 'prisma/seed-r495.cjs'], cwd=REPO, capture_output=True, text=True, timeout=180, env=subenv)
+chk(r.returncode == 0 and '50 povezav' in r.stdout, 'obnova stanja: seed-r495 po r493 preverbi (50 povezav)')
+s, d = callj('GET', '/api/product-assets?status=VERIFIED', tok_adm)
+chk(len(d.get('data', [])) == 85, f'obnova stanja: 85 VERIFIED (dejansko: {len(d.get("data", []))})')
 
 # ── 12. regresija temeljev ──
 s, d = callj('GET', '/api/guide', tok_mon)

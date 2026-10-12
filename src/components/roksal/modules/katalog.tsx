@@ -370,7 +370,7 @@ function ProductDialog ({ detail, loading, canCalc, canWrite, onClose, onReload 
               </div>
               {detail.variants.some((v) => v.color && !v.ral) ? (
                 <p className="text-[11px] text-muted-foreground">
-                  Imena odtenkov so potrjena z uradnimi barvnimi lestvicami roksal.com (prenešene 2026-10-12; glej Gradiva) in, kjer je bilo mogoče, z besedilom vira. Odtenka Golden teak in White sta potrjena samo s sliko lestvice. Barvni prikaz brez uradnega vzorca ostaja približek.
+                  Imena odtenkov so potrjena z uradnimi barvnimi lestvicami roksal.com (prenešene 2026-10-12) in, od 2026-10-13, tudi z Roksalovimi lastnimi naslovi galerijskih fotografij (npr. »Deska 100, ASH WOOD.«) — glej Gradiva. Odtenka Golden teak in White sta potrjena samo s sliko lestvice. Barvni prikaz brez uradnega vzorca ostaja približek.
                 </p>
               ) : null}
             </section>
@@ -878,7 +878,7 @@ function ProductAssetsSection ({ productId }: { productId: string }) {
           Manjkajo uradne barvne lestvice (datoteke). Imena odtenkov so zapisana v slikah na roksal.com in jih bo mogoče dokončno potrditi z datotekami od Roksala — v aplikaciji niso izmišljena.
         </p>
       ) : (
-        <p className="text-[10px] text-muted-foreground">Odtenki so potrjeni z uradnimi lestvicami roksal.com (datoteke prenešene 2026-10-12) in, kjer je bilo mogoče, z besedilom vira (reference/FAQ). Odtenka Golden teak in White sta potrjena samo s sliko lestvice.</p>
+        <p className="text-[10px] text-muted-foreground">Odtenki so potrjeni z uradnimi lestvicami roksal.com (2026-10-12) in z naslovi galerijskih fotografij (2026-10-13, oznaka »potrjena«) — fotografije profil×barv so iz Roksalovih galerij. Odtenka Golden teak in White sta potrjena samo s sliko lestvice.</p>
       )}
     </section>
   )

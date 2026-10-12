@@ -1,6 +1,6 @@
 {
   "name": "nextjs_tailwind_shadcn_ts",
-  "version": "1.47.0",
+  "version": "1.48.0",
   "private": true,
   "scripts": {
     "dev": "next dev -p 3000 2>&1 | tee dev.log",
@@ -108,5 +108,6 @@
     "sharp",
     "embedded-postgres",
     "@embedded-postgres/linux-x64"
-  ]
+  ],
+  "description": ""
 }

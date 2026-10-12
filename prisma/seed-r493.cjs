@@ -31,8 +31,8 @@ const PRODUCTS = [
     widthMm: 150, heightMm: 25, warrantyMonths: 180,
     tech: JSON.stringify({ material: 'WPC (HDPE)', dolzine: [4000, 2200], povrsine: 3, barv: 7, garancijaLet: 15, vir: 'https://roksal.com/woodcore-wpc-deske/wpc-deske-za-teraso/' }),
     variants: [
-      { sku: 'ROK-TER-KLASIK-ROAK', name: 'KLASIK — Rustic Oak', color: 'Rustic Oak' },
-      { sku: 'ROK-TER-KLASIK-RWA', name: 'KLASIK — Rustic Walnut', color: 'Rustic Walnut' },
+      { sku: 'ROK-TER-KLASIK-ROAK', name: 'KLASIK — Rustic Oak', color: 'Rustic oak' },
+      { sku: 'ROK-TER-KLASIK-RWA', name: 'KLASIK — Rustic Walnut', color: 'Rustic walnut' },
     ],
   },
   {
@@ -42,8 +42,8 @@ const PRODUCTS = [
     widthMm: 150, heightMm: 25, warrantyMonths: 180,
     tech: JSON.stringify({ material: 'WPC (HDPE)', dolzine: [4000, 2200], povrsine: 'gladka/rebričena', barv: 7, garancijaLet: 15, vir: 'https://roksal.com/woodcore-wpc-deske/wpc-deske-za-teraso/' }),
     variants: [
-      { sku: 'ROK-TER-RUSTIC-ROAK', name: 'RUSTIC — Rustic Oak', color: 'Rustic Oak' },
-      { sku: 'ROK-TER-RUSTIC-RWA', name: 'RUSTIC — Rustic Walnut', color: 'Rustic Walnut' },
+      { sku: 'ROK-TER-RUSTIC-ROAK', name: 'RUSTIC — Rustic Oak', color: 'Rustic oak' },
+      { sku: 'ROK-TER-RUSTIC-RWA', name: 'RUSTIC — Rustic Walnut', color: 'Rustic walnut' },
     ],
   },
   {
@@ -61,8 +61,8 @@ const PRODUCTS = [
     widthMm: 100, warrantyMonths: 180,
     tech: JSON.stringify({ material: 'WPC (HDPE)', profil: 'POLNA DESKA 100', dolzine: [5800], maxRazmakPodporeMm: 800, barv: 8, primerno: 'samo pokončna ograja', vir: 'https://roksal.com/woodcore-wpc-deske/balkonske-ograje-in-dvoriscne-ograje/wpc-ograja-pokoncna/' }),
     variants: [
-      { sku: 'ROK-OGP-POLNA-100-ROAK', name: 'POLNA 100 — Rustic Oak', color: 'Rustic Oak' },
-      { sku: 'ROK-OGP-POLNA-100-RWA', name: 'POLNA 100 — Rustic Walnut', color: 'Rustic Walnut' },
+      { sku: 'ROK-OGP-POLNA-100-ROAK', name: 'POLNA 100 — Rustic Oak', color: 'Rustic oak' },
+      { sku: 'ROK-OGP-POLNA-100-RWA', name: 'POLNA 100 — Rustic Walnut', color: 'Rustic walnut' },
     ],
   },
   {
@@ -72,8 +72,8 @@ const PRODUCTS = [
     widthMm: 128, warrantyMonths: 180,
     tech: JSON.stringify({ material: 'WPC (HDPE)', profil: 'POLNA DESKA 128', dolzine: [2200], maxRazmakPrecnaMm: 1100, maxRazmakPokoncnaMm: 1000, barv: 5, primerno: 'prečna in pokončna ograja', vir: 'https://roksal.com/woodcore-wpc-deske/balkonske-ograje-in-dvoriscne-ograje/wpc-precna-ograja/' }),
     variants: [
-      { sku: 'ROK-OG-POLNA-128-ROAK', name: 'POLNA 128 — Rustic Oak', color: 'Rustic Oak' },
-      { sku: 'ROK-OG-POLNA-128-RWA', name: 'POLNA 128 — Rustic Walnut', color: 'Rustic Walnut' },
+      { sku: 'ROK-OG-POLNA-128-ROAK', name: 'POLNA 128 — Rustic Oak', color: 'Rustic oak' },
+      { sku: 'ROK-OG-POLNA-128-RWA', name: 'POLNA 128 — Rustic Walnut', color: 'Rustic walnut' },
     ],
   },
   {
@@ -83,8 +83,8 @@ const PRODUCTS = [
     widthMm: 67, warrantyMonths: 180,
     tech: JSON.stringify({ material: 'WPC (HDPE)', profil: 'ROMB 67', dolzine: [2800, 5800], maxRazmakPrecnaMm: 1450, maxRazmakPokoncnaMm: 1100, vijacenje: 'skrito (alu cev v jedru, RF vijaki)', barv: 7, primerno: 'prečna in pokončna ograja, fasada', vir: 'https://roksal.com/woodcore-wpc-deske/balkonske-ograje-in-dvoriscne-ograje/wpc-precna-ograja/' }),
     variants: [
-      { sku: 'ROK-OG-ROMB-67-ROAK', name: 'ROMB 67 — Rustic Oak', color: 'Rustic Oak' },
-      { sku: 'ROK-OG-ROMB-67-RWA', name: 'ROMB 67 — Rustic Walnut', color: 'Rustic Walnut' },
+      { sku: 'ROK-OG-ROMB-67-ROAK', name: 'ROMB 67 — Rustic Oak', color: 'Rustic oak' },
+      { sku: 'ROK-OG-ROMB-67-RWA', name: 'ROMB 67 — Rustic Walnut', color: 'Rustic walnut' },
     ],
   },
   {
@@ -94,8 +94,8 @@ const PRODUCTS = [
     widthMm: 150, heightMm: 25, warrantyMonths: 180,
     tech: JSON.stringify({ material: 'WPC (HDPE)', profil: 'DESKA 150 (terasni)', dolzine: [4000, 2200], maxRazmakPrecnaMm: 1300, vijacenje: 'vidno spredaj', barv: 7, primerno: 'prečna ograja', vir: 'https://roksal.com/woodcore-wpc-deske/balkonske-ograje-in-dvoriscne-ograje/wpc-precna-ograja/' }),
     variants: [
-      { sku: 'ROK-OG-DESKA-150-ROAK', name: 'DESKA 150 — Rustic Oak', color: 'Rustic Oak' },
-      { sku: 'ROK-OG-DESKA-150-RWA', name: 'DESKA 150 — Rustic Walnut', color: 'Rustic Walnut' },
+      { sku: 'ROK-OG-DESKA-150-ROAK', name: 'DESKA 150 — Rustic Oak', color: 'Rustic oak' },
+      { sku: 'ROK-OG-DESKA-150-RWA', name: 'DESKA 150 — Rustic Walnut', color: 'Rustic walnut' },
     ],
   },
   {
@@ -105,8 +105,8 @@ const PRODUCTS = [
     warrantyMonths: 180,
     tech: JSON.stringify({ material: 'WPC (HDPE)', profil: 'KUBO', barv: 4, primerno: 'fasada', vir: 'https://roksal.com/woodcore-wpc-deske/barvni-odtenki/' }),
     variants: [
-      { sku: 'ROK-FAS-KUBO-ROAK', name: 'KUBO — Rustic Oak', color: 'Rustic Oak' },
-      { sku: 'ROK-FAS-KUBO-RWA', name: 'KUBO — Rustic Walnut', color: 'Rustic Walnut' },
+      { sku: 'ROK-FAS-KUBO-ROAK', name: 'KUBO — Rustic Oak', color: 'Rustic oak' },
+      { sku: 'ROK-FAS-KUBO-RWA', name: 'KUBO — Rustic Walnut', color: 'Rustic walnut' },
     ],
   },
   {

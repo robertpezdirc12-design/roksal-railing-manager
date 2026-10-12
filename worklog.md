@@ -1761,3 +1761,34 @@ Work Log:
 
 Stage Summary:
 - DR veriga zdrava in aktualna na 4334fd4 (v1.47.0); CI 23/23; off-site + lokalno + dokazana obnova
+
+---
+Task ID: R495
+Agent: main (Z.ai Code)
+Task: Issue #6 — GALERIJSKE FOTOGRAFIJE PROFIL×BARVA iz roksal.com + rešitev POLNA 57/32 + vrtno pohištvo s fotografijami (ukaz: »odlicno cene ne pisi moznost samodejnega vnosa cen in nadaljuj« — izrecno BREZ samodejnega vnosa cen, cene ostanejo ročne)
+
+Work Log:
+- RAZISKAVA GALERIJ roksal.com (WAF openresty JS-izziv premagan z agent-browser stealth patch, enaka tehnika kot R494): 7 galerij zajetih (pokončne 92, prečne 120, terase 94, klopi-mize 23, fasade 84, stopnice 21, pregradne stene 37) + detajli 48 = 465 vnosov; naslovi lightbox zapisov vsebujejo PROFIL + BARVO po Roksalovih lastnih podatkih (npr. »Deska 57-32, OAK WOOD.«, »Deska 100, RUSTIC OAK«) — to je avtoritativni vir za colorName (ne VLM približek)
+- MATRIKA POKRITOSTI zgrajena iz naslovov (normalizacija, ločevanje zlepljenih vrstic): ROMB 7/7 barv, POLNA 100 8/8, POLNA 128 6/6, DESKA 150 7/7, KUBO 4/4, 57/32: AMAZON+OAK — 45 unikatnih fotografij izbranih (en na kombinacijo profil×barv, prednost najnovejšim), + 8 vrtnega pohištva + zaključna letev
+- PRENOS 48 DATOTEK znotraj brskalniške seje (fetch → base64 → PNG; magic-bytes validacija v brskalniku; sha256 + bytes zapisani): 47 galerijskih + zakljucna-letev.jpg (izvirnik 200×145/2564 B — edina objavljena velikost vira, odkrita na strani Terase razdelek Elementi)
+- POLNA 57/32 REŠENO: stran pokončnih ograj izrecno pravi »trenutno na voljo štiri barve« + prikazuje lestvico KUBO → 4 variante (AMW, OKW, ROAK, RWA); barvna stran še vedno pravi »tri barve« — OBOJE dokumentirano v tech.barvOpomba; fotografski dokaz: Amazon wood (naleganje 5,7 cm) + Oak wood (salon, klopi Linea)
+- PONOVNO VLM PREVERJANJE VSEH 5 LESTVIC (cela slika vsaka): KUBO = Amazon wood, Oak wood, Rustic oak, Rustic walnut (potrjeno; R494 zapis v DB je bil pravilen); POLNA 128 = 6 odtenkov BREZ Golden teak (Amazon, Ash, Burma, Oak, Rustic oak, Rustic walnut) — skladno z obstoječimi variantami; galerijski dokazi kubo (OAK 16, RUSTIC WALNUT 8, AMAZON 1) skladni z lestvico
+- NORMALIZACIJA VELIKIH ČRK: R493 je ustvaril »Rustic Oak/Walnut« (14 variant) → uradna oblika s lestvic je »Rustic oak/walnut« (vseh 5 neodvisnih VLM branj) → seed-r493.cjs popravljen + DB normalizirana (14 barv + 14 imen)
+- DB: 50 novih ProductAsset povezav (49 prej + zaključna letev; colorName POTRJEN z naslovom vira, colorApprox=null, variantSku povezan kjer varianta obstaja, sourceUrl na roksal.com, permission zapisan) → skupaj 85 VERIFIED, 0 MISSING, 0 MANJKA v matriki; 46 → 50 ROK variant
+- MANIFEST.json: 32 → 80 vnosov (48 novih r495-*)
+- CENE: izrecno BREZ samodejnega vnosa cen (navodilo lastnika) — nič avtomatizacije dodano; Ceniki ostajajo ročno urejanje pravil (preverjeno v UI: gumbi »Uredi pravilo«)
+- TEST POPRAVKI (zastarele trditve zaradi R495 stanja): r493.py (35→85 gradiv, 46→50 variant, VLM kontrola popravljena na vrednost colorApprox — opomba v prozi sme omenjati VLM, pričakovane barve lowercase); r494.py (POLNA 57/32 zdaj 4 variante namesto BREZ, po re-seedu 75 VERIFIED ker seed-r494 briše ROK-VRT (cascade 10 r495 gradiv), 50 variant, colors lowercase, UI opomba posodobljena); OBA testa sedaj po svojih preverbah POVEŽETA obnovitev stanja s seed-r495 (destruktivni re-seedi sicer pobrišejo r495 zapise — ugotovitev iz dejanskega primera)
+- UI (katalog.tsx): opomba variant posodobljena (galerijske fotografije 2026-10-13 kot vir potrditve); noga gradiv posodobljena; oznaka »barva: X (potrjena)« pri fotografijah
+- TESTI: tests/r495.py 40/40 (celovitost 48 datotek sha256, 4 variante 57/32 z obema trditvama vira, 50 povezav s provenienco, pokritost profil×barv za vseh 8 profilov, 8× vrtno pohištvo s fotografijo, matrika 0 MANJKA, zaključna letev KOMPONENTA, BREZ samodejnega vnosa cen, idempotenca seida)
+- CI: skupina r495 (ci-matrix.sh + ci.yml, 24. regresijska skupina); opis suite posodobljen na r437–r495
+- REGRESIJA: r483 61 · r484 37 · r485 63 · r486 70 · r487 71 · r488 65 · r489 128 · r490 111 · r493 70 · r494 111 · r495 40 = 767/767 ✓
+- BRKSKALNIŠKA E2E (1280×800 + 390×844): vrtna miza Kubo s fotografijo; klop X z oznako »barva: Rustic oak (potrjena)«; POLNA 57/32 z 4 variantami + 2 fotografijama + lestvico KUBO; ROMB 67 s 7 fotografijami po barvah (vse z »potrjena«); 0 napak konzole; dokazi ops/r495-*.png (8 posnetkov)
+- NEREŠENO (iskreno): VLM vzorčna kontrola vsebine fotografij ni izvedena (API 429 rate-limit celoten dan) — namesto nje: PIL celovitost + magic-bytes + statistična kontrola svetlosti centrov (9 odstopanj pojasnjenih s sestavo prizora in z uradno opombo vira, da Rustic odtenka med serijami variirata); avtoritativni vir barv ostaja Roksalov lastni naslov zapisu
+- ostaja (zavestno, needs Roksal): uradni ceniški podatki (salePrice 0 za ROK-* — ročni vnos po navodilu lastnika), neskladje POLNA 128 slika 6/besedilo 5 pri Roksalu
+
+Stage Summary:
+- issue #6 v bistvu DOKONČAN po fotografijah: 85 VERIFIED gradiv, 0 MANJKA — vsak profil ima fotografijo za VSAKO svojo uradno barvo (46 kombinacij → 45 fotografij), vrtno pohištvo 8/8 s fotografijami, zaključna letev dodana
+- ključni premik: barve na fotografijah so POTRJENE z Roksalovimi lastnimi naslovi galerij (ne VLM ocene) — colorName zapolnjen, colorApprox odstranjen pri teh zapisih
+- POLNA 57/32: 4 variante po strani ograj (lestvica KUBO), fotografsko potrjeno AMAZON+OAK, dokumentirano neskladje s barvno stranjo (3)
+- cene: ročne (izrecno navodilo lastnika) — samodejni vnos NI implementiran
+- verzija 1.48.0
