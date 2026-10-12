@@ -61,11 +61,12 @@ tok_adm = login('admin@roksal.si', 'Admin123!')
 tok_mon = login('monter@roksal.si', 'Monter123!')
 
 # ── 4. seed izdelkov (prava Roksal linija) ──
+# R494: 10 osnovnih izdelkov + 8 vrtnega pohištva = 18
 s, d = callj('GET', '/api/products?family=all&q=ROK-', tok_adm)
 chk(s == 200, 'GET /api/products?q=ROK- → 200')
 prods = d.get('data', [])
 skus = [p['sku'] for p in prods]
-chk(len(prods) == 10, f'10 pravih Roksal izdelkov (dejansko: {len(prods)})')
+chk(len(prods) == 18, f'18 pravih Roksal izdelkov (10 osnovnih + 8 pohištvo; dejansko: {len(prods)})')
 for expected in ['ROK-TER-KLASIK', 'ROK-TER-RUSTIC', 'ROK-OGP-POLNA-57', 'ROK-OGP-POLNA-100', 'ROK-OG-POLNA-128', 'ROK-OG-ROMB-67', 'ROK-OG-DESKA-150', 'ROK-FAS-KUBO']:
     chk(expected in skus, f'izdelek {expected} v katalogu')
 romb = next((p for p in prods if p['sku'] == 'ROK-OG-ROMB-67'), None)
@@ -79,7 +80,7 @@ chk(tech.get('maxRazmakPokoncnaMm') == 1100, 'ROMB 67: max razmak pokončna 110 
 s, d = callj('GET', '/api/product-assets?status=VERIFIED', tok_adm)
 chk(s == 200, 'GET /api/product-assets?status=VERIFIED → 200')
 assets = d.get('data', [])
-chk(len(assets) == 27, f'27 preverjenih fotografij (dejansko: {len(assets)})')
+chk(len(assets) == 35, f'35 preverjenih gradiv — 27 fotografij + 8 zapisov lestvic (dejansko: {len(assets)})')
 manjkajoce_datoteke = [a for a in assets if not a.get('filePath')]
 chk(len(manjkajoce_datoteke) == 0, 'vse VERIFIED gradive imajo filePath')
 # preveri 3 vzorčne datoteke po sha256
@@ -95,54 +96,81 @@ for a in random.sample(assets, min(3, len(assets))):
         chk(a.get('permission') and a.get('sourceName'), 'provenienca + dovoljenje zapisana')
         chk(a.get('colorApprox') is None or 'VLM' not in json.dumps(a), 'VLM ocena je ločeno polje, ne ime')
 
-# ── 6. barvne lestvice — iskrena vrzel (MISSING, ne tiho skrita) ──
+# ── 6. barvne lestvice — R494: datoteke PRENESENE, status VERIFIED ──
+# (R493 je bile zabeležil iskreno MISSING zaradi WAF; R494 je datoteke prenesel
+#  z brskalniško sejo in imena odtenkov potrdil iz slik + besedila vira.)
 s, d = callj('GET', '/api/product-assets?kind=BARVNA_LESTVICA', tok_adm)
 chk(s == 200, 'GET /api/product-assets?kind=BARVNA_LESTVICA → 200')
 charts = d.get('data', [])
-chk(len(charts) == 5, f'5 barvnih lestvic zabeleženih (dejansko: {len(charts)})')
-chk(all(c.get('status') == 'MISSING' for c in charts), 'vse barvne lestvice status MISSING (datoteka ni prenesena — iskreno)')
+chk(len(charts) == 8, f'8 zapisov barvnih lestvic — 5 datotek × več profilov (dejansko: {len(charts)})')
+chk(all(c.get('status') == 'VERIFIED' for c in charts), 'vse barvne lestvice VERIFIED (datoteke prenesene — R494)')
+chk(all(c.get('filePath') and c.get('sha256') and c.get('bytes') for c in charts), 'vsaka lestvica ima filePath + sha256 + bytes')
 chk(all(c.get('sourceUrl', '').startswith('https://roksal.com/') for c in charts), 'vsaka lestvica ima izvorni URL na roksal.com')
-chk(all('WAF' in (c.get('note') or '') for c in charts), 'opomba pojasnjuje vzrok manjkajoče datoteke')
+for c in charts:
+    fp = os.path.join(REPO, c['filePath']) if c.get('filePath') else None
+    if fp and os.path.exists(fp):
+        sha = hashlib.sha256(open(fp, 'rb').read()).hexdigest()
+        chk(sha == c['sha256'], f'sha256 lestvice ujema: {os.path.basename(c["filePath"])}')
+    else:
+        chk(False, f'datoteka lestvice na disku: {c.get("filePath")}')
 
-# ── 7. matrika pokritosti ──
+# ── 7. matrika pokritosti (R494: 18 vrstic, lestvice VERIFIED) ──
 s, d = callj('GET', '/api/product-assets?matrix=1', tok_mon)
 chk(s == 200, 'GET /api/product-assets?matrix=1 (monter) → 200')
 rows = d.get('data', [])
-chk(len(rows) == 10, f'matrika: 10 vrstic (dejansko: {len(rows)})')
+chk(len(rows) == 18, f'matrika: 18 vrstic (dejansko: {len(rows)})')
 legenda = d.get('legenda', {})
 chk('DELECNO' in legenda.get('status', ''), 'matrika: legenda razloži status DELECNO')
+preverjeno = [r for r in rows if r['status'] == 'PREVERJENO']
+chk(len(preverjeno) >= 8, f'matrika: izdelki z lestvico so PREVERJENO ({len(preverjeno)}; R494)')
 delecno = [r for r in rows if r['status'] == 'DELECNO']
-chk(len(delecno) >= 5, f'matrika: vrstice z manjkajočo lestvico so VIDNO DELECNO ({len(delecno)})')
+chk(len(delecno) == 0, f'matrika: nič več DELECNO (lestvice prenesene; dejansko: {len(delecno)})')
 chk(all(r.get('fotografije', 0) >= 0 for r in rows), 'matrika: števec fotografij prisoten')
 
-# ── 8. potrjena imena odtenkov samo Rustic (iz besedila vira) ──
+# ── 8. potrjena imena odtenkov — R494: polna paleta iz uradnih lestvic ──
+# (R493: samo Rustic Oak/Walnut iz besedila; R494: vsa imena iz lestvic + besedila)
 s, d = callj('GET', '/api/products?family=all&q=ROK-', tok_adm)
 allvars = [v for p in d.get('data', []) for v in p.get('variants', [])]
-chk(len(allvars) == 14, f'14 variant (dejansko: {len(allvars)})')
+chk(len(allvars) == 46, f'46 variant (dejansko: {len(allvars)})')
 chk(all(v.get('ral') is None for v in allvars), 'Roksal variante BREZ RAL kode (WPC odtenki niso RAL — približek bi bil napačen)')
 barve = set(v.get('color') for v in allvars)
-chk(barve == {'Rustic Oak', 'Rustic Walnut'}, f'imena barv točno Rustic Oak/Walnut (dejansko: {barve})')
+pričakovane = {'Amazon wood', 'Ash wood', 'Golden teak', 'Burma teak', 'Oak wood', 'White', 'Rustic Oak', 'Rustic Walnut'}
+chk(barve == pričakovane, f'imena barv točno po uradnih lestvicah (dejansko: {barve})')
 
 # ── 9. UI — iskreni nizi v katalogu ──
 kat = src('src/components/roksal/modules/katalog.tsx')
 chk('Produktna gradiva' in kat, 'UI: razdelek Produktna gradiva')
 chk('VLM ocena, ni uradno ime' in kat, 'UI: VLM približek IZRECNO označen kot neuraden')
 chk('Preverjeno' in kat and 'V preverjanju' in kat and 'Manjka datoteka' in kat, 'UI: statusi Preverjeno/V preverjanju/Manjka')
-chk('niso izmišljena' in kat, 'UI: manjkajoča imena odtenkov izrecno niso izmišljena')
+chk('Uradna barvna lestvica' in kat, 'UI: R494 — lestvica prikazana čez celo širino z naslovom')
 chk('približek' in kat, 'UI: beseda približek prisotna (ločitev od uradnega)')
 
 # ── 10. RAL_HEX ostaja označen kot približek v jedru ──
 core = src('src/lib/photo-replace-core.ts')
 chk('Pogosti RAL kodi → hex (približek' in core, 'photo-replace-core: RAL_HEX dokumentiran kot približek')
 
-# ── 11. seed idempotenca (baza) ──
+# ── 11. seed idempotenca (baza) — R494: veriga r493→r494 ──
 import subprocess
-r = subprocess.run(['node', 'prisma/seed-r493.cjs'], cwd=REPO, capture_output=True, text=True, timeout=180)
-chk(r.returncode == 0 and 'KONEC: 10 izdelkov, 14 variant' in r.stdout, 'seed-r493 idemponten ponovni zagon: 10 izdelkov, 14 variant')
+# seedi VEDNO uporabljajo bazo tega repozitorija (env.sh) — sistemski DATABASE_URL
+# (npr. sqlite od my-project predloge) bi jih preusmeril na napačno bazo
+subenv = dict(os.environ)
+try:
+    with open(os.path.join(REPO, 'env.sh'), encoding='utf-8') as f:
+        for line in f:
+            if 'DATABASE_URL=' in line and 'export' in line:
+                subenv['DATABASE_URL'] = line.split('"')[1]
+                break
+except Exception:
+    pass
+r = subprocess.run(['node', 'prisma/seed-r493.cjs'], cwd=REPO, capture_output=True, text=True, timeout=180, env=subenv)
+chk(r.returncode == 0, f'seed-r493 ponovni zagon: brez napake ({r.stderr.strip()[:120] if r.returncode else "ok"})')
+r = subprocess.run(['node', 'prisma/seed-r494.cjs'], cwd=REPO, capture_output=True, text=True, timeout=180, env=subenv)
+chk(r.returncode == 0 and '5 lestvic VERIFIED' in r.stdout, f'seed-r494 po r493: lestvice VERIFIED obnovljene ({r.stderr.strip()[:120] if r.returncode else "ok"})')
 s, d = callj('GET', '/api/product-assets?status=VERIFIED', tok_adm)
-chk(len(d.get('data', [])) == 27, 'po ponovnem seedu: še vedno 27 VERIFIED (brez podvajanj)')
+chk(len(d.get('data', [])) == 35, f'po ponovnem seedu (r493→r494): 35 VERIFIED brez podvajanj (dejansko: {len(d.get("data", []))})')
 s, d = callj('GET', '/api/products?family=all&q=ROK-', tok_adm)
-chk(len(d.get('data', [])) == 10, 'po ponovnem seedu: 10 izdelkov (brez podvajanj)')
+chk(len(d.get('data', [])) == 18, 'po ponovnem seedu (r493→r494): 18 izdelkov (brez podvajanj)')
+chk(len([v for p in d.get('data', []) for v in p.get('variants', [])]) == 46, 'po ponovnem seedu (r493→r494): 46 variant (brez podvajanj)')
 
 # ── 12. regresija temeljev ──
 s, d = callj('GET', '/api/guide', tok_mon)

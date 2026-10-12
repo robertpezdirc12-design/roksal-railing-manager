@@ -241,5 +241,50 @@
   "cdnUrl": "https://z-cdn.chatglm.cn/image-search-mcp/images-ppt/5813faa388c5.jpg",
   "sha256": "195e54c9f54508b87ebc972c08036d6031cdd7b04bdee2d605ae2d56b5f9e52e",
   "bytes": 143912
+ },
+ {
+  "file": "roksal-barvna-lestvica-terasa-150.png",
+  "kategorija": "barvna-lestvica",
+  "opis": "Uradna barvna lestvica terasa / DESKA 150 (KLASIK in RUSTIC) (7 odtenkov)",
+  "source": "Roksal d.o.o. (roksal.com) — datoteka prenesena z javnega URL-ja (brskalniška seja)",
+  "sourceUrl": "https://roksal.com/wp-content/uploads/2024/09/BARVNA_LESTVICA_1-terasa4-1024x272.png",
+  "sha256": "293e032c22e73e7d8bd2b83794824133c79410854bdd7f780f032c0434673db1",
+  "bytes": 85020
+ },
+ {
+  "file": "roksal-barvna-lestvica-romb-67.png",
+  "kategorija": "barvna-lestvica",
+  "opis": "Uradna barvna lestvica ROMB 67 (7 odtenkov)",
+  "source": "Roksal d.o.o. (roksal.com) — datoteka prenesena z javnega URL-ja (brskalniška seja)",
+  "sourceUrl": "https://roksal.com/wp-content/uploads/2024/09/BARVNA_LESTVICA_3-rombi4-1024x268.png",
+  "sha256": "56a14088abefb505c0e27102cf58d26b4064f83ae3669793d29dbddf44979bef",
+  "bytes": 92193
+ },
+ {
+  "file": "roksal-barvna-lestvica-kubo.png",
+  "kategorija": "barvna-lestvica",
+  "opis": "Uradna barvna lestvica KUBO (tudi POLNA 57/32) (4 odtenkov)",
+  "source": "Roksal d.o.o. (roksal.com) — datoteka prenesena z javnega URL-ja (brskalniška seja)",
+  "sourceUrl": "https://roksal.com/wp-content/uploads/2024/09/BARVNA_LESTVICA_5-kubo4-1024x312.png",
+  "sha256": "48e07a43df36775a910ed433c965671e311eafa2beb0324587dadd6552286dce",
+  "bytes": 82324
+ },
+ {
+  "file": "roksal-barvna-lestvica-polna-100.png",
+  "kategorija": "barvna-lestvica",
+  "opis": "Uradna barvna lestvica POLNA DESKA 100 (8 odtenkov)",
+  "source": "Roksal d.o.o. (roksal.com) — datoteka prenesena z javnega URL-ja (brskalniška seja)",
+  "sourceUrl": "https://roksal.com/wp-content/uploads/2024/10/BARVNA_LESTVICA_2_polna-1024x240.png",
+  "sha256": "95976e9e588991dd4f1caeddac2bad6c2f856be73d310b4f8f526c08bd3dbfb9",
+  "bytes": 80245
+ },
+ {
+  "file": "roksal-barvna-lestvica-polna-128.png",
+  "kategorija": "barvna-lestvica",
+  "opis": "Uradna barvna lestvica POLNA DESKA 128 (6 odtenkov)",
+  "source": "Roksal d.o.o. (roksal.com) — datoteka prenesena z javnega URL-ja (brskalniška seja)",
+  "sourceUrl": "https://roksal.com/wp-content/uploads/2024/09/BARVNA_LESTVICA_4-polna-128-4-1024x273.png",
+  "sha256": "df7252e99c47f486ad6acfec78e18bacb300cadf057722a866ac4b68a335b0f6",
+  "bytes": 84373
  }
 ]

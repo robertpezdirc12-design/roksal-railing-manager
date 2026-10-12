@@ -370,7 +370,7 @@ function ProductDialog ({ detail, loading, canCalc, canWrite, onClose, onReload 
               </div>
               {detail.variants.some((v) => v.color && !v.ral) ? (
                 <p className="text-[11px] text-muted-foreground">
-                  Imena odtenkov (npr. Rustic Oak, Rustic Walnut) so potrjena z besedilom vira (roksal.com); ostali odtenki tega profila so zapisani v uradni barvni lestvici (glej Gradiva) in čakajo potrditev imen. Barvni prikaz brez uradnega vzorca je približek.
+                  Imena odtenkov so potrjena z uradnimi barvnimi lestvicami roksal.com (prenešene 2026-10-12; glej Gradiva) in, kjer je bilo mogoče, z besedilom vira. Odtenka Golden teak in White sta potrjena samo s sliko lestvice. Barvni prikaz brez uradnega vzorca ostaja približek.
                 </p>
               ) : null}
             </section>
@@ -750,8 +750,9 @@ const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
 }
 
 function ProductAssetsSection ({ productId }: { productId: string }) {
-  const q = useApi<{ data: AssetRow[] }>(`/api/product-assets?productId=${productId}`, [productId])
+  const q = useApi<{ data: AssetRow[]; colors?: string[] }>(`/api/product-assets?productId=${productId}`, [productId])
   const rows = q.data?.data ?? []
+  const colors = q.data?.colors ?? []
 
   if (q.loading) {
     return (
@@ -772,6 +773,8 @@ function ProductAssetsSection ({ productId }: { productId: string }) {
   if (rows.length === 0) return null
 
   const verified = rows.filter((a) => a.status === 'VERIFIED').length
+  const scaleRows = rows.filter((a) => a.kind === 'BARVNA_LESTVICA')
+  const otherRows = rows.filter((a) => a.kind !== 'BARVNA_LESTVICA')
   return (
     <section className="space-y-2" aria-label="Produktna gradiva">
       <div className="flex flex-wrap items-center gap-2">
@@ -783,15 +786,60 @@ function ProductAssetsSection ({ productId }: { productId: string }) {
       <p className="text-[11px] text-muted-foreground">
         Izvirniki: {rows[0]?.sourceName ?? 'Roksal d.o.o.'}. Dovoljenje: izvajalec dela za Roksal (izjava lastnika). Izvirne datoteke se ne spreminjajo; izpeljane različice nosijo sled do izvirnika.
       </p>
+
+      {/* R494: barvne lestvice — čez celo širino, neskrčene, z imeni odtenkov */}
+      {scaleRows.map((a) => {
+        const st = STATUS_BADGE[a.status] ?? STATUS_BADGE.NEEDS_REVIEW
+        const src = a.filePath ? a.filePath.replace(/^public/, '') : a.cdnUrl ?? a.sourceUrl ?? ''
+        return (
+          <div key={a.id} className="overflow-hidden rounded-lg border bg-card">
+            {a.status === 'MISSING' ? (
+              <div className="flex h-28 items-center justify-center bg-muted/60 p-2 text-center text-[11px] text-muted-foreground" role="img" aria-label="Datoteka barvne lestvice ni bila prenesena">
+                Barvna lestvica obstaja na roksal.com — datoteka ni prenesena (WAF). Izvorni URL in alt so zabeleženi.
+              </div>
+            ) : src ? (
+              <img
+                src={src}
+                alt={ASSET_KIND_LABEL[a.kind] ?? a.kind}
+                className="w-full bg-white object-contain dark:bg-zinc-900"
+                loading="lazy"
+                width={1024}
+                height={320}
+              />
+            ) : (
+              <div className="flex h-28 items-center justify-center bg-muted/60 text-xs text-muted-foreground">brez datoteke</div>
+            )}
+            <div className="space-y-1.5 p-2">
+              <div className="flex items-center justify-between gap-1">
+                <span className="text-[11px] font-semibold leading-tight">Uradna barvna lestvica (roksal.com)</span>
+                <span className={`inline-block rounded border px-1.5 py-0.5 text-[10px] font-semibold ${st.cls}`}>{st.label}</span>
+              </div>
+              {colors.length > 0 ? (
+                <div className="flex flex-wrap gap-1" aria-label="Imena odtenkov">
+                  {colors.map((c) => (
+                    <span key={c} className="rounded border bg-muted px-1.5 py-0.5 text-[10px] font-medium">{c}</span>
+                  ))}
+                </div>
+              ) : null}
+              {a.note ? <p className="text-[10px] leading-snug text-muted-foreground" title={a.note}>{a.note.slice(0, 160)}{a.note.length > 160 ? '…' : ''}</p> : null}
+              {a.sha256 ? <p className="truncate font-mono text-[9px] text-muted-foreground" title={a.sha256}>sha256: {a.sha256.slice(0, 12)}…</p> : null}
+              {a.sourceUrl ? (
+                <a href={a.sourceUrl} target="_blank" rel="noreferrer" className="block truncate text-[10px] text-roksal-amber hover:underline" title={a.sourceUrl}>izvirnik (roksal.com)</a>
+              ) : null}
+            </div>
+          </div>
+        )
+      })}
+
       <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4">
-        {rows.map((a) => {
+        {otherRows.map((a) => {
           const st = STATUS_BADGE[a.status] ?? STATUS_BADGE.NEEDS_REVIEW
           const src = a.filePath ? a.filePath.replace(/^public/, '') : a.cdnUrl ?? a.sourceUrl ?? ''
           return (
             <li key={a.id} className="overflow-hidden rounded-lg border bg-card">
               {a.status === 'MISSING' ? (
-                <div className="flex h-28 items-center justify-center bg-muted/60 p-2 text-center text-[11px] text-muted-foreground" role="img" aria-label="Datoteka barvne lestvice ni bila prenesena">
-                  Barvna lestvica obstaja na roksal.com — datoteka ni prenesena (WAF). Izvorni URL in alt so zabeleženi.
+                <div className="flex h-28 items-center justify-center bg-muted/60 p-2 text-center text-[11px] text-muted-foreground" role="img" aria-label="Datoteka gradiva ni bila prenesena">
+                  Gradivo obstaja na roksal.com — datoteka ni prenesena. Izvorni URL in alt so zabeleženi.
                 </div>
               ) : src ? (
                 <img
@@ -829,7 +877,9 @@ function ProductAssetsSection ({ productId }: { productId: string }) {
         <p className="rounded-lg border border-amber-300 bg-amber-50 p-2 text-[11px] text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
           Manjkajo uradne barvne lestvice (datoteke). Imena odtenkov so zapisana v slikah na roksal.com in jih bo mogoče dokončno potrditi z datotekami od Roksala — v aplikaciji niso izmišljena.
         </p>
-      ) : null}
+      ) : (
+        <p className="text-[10px] text-muted-foreground">Odtenki so potrjeni z uradnimi lestvicami roksal.com (datoteke prenešene 2026-10-12) in, kjer je bilo mogoče, z besedilom vira (reference/FAQ). Odtenka Golden teak in White sta potrjena samo s sliko lestvice.</p>
+      )}
     </section>
   )
 }

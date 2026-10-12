@@ -44,7 +44,7 @@ export async function GET (req: NextRequest) {
       data: rows,
       legenda: {
         status: 'PREVERJENO = vsa gradiva preverjena; DELECNO = gradiva obstajajo, a barvna lestvica manjka (datoteka); MANJKA = ni preverjenih gradiv',
-        barve: 'potrjenihImen = imena potrjena z besedilom vira (Rustic Oak/Walnut); ralPribliskov = demo RAL približki (neuradno za WPC)',
+        barve: 'potrjenihImen = imena odtenkov potrjena z uradnimi lestvicami roksal.com + besedilom vira; ralPribliskov = demo RAL približki (neuradno za WPC)',
       },
     })
   }
@@ -62,5 +62,17 @@ export async function GET (req: NextRequest) {
     orderBy: [{ status: 'asc' }, { kind: 'asc' }, { createdAt: 'asc' }],
     include: { product: { select: { sku: true, name: true } } },
   })
-  return NextResponse.json({ data: assets })
+
+  // R494: za prikaz imen odtenkov ob barvni lestvici — aktivne barve variant izdelka
+  let colors: string[] = []
+  if (productId) {
+    const variants = await db.productVariant.findMany({
+      where: { productId, active: true, color: { not: null } },
+      select: { color: true },
+      distinct: ['color'],
+    })
+    colors = variants.map((v) => v.color).filter((c): c is string => Boolean(c))
+  }
+
+  return NextResponse.json({ data: assets, colors })
 }
