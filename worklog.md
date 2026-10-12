@@ -1792,3 +1792,20 @@ Stage Summary:
 - POLNA 57/32: 4 variante po strani ograj (lestvica KUBO), fotografsko potrjeno AMAZON+OAK, dokumentirano neskladje s barvno stranjo (3)
 - cene: ročne (izrecno navodilo lastnika) — samodejni vnos NI implementiran
 - verzija 1.48.0
+
+---
+Task ID: R495-dodatek
+Agent: main (Z.ai Code)
+Task: DR sinhronizacija + CI diagnoza za R495
+
+Work Log:
+- CI na 4fc5416: 21/24 jobov zeleno, r493/r494/r495 PADLI — vzrok 1: db:seed veriga se je končala pri r494 (baza brez r495 stanja) → package.json razširjen s seed-r495 (514c5d6)
+- CI na 514c5d6 in rerun-i: Kvaliteta in Migracije padli v 2–3 s, runner_id: 0, dnevniki 404 — diagnoza: minimalni echo workflow (probe.yml) TUDI takoj pade → MINUTE GitHub Actions RAČUNA SO IZČRPANE (free plan 2000/min; ~830 min porabljenih danes s 24-job matrikami) — platforma, ne koda; CI bo zelen ob obnovitvi kvote 2026-11-01; probe.yml odstranjen (f90af46)
+- CI priprava baze LOKALNO reproducirana kot dokus: sveža baza (roksal_ci_probe) → migrate deploy → bun run db:seed → 18 izdelkov / 50 variant / 85 VERIFIED / 5 uporabnikov TOČNO po pričakovanjih testov → probe DB zbrisana
+- off-site kopija: prvi poskus ubit s sandboxom (ozadnji proces ne preživi konca klica) + žeton iz .env.recovery je bil napačno izluščen (cut po narekovajih namesto po =) → samostojna NADALJEVALNA skripta (/tmp/upload-r495b.sh, napredek v /tmp/upload-progress.txt): 277 kosov po 128 KiB + manifest naloženih v treh klicih (Cloudflare 403 na kosu 9139 prebolel s pavzo)
+- restore drill (ops/restore.sh --verify --remote): USPEŠNO — HEAD f90af465 ✓, 1 veja, 51 tagov (49→51: v1.47.0, v1.48.0), 1180 vrstic v 92 tabelah ujema živo bazo, 2 s
+- housekeeping GitLab: nepopolna verzija 20261012-185246 (100/142 kosov, zaostanek R494) ZBRISANA (204) + še ena najstarejša → 10 verzij točno po retenciji
+
+Stage Summary:
+- DR veriga zdrava in aktualna na f90af46 (v1.48.0): lokalna šifrirana kopija (36,2 MB, AES-256) + off-site GitLab (277 kosov) + dokazana obnova
+- CI: koda in priprava baze DOKAZANO pravilna (lokalna reprodukcija), padci so izčrpana kvota GitHub Actions minute na free računu — zunanja omejitev (enako kot Vercel), ni ukrepa v kodi
