@@ -1689,3 +1689,5 @@ Stage Summary:
 - DR veriga ZDROVA IN AKTUALNA: lokalno + off-site + dokazana obnova na točno 9c54ffa (v1.45.0 z vsemi popravki in dnevnikom)
 - žeton GitLab potrjen kot veljaven in shranjen v .env.recovery (gitignored); geslo za kopije ločeno v isti datoteki
 - BREZ sprememb aplikacijske kode — samo operativna vzdrževalnost
+
+R492-dodatek: prvi CI poskus na 6ebb946 se je obesil na jobu Regresija (r480) (21+ min, običajno 1,1 min — ujet runner, ne koda) → preklic + rerun: run #43 USPEH, **21/21 jobov zeleno** (3,5 min).
