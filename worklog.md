@@ -1669,3 +1669,23 @@ Work Log:
 Stage Summary:
 - vse zeleno; brez sprememb kode (samo dokumentacija dnevnika + dokazi); produkcija še vedno na v1.21.0 (Vercel billing blokada — v1.22–v1.45 niso razporejene, odločitev lastnika)
 - odprti issueji #2 (odločitev lastnika o izvirnem viru), #3/#7 (terenska validacija), #6 (asseti od uporabnika)
+
+---
+Task ID: R492
+Agent: main (Z.ai Code)
+Task: DR sinhronizacija — off-site varnostna kopija na trenutnem stanju (po R491)
+
+Work Log:
+- ugotovljena vrzel: vse off-site kopije (5) so bile iz jutranjega okna 08:34–08:49 (SHA 28fc9706 = v1.44.0 pred R490/R491) — manjkali so v1.45.0 (R490 SMART GUIDE), testni podatki (b2bc172) in rekonstruirani dnevnik (9c54ffa)
+- preizkušen uporabnikov GitLab žeton (glpat-PkgT…, dolžina 62): VELJAVEN — račun robertpezdirc8, stanje active; domneva iz R485-okolje o »okrnjenem žetonu« je NAPAČNA (žeton deluje v celoti)
+- dostop do projekta 87474527 (markec-group1/roksal-railing-manager): OK — lastniški dostop 50, packages_enabled, empty_repo po zasnovi
+- ops/backup.sh izveden (popoln cikel): export 91 tabel → git bundle → tar → AES-256-CBC + PBKDF2 200k → 7.167.648 bajtov (~7,2 MB; rast proti 3,2 MB prej = nova koda + 9 testnih slik) → nalaganje na GitLab v 56 kosih po 128 KiB z brskalniškim UA in ponovitvami (obstoječa obramba proti Cloudflare 403)
+- off-site potrditev: paket roksal-backup v20261012-125336-9c54ffa1 VIDA na GitLabu (ustvarjen 12:53)
+- ops/restore.sh --verify --remote (drill na novi kopiji): dešifriranje OK; kontrolne vsote OK (git.bundle + export agregat + db/schema.prisma); git clone iz svežka HEAD = 9c54ffa12295f41aa3de28c3d3fa18168eb2aa85 ✓, 1 veja, 48 tagov; baza 2680 vrstic v 91 tabelah — vsi števci se ujemajo s kopijo IN živo bazo; skupni čas 1 s → {"ok": true}
+- opaženo vedenje okolja: Cloudflare proti gitlab.com iz peskovnine blokira VERJETNOSTNO in izmenično (403 blok ~1 min, nato spet 200) — backup.sh obramba (kosi + UA + ponovitve) je učinkovita; GET preverbe zahtevajo potrpežljivost ali ponovitev
+- remote housekeeping: meja 10 verzij, trenutno 6 — nič za brisanje
+
+Stage Summary:
+- DR veriga ZDROVA IN AKTUALNA: lokalno + off-site + dokazana obnova na točno 9c54ffa (v1.45.0 z vsemi popravki in dnevnikom)
+- žeton GitLab potrjen kot veljaven in shranjen v .env.recovery (gitignored); geslo za kopije ločeno v isti datoteki
+- BREZ sprememb aplikacijske kode — samo operativna vzdrževalnost
