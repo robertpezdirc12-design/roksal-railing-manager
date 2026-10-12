@@ -18,6 +18,7 @@
     "db:push:force": "prisma db push --accept-data-loss",
     "db:generate": "prisma generate",
     "db:seed": "node prisma/seed.cjs && node prisma/seed-r437.cjs && node prisma/seed-r442.cjs && node prisma/seed-r445.cjs && node prisma/seed-r446.cjs && node prisma/seed-r447.cjs && node prisma/seed-r449.cjs && node prisma/seed-r475.cjs",
+    "db:seed:test": "node prisma/seed-test.cjs",
     "db:reset": "prisma migrate reset"
   },
   "dependencies": {
