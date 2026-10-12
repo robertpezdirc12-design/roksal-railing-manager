@@ -79,4 +79,48 @@ Trden temelj za gradnjo: **fence-run** (persistenten, verifikiran, cm) + **dvoj�
 
 ---
 
+## 7. End-to-end veriga (R488 — issue #9)
+
+**Datum:** R488 · **Revizija kode:** main = R487 (`72cb6aa`, tag v1.42.0) + popravki P1/P2/P5 istega dne
+**Metoda:** raziskovalni audit 1-a-R488 (veriga POTRJEN TEKAČ → … → PROIZVODNJA) → implementacija treh vrzeli → dokaz `tests/r488.py` (65 kontrol, 8 faz).
+
+### 7.1 Tabela skokov (osvežena po popravkih R488)
+
+| # | Skok | Kje | Status po R488 | Dokaz |
+|---|---|---|---|---|
+| 1 | Vozlišča+teren → segmenti | `fence-run-engine.computeSegments` + `syncSegments` | ✅ 1-D veriga (2.5D dolžine po padini), statusi §9 | r460, r488-B |
+| 2 | TEKAČ → POTRDITEV | `POST /api/fence-run/[id]/confirm` | ✅ quality gate + kanonična meritev (params.fenceRunId + params.segments) + verzija v1 | r460, r488-C |
+| 3 | POTRDITEV → PAKET (handoff) | isto, `handoff:true` | ✅ **P1 (R488)**: calcJson.inputs.segments v m-formi ({kljuc:'seg-N', dolzina, visina}) + razmikStebrovM iz pravila max_razdalja_stebrov; brez plan (suhi handoff) | r488-C |
+| 4 | PAKET → BOM | `POST /api/project-packages/[id]/bom` → `planBom` | ✅ **P1 (R488)**: handoff paket zdaj izpelje vrstice PO SEGMENTU (segmentsApplied = N, BomLine.segmentKey) — prej 0 (predloga × qty) | r488-F |
+| 5 | BOM → CENE | `resolveItemCost/resolveSalePrice/resolveMontaza` (ceniki) | ✅ en vir resnice za cene (R464) | r488-F/G |
+| 6 | CENE → PONUDBA | `POST /api/quotes` (R474/R476) | ✅ popust + DDV 22 % iz osnove po popustu; invalidacija ob regeneraciji BOM (staleAt/staleReason → OSNUTEK) | r488-G |
+| 7 | TEKAČ → MERILNI MODEL | `GET /api/fence-run/[id]/model` (R473) | ✅ seg-N 1:1, totalLengthCm == summary, turns L/D | r488-D |
+| 8 | MODEL → DOKUMENT | `GET /api/pdf/measure/[runId]` (R477) | ✅ merilni paket (risba+skica+odrezni seznam) | r488-E |
+| 9 | PAKET → AS-DESIGNED | `buildDesignedSnapshot` → `segmentsZaProjekt` | ✅ **P5 (R488)**: preferira POTRJENEGA tekača; osnutek samo kot fallback z vidnim opozorilom (runDraftWarning/runStatusAtSnapshot v meta) | r488-H |
+| 10 | BOM POTRJEN → AS-PRODUCED | `buildProducedSnapshot` | ✅ + **R488**: parseTwinData ohrani produkt/RAL (prefab lističi nosijo RAL variante) | r488-H |
+| 11 | AS-PRODUCED → PROIZVODNJA | `POST /api/production/from-twin` (R465) | ✅ PR nalog + elementi seg-N z merami/RAL/NAVRTEN; idempotenca 409 | r465, r488-H |
+| 12 | MERITEV → KONFIGURATOR (prefill) | `konfigurator.prefillFromMeasurements` | ✅ **P2 (R488)**: meritev iz tekača prenese PRAVE segmente (seg-1…seg-N, dolžine/višine) namesto flat dolžine; ročno urejanje ostaja | r488-J (source) |
+
+**Jedro dokaza — EN VIR RESNICE:** ključi `seg-N` so USKLAJENI čez celo verigo (tekač ↔ meritev ↔ model ↔ calcJson.inputs ↔ BomLine ↔ dvojček ↔ prefab) in skupna dolžina se prenese nespremenjena (tekač == meritev == model == dvojček == Σ lističev). To preverja `tests/r488.py` faza I na deterministični geometriji (4×250 cm).
+
+### 7.2 Popravki R488 (implementirano)
+
+1. **P1 — handoff paket brez segmentov:** `confirm` zapiše `calcJson.inputs.segments` (m-forma) + `razmikStebrovM` iz aktivnega `EngineeringRule max_razdalja_stebrov`; `calcJson.plan` se NE shranjuje. Meritvi smo dodali še `heightCm` v `params.segments` (vir za P2). Učinek: `POST /bom` na handoff paketu vrne `segmentsApplied = N` (ne 0) in BomLine s `segmentKey`.
+2. **P2 — konfiguratorjev prefill splošči segmente:** `prefillFromMeasurements()` prenaša PRAVE segmente tekača, kadar meritev ima `params.fenceRunId` + neprazne `params.segments`; sicer stara flat pot. Ob tem popravljen 10× zaokrožitveni hrošč flat pretvorbe cm → m (`round(cm/10)/100` → `round(cm)/100`; komentar v kodi je že zahteval »cm → m«).
+3. **P5 — segmentsZaProjekt brez statusnega filtra:** nova opcija `{ confirmedFirst: true }` (SAMO AS-DESIGNED pot); če obstaja POTRJEN tekač projekta, se uporabi najnovejši POTRJENI, sicer najnovejši katerikoli + `runDraftWarning: true`/`runStatusAtSnapshot` v meta snapshot-a (vidno, nikoli tiho — §19). `twinOverview` in ostali klicatelji obnašanja nespremenjeni.
+4. **Najdena ob implementaciji — parseTwinData je puščal `produkt` za sabo:** `latestSnapshot` (AS-DESN → AS-PRODUCED → from-twin) je iz belega seznama izpustil `produkt`, zato prefab lističi NISO dobili RAL-ja variante. Whitelist razširjen za `produkt` (productId/variantId/ime/varianta/ral) — R488-H preverja `ral == 'RAL 7016'` na vseh lističih.
+
+### 7.3 Znane meje (zavestno IZVEN obsega R488)
+
+| # | Meja | Zakaj je OK / utemeljitev |
+|---|---|---|
+| P3 | **Ponudba NE gradi vrstic strežniško iz BOM** — danes odjemalec sestavi pozicije iz plan dry-run (`planBom`) in jih pošlje eksplicitno. | Ponudba je POSLOVNI dokument (popusti, ročne pozicije, teksti), ne tehnični BOM; avtomatsko pretakanje vrstic bi odjemu stranki onemogočilo prilagoditve. Kvantitativna povezanost OSTANE: ponudba je vezana na `packageId` (R474) → invalidacija ob spremembi obsega deluje, r488-G. Strežniška pretvorba je smiselna šele z zahtevo po »ponudba iz kosovnice v enem kliku« (nov issue). |
+| P4 | **Quote NIMA direktne FK na ProductionOrder** — proizvodnja teče iz dvojčka/BOM (AS-PRODUCED iz POTRJENE kosovnice paketa, ki je vezan na ponudbo posredno prek paketa). | Zasnovno pravilo »tekač = BOM = dvojček = viri; ponudba/proizvodnja sta POGLEDA na njih« (R461/R465). Direktna vez bi ustvarila drugi vir resnice za obseg proizvodnje; sledljivost ponudba → paket → BOM → AS-PRODUCED → PR nalog že obstaja (r488 dokazuje konce verige). |
+| P6 | **Kamera multiView meritev NE postane tekač** — flat potrditev ostaja eno-segmentna. | Transformacija 2D foto-izmere v 1-D verigo z vozlišči je izmišljanje podatkov (§19): foto točke nimajo atCm pozicij ob teku niti stebrov/vrat. Prava pot obstaja in je dokumentirana: ročni tekač (r460) ali zajem FENCE_RUN (r461). Ko bo zahtevek »iz kamere v tekač« konkreten, gre skozi zajem (capture-session FENCE_RUN mode). |
+| — | Prefill P2 je UI-nivo (brez API dokaza) | Kontrole r488-J so source-grep (isti vzorec kot r487-E za UI nize); funkcija je čista pretvorba prebranih podatkov (brez strežniške logike). |
+
+*Dokaz R488: `tests/r488.py` — 65 kontrol, faze A–K (priprava, tekač, potrditev+handoff, model, PDF, BOM, ponudba, dvojček+proizvodnja, konsistenca+RBAC, P2 source, čiščenje ×2). Regresija ob objavi: r462 91/91, r465 90/90, r475 49/49, r476 51/51, r474 37/37, r486 70/70, r487 71/71, tsc 0 napak, lint čisto, dev.log brez 5xx.*
+
+---
+
 *Dokazi: file:line reference v tem dokumentu so bile zbrane z neposrednim branjem kode R471 (main). Testna pokritost: tests/r437–r471 (33 datotek, ~1900+ kontrol), CI matrika r465–r471.*

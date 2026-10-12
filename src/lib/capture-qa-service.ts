@@ -341,15 +341,24 @@ export async function latestSnapshot (projectId: string, kind: string): Promise<
   return { id: s.id, version: s.version, data: safeParse(s.data, parseTwinData, null as unknown as TwinSnapshotData | null) }
 }
 
-/** Segmenti iz meritev projekta (iz tekačev, sicer polja meritve). */
-export async function segmentsZaProjekt (projectId: string): Promise<{ segments: GateSegment[]; measurementId: string | null; totalCm: number }> {
-  const runs = await db.fenceRun.findMany({
-    where: { projectId },
+/** Segmenti iz meritev projekta (iz tekačev, sicer polja meritve).
+ * R488 (P5): confirmedFirst = true (samo AS-DESIGNED pot) PREFERIRA tekača s
+ * statusom POTRJEN — če obstaja, se uporabi najnovejši POTRJENI; sicer pade
+ * nazaj na najnovejšega katerikoli (obstoječe obnašanje) + runStatus pove,
+ * da je vir osnutek (klicatelj zapiše opozorilo v snapshot). Ostali
+ * klicatelji (twinOverview) obnašanja NE spreminjajo. */
+export async function segmentsZaProjekt (projectId: string, opts?: { confirmedFirst?: boolean }): Promise<{ segments: GateSegment[]; measurementId: string | null; totalCm: number; runStatus: string | null }> {
+  const runQuery = (status?: string) => db.fenceRun.findMany({
+    where: { projectId, ...(status ? { status } : {}) },
     orderBy: { updatedAt: 'desc' },
     include: { segments: { orderBy: { order: 'asc' } } },
     take: 1,
   })
-  const run = runs[0]
+  let run = (await runQuery())[0]
+  if (opts?.confirmedFirst) {
+    const confirmed = (await runQuery('POTRJEN'))[0]
+    if (confirmed && confirmed.segments.length > 0) run = confirmed
+  }
   if (run && run.segments.length > 0) {
     return {
       segments: run.segments.map((seg) => ({
@@ -360,6 +369,7 @@ export async function segmentsZaProjekt (projectId: string): Promise<{ segments:
       })),
       measurementId: run.measurementId,
       totalCm: round1(run.segments.reduce((a, s) => a + s.lengthCm, 0)),
+      runStatus: run.status,
     }
   }
   // brez tekača: zadnja kanonična meritev kot en segment
@@ -376,9 +386,10 @@ export async function segmentsZaProjekt (projectId: string): Promise<{ segments:
       }],
       measurementId: m.id,
       totalCm: m.lengthCm,
+      runStatus: null,
     }
   }
-  return { segments: [], measurementId: null, totalCm: 0 }
+  return { segments: [], measurementId: null, totalCm: 0, runStatus: null }
 }
 
 // ─── AS-DESIGNED iz projektnega paketa (§10) ────────────────────────────────
@@ -415,7 +426,10 @@ export async function buildDesignedSnapshot (args: {
     fotoViz = { id: pv.id, variantLabel: pv.variantLabel, engineVersion: pv.engineVersion }
   }
 
-  const base = await segmentsZaProjekt(args.projectId)
+  // R488 (P5): AS-DESIGNED PREFERIRA POTRJENEGA tekača (vir izmere, ki je
+  // prešel quality gate) — osnutek se uporabi samo, če potrjenega ni, in to
+  // ostane VIDNO zapisano v meta snapshot-a (runDraftWarning).
+  const base = await segmentsZaProjekt(args.projectId, { confirmedFirst: true })
   let config: Record<string, unknown> | null = null
   if (pkg.calcJson) {
     try { config = JSON.parse(pkg.calcJson) as Record<string, unknown> } catch { config = null }
@@ -435,6 +449,12 @@ export async function buildDesignedSnapshot (args: {
     fotoViz,
     measurement: base.measurementId ? { id: base.measurementId, version: null } : null,
   })
+  // R488 (P5): vir segmentov je NEPOTRJEN tekač (osnutek) → opozorilo v meta
+  // snapshot-a — nikoli tiho (§19). Status vrst ostane nespremenjen.
+  if (base.runStatus != null && base.runStatus !== 'POTRJEN') {
+    data.runDraftWarning = true
+    data.runStatusAtSnapshot = base.runStatus
+  }
   const snap = await createTwinSnapshotRow({
     projectId: args.projectId,
     kind: 'AS_DESIGNED',

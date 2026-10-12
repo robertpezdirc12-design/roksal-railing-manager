@@ -17,6 +17,7 @@ import { ENGINE_VERSION, SEGMENT_STATUSES } from '@/lib/fence-run-engine'
 import { analyzeContext, loadRunContext, snapshotVersion } from '@/lib/fence-run-service'
 import { fenceRunZaUporabnika } from '@/lib/fence-run-access'
 import { nextPackageCode } from '@/lib/product-core'
+import { POSTS_RULE_KEY } from '@/lib/segment-bom'
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -90,8 +91,8 @@ export async function POST (req: NextRequest, { params }: Params) {
         nodes: ctx.nodes,
         segments: ctx.segments.map((s) => ({
           order: s.order, fromAtCm: s.fromAtCm, toAtCm: s.toAtCm,
-          lengthCm: s.lengthCm, slopeDeg: s.slopeDeg, status: s.status,
-          verifiedCm: s.verifiedCm,
+          lengthCm: s.lengthCm, heightCm: s.heightCm, slopeDeg: s.slopeDeg,
+          status: s.status, verifiedCm: s.verifiedCm,
         })),
         summary: analysis.summary,
       }),
@@ -117,13 +118,43 @@ export async function POST (req: NextRequest, { params }: Params) {
   if (handoff && ctx.run.productId) {
     const product = await db.product.findUnique({
       where: { id: ctx.run.productId },
-      select: { id: true, name: true, unit: true },
+      select: { id: true, name: true, unit: true, family: { select: { code: true } } },
     })
     if (product) {
       const variant = ctx.run.variantId
         ? await db.productVariant.findUnique({ where: { id: ctx.run.variantId }, select: { id: true, name: true } })
         : null
       const code = await nextPackageCode(project?.code ?? 'P')
+      const qty = Math.round((analysis.summary.totalLengthCm / 100) * 100) / 100
+      // R488 (P1 — end-to-end veriga): handoff paket nosi STRUCTURIRANE VHODE
+      // iz POTRJENIH segmentov tekača (m-forma, ključi seg-N — isti vir kot
+      // konfigurator). Tako POST /api/project-packages/[id]/bom izpelje
+      // vrstice PO SEGMENTU (segmentsApplied = N) brez ponovnega vnosa (§21).
+      // calcJson.plan se NE shranjuje — izračun ostane suh dry-run (enako
+      // konfiguratorju: cene/marža se zapišejo šele z generacijo kosovnice).
+      const gates = ctx.nodes.filter((n) => n.kind === 'VRATA').length
+      const inputs: Record<string, unknown> = {
+        familyCode: product.family.code,
+        form: 'm',
+        qty,
+        qtySource: 'fence-run',
+        segments: ctx.segments.map((s) => ({
+          kljuc: `seg-${s.order + 1}`,
+          dolzina: Math.round(s.lengthCm) / 100, // cm → m (na cel cm)
+          visina: s.heightCm != null && s.heightCm > 0 ? Math.round(s.heightCm) / 100 : null,
+        })),
+        ...(gates > 0 ? { vrataKos: gates } : {}),
+        fenceRunId: id,
+        runName: ctx.run.name,
+        engine: ENGINE_VERSION,
+        source: 'FENCE_RUN',
+      }
+      // razmik stebrov iz AKTIVNEGA EngineeringRule max_razdalja_stebrov (cm → m);
+      // brez pravila pusti izpeljavo planBom (opozorilo BREZ_RAZMIKA — pošteno)
+      const postsRule = await db.engineeringRule.findFirst({ where: { key: POSTS_RULE_KEY, active: true } })
+      if (postsRule && Number(postsRule.value) > 0) {
+        inputs.razmikStebrovM = Math.round(Number(postsRule.value)) / 100
+      }
       const created = await db.projectPackage.create({
         data: {
           code,
@@ -132,9 +163,10 @@ export async function POST (req: NextRequest, { params }: Params) {
           variantId: variant?.id ?? null,
           measurementId: measurement.id,
           name: variant ? `${product.name} — ${variant.name}` : product.name,
-          qty: Math.round((analysis.summary.totalLengthCm / 100) * 100) / 100,
+          qty,
           unit: product.unit === 'm' ? 'm' : 'm',
           status: 'IZMERA',
+          calcJson: JSON.stringify({ inputs }),
           note: `Iz ograjnega tekača (${ctx.run.name})`,
         },
       })

@@ -899,6 +899,34 @@ function StepIzdelek ({ families, products, loading, error, familyCode, productI
   )
 }
 
+/**
+ * R488 (P2 — end-to-end veriga): PRAVI segmenti tekača iz params meritve
+ * (dolžine/višine po segmentu; ključe seg-N razreši strežnik ob izračunu BOM).
+ * Vrne null, če meritev NI nastala iz ograjnega tekača (manjka
+ * params.fenceRunId ali params.segments) — takrat velja stara flat pretvorba.
+ */
+function runSegmentsFromParams (params: string | null): { lengthCm: number; heightCm: number | null }[] | null {
+  if (!params) return null
+  try {
+    const o = JSON.parse(params) as {
+      fenceRunId?: unknown
+      segments?: { lengthCm?: unknown; heightCm?: unknown }[] | null
+    }
+    if (typeof o.fenceRunId !== 'string' || !o.fenceRunId) return null
+    if (!Array.isArray(o.segments) || o.segments.length === 0) return null
+    const out: { lengthCm: number; heightCm: number | null }[] = []
+    for (const s of o.segments) {
+      const lenCm = Number(s?.lengthCm)
+      if (!Number.isFinite(lenCm) || lenCm <= 0) continue // preskoči neveljavne
+      const h = Number(s?.heightCm)
+      out.push({ lengthCm: lenCm, heightCm: Number.isFinite(h) && h > 0 ? h : null })
+    }
+    return out.length > 0 ? out : null
+  } catch {
+    return null
+  }
+}
+
 // ─── 3. MERITVE (družinski vhodni obrazec, issue #7 §4) ───────────────────────
 
 function StepMeritve (p: {
@@ -935,6 +963,10 @@ function StepMeritve (p: {
    * R455 (issue #10 §5 — SAMODEJNI PRENOS PODATKOV): prevzeme POTRJENE meritve
    * izbranega projekta (KAMERA + ROCNO, lengthCm > 0) in jih pretvori v segmente
    * — brez ponovnega ročnega prepisovanja istih podatkov v drugem modulu.
+   * R488 (P2): meritev iz tekača (params.fenceRunId + params.segments) prenese
+   * PRAVE segmente tekača (seg-1 … seg-N) namesto ene flat dolžine — struktura
+   * izmere ostane celovita do BOM/ponudbe. Prefill je samo PREDLOGA: segmenti
+   * ostanejo ročno urejavi.
    */
   async function prefillFromMeasurements (): Promise<void> {
     if (!p.projectId) {
@@ -943,7 +975,7 @@ function StepMeritve (p: {
     }
     setPrefillBusy(true)
     try {
-      const res = await apiGet<{ data: { id: string; type: string; source: string; lengthCm: number | null; heightCm: number | null; location: string | null }[] }>(
+      const res = await apiGet<{ data: { id: string; type: string; source: string; lengthCm: number | null; heightCm: number | null; location: string | null; params: string | null }[] }>(
         `/api/measurements?projectId=${p.projectId}`
       )
       const rows = (res.data ?? []).filter((m) => m.type !== 'FOTO' && (m.lengthCm ?? 0) > 0)
@@ -951,15 +983,37 @@ function StepMeritve (p: {
         toast({ title: 'Ni potrjenih meritev.', description: 'Za ta projekt še ni potrdjenih meritev z dolžino — izmerite s kamero ali vnesite ročno.' })
         return
       }
-      const segs = rows.map((m) => ({
-        id: p.nextSegId(),
-        len: String(Math.round((m.lengthCm as number) / 10) / 100), // cm → m (2 dec.)
-        h: m.heightCm && m.heightCm > 0 ? String(Math.round(m.heightCm) / 100) : '',
-      }))
+      const segs: SegM[] = []
+      let runBased = 0
+      for (const m of rows) {
+        const runSegs = runSegmentsFromParams(m.params)
+        if (runSegs) {
+          // meritev iz tekača → PRAVI segmenti (dolžine/višine 1:1)
+          runBased++
+          for (const rs of runSegs) {
+            segs.push({
+              id: p.nextSegId(),
+              len: String(Math.round(rs.lengthCm) / 100), // cm → m (na cel cm)
+              h: rs.heightCm && rs.heightCm > 0 ? String(Math.round(rs.heightCm) / 100) : '',
+            })
+          }
+        } else {
+          // stara flat pot: ena meritev = en segment
+          segs.push({
+            id: p.nextSegId(),
+            len: String(Math.round(m.lengthCm as number) / 100), // cm → m (2 dec.)
+            h: m.heightCm && m.heightCm > 0 ? String(Math.round(m.heightCm) / 100) : '',
+          })
+        }
+      }
       p.setSegsM(segs)
       toast({
-        title: `Prevzetih ${rows.length} meritev iz projekta.`,
-        description: 'Segmenti so iz potrjenih meritev (kamera/ročno) — po potrebi jih prilagodite.',
+        title: runBased > 0
+          ? `Prevzetih ${segs.length} segmentov iz ${runBased} meritev tekača.`
+          : `Prevzetih ${rows.length} meritev iz projekta.`,
+        description: runBased > 0
+          ? 'Segmenti so 1:1 iz potrjenih tekačev (seg-1 … seg-N) — po potrebi jih prilagodite.'
+          : 'Segmenti so iz potrjenih meritev (kamera/ročno) — po potrebi jih prilagodite.',
       })
     } catch (e) {
       toast({ title: 'Prevzem meritev ni uspel.', description: e instanceof Error ? e.message : undefined, variant: 'destructive' })

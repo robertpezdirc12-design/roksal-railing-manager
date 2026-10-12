@@ -580,6 +580,11 @@ export interface TwinSnapshotData {
   /** R462 §10: ključi segmentov z EKSPlicitNO odobrenimi spremembami mere — diff jih označi APPROVED_CHANGE */
   producedOverrideKeys?: string[]
   montaža?: { notes: string[]; workOrderId: string | null; odkloni?: DiffRow[] } | null
+  /** R488 §P5: AS-DESIGNED iz NEPOTRJENEGA tekača (osnutka) — vidno opozorilo
+   *  v meta (nikoli tiho, §19). true SAMO kadar je vir osnutek. */
+  runDraftWarning?: boolean
+  /** status tekača v trenutku snapshot-a (npr. OSNUTEK / PREGLED) */
+  runStatusAtSnapshot?: string | null
   engineVersion: string
 }
 
@@ -936,6 +941,23 @@ export function parseTwinData (v: unknown): TwinSnapshotData | null {
   }
   if (Array.isArray(v.producedOverrideKeys)) {
     out.producedOverrideKeys = v.producedOverrideKeys.filter((k): k is string => typeof k === 'string')
+  }
+  // R488 (E2E veriga): produkt (RAL/varianta) preživi round-trip — AS-PRODUCED
+  // in prefab lističi potrebujejo RAL iz variante paketa (issue #9 veriga).
+  if (isObj(v.produkt) && typeof (v.produkt as { ime?: unknown }).ime === 'string') {
+    const pr = v.produkt as Record<string, unknown>
+    out.produkt = {
+      productId: typeof pr.productId === 'string' ? pr.productId : '',
+      variantId: typeof pr.variantId === 'string' ? pr.variantId : null,
+      ime: pr.ime as string,
+      varianta: typeof pr.varianta === 'string' ? pr.varianta : null,
+      ral: typeof pr.ral === 'string' ? pr.ral : null,
+    }
+  }
+  // R488 §P5: opozorilo o osnutkovem viru AS-DESIGNED preživi round-trip
+  if (v.runDraftWarning === true) {
+    out.runDraftWarning = true
+    out.runStatusAtSnapshot = typeof v.runStatusAtSnapshot === 'string' ? v.runStatusAtSnapshot : null
   }
   return out
 }
