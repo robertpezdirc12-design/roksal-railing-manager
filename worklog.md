@@ -1746,3 +1746,18 @@ Stage Summary:
 - ključni premik: 5 MISSING → 8 VERIFIED zapisov; 14 → 46 variant; 10 → 18 izdelkov; matrika pokritosti brez DELECNO
 - ostaja (zavestno): fotografije po kombinaciji profil×barva (galerije roksal.com), uradni ceniški podatki (salePrice 0 za ROK-*), točen izbor 3 barv za POLNA 57/32, umik neskladja POLNA 128 (6/5) pri Roksalu
 - verzija 1.47.0
+
+---
+Task ID: R494-dodatek
+Agent: main (Z.ai Code)
+Task: DR sinhronizacija + CI potrditev za R494
+
+Work Log:
+- CI na 4334fd4 (v1.47.0): USPEH — 23/23 jobov zeleno (nova skupina r494 vključena)
+- off-site kopija: prvi poskus (18:46) naletel na Cloudflare 403 (kos 54/142), drugi (18:52) ubit ob timeoutu orodja (100/142) — TRETJI poskus v ozadju (19:02) USPEŠEN: roksal-backup-20261012-190245-4334fd4f.rkb (18.567.680 B, AES-256, sha256 a1351c37…), 142 kosov + manifest na GitLabu, 546 s
+- restore drill (ops/restore.sh --verify --remote): USPEŠNO — HEAD 4334fd4 ✓, 1 veja, 50 tagov (48→50: v1.46.0, v1.47.0), 879 vrstic v 92 tabelah se ujema z živo bazo, 1 s
+- opaženje okolja: backup.sh brez source env.sh podeduje SISTEMSKI DATABASE_URL (sqlite my-project) → napaka validacije providerja; izvajati z env.sh (isti vzorec kot pri testih)
+- housekeeping: nepopolna verzija 20261012-185246 (100/142 kosov) ZOSTANE na GitLabu — brisanje je spodletelo (Cloudflare blok IP); ni nevarna (restore preverja kontrolne vsote — fail-closed) → izbrisati ob naslednjem odprtem oknu
+
+Stage Summary:
+- DR veriga zdrava in aktualna na 4334fd4 (v1.47.0); CI 23/23; off-site + lokalno + dokazana obnova
