@@ -18,11 +18,12 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { getSessionUser, jsonError, readsAllData, type SessionUser } from '@/lib/auth'
+import { getSessionUser, jsonError, managesAssignments, readsAllData, type SessionUser } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
 import { emitEvent } from '@/lib/notify'
 import { izvediAkcijo, type AkcijaVhod } from '@/lib/playbook-engine'
 import { MEASURE_MODES } from '@/lib/measure-engine'
+import { posodobiCheck, preveriBlokadoZakljucka } from '@/lib/montaza-qa-core'
 
 // R439: terenski tok — VERBATIM iz /api/nalog/[id]/transition
 const FLOW: Record<string, { next: string; event: string; label: string }[]> = {
@@ -36,7 +37,7 @@ const FLOW: Record<string, { next: string; event: string; label: string }[]> = {
 }
 
 const TYPES = ['OGRAJA', 'BALUSTRADA', 'NAGIB', 'OSTANEO']
-const KINDS = ['meritev', 'foto', 'nalog-opomba', 'nalog-status', 'nalog-zakljucek', 'playbook-step'] as const
+const KINDS = ['meritev', 'foto', 'nalog-opomba', 'nalog-status', 'nalog-zakljucek', 'playbook-step', 'montaza-check'] as const
 type SyncKind = (typeof KINDS)[number]
 
 const MAX_OPS = 50
@@ -355,13 +356,17 @@ async function opFoto (
   return { data: photo }
 }
 
-/** Prehod statusa (ISTA logika kot /api/nalog/[id]/transition); spor → CONFLICT. */
+/** Prehod statusa (ISTA logika kot /api/nalog/[id]/transition); spor → CONFLICT.
+ *  R489 (issue #12 §2C): zaključek blokira kritična nerešena napaka (ISTA
+ *  varovala kot spletna pot — sync NE sme obiti blokade). */
 async function opTransition (
   user: SessionUser,
   workOrderId: string,
   to: string,
   note: string | null,
-  forceZakljucek: boolean
+  forceZakljucek: boolean,
+  override: boolean = false,
+  overrideReason: string | null = null
 ): Promise<{ data?: unknown; error?: string; conflict?: boolean }> {
   const order = await db.workOrder.findUnique({
     where: { id: workOrderId },
@@ -387,6 +392,30 @@ async function opTransition (
         ? 'Nalog je že zaključen.'
         : `Prehod ${order.status} → ${target} ni dovoljen. Dovoljeni prehodi: ${allowed.map((s) => `${order.status} → ${s.next}`).join('; ') || '—'}.`
     return { error: reason, conflict: true }
+  }
+
+  // R489 (issue #12 §2C): blokada zaključka — ISTA logika kot /api/nalog/[id]/transition
+  if (step.next === 'ZAKLJUCEN') {
+    const blokada = await preveriBlokadoZakljucka(workOrderId)
+    if (blokada.blokira) {
+      if (!override || !managesAssignments(user)) {
+        return {
+          error: `Zaključek terena je blokiran: ${blokada.razlogi.join(' ')}`,
+          conflict: true,
+        }
+      }
+      if (!overrideReason) {
+        return { error: 'Izvzem blokade zahteva razlog (forceReason).', conflict: true }
+      }
+      await writeAudit({
+        userId: user.id,
+        action: 'WO_ZAKLJUCEK_OVERRIDE',
+        entity: 'workOrder',
+        entityId: workOrderId,
+        projectId: order.project?.id ?? null,
+        detail: { code: order.code, razlog: overrideReason, blokirajoce: blokada.razlogi, synced: true },
+      })
+    }
   }
 
   const now = new Date()
@@ -517,7 +546,33 @@ export async function POST (req: NextRequest) {
           const to = str(payload.to)
           if (!woId) outcome = { error: 'Manjka workOrderId.' }
           else if (!to) outcome = { error: 'Manjka ciljni status (to).' }
-          else outcome = await opTransition(user, woId, to, null, false)
+          else outcome = await opTransition(user, woId, to, null, false, payload.force === true, str(payload.forceReason))
+        }
+      } else if (op.kind === 'montaza-check') {
+        // R489 (issue #12 §4): offline status kontrolne točke — ISTA logika kot
+        // PATCH /api/nalog/[id]/qa/check (sync je transport, ne nov sistem)
+        if (!user.perms.includes('nalog.write')) outcome = { error: 'Manjka pravica nalog.write.' }
+        else {
+          const woId = str(payload.workOrderId)
+          const checkId = str(payload.checkId)
+          const status = str(payload.status)
+          if (!woId || !checkId || !status) {
+            outcome = { error: 'Manjka workOrderId, checkId ali status.' }
+          } else {
+            outcome = await posodobiCheck(user, woId, {
+              checkId,
+              status,
+              note: str(payload.note),
+              photoId: str(payload.photoId),
+              resolutionNote: str(payload.resolutionNote),
+              deviationReason: str(payload.deviationReason),
+              deviationLocation: str(payload.deviationLocation),
+              deviationTargetKey: str(payload.deviationTargetKey),
+              deviationImpactMaterial: payload.deviationImpactMaterial === true,
+              deviationImpactPrice: payload.deviationImpactPrice === true,
+              deviationImpactSafety: payload.deviationImpactSafety === true,
+            })
+          }
         }
       } else if (op.kind === 'playbook-step') {
         // R458 (issue #13 §13): offline akcija nad korakom playbooka — ISTA
@@ -553,7 +608,7 @@ export async function POST (req: NextRequest) {
           const woId = str(payload.workOrderId)
           const summary = str(payload.summary)
           if (!woId) outcome = { error: 'Manjka workOrderId.' }
-          else outcome = await opTransition(user, woId, 'ZAKLJUCEN', summary, true)
+          else outcome = await opTransition(user, woId, 'ZAKLJUCEN', summary, true, payload.force === true, str(payload.forceReason))
         }
       }
     } catch (err) {

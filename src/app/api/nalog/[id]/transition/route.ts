@@ -6,9 +6,10 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { jsonError, readsAllData, requirePermission } from '@/lib/auth'
+import { jsonError, managesAssignments, readsAllData, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
 import { emitEvent } from '@/lib/notify'
+import { preveriBlokadoZakljucka } from '@/lib/montaza-qa-core'
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -33,6 +34,8 @@ export async function POST (req: NextRequest, { params }: Params) {
   const body = await req.json().catch(() => null)
   const to = typeof body?.to === 'string' ? body.to : ''
   const note = typeof body?.note === 'string' ? body.note : null
+  const force = body?.force === true
+  const forceReason = typeof body?.forceReason === 'string' && body.forceReason.trim() ? body.forceReason.trim().slice(0, 300) : null
 
   const order = await db.workOrder.findUnique({
     where: { id },
@@ -55,6 +58,32 @@ export async function POST (req: NextRequest, { params }: Params) {
       `Prehod ${order.status} → ${to || '?'} ni dovoljen.`,
       `Dovoljeni prehodi: ${allowed.map((s) => `${order.status} → ${s.next} (${s.label})`).join('; ') || '—'}`
     )
+  }
+
+  // R489 (issue #12 §2C): kritična nerešena napaka BLOKIRA zaključek terena —
+  // izvzem samo z izrecnim odobrenjem vodstva (force + razlog, revizija).
+  if (to === 'ZAKLJUCEN') {
+    const blokada = await preveriBlokadoZakljucka(id)
+    if (blokada.blokira) {
+      if (!force || !managesAssignments(auth.user)) {
+        return jsonError(
+          409,
+          'Zaključek terena je blokiran: nerešene kritične zadeve.',
+          blokada.razlogi.join(' ') + (managesAssignments(auth.user) ? ' Izvzem je možen samo z force + razlogom (vodstvo).' : '')
+        )
+      }
+      if (!forceReason) {
+        return jsonError(400, 'Izvzem blokade zahteva razlog (forceReason).', 'Razlog se zapiše v revizijsko sled.')
+      }
+      await writeAudit({
+        userId: auth.user.id,
+        action: 'WO_ZAKLJUCEK_OVERRIDE',
+        entity: 'workOrder',
+        entityId: id,
+        projectId: order.project?.id ?? null,
+        detail: { code: order.code, razlog: forceReason, blokirajoce: blokada.razlogi },
+      })
+    }
   }
 
   const now = new Date()

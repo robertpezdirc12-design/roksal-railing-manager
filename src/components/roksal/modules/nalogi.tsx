@@ -11,7 +11,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import {
-  CalendarClock, Camera, CheckCheck, CheckCircle2, ClipboardList, History, Loader2, MapPin, MessageSquare,
+  CalendarClock, Camera, CheckCheck, CheckCircle2, ClipboardCheck, ClipboardList, FileText, History, Loader2, MapPin, MessageSquare,
   Play, Plus, Ruler, Search, User, UserPlus, Users, WifiOff,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -29,6 +29,69 @@ import { apiPatch, apiPost, fmtDate, fmtDateTime, useApi } from '@/lib/api-clien
 import { EmptyState, ErrorBox, LoadingRows, PageHeader, StatusBadge } from '@/components/roksal/ui-bits'
 import { hasPerm } from '@/lib/permissions-core'
 import { cacheNalogi, getCachedNalogi, queueOp, syncNow, useOnline, type OfflineOpKind } from '@/lib/offline'
+
+// R489 (issue #12): povzetek montažnega QA v podrobnosti naloga (samo online —
+// urejanje je v modulu Danes, tukaj samo stanje + primopredaja + PDF)
+function QaSummarySection ({ woId }: { woId: string }) {
+  const token = useAppStore((s) => s.token)
+  const { toast } = useToast()
+  const qa = useApi<{
+    data: {
+      povzetek: { skupaj: number; vRedu: number; napake: number; caka: number; niRelevantno: number; odstopanj: number }
+      checks: { critical: boolean; status: string; label: string }[]
+      handover: { id: string; version: number; status: string; monterConfirmedAt: string | null; customerSignedAt: string | null } | null
+    }
+  }>(`/api/nalog/${woId}/qa`)
+  const [pdfBusy, setPdfBusy] = useState(false)
+  const d = qa.data?.data
+  if (qa.loading || !d || d.povzetek.skupaj === 0) return null
+
+  const odprteKriticne = d.checks.filter((c) => c.critical && (c.status === 'NAPAKA' || c.status === 'CAKA_PREVERJANJE'))
+
+  async function izvozi (): Promise<void> {
+    if (!d?.handover || !token) return
+    setPdfBusy(true)
+    try {
+      const res = await fetch(`/api/pdf/handover/${d.handover.id}`, { headers: { Authorization: `Bearer ${token}` } })
+      if (!res.ok) throw new Error(`Napaka strežnika (${res.status}).`)
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      window.open(url, '_blank', 'noopener')
+      setTimeout(() => URL.revokeObjectURL(url), 30_000)
+    } catch (e) {
+      toast({ title: 'Izvoz PDF ni uspel.', description: e instanceof Error ? e.message : undefined, variant: 'destructive' })
+    } finally { setPdfBusy(false) }
+  }
+
+  return (
+    <section aria-label="Kontrola kakovosti montaže — povzetek" className="rounded-xl border p-3">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <h3 className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-muted-foreground">
+          <ClipboardCheck className="size-4 text-roksal-amber" aria-hidden /> Kontrola kakovosti montaže
+        </h3>
+        <span className="text-[11px] text-muted-foreground">
+          {d.povzetek.vRedu} v redu · {d.povzetek.napake} napak · {d.povzetek.caka} čaka · {d.povzetek.niRelevantno} neveljavnih
+        </span>
+      </div>
+      {odprteKriticne.length > 0 ? (
+        <p className="rounded-lg border border-red-200 bg-red-50 px-2.5 py-2 text-xs font-medium text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
+          ZAKLJUČEK BLOKIRAN — {odprteKriticne.length} kritičnih nerešenih točk (urejanje v modulu Danes).
+        </p>
+      ) : null}
+      {d.handover ? (
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <StatusBadge status={d.handover.status} />
+          <span className="text-[11px] text-muted-foreground">Primopredaja v{d.handover.version}</span>
+          <Button size="sm" variant="outline" className="h-7 text-[11px]" disabled={pdfBusy} onClick={() => void izvozi()}>
+            {pdfBusy ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <FileText className="size-3.5" aria-hidden />} PDF primopredaje
+          </Button>
+        </div>
+      ) : (
+        <p className="mt-2 text-[11px] text-muted-foreground">Primopredajno poročilo še ni zgrajeno (modul Danes → Primopredaja).</p>
+      )}
+    </section>
+  )
+}
 
 interface WorkOrderRow {
   id: string; code: string; title: string; status: string
@@ -524,6 +587,9 @@ function NalogDetail ({ detail, offline = false, canTransition, canReschedule, c
           ))}
         </ol>
       </section>
+
+      {/* R489 (issue #12): povzetek montažnega QA + primopredaja (urejanje v Danes) */}
+      {!offline ? <QaSummarySection woId={detail.id} /> : null}
 
       {/* R439 (issue #6): OFFLINE DEJANJA — vrsta (vidno v monter/vodja toku).
           Gumbi delujejo TUDI online — vrsta se takoj poskusi sinhronizirati. */}

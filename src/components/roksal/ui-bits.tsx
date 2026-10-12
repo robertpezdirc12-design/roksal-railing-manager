@@ -112,6 +112,17 @@ const STATUS_MAP: Record<string, { label: string; cls: string }> = {
   PREVERITEV: { label: 'Preveritev', cls: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300' },
   ODOBRENA: { label: 'Odobrena', cls: 'bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300' },
   V_SERVISU: { label: 'V servisu', cls: 'bg-violet-100 text-violet-800 dark:bg-violet-950 dark:text-violet-300' },
+  // montaža QA (R489 — issue #12 §2B/§2C/§2D)
+  NI_ZACETO: { label: 'Ni začeto', cls: 'bg-secondary text-secondary-foreground' },
+  V_REDU: { label: 'V redu', cls: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' },
+  NAPAKA: { label: 'Napaka', cls: 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300' },
+  NI_RELEVANTNO: { label: 'Ni relevantno', cls: 'bg-muted text-muted-foreground' },
+  CAKA_PREVERJANJE: { label: 'Čaka na preverjanje', cls: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300' },
+  ODPRTO: { label: 'Odprto', cls: 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300' },
+  ODRAVLJENO: { label: 'Odravljeno', cls: 'bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300' },
+  PREVERJENO: { label: 'Preverjeno', cls: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' },
+  POGOJNA: { label: 'Pogojna', cls: 'bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200' },
+  NEPOPOLNA: { label: 'Nepopolna', cls: 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300' },
 }
 
 export function StatusBadge ({ status }: { status: string }) {

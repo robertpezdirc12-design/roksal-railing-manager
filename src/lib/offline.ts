@@ -21,7 +21,7 @@ export const DB_NAME = 'roksal-offline'
 export const DB_VERSION = 2
 const MAX_PHOTO_BYTES = 8 * 1024 * 1024 // 8 MB dataURL-a — enako strežniški meji
 
-export type OfflineOpKind = 'meritev' | 'foto' | 'nalog-opomba' | 'nalog-status' | 'nalog-zakljucek'
+export type OfflineOpKind = 'meritev' | 'foto' | 'nalog-opomba' | 'nalog-status' | 'nalog-zakljucek' | 'montaza-check'
 
 export interface QueueOp {
   opId: string

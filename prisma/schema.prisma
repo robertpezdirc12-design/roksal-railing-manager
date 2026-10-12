@@ -64,6 +64,13 @@ model User {
   consentedProjects Project[] @relation("projectPhotoConsent") // R479: projekti, kjer je zabeležil GDPR soglasje (§10)
   vizLinksCreated   VizLink[] @relation("vizLinkCreator") // R480: izdajatelji javnih vizualizatorjev (§10)
   webhookSubscriptions WebhookSubscription[] @relation("webhookCreator") // R481: naročnine webhook dogodkov (§9)
+  qaChecked         MontazaCheck[] @relation("qaCheckedBy") // R489: kdo je nazadnje preveril kontrolno točko (issue #12)
+  qaDeviations      MontazaDeviation[] @relation("qaDeviationBy") // R489: avtorji odstopanj (issue #12)
+  qaDeviationsResolved MontazaDeviation[] @relation("qaDeviationResolvedBy") // R489: kdo je odpravil odstopanje
+  qaActionAssignees MontazaAction[] @relation("qaActionAssignee") // R489: odgovorne osebe korektivnih ukrepov (issue #12)
+  qaActionsVerified MontazaAction[] @relation("qaActionVerifiedBy") // R489: kdo je preveril odpravo ukrepa
+  qaHandoverMonter HandoverReport[] @relation("qaHandoverMonter") // R489: monterjeva potrditev primopredaje (issue #12)
+  qaHandoversCreated HandoverReport[] @relation("qaHandoverCreatedBy") // R489: izdajatelji poročil primopredaje
 }
 
 model Session {
@@ -166,6 +173,7 @@ model Project {
   twinSnapshots    DigitalTwinSnapshot[] // R461: digitalni dvojček projekta (issue #16)
   vizLinks         VizLink[] // R480: javne povezave vizualizatorja (issue #9 §10)
   vizChoices       VisualizationChoice[] // R480: strankini izbori variant — append-only (issue #9 §10)
+  handoverReports  HandoverReport[] // R489: verzionirana primopredajna poročila (issue #12)
 }
 
 model Quote {
@@ -269,6 +277,11 @@ model WorkOrder {
   crew         Crew?     @relation("crewWorkOrders", fields: [crewId], references: [id], onDelete: SetNull)
   deliveries   Delivery[]
   playbookRuns PlaybookRun[] // R458: vodeni postopki na nalogu (issue #13)
+  // R489 (GitHub issue #12): montaža QA + primopredaja — kontrolne točke, odstopanja,
+  // korektivni ukrepi (prek odstopanj) in verzionirana primopredajna poročila
+  montazaChecks     MontazaCheck[]
+  montazaDeviations MontazaDeviation[]
+  handoverReports   HandoverReport[]
 }
 
 model WorkOrderEvent {
@@ -1168,6 +1181,134 @@ model InstallationMaterialUsage {
   user        User?             @relation("usageUser", fields: [userId], references: [id])
   createdAt   DateTime          @default(now())
 
+  @@index([workOrderId])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MONTAŽA QA & PRIMOPREDAJA (R489 — GitHub issue #12, P1)
+// Dokazljiva kontrola kakovosti od začetka montaže do zaključka:
+//   • kontrolne točke s statusnim strojem (NI_ZACETO | V_REDU | NAPAKA |
+//     NI_RELEVANTNO | CAKA_PREVERJANJE) — PODATKOVNO VEDENE: nastanejo iz virov
+//     (aktivna playbook definicija MONTAZA, segmenti digitalnega dvojčka
+//     AS-DESIGNED/POTRJENEGA tekača, aktivna inženirska pravila) — snapshot
+//     templateVersion ob nastanku (sprememba predloge NE spremeni že
+//     izvedene montaže za nazaj, §3);
+//   • odstopanja (razlog obvezen, lokacija/segment, dokazna fotografija,
+//     vpliv na materiale/ceno/varnost) z korektivnimi ukrepi
+//     (odgovorna oseba, rok, status ODPRTO→V_OBRAVNAVI→ODRAVLJENO→PREVERJENO);
+//   • kritična nerešena napaka BLOKIRA zaključek naloga (obe poti: /transition
+//     + sync), izvzem samo z izrecnim odobrenjem vodstva (force + razlog, revizija);
+//   • primopredajno poročilo: primerjava načrtovano/potrjeno/izvedeno (seg-N),
+//     fotografije pred/med/po, potrditev monterja + stranke — podpis na zaslonu
+//     je ZABELEŽENA potrditev (ni kvalificiran elektronski podpis, §2D),
+//     status ZAKLJUCENA | POGOJNA | NEPOPOLNA, verzioniranje (zgodovina ostane).
+// ═══════════════════════════════════════════════════════════════════════════
+
+// kontrolna točka montažnega QA (issue #12 §2B) — nastane IZ PREDLOG, nikoli prosta
+model MontazaCheck {
+  id              String    @id @default(cuid())
+  workOrderId     String
+  workOrder       WorkOrder @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  templateKey     String // vir: playbook:MONTAZA:<ver> | twin:<snapshotId|tekač> | rule:<key>
+  templateVersion Int       @default(1) // verzija graditelja predloge ob nastanku (§3 snapshot)
+  stepId          String? // playbook korak (npr. varnost/kontrola), če izhaja iz njega
+  label           String
+  instruction     String? // kratko navodilo monterju (kaj preveriti)
+  critical        Boolean   @default(false) // NAPAKA/CAKA na kritični točki blokira zaključek
+  targetKey       String? // seg-N — vezava na segment digitalnega dvojčka
+  status          String    @default("NI_ZACETO") // NI_ZACETO | V_REDU | NAPAKA | NI_RELEVANTNO | CAKA_PREVERJANJE
+  photoId         String? // dokazna fotografija (Measurement type FOTO — izvirnik ostane)
+  note            String? // opomba / razlog, če postavka ni relevantna
+  checkedById     String?
+  checkedBy       User?     @relation("qaCheckedBy", fields: [checkedById], references: [id])
+  checkedAt       DateTime?
+  resolutionNote  String? // ob odpravi napake (NAPAKA/CAKA_PREVERJANJE → V_REDU)
+  sortOrder       Int       @default(0)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  deviations       MontazaDeviation[] // odstopanja, povezana s to točko (zgodovina se ohranja)
+
+  @@index([workOrderId, status])
+}
+
+// zapis odstopanja izvedbe od potrjenega načrta (issue #12 §2B)
+model MontazaDeviation {
+  id             String    @id @default(cuid())
+  workOrderId    String
+  workOrder      WorkOrder  @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  checkId        String?
+  check          MontazaCheck? @relation(fields: [checkId], references: [id], onDelete: SetNull)
+  reason         String // obvezni razlog odstopanja
+  location       String? // opis lokacije/elementa
+  targetKey      String? // seg-N, če je odstopanje vezano na segment
+  photoId        String? // dokazna fotografija
+  impactMaterial Boolean   @default(false) // vpliv na materiale
+  impactPrice    Boolean   @default(false) // vpliv na ceno
+  impactSafety   Boolean   @default(false) // vpliv na varnost (kritično — blokira zaključek)
+  note           String?
+  createdById    String?
+  createdBy      User?     @relation("qaDeviationBy", fields: [createdById], references: [id])
+  resolvedAt     DateTime?
+  resolvedById   String?
+  resolvedBy     User?     @relation("qaDeviationResolvedBy", fields: [resolvedById], references: [id])
+  createdAt      DateTime  @default(now())
+
+  actions        MontazaAction[]
+
+  @@index([workOrderId, resolvedAt])
+}
+
+// korektivni ukrep na odstopanju (issue #12 §2C) — linearni statusni tok
+model MontazaAction {
+  id           String    @id @default(cuid())
+  deviationId  String
+  deviation    MontazaDeviation @relation(fields: [deviationId], references: [id], onDelete: Cascade)
+  description  String
+  assigneeId   String?
+  assignee     User?     @relation("qaActionAssignee", fields: [assigneeId], references: [id])
+  dueAt        DateTime?
+  status       String    @default("ODPRTO") // ODPRTO | V_OBRAVNAVI | ODRAVLJENO | PREVERJENO
+  photoId      String? // dokazilo odprave (ne prepiše prejšnjih)
+  note         String?
+  completedAt  DateTime?
+  verifiedById String?
+  verifiedBy   User?     @relation("qaActionVerifiedBy", fields: [verifiedById], references: [id])
+  verifiedAt   DateTime?
+  createdAt    DateTime  @default(now())
+
+  @@index([deviationId, status])
+}
+
+// primopredajno poročilo (issue #12 §2D) — VERZIONIRANO: nova izgradnja = nova
+// verzija; podpisi živijo na svoji verziji, zgodovina ostane (ne tiho prepiše)
+model HandoverReport {
+  id                  String    @id @default(cuid())
+  workOrderId         String
+  workOrder           WorkOrder  @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  version             Int       @default(1)
+  projectId           String?
+  project             Project?  @relation(fields: [projectId], references: [id])
+  designedSnapshotId  String? // AS-DESIGNED dvojček (načrtovano/potrjeno)
+  installedSnapshotId String? // AS-INSTALLED dvojček (izvedeno)
+  producedBomId       String? // POTRJENA kosovnica (material po segmentih)
+  diffJson            String? // primerjava seg-N: načrtovano/potrjeno/izvedeno + viri
+  photosJson          String? // [{ id, stage: PRED|MED|PO, createdAt }] — izvirniki ostanejo
+  summary             String? // povzetek izvedbe
+  monterConfirmedAt   DateTime?
+  monterConfirmedById String?
+  monterConfirmedBy   User?     @relation("qaHandoverMonter", fields: [monterConfirmedById], references: [id])
+  customerSignature   String? // dataURL — ZABELEŽENA potrditev, NE kvalificiran e-podpis
+  customerSignedAt    DateTime?
+  customerSignedBy    String? // ime/identiteta, ki jo vnese stranka (v obsegu dovoljenj)
+  customerRemark      String? // pripomba stranke — sledljiv zapis, ne tiho zavrnjen komentar
+  status              String    @default("NEPOPOLNA") // ZAKLJUCENA | POGOJNA | NEPOPOLNA
+  createdById         String?
+  createdBy           User?     @relation("qaHandoverCreatedBy", fields: [createdById], references: [id])
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@unique([workOrderId, version])
   @@index([workOrderId])
 }
 

@@ -46,6 +46,8 @@
 - `GET/POST /api/projects` · `GET /api/projects/[id]/command` · `GET /api/projects/[id]/timeline`
 - `GET/POST /api/production` · `GET/PATCH/DELETE /api/production/[id]`
 - `GET/POST /api/nalog` (delovni nalogi) · `GET/PATCH/DELETE /api/nalog/[id]` · `POST /api/nalog/[id]/termin` · `POST /api/nalog/[id]/transition` · `GET /api/nalog/zgodovina`
+- `GET/POST/PATCH /api/nalog/[id]/checklist` (R444 preprosti seznam) · `GET/POST /api/nalog/[id]/material` · `GET/POST /api/nalog/[id]/events`
+- R489 MONTAŽA QA: `GET/POST /api/nalog/[id]/qa` (kontrolne točke iz virov) · `PATCH /api/nalog/[id]/qa/check` (statusni stroj) · `POST/PATCH /api/nalog/[id]/qa/deviation` (odstopanja) · `POST/PATCH /api/nalog/[id]/qa/action` (korektivni ukrepi) · `GET/POST/PATCH /api/nalog/[id]/handover` (verzionirana primopredaja) · `GET /api/pdf/handover/[id]` (PDF zapis)
 - `GET/POST /api/schedules`
 - `GET/POST /api/crews` (ekipe)
 - `GET/POST /api/equipment` · `GET /api/equipment/events`

@@ -39,6 +39,7 @@ import { EmptyState, ErrorBox, LoadingRows, PageHeader, StatusBadge } from '@/co
 import { hasPerm } from '@/lib/permissions-core'
 import { loadDraft } from '@/lib/measure-draft'
 import { KameraMeritevDialog } from '@/components/roksal/modules/meritve-kamera'
+import { HandoverSection, MontazaQaSection } from '@/components/roksal/modules/montaza-qa'
 
 interface WorkOrderRow {
   id: string; code: string; title: string; status: string
@@ -480,6 +481,24 @@ function WorkOrderDetail ({ woId, onTransitioned }: {
 
       {/* težave na terenu (R444 — dogodek TEZAVA) */}
       <TroubleSection woId={woId} troubles={troubles} canWrite={canChecklist} onReload={() => void detail.reload()} />
+
+      {/* R489 (issue #12): KONTROLA KAKOVOSTI MONTAŽE — statusne točke iz virov,
+          odstopanja in korektivni ukrepi (vzporedno preprostemu seznamu R444) */}
+      <MontazaQaSection
+        woId={woId}
+        canWrite={canChecklist && wo.status !== 'ZAKLJUCEN'}
+        fotoOptions={(wo.measurements ?? []).filter((m) => m.type === 'FOTO').map((m) => ({ id: m.id, label: `Foto ${new Date(m.createdAt).toLocaleDateString('sl-SI')} (${m.id.slice(-6)})` }))}
+        onTransitioned={() => void detail.reload()}
+      />
+
+      {/* R489 (issue #12 §2D): PRIMOPREDAJA — poročilo, primerjava, podpisa, PDF */}
+      {wo.status === 'V_PREVERI' || wo.status === 'ZAKLJUCEN' ? (
+        <HandoverSection
+          woId={woId}
+          canWrite={canChecklist}
+          onTransitioned={() => void detail.reload()}
+        />
+      ) : null}
 
       {/* meritve + foto — povezava na zajem */}
       {/* R486 (issue #7 §3): ZAČNI MERITEV — en velik primarni gumb z avtomatskim

@@ -23,6 +23,7 @@ import {
 } from '@/lib/segment-bom'
 import { exportChecks } from '@/lib/export-core'
 import { renderMeasurePackagePdf, type CutListRow, type PackagePhoto } from '@/lib/measure-package-pdf'
+import { handoverPdfZaUporabnika } from '@/lib/handover-pdf'
 
 type Params = { params: Promise<{ type: string; id: string }> }
 
@@ -614,8 +615,8 @@ export async function GET (req: NextRequest, { params }: Params) {
   if (auth instanceof NextResponse) return auth
   const { type, id } = await params
 
-  if (type !== 'quote' && type !== 'invoice' && type !== 'photoviz' && type !== 'measure') {
-    return jsonError(400, 'Neznana vrsta dokumenta.', 'Veljavni tipi: quote, invoice, photoviz, measure.')
+  if (type !== 'quote' && type !== 'invoice' && type !== 'photoviz' && type !== 'measure' && type !== 'handover') {
+    return jsonError(400, 'Neznana vrsta dokumenta.', 'Veljavni tipi: quote, invoice, photoviz, measure, handover.')
   }
   if (!id) return jsonError(400, 'Manjka identifikator dokumenta.')
 
@@ -642,7 +643,9 @@ export async function GET (req: NextRequest, { params }: Params) {
       ? await renderInvoicePdf(id)
       : type === 'measure'
         ? await renderMeasurePackage(auth.user, id, turns)
-        : await renderPhotoVizPdf(id)
+        : type === 'handover'
+          ? await handoverPdfZaUporabnika(auth.user, id)
+          : await renderPhotoVizPdf(id)
   if (rendered instanceof NextResponse) return rendered
 
   await writeAudit({
