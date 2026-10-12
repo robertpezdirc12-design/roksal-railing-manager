@@ -318,13 +318,14 @@ export async function posodobiCheck (user: SessionUser, workOrderId: string, vho
     },
   })
 
-  // kritična napaka → dogodek težave na nalogu + obvestilo pisarni (vzorec QC_NOK)
+  // kritična napaka → dogodek težave na nalogu + obvestilo pisarni (QC_NOK kanal
+  // — tip je fiksna webhook pogodba, 16 tipov; montažne podrobnosti so v naslovu)
   if (cilj === 'NAPAKA' && (check.critical || vhod.deviationImpactSafety === true)) {
     await db.workOrderEvent.create({
       data: { workOrderId, userId: user.id, type: 'TEZAVA', note: `QA ${check.label}: ${razlog.slice(0, 160)}` },
     })
     await emitEvent({
-      type: 'MONTAZA_NOK',
+      type: 'QC_NOK',
       key: `montaza-nok:${check.id}:${now.getTime()}`,
       title: 'Kritična napaka na montaži',
       body: `Nalog ${scoped.wo.code}: ${check.label} — ${razlog.slice(0, 140)}`,

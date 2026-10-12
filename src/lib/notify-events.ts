@@ -24,8 +24,6 @@ export const NOTIFICATION_EVENT_TYPES = [
   'MODEL_CHANGED',
   'PRODUCTION_READY',
   'ORDER_CONFIRMED',
-  // R489 (issue #12 — montaža QA):
-  'MONTAZA_NOK',
 ] as const
 
 export type NotificationEventType = (typeof NOTIFICATION_EVENT_TYPES)[number]
@@ -49,7 +47,6 @@ export const NOTIFICATION_EVENT_LABELS: Record<string, string> = {
   MODEL_CHANGED: 'Model spremenjen',
   PRODUCTION_READY: 'Proizvodnja pripravljena',
   ORDER_CONFIRMED: 'Naročilo potrjeno',
-  MONTAZA_NOK: 'Kritična napaka na montaži',
 }
 
 /** Oznaka za '*' (privzeto za vse dogodke). */

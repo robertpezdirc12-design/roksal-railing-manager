@@ -67,7 +67,7 @@ HandoverReport    primopredaja (workOrderId+version UNIQUE — zgodovina verzij;
 **Pravila statusnega stroja** (§2B):
 - `NAPAKA` **zahteva razlog** → samodejno ustvari odstopanje (sledljiv zapis,
   ne samo status); kritična/varnostna napaka doda še dogodek `TEZAVA` na nalog
-  in obvestilo pisarni (`MONTAZA_NOK`, nov tip v katalogu obvestil);
+  in obvestilo pisarni (obvestilo `QC_NOK` (fiksna webhook pogodba 16 tipov — podrobnosti v naslovu));
 - `NI_RELEVANTNO` **zahteva razlog** (opombo);
 - odprava (`NAPAKA/CAKA → V_REDU`) **zahteva** `resolutionNote`;
 - nazaj ni mogoče (zgodovina se ohranja, razen `NI_RELEVANTNO → NI_ZACETO`).
