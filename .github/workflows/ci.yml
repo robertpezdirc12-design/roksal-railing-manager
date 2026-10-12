@@ -5,7 +5,7 @@ name: CI
 #   quality     — tsc --noEmit + eslint (isti standard kot build)
 #   build       — next build (BREZ ignoreBuildErrors — TS napaka pade build)
 #   migrations  — SVEŽA PostgreSQL baza izključno iz repozitorija + migracij
-#   regression  — celoten poslovni testni suite (r437–r489) proti migrirani bazi
+#   regression  — celoten poslovni testni suite (r437–r490) proti migrirani bazi
 
 on:
   push:
@@ -98,6 +98,7 @@ jobs:
           - grupa: r487
           - grupa: r488
           - grupa: r489
+          - grupa: r490
     services:
       postgres:
         image: postgres:16

@@ -35,6 +35,8 @@ import {
 } from '@/lib/offline'
 import { RoksalLogo } from '@/components/roksal/logo'
 import { ModuleView } from '@/components/roksal/module-view'
+// R490 (issue #11): SMART GUIDE — kontekstna pomoč SL/HR + glas (Web Speech API)
+import { SmartGuide } from '@/components/roksal/smart-guide'
 
 interface NotificationRow { id: string; title: string; body: string; read: boolean; createdAt: string }
 
@@ -165,6 +167,9 @@ export function AppShell () {
           <div className="flex items-center gap-1.5">
             {/* R439 (issue #6): stanje signala + vrsta offline operacij */}
             <OfflineBadge />
+
+            {/* R490 (issue #11): kontekstna pomoč za trenutni modul (SL/HR + glas) */}
+            <SmartGuide />
 
             <Button
               variant="ghost" onClick={() => setSearchOpen(true)}
