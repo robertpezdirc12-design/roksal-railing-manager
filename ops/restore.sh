@@ -105,14 +105,25 @@ for p in json.load(sys.stdin):
         print(p['id']); break
 " "$ver")"
   [ -n "$pid" ] || die "verzija $ver ni najdena med off-site kopijami"
-  files="$(api_get "/projects/$GITLAB_PROJECT_ID/packages/$pid/package_files")"
-  printf '%s' "$files" | python3 -c "
+  # R485-okolje (popravek paginacije): package_files privzeto vrne SAMO 20
+  # zadetkov — kopija z > 19 kosi bi se sestavila NAKRUŽENA (sidecar manifest
+  # bi jo sicer zavrnil, a obnova ne bi uspela). Preberemo VSE strani (do 10).
+  local page got n_page
+  : > "$TMP_FILES"
+  for page in 1 2 3 4 5 6 7 8 9 10; do
+    got="$(api_get "/projects/$GITLAB_PROJECT_ID/packages/$pid/package_files?per_page=100&page=$page")"
+    printf '%s' "$got" | python3 -c '
 import json, sys
 fs = json.load(sys.stdin)
-if not fs: sys.exit(1)
-names = sorted(f['file_name'] for f in fs)
-print('\n'.join(names))
-" > "$TMP_FILES" || die "verzija $ver nima datotek"
+for f in sorted(fs, key=lambda x: x["file_name"]):
+    print(f["file_name"])
+' >> "$TMP_FILES"
+    n_page="$(printf '%s' "$got" | python3 -c 'import json, sys; print(len(json.load(sys.stdin)))' 2>/dev/null || echo 100)"
+    [ "${n_page:-100}" -lt 100 ] && break
+  done
+  # globalni vrstni red (strani so lahko v poljubnem zaporedju) + brez podvajanj
+  sort -u -o "$TMP_FILES" "$TMP_FILES"
+  [ -s "$TMP_FILES" ] || die "verzija $ver nima datotek"
   local n
   n="$(wc -l < "$TMP_FILES")"
   if [ "$n" -eq 1 ]; then

@@ -187,16 +187,26 @@ t "napačno geslo → zavrnjeno (izhod 1)" 1 "$VERIFY_BAD_RC"
 # Brskalniški UA (Cloudflare občasno blokira privzeti curl UA — spoznanje R448).
 UA="Mozilla/5.0 (X11; Linux x86_64; rv:132.0) Gecko/20100101 Firefox/132.0"
 GITLAB_API_OK=0; GITLAB_PROBE="brez žetona"
+GITLAB_EMPTY_REPO=0
 if [ -n "$GTOKEN" ]; then
   GITLAB_PROBE=$(curl -s -A "$UA" --max-time 20 -o /dev/null -w '%{http_code}' \
-    -H "PRIVATE-TOKEN: $GTOKEN" "https://gitlab.com/api/v4/projects/87314539" 2>/dev/null || echo 000)
+    -H "PRIVATE-TOKEN: $GTOKEN" "https://gitlab.com/api/v4/projects/87474527" 2>/dev/null || echo 000)
   [ "$GITLAB_PROBE" = "200" ] && GITLAB_API_OK=1
+  # R485-okolje: ogledalo je POVEZAVA-ZA-PAKETE (brez git zgodovine — off-site
+  # teče prek generic packages, git CI pa na GitHubu). Preverbi, ki zahtevata
+  # git zgodovino (pipelines/MR), se v praznem repu pošteno preskočita.
+  if [ "$GITLAB_API_OK" = 1 ]; then
+    for i in 1 2 3; do PROJJSON=$(curl -s -A "$UA" --max-time 20 \
+      -H "PRIVATE-TOKEN: $GTOKEN" "https://gitlab.com/api/v4/projects/87474527" 2>/dev/null); \
+      [ -n "$PROJJSON" ] && ! echo "$PROJJSON" | head -c 30 | grep -q '^<' && break; sleep 5; done
+    [ "$(echo "$PROJJSON" | jq -r '.empty_repo // false')" = "true" ] && GITLAB_EMPTY_REPO=1
+  fi
 fi
 
 # ── 6. off-site kopija na GitLabu ───────────────────────────────────────────
 echo "── 6. off-site (GitLab packages)"
 if [ "$GITLAB_API_OK" = 1 ]; then
-  GAPI="https://gitlab.com/api/v4/projects/87314539"
+  GAPI="https://gitlab.com/api/v4/projects/87474527"
   for i in 1 2 3 4 5; do PKGS=$(curl -s -A "$UA" --max-time 30 "$GAPI/packages?package_name=roksal-backup&per_page=100" -H "PRIVATE-TOKEN: $GTOKEN"); [ -n "$PKGS" ] && ! echo "$PKGS" | head -c 30 | grep -q '^<' && break; sleep 5; done
   PKGC=$(echo "$PKGS" | jq 'length')
   gett "off-site kopije obstajajo (≥1 verzija)" 1 "$PKGC"
@@ -213,7 +223,7 @@ echo "── 7. zaščita repozitorija"
 ORIGIN_URL="$(git -C $ROOT remote get-url origin 2>/dev/null || echo "")"
 case "$ORIGIN_URL" in *gitlab.com*) ORIGIN_GITLAB=1 ;; *) ORIGIN_GITLAB=0 ;; esac
 if [ "$GITLAB_API_OK" = 1 ] && [ "$ORIGIN_GITLAB" = 1 ]; then
-  GAPI="https://gitlab.com/api/v4/projects/87314539"
+  GAPI="https://gitlab.com/api/v4/projects/87474527"
   for i in 1 2 3 4 5; do PROT=$(curl -s -A "$UA" --max-time 30 "$GAPI/protected_branches/main" -H "PRIVATE-TOKEN: $GTOKEN"); [ -n "$PROT" ] && ! echo "$PROT" | head -c 30 | grep -q '^<' && break; sleep 5; done
   t "main zaščitena (id obstaja)" 1 "$(echo "$PROT" | jq -r '.id // empty' | wc -w | tr -d ' ')"
   t "direktni push: NOBODY" 0 "$(echo "$PROT" | jq -r '.push_access_levels[0].access_level')"
@@ -242,22 +252,26 @@ echo "── 8. CI"
 # (.github/** — R464: CI piše glavni agent) — pomembno je, da je v repu.
 CI_N=$(git -C $ROOT ls-files | grep -E '^(\.gitlab-ci\.yml|\.github/)' | wc -l | tr -d '[:space:]')
 gett "CI definicija sledena v repu (GitLab in/ali GitHub)" 1 "$CI_N"
-if [ "$GITLAB_API_OK" = 1 ]; then
-  GAPI="https://gitlab.com/api/v4/projects/87314539"
+if [ "$GITLAB_API_OK" = 1 ] && [ "$GITLAB_EMPTY_REPO" = 0 ]; then
+  GAPI="https://gitlab.com/api/v4/projects/87474527"
   for i in 1 2 3 4 5; do PIPES=$(curl -s -A "$UA" --max-time 30 "$GAPI/pipelines?per_page=10" -H "PRIVATE-TOKEN: $GTOKEN"); [ -n "$PIPES" ] && ! echo "$PIPES" | head -c 30 | grep -q '^<' && break; sleep 5; done
   gett "pipelines obstajajo" 1 "$(echo "$PIPES" | jq 'length')"
+elif [ "$GITLAB_API_OK" = 1 ]; then
+  echo "  ⟿ GitLab pipelines preskočeni (prazen paketni repozitorij — CI teče na GitHubu; GitLab je le off-site shramba)"
 else
   echo "  ⟿ GitLab pipelines preskočeni (API: $GITLAB_PROBE)"
 fi
 
 # ── 9. MR obstaja (r441-dr → main) ──────────────────────────────────────────
 echo "── 9. MR"
-if [ "$GITLAB_API_OK" = 1 ]; then
-  GAPI="https://gitlab.com/api/v4/projects/87314539"
+if [ "$GITLAB_API_OK" = 1 ] && [ "$GITLAB_EMPTY_REPO" = 0 ]; then
+  GAPI="https://gitlab.com/api/v4/projects/87474527"
   # filter po source_branch (ne per_page=10 — seznam MR-jev raste s fazami,
   # r441-dr pada iz prvih 10)
   for i in 1 2 3 4 5; do MRS=$(curl -s -A "$UA" --max-time 30 "$GAPI/merge_requests?source_branch=r441-dr&per_page=20" -H "PRIVATE-TOKEN: $GTOKEN"); [ -n "$MRS" ] && ! echo "$MRS" | head -c 30 | grep -q '^<' && break; sleep 5; done
   contains "MR !1 obstaja (r441-dr → main)" "$(echo "$MRS" | jq -r '.[] | select(.source_branch=="r441-dr") | .title')" 'R441'
+elif [ "$GITLAB_API_OK" = 1 ]; then
+  echo "  ⟿ GitLab MR preverba preskočena (prazen paketni repozitorij — MR potek sovpada z GitHub PR tokom)"
 else
   echo "  ⟿ GitLab MR preverba preskočena (API: $GITLAB_PROBE)"
 fi

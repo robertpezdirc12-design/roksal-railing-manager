@@ -126,7 +126,7 @@ if not tok:
     for line in open(sys.argv[1], encoding='utf-8'):
         if line.startswith('GITLAB_TOKEN='):
             tok = line.split('=', 1)[1].strip()
-req = urllib.request.Request(f'{api}/projects/87314539/packages?package_name=roksal-backup&sort=desc&order_by=created_at&per_page=1')
+req = urllib.request.Request(f'{api}/projects/87474527/packages?package_name=roksal-backup&sort=desc&order_by=created_at&per_page=1')
 req.add_header('PRIVATE-TOKEN', tok)
 pkgs = json.load(urllib.request.urlopen(req, timeout=30))
 created = datetime.fromisoformat(pkgs[0]['created_at'].replace('Z', '+00:00'))

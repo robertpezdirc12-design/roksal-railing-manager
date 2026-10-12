@@ -8,7 +8,7 @@ OPS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$OPS_DIR/.." && pwd)"
 
 GITLAB_API="https://gitlab.com/api/v4"
-GITLAB_PROJECT_ID="87314539" # markec-group/roksal-railing-manager
+GITLAB_PROJECT_ID="87474527" # markec-group1/roksal-railing-manager (obnovljeno po suspenzdu; star 87314539 izbrisan)
 DB_PATH="${ROKSAL_DB_PATH:-$ROOT_DIR/db/custom.db}"
 BACKUP_DIR="${ROKSAL_BACKUP_DIR:-$ROOT_DIR/db/backups}"
 SECRETS_FILE="$ROOT_DIR/.env.recovery"
