@@ -1401,3 +1401,271 @@ Stage Summary:
 - GitLab mirror: uporabnikov žeton glpat-5P7j… ZNOVA PREKLIČAN (401 Token was revoked — drugič v dveh sejah) — mirror ostaja blokiran, potreben nov žeton brez rotacije
 - preostanek issue #9: primerjalni paketi (STANDARD/BOLJŠI/PREMIUM), marža/popusti v ponudbi, merilni PDF iz modela R473
 - deliveroti: migracija r475, segment-bom.ts, 5 API-jev, UI 3 moduli, seed, tests/r475.py (49), tag v1.31.0
+
+═══════════════════════════════════════════════════════════════════
+REKONSTRUKCIJA DNEVNIKA R476–R491 (izvedeno v R491, 2026-10-12)
+Vnosi R476–R484 so bili izgubljeni ob ponastavitvi sandboxa (glej
+R485-diagnoza v projektnem dnevniku). Obnovljeni iz GitHub issue
+komentarjev (avtoritativni vir) in git commit sporočil. Celotna
+poročila ostajajo v komentarjih issuejev #8, #9, #2, #3, #7, #11, #12.
+═══════════════════════════════════════════════════════════════════
+
+---
+Task ID: R476
+Agent: main (Z.ai Code)
+Task: Issue #9 §5 — primerjalni paketi (STANDARD/BOLJŠI/PREMIUM) + popust na ponudbo
+
+Work Log:
+- (rekonstruirano iz commit cab3330; issue komentar ni bil objavljen)
+- migracija r476_tiers_discount: ProjectPackage.tier+compareCode (nivo enoličen v skupini, skupina ne prečka projektov), Quote.discountPct/discount (DDV iz osnove PO popustu)
+- quote-core.ts: computeQuoteTotals, validacija popusta 0..100, PACKAGE_TIERS s slovenskimi oznakami
+- API: POST /api/project-packages (tier/compareCode, 409 podvojen nivo), POST/PATCH /api/quotes discountPct (popust samo na OSNUTEK), račun podeduje osnovo po popustu, PDF z vrstico Popust
+- UI: konfigurator (Primerjalna ponudba), projekti (kartica primerjave z deltami ±% in maržo), ponudbe (popust v zneskih)
+- tests/r476.py 51/51
+
+Stage Summary:
+- tag v1.32.0; issue #9 §5 izvedena
+
+---
+Task ID: R477
+Agent: main (Z.ai Code)
+Task: Issue #9 §6 — merilni paket PDF + izvozi BOM/ponudb
+
+Work Log:
+- merilni paket PDF: /api/pdf/measure/[runId] (measure-package-pdf/1.0) — pokritne strani, skice, tolerance, kotirane mere
+- izvozi: /api/export/[bom|quote]/[id]?format=csv|xlsx|json — kolone usklajene z uvozom (R478 round-trip)
+- UI gumbi za prenos v modulih
+- tests/r477.py
+
+Stage Summary:
+- tag v1.33.0, commit 9f980c4; issue #9 §6 izvozna polovica
+
+---
+Task ID: R478
+Agent: main (Z.ai Code)
+Task: Issue #9 §6 ZAKLJUČEK — UVOZ (round-trip import)
+
+Work Log:
+- uvoz kosovnice: POST /api/import/bom (multipart: datoteka + packageId + mode=preveri|uvozi)
+- uvoz ponudbe: POST /api/import/quote (JSON)
+- dokaz okroglosti: izvoz → uvoz → enake vrednosti (BOM in ponudba)
+- tests/r478.py
+
+Stage Summary:
+- tag v1.34.0, commit 4ae92ec; §6 zaključen (izvoz+uvoz)
+
+---
+Task ID: R479
+Agent: main (Z.ai Code)
+Task: Issue #9 Faza 5 (§7 + §10 osnova) — enotni pregledovalnik, pini, delitev, GDPR
+
+Work Log:
+- enotni pregledovalnik: src/components/roksal/modules/pregled.tsx
+- pripeti komentarji: model ReviewPin (revizije PIN_ADD/PIN_RESOLVE)
+- javna delitev pregleda: rv- žetoni (samo-za-branje, brez prijave)
+- GDPR soglasje za fotografije (§10 osnova — zapre luknjo iz audita)
+- tests/r479.py
+
+Stage Summary:
+- tag v1.35.0, commit 92cba8b
+
+---
+Task ID: R480
+Agent: main (Z.ai Code)
+Task: Issue #9 §10 — javni vizualizator
+
+Work Log:
+- javni (neprijavljeni) pregled vizualizacij prek žetonov — varovala: brez osebnih podatkov, brez urejanja, potek
+- tests/r480.py
+
+Stage Summary:
+- tag v1.36.0, commit 0d4fc79
+
+---
+Task ID: R481
+Agent: main (Z.ai Code)
+Task: Issue #9 §8 PROSTOR + §9 integracije — ZADNJA točka issue #9
+
+Work Log:
+- prostorski podatki in integracije po specifikaciji §8/§9 (detajli v issue komentarju)
+- tests/r481.py
+- CI za v1.37.0 je padel na novi skupini r481 → popravek v R482-fix
+
+Stage Summary:
+- tag v1.37.0, commit 751a3af; issue #9 po tem popolnoma izveden
+
+---
+Task ID: R482-fix
+Agent: main (Z.ai Code)
+Task: Popravek izdaje v1.37.1 (test-ping ruta)
+
+Work Log:
+- kaj je bilo narobe: CI za v1.37.0 je padel na skupini r481 — .gitignore z golo vrstico `test` je požrl test-ping ruto v paketu
+- popravek vzorca .gitignore; ponovna izdaja zelena
+
+Stage Summary:
+- tag v1.37.1; lekcija: pred izdajo `git status --ignored`
+
+---
+Task ID: R483
+Agent: main (Z.ai Code)
+Task: Issue #8 Faza 5 (§11) — uporabniško testiranje in izdaja SMART VISION
+
+Work Log:
+- popravljene najpomembnejše napake prepoznavanja (§11 F5)
+- dokumentirane omejitve: docs/SMART-VISION-8.md (223 vrstic, pošteno o zmožnostih)
+- kratka navodila monterju ob NEZADOSTNIH PODATKIH (§11 F5)
+- §12 Definition of Done — presoja izpolnjenosti
+- tests/r483.py 61/61
+
+Stage Summary:
+- main bf58a50, tag v1.38.0; faza §11 issue #8 zaključena pošteno glede na omejitve
+
+---
+Task ID: R484
+Agent: main (Z.ai Code) + podagenti
+Task: Issue #2 (P0 RECOVERY) — dokazljiv popis izgubljenih funkcij
+
+Work Log:
+- Faza 0: varna kopija IZVEN repa (/home/z/roksal-backups/R484-20261011-1755/, 92 datotek, SHA-256 manifest; izgubljena ob kasnejši ponastavitvi sandboxa)
+- Faza 1: viri (14 preverjanj — GitHub/GitLab/Vercel/Neon, dejanski rezultati brez ugibanj)
+- Faza 2: matrika funkcionalnosti A–E (7-stolpčna, docs/RECOVERY-STATUS.md, 207 vrstic)
+- Faza 3: obnova + zaključki o izgubah
+- tests/r484.py 37/37
+
+Stage Summary:
+- tag v1.39.0; izdelek docs/RECOVERY-STATUS.md; issue #2 odprt za odločitev lastnika o izvirnem viru
+
+---
+Task ID: R485-diagnoza + R485-okolje
+Agent: main (Z.ai Code)
+Task: PONASTAVITEV SANDBOKSA — diagnoza + obnova okolja + off-site
+
+Work Log:
+- sandbox popolnoma ponastavljen: /home/z/roksal, lokalne .rkb kopije, ~/.roksal-prod.env in PostgreSQL izginili; koda NI izgubljena (GitHub main 9b48e86 = v1.39.0)
+- obnova: klon s PAT, bun install, embedded-postgres :54329, migracije, dev :3000 zdrav
+- GitLab račun odklenjen (robertpezdirc8): off-site noga backup/DR ponovno vzpostavljena; novi projektni ID 87474527 (markec-group1/roksal-railing-manager)
+- najden in popravljen PRAVI hrošč v restore poti: GitLab package_files API privzeto vrne samo 20 zadetkov — obnova bi se sestavila iz 19/25 kosov; stranski manifest s SHA-256 kopijo pravilno ZAVRNE (fail-closed)
+- tests/r441.sh 57/57 (drill preverjen)
+
+Stage Summary:
+- okolje obnovljeno; off-site dokazan; delovni dnevnik R476–R484 ostal samo v issue komentarjih (rekonstruiran v R491)
+
+---
+Task ID: R485
+Agent: main (Z.ai Code)
+Task: Issue #8 — dokončanje manjkajočih zmožnosti zaznavanja
+
+Work Log:
+- vrzeli iz audita zaprte (detajli v issue #8 komentarju R485)
+- pošteno odloženo: dokumentirano v docs/SMART-VISION-8.md §2
+- dokazi: ne samo odkljukani kriteriji (brskalniška preverba)
+- tests/r485.py 63/63; CI skupina r485 (16 jobov)
+
+Stage Summary:
+- tag v1.40.0; issue #8 dokončan po vseh fazah
+
+---
+Task ID: R486
+Agent: main (Z.ai Code)
+Task: Issue #7 — MONTER CAMERA-FIRST: celoten tok na telefonu, dokazan E2E
+
+Work Log:
+- 4 vrzeli zaprte: gumb ZAČNI MERITEV v DANES s predpolnjenim projektom+nalogom; IndexedDB osnutek (avtosave 500 ms, pasika Nadaljuj nedokončano, obnova celotnega stanja); offline queuePhoto nosi kalibracijo/views/quality/zaupanje/način/engine; sličica ≤120 KB
+- E2E dokaz 390×844 (28 posnetkov + VERIFY-NOTES.md): prijava → ZAČNI MERITEV s predfillom → kalibracija 110 cm → točke → RELOAD sred merjenja → NADALJUJ (obnova!) → POTRDI → tekač VERIFIED → admin konfigurator Prevzemi iz izmere (9 segmentov) → BOM 30 vrstic → PONUDBA PON-2026-008 336,87 € z DDV → IndexedDB drafts=0
+- tests/r486.py 70/70 ×3; regresija 813/813 (r474–r485)
+- ostaja (pošteno): fizični telefon/pravi zajem/baseline ≥5 monterjev — BLOKIRANO na terenu
+
+Stage Summary:
+- tag v1.41.0; issue #7 izveden po kodni strani, odprt za terensko validacijo
+
+---
+Task ID: R487
+Agent: main (Z.ai Code)
+Task: Issue #3 — FIELD CAPTURE 2.0: več pogledov → ena konsistentna, potrjena meritev
+
+Work Log:
+- prej: konsolidacija SAMO v UI (tiho povprečje), strežnik ni preračunal pogledov, E2E dodajanje blokirano
+- vrzeli zaprte: panel izbire obstoječe fotografije za dodatne poglede; KONFLIKTNA VRATA — spread >5 % → POTRDI onemogočen + role=alert; strežniška konsolidacija pogledov z zaupanjem
+- E2E dokaz 390×844 (18 posnetkov + VERIFY-NOTES.md)
+- tests/r487.py 71/71
+- ostaja: terenska validacija natančnosti na pravih objektih
+
+Stage Summary:
+- tag v1.42.0; issue #3 izveden po kodni strani, odprt za terensko validacijo
+
+---
+Task ID: R488
+Agent: main (Z.ai Code)
+Task: Issue #9 END-TO-END: potrjeni model → kosovnica → cenik → ponudba → proizvodnja
+
+Work Log:
+- audit je našel 3 vrzeli — vse tri zaprte (detajli v issue #9 komentarju R488)
+- tests/r488.py 65 kontrol (faze A–K), 65/65 ×2 (idempotentno)
+- CI skupina r488 — 19/19 jobov zelenih; regresija r455–r487 vse zeleno; tsc 0; lint čisto
+- znane meje utemeljene v AUDIT-9 §7.3
+
+Stage Summary:
+- tag v1.43.0; veriga model→BOM→cenik→ponudba→proizvodnja dokazana E2E
+
+---
+Task ID: R489
+Agent: main (Z.ai Code) + 1-a-R489 + 1-b-R489
+Task: Issue #12 — MONTAŽA QA & PRIMOPREDAJA + issue #13 WalkMyPlan presoja
+
+Work Log:
+- migracija 20261017_r489_montaza_qa: kontrolne točke, odstopanja, podpis stranke
+- dokumentacija: docs/MONTAZA-QA-12.md (audit+zasnova+rezultati), docs/ROUTE-MAP.md posodobljen
+- kritična napaka montaže emitira QC_NOK (fiksna zunanja pogodba WEBHOOK_EVENTS, r481)
+- issue #13 WalkMyPlan: odločitev NE SPREJMI (NO-GO) po dejanskih spletnih preverbah — ni primeren za integracijo
+- tests/r489.py 128/128
+
+Stage Summary:
+- tag v1.44.0, commit 4f700a3, CI 20/20; issue #12 ZAPRT, #13 ZAPRT (NO-GO)
+
+---
+Task ID: R490-testni-podatki
+Agent: main (Z.ai Code)
+Task: Testni podatki za lažje testiranje (zahteva lastnika)
+
+Work Log:
+- 9 realnih testnih slik (z-ai generacija, sharp JPEG 1600 px q74): montažni tekač PRED/MED/PO, izmera, dokazilo napake, 4 zaključena dela
+- idempotentni prisma/seed-test.cjs: 6 uporabnikov vseh vlog z gesli (admin/vodja/monter/monter2/skladišče/proizvodnja), P-TEST-001 (TEREN)+P-TEST-002 (ZAKLJUCEN, soglasje galerije), N-TEST-001 V_TEKU s QA točkami/odstopanjem/checklistom, markerji [TEST] — demo podatki nedotaknjeni
+- npm script db:seed:test; r489 128/128; galerija/nalog UI preverjena v brskalniku, 0 konzolnih napak
+
+Stage Summary:
+- commit b2bc172 (brez ločenega taga — del v1.45.0)
+
+---
+Task ID: R490 + R490-objava
+Agent: main (Z.ai Code) + 1-a-R490 (audit)
+Task: Issue #11 — ROKSAL SMART GUIDE: kontekstna pomoč, skice in glasovna navodila SL/HR
+
+Work Log:
+- src/lib/smart-guide-registry.ts: GuideEntry + GUIDE 41 vnosov za VSE 41 zavihkov (11 prednostnih s polnimi koraki+skico), SKETCH_KEYS, validateGuide() integriteta (0 issues)
+- src/components/roksal/guide-sketches.tsx: 11 lastnih SVG skic po vzorcu TriangleSvg, obvezna oznaka »Shematski prikaz — ni merilo« (SL/HR), aria-label
+- src/hooks/use-guide-speech.ts: IZKLJUČNO window.speechSynthesis (Web Speech API), lang sl-SI/hr-HR, Predvajaj/Premor/Ponovi, hitrost 0.5–1.5, utišanje persist
+- src/components/roksal/smart-guide.tsx: gumb Pomoč v glavi + Sheet (bottom mobilno + safe-area), koraki/pričakovani rezultat/pogoste napake/skica; vodena prva uporaba MONTER (7 modulov, samodejno enkratno odprtje, preskok); preklop SL/HR s persistenco; dostopnost (aria-live samo status, motion-reduce, veliki gumbi)
+- /api/guide GET (prijava): integracijska točka testov; tests/r490.py 111/111 ×2
+- brskalniška samopreverba 390×844 + 1280×800: vodeni uvod, SL→HR preklop, TTS poštena zaznava, 0 konzolnih napak
+- objava: commit 67b1191, tag v1.45.0, CI 21 regresijskih skupin zeleno, issue #11 ZAPRT (komentar 6123961433)
+
+Stage Summary:
+- main = 67b1191, v1.45.0; 41/41 modulov pokritih; brez AI/brez omrežja/brez stroškov
+
+---
+Task ID: R491
+Agent: main (Z.ai Code)
+Task: Celovita končna preverba s testnimi podatki + rekonstrukcija delovnega dnevnika (DR vrzel)
+
+Work Log:
+- regresija: r483 61/61 · r484 37/37 · r485 63/63 · r486 70/70 · r487 71/71 · r488 65/65 · r489 128/128 · r490 111/111 — skupaj 606/606 ✓ proti dev :3000
+- brskalniška E2E (390×844 + 1280×800) s testnimi uporabniki: monter prijava → DANES → ZAČNI MERITEV s predpolnjenim P-TEST-001/N-TEST-001; vodeni uvod (Pomoč) se samodejno odpira in zapira; Galerija 4 [TEST] fotografije s soglasjem + povečava; N-TEST-001 detail (checklist 2/4, QA točke z odstopanjem, MERITVE 5)
+- admin foto vizualizacija na testni sliki: čarovnik projekt → fotografija ([TEST] Steklena balkonska) → 4 vogalne točke + ročna referenca 240 cm → izdelek OGR-K-001 RAL 7016 → PREJ/POTEM; dokaz po pikslih: leva polovica izvirnik (RGB 94,106,122), desna antracit ograja (RGB 44,36,33) — menjava ograje RES deluje
+- 0 konzolnih napak, 0 stranskih napak, 0 5xx v dev.log; noga prilepljena (footer-bottom=viewport pri dolgi vsebini mt-auto)
+- NAJDENA VRZEL (DR): repo worklog.md se končal pri R475, lokalni dnevnik R476–R484 izgubljen ob resetu, backup.sh ne vsebuje projektnega dnevnika → rekonstrukcija R476–R490 iz GitHub issue komentarjev + git commit sporočil (ta dodatek)
+- dokazi: ops/r491-zacni-meritev-prefill.png, r491-galerija-test.png, r491-nalog-test-001.png, r491-foto-viz-test.png
+
+Stage Summary:
+- vse zeleno; brez sprememb kode (samo dokumentacija dnevnika + dokazi); produkcija še vedno na v1.21.0 (Vercel billing blokada — v1.22–v1.45 niso razporejene, odločitev lastnika)
+- odprti issueji #2 (odločitev lastnika o izvirnem viru), #3/#7 (terenska validacija), #6 (asseti od uporabnika)
