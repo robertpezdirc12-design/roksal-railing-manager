@@ -91,6 +91,11 @@ sheme ročno. V peskovnici job poganja upravitelj oz. cron vnosi (glej §7).
    Izhod `1 = ZASTARELO` je incident, ne opomba — brez tega preizkusa se
    razlika med "združeno na GitHubu" in "dejavno v produkciji" pozna šele, ko
    monter na terenu ne vidi nove vsebine.
+9. **Takoj za vsakim pushom na `main` (R499):** push pomeni deploy, ne samo
+   arhiv. Zaporedje preprostih preverb: `ops/deploy-status.sh` (mora vrniti
+   `USKLAJENO`, izhod 0) → `/api/health` 200 → `/api/auth/session` 401. Ob
+   `ZASTARELO` prvo vprašanje NI "kje je napaka v kodi" ampak "kateri avtor
+   vrha nima GitHub računa" — Vercel zadrži deploy brez napake v kodi.
 
 ### Sprožitev deployja ročno iz GitLaba (rezervni mehanizem)
 

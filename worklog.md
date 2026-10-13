@@ -1952,3 +1952,26 @@ Work Log:
   na `origin/main` so bili `aa424c0 <z@container>`; HEAD veje je
   `robertpezdirc12-design@users.noreply.github.com`, kar je edino, kar Vercel
   gleda.
+- PROMOCIJA IZVEDENA: `git push origin HEAD:refs/heads/main` → `aa424c0..cea622b`
+  (hitra združitev, brez prisilnega pusha). Vercel je samodejno ustvaril
+  production deploy, ki NI bil zadržan: `readyState READY`, `target production`,
+  `gitUser.id 249648337` (račun `robertpezdirc12-design` je razrešen — to je
+  edina razlika glede na devet BLOCKED deployev R493 … R495).
+- IZMERJENO NA ŽIVI PRODUKCIJI: `/api/public/health` →
+  `{"ok":true,"db":"ok","build":"main-cea622b"}`; `ops/deploy-status.sh` →
+  `USKLAJENO` (izhod 0); `/` 200; `/api/health` 200; `/api/auth/session` 401;
+  `POST /api/auth/login` s praznim telesom 400. Prijav z produkcijskimi gesli
+  ni — demo/admin gesla so še vedno javno znana in se jih ne uporablja.
+
+Stage Summary:
+- Produkcija teče enako kodo kot `main` prvič po R492. Varnostni popravki R496 in
+  utrditev R497 so živi; relejna vrata imajo avtorski preizkus, zato se isti
+  incident ne more več zgoditi tiho.
+- Dve odprti lastnikovi nalogi: (a) rotacija petih produkcijskih gesel, (b)
+  `bun run db:migrate:deploy` na Neonu za aditivno
+  `20261018000000_r493_product_assets` — brez nje panel »Produktna gradiva«
+  javi napako, ostalo (prijava, nalogi, meritve, QA) deluje.
+- GitLab kopija NI osvežena: žeton `glpat-…` je NEVELJAVEN (`400` na
+  `/api/v4/user`, »Access denied« na `git ls-remote`); potrebujete nov žeton.
+  V treh klepetih poslane živne vrednosti (Vercel `vcp_…`, Neon `napi_…`,
+  GitLab `glpat-…`) je treba šteti kot razkrite in jih preklicati.
