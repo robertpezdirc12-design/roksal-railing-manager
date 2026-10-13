@@ -1,11 +1,23 @@
 // /api/measurements/[id] — posamezna meritev
 // GET   podrobnost z avtorjem+projektom+nalogom (measurements.read)
 // PATCH popravek polj (measurements.write) + revizija MEASUREMENT_UPDATE
+//
+// R501 (issue #15 faza 2) — PROVENIENCA:
+//   • `status`/`statusNote` izračuna STREŽNIK (merilno jedro), odjemalec ga ne
+//     more poljubno prepisati. Pisarna (pravica quotes.approve — VODJA/ADMIN)
+//     ima samo dva prehoda: CONFIRMED (potrditev odgovornosti) in
+//     INVALIDATED (razveljavitev, razlog OBVEZEN). Monter ne more sam potrditi
+//     lastne mere — zato monterju manjkajoča pravica pomeni 403.
+//   • Sprememba GEOMETRIJE (params: točke/kalibracija) vrne dokazano merilo na
+//     strežniško preračunano stanje — potrjena mera se ne more opreti na
+//     referenco, ki je bila med tem popravljena.
 
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { jsonError, readsAllData, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
+import { MEASUREMENT_STATUS_LABELS, MEASUREMENT_STATUSES, deriveProvenance, type MeasurementStatus, type MeasureMode } from '@/lib/measure-engine'
+import { invalidateQuotesForPackage } from '@/lib/quote-invalidation'
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -91,6 +103,73 @@ export async function PATCH (req: NextRequest, { params }: Params) {
   if (body.segments === null) patch.segments = null
   else if (typeof body.segments === 'number' && Number.isFinite(body.segments) && body.segments >= 0) patch.segments = Math.round(body.segments)
 
+  // R501: prazni patch se preveri ŠELE po izpeljavi statusnega prehoda —
+  // pisarna potrdi ali razveljavi mero SAMO s prehodom stanja (brez polj),
+  // sicer bi bil potrditveni klik nedelujoč.
+
+  // ── R501: ročni pregledovalni prehod (samo pisarna) ───────────────────────
+  const canApprove = user.perms.includes('quotes.approve')
+  const statusWanted = typeof body.status === 'string' && body.status ? body.status : null
+  if (statusWanted !== null) {
+    if (!(MEASUREMENT_STATUSES as string[]).includes(statusWanted)) {
+      return jsonError(400, 'Neznan status meritve.', `Veljavni: ${MEASUREMENT_STATUSES.join(', ')}.`)
+    }
+    if (statusWanted !== 'CONFIRMED' && statusWanted !== 'INVALIDATED') {
+      return jsonError(400, 'Status je izračunan, ne nastavljen.',
+        'Ročno je dovoljena samo potrditev (CONFIRMED) ali razveljavitev (INVALIDATED); ostala stanja izračuna strežnik iz geometrije.')
+    }
+    if (!canApprove) {
+      return jsonError(403, 'Dostop zavrnjen — manjka pravica quotes.approve.',
+        'Meritev lahko potrdi ali razveljavi samo vodja ali administrator; monter je ne more sam odobriti.')
+    }
+  }
+  const reason = typeof body.statusNote === 'string' ? body.statusNote.trim() : ''
+  if (statusWanted === 'INVALIDATED' && reason.length < 3) {
+    return jsonError(400, 'Razveljavitev zahteva razlog.', 'Navedite razlog (statusNote, min. 3 znaki) — razveljavitev mora biti sledljiva.')
+  }
+
+  // ── R501: sprememba geometrije razveljavi prej dokazano merilo ────────────
+  const paramsChanged = typeof patch.params === 'string' && patch.params !== existing.params
+  if (paramsChanged && statusWanted !== null) {
+    return jsonError(400, 'Geometrije ni mogoče hkrati spreminjati in potrjevati.',
+      'Najprej shranite spremembo točk/kalibracije (strežnik jo ponovno ovrednoti), nato jo posebej potrdite.')
+  }
+  let revalidated = false
+  if (paramsChanged) {
+    let novo: { points?: unknown; calibration?: unknown; mode?: unknown; multiView?: unknown } | null = null
+    try { novo = JSON.parse(patch.params as string) } catch { novo = null }
+    const mv = novo?.multiView as { count?: number; conflict?: boolean } | undefined
+    const rec = novo && (novo.points !== undefined || novo.calibration !== undefined)
+      ? deriveProvenance({
+        points: novo.points,
+        calibration: novo.calibration,
+        mode: typeof novo.mode === 'string' ? novo.mode as MeasureMode : null,
+        legacyType: (patch.type as string | undefined) ?? existing.type,
+        viewsAgreeing: !!mv && (mv.count ?? 0) >= 2 && mv.conflict !== true,
+      })
+      : { status: 'INVALIDATED' as const, reason: 'Geometrijska podlaga (točke/kalibracija) je bila iz zapisa odstranjena — merilo ni več dokazljivo.' }
+    patch.status = rec.status
+    patch.statusNote = rec.reason
+    revalidated = rec.status !== existing.status
+  } else if (statusWanted !== null) {
+    patch.status = statusWanted
+    patch.statusNote = reason || (statusWanted === 'CONFIRMED'
+      ? `Potrjeno s strani pisarne (${user.name ?? user.email}) — odgovornost za številko je zdaj na pregledovalcu.`
+      : '')
+    revalidated = statusWanted !== existing.status
+  } else {
+    // R501: številke so se spremenile BREZ nove geometrije → ročni popravek.
+    // Odgovornost preide na vpis (merilo ne more dokazovati vrednosti, ki je
+    // nismo več izračunali iz slike).
+    const numbersChanged = ['lengthCm', 'heightCm', 'slopeDeg', 'posts', 'segments'].some((k) => k in patch)
+    if (numbersChanged && existing.source === 'KAMERA' && existing.status !== 'MANUAL') {
+      patch.status = 'MANUAL'
+      patch.statusNote = `Ročni popravek vrednosti (${user.name ?? user.email}) brez ponovnega izračuna geometrije — odgovornost je na vpisu, ne na merilu.`
+      revalidated = true
+    }
+  }
+
+  // R501: šele zdaj vemo, ali je za shraniti kaj početi (polja ALI prehod stanja)
   if (Object.keys(patch).length === 0) return jsonError(400, 'Ni sprememb za izvedbo.')
 
   // zgodovina verzij: posnetek STANJA PRED spremembo (kdo/kdaj/kaj — issue #1)
@@ -108,12 +187,36 @@ export async function PATCH (req: NextRequest, { params }: Params) {
         type: existing.type, location: existing.location, note: existing.note, handrail: existing.handrail,
         lengthCm: existing.lengthCm, heightCm: existing.heightCm, posts: existing.posts,
         segments: existing.segments, slopeDeg: existing.slopeDeg, params: existing.params,
+        status: existing.status, statusNote: existing.statusNote,
       }),
       note: `Popravek: ${Object.keys(patch).join(', ')}`,
     },
   })
 
   const updated = await db.measurement.update({ where: { id }, data: patch, include: INCLUDE })
+
+  // ── R501 (issue #15 faza 2): ponovna validacija ODVISNIH zapisov ──────────
+  // Meritev je edini vir količin za povezane pakete. Če se je njeno stanje
+  // spremenilo (nova geometrija, ročni popravek, potrditev/razveljavitev),
+  // obstoječe ponudbe ne smejo ostati veljavne z zdaj nedokazanimi številkami.
+  // Kosovnice NE brišemo (invarianta rezervacij) — generiranje je novo zaprto
+  // z vrati v /bom, obstoječe ponudbe pa dobijo zastavico ali prenovitev.
+  let invalidiran = { paketi: 0, ponudbe: 0 }
+  if (revalidated && updated.status !== existing.status) {
+    const paketi = await db.projectPackage.findMany({
+      where: { measurementId: id },
+      select: { id: true, code: true, projectId: true, bom: { select: { code: true } } },
+    })
+    const razlog = `Meritev ${updated.type} je zdaj stanja «${MEASUREMENT_STATUS_LABELS[updated.status as MeasurementStatus] ?? updated.status}» (${(updated.statusNote ?? '').slice(0, 160)}) — količine in cene iz nje je treba preveriti.`
+    let ponudbe = 0
+    for (const p of paketi) {
+      const res = await invalidateQuotesForPackage(
+        { id: p.id, code: p.code, projectId: p.projectId }, razlog, auth.user.id
+      )
+      ponudbe += res.reset + res.flagged
+    }
+    invalidiran = { paketi: paketi.length, ponudbe }
+  }
 
   await writeAudit({
     userId: auth.user.id,
@@ -125,9 +228,11 @@ export async function PATCH (req: NextRequest, { params }: Params) {
       from: {
         type: existing.type, location: existing.location, note: existing.note, handrail: existing.handrail,
         lengthCm: existing.lengthCm, heightCm: existing.heightCm, posts: existing.posts, segments: existing.segments, slopeDeg: existing.slopeDeg,
+        status: existing.status,
       },
       to: patch,
+      ...(invalidiran.paketi > 0 ? { invalidiranih_paketov: invalidiran.paketi, invalidiranih_ponudb: invalidiran.ponudbe } : {}),
     },
   })
-  return NextResponse.json({ data: updated })
+  return NextResponse.json({ data: updated, ...(invalidiran.paketi > 0 ? { meta: { invalidiran } } : {}) })
 }

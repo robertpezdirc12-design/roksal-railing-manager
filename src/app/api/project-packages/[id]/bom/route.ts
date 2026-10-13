@@ -5,6 +5,7 @@ import { writeAudit } from '@/lib/audit'
 import { nextBomCode, planBom } from '@/lib/product-core'
 import { invalidateQuotesForPackage } from '@/lib/quote-invalidation'
 import { normalizeSegments, SEGMENT_BOM_VERSION, type RawSegmentRow } from '@/lib/segment-bom'
+import { MEASUREMENT_STATUS_LABELS, measurementStatusAllowsBusiness, type MeasurementStatus } from '@/lib/measure-engine'
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -17,6 +18,13 @@ type Params = { params: Promise<{ id: string }> }
 // (calcJson.inputs.segments, m-forma s ključi seg-N), se vrstice komponent z
 // segmentRole izračunajo PO SEGMENTU (stebri iz razmika, dolžine/ploščine z
 // odpadom iz pravila odpad_rez_pct) — vrstica ← segment je sledljiva.
+//
+// R501 (issue #15 faza 2 — H2 POSLOVNA VRATA): kosovnica je točka, kjer mera
+// postane material in cena. Če je paket vezan na meritev, katere provenience je
+// OCENA (ESTIMATED/AUTO_SUGGESTED) ali je bila razveljavljena (INVALIDATED),
+// generacija ZAVRNE s 409 — številka brez dokazanega merila ne sme v nabavo.
+// Vrata so na eni točki (generiranje), zato obstoječi tokovi brez vezane
+// meritve tečejo naprej nespremenjeno.
 export async function POST (req: NextRequest, { params }: Params) {
   const auth = await requirePermission(req, 'quotes.create')
   if (auth instanceof NextResponse) return auth
@@ -24,9 +32,14 @@ export async function POST (req: NextRequest, { params }: Params) {
 
   const pkg = await db.projectPackage.findUnique({
     where: { id },
-    include: { bom: true, project: { select: { id: true, code: true } } },
+    include: { bom: true, project: { select: { id: true, code: true } }, measurement: { select: { id: true, type: true, lengthCm: true, status: true, statusNote: true } } },
   })
   if (!pkg) return jsonError(404, 'Paket ne obstaja.')
+
+  if (pkg.measurement && !measurementStatusAllowsBusiness(pkg.measurement.status)) {
+    return jsonError(409, 'Meritev paketa ni poslovno uporabna.',
+      `Meritev ${pkg.measurement.id} je stanja «${MEASUREMENT_STATUS_LABELS[pkg.measurement.status as MeasurementStatus] ?? pkg.measurement.status}» — ocene ali razveljavljene mere ne moremo pretvoriti v kosovnico. ${pkg.measurement.statusNote ? `Razlog: ${pkg.measurement.statusNote}` : ''} Ponovite meritev z dokazano referenco (kalibracija px/cm) ali jo potrdi pisarna (CONFIRMED).`)
+  }
 
   const body = await req.json().catch(() => null)
 

@@ -29,12 +29,19 @@ export const MEASURE_MODES: MeasureMode[] = ['OGRAJA', 'KERAMIKA', 'STREHA', 'FA
 
 export type CalibrationMethod = 'MARKER' | 'ZNANA_MERA' | 'ZUNANJA_NAPRAVA' | 'LIDAR' | 'ROCNO'
 
-export const CALIB_METHODS: { id: CalibrationMethod; label: string; desc: string }[] = [
-  { id: 'MARKER', label: 'Fizični marker', desc: 'Merilni marker (šahovnica) v kadru — znana velikost' },
-  { id: 'ZNANA_MERA', label: 'Znana mera objekta', desc: 'Vrata, okno, ploščica … znana dejanska dolžina' },
-  { id: 'ZUNANJA_NAPRAVA', label: 'Zunanja naprava', desc: 'Leica DISTO / laser — referenčna razdalja' },
-  { id: 'LIDAR', label: 'LiDAR / depth skala', desc: 'Globinska senzorika naprave (kjer je podprta)' },
-  { id: 'ROCNO', label: 'Ročna referenca', desc: 'Ročno izmerjena referenca na objektu' },
+/**
+ * ENA lestvica metod kalibracije za VSE plasti (issue #15 faza 2: »različne
+ * plasti ne smejo imeti različne interpretacije iste reference«). Merilni
+ * engine, tekač ogradnje (`fence-run-engine`) in UI uporabljajo TISTO tabelo —
+ * `base` je zaupanje metode v cm referenčnem tekaču (0..100), `desc` vodilo
+ * za moneterja.
+ */
+export const CALIB_METHODS: { id: CalibrationMethod; label: string; desc: string; base: number }[] = [
+  { id: 'MARKER', label: 'Fizični marker', desc: 'Merilni marker (šahovnica) v kadru — znana velikost', base: 80 },
+  { id: 'ZNANA_MERA', label: 'Znana mera objekta', desc: 'Vrata, okno, ploščica … znana dejanska dolžina', base: 70 },
+  { id: 'ZUNANJA_NAPRAVA', label: 'Zunanja naprava', desc: 'Leica DISTO / laser — referenčna razdalja', base: 88 },
+  { id: 'LIDAR', label: 'LiDAR / depth skala', desc: 'Globinska senzorika naprave (kjer je podprta)', base: 92 },
+  { id: 'ROCNO', label: 'Ročna referenca', desc: 'Ročno izmerjena referenca na objektu', base: 55 },
 ]
 
 export interface EnginePoint { x: number; y: number; src?: 'ROCNO' | 'PREDLOG' }
@@ -50,6 +57,233 @@ export interface EngineCalib {
   imgH?: number
   method?: CalibrationMethod
   refObject?: string
+}
+
+export const CALIB_METHOD_IDS: CalibrationMethod[] = CALIB_METHODS.map((m) => m.id)
+
+/**
+ * ENOTNA kalibracijska pogodba (issue #15, faza 2).
+ *
+ * Pred tem so bili ŠTYRJE ločeni parse-i kalibracije (analyze, confirm, sync,
+ * railing-layout) z rahlo različnimi pravili: ista kalibracija je na eni poti
+ * veljala, na drugi se je tiho izgubila (offline sinhronizacija je npr. zavrgla
+ * pxY/cmY in celoten `engine`). Vslednji vnos zdaj kliče TO funkcijo, zato se
+ * pravila ne morejo več razhajati.
+ *
+ * Vrne `null` kadar merila NI (px/cm para ni) — klicatelj odloči, ali to pomeni
+ * 400 (izračun) ali samo odsotno merilo (shranjevanje → status ESTIMATED).
+ */
+export function parseCalibration (v: unknown): EngineCalib | null {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return null
+  const o = v as { px?: unknown; cm?: unknown; pxY?: unknown; cmY?: unknown; imgW?: unknown; imgH?: unknown; method?: unknown; refObject?: unknown }
+  const px = Number(o.px); const cm = Number(o.cm)
+  if (!Number.isFinite(px) || px <= 0 || !Number.isFinite(cm) || cm <= 0 || cm > 100000) return null
+  const out: EngineCalib = { px, cm }
+  // Ločena Y referenca (nagnjen kader) sme v merilo SAMO v paru — sicer bi
+  // polovičen podatek tiho spremenil smer merila iz dokazanega v nedokazanega.
+  const pxY = Number(o.pxY); const cmY = Number(o.cmY)
+  if (Number.isFinite(pxY) && pxY > 0 && Number.isFinite(cmY) && cmY > 0 && cmY <= 100000) { out.pxY = pxY; out.cmY = cmY }
+  const imgW = Number(o.imgW); const imgH = Number(o.imgH)
+  if (Number.isFinite(imgW) && imgW > 0) out.imgW = Math.round(imgW)
+  if (Number.isFinite(imgH) && imgH > 0) out.imgH = Math.round(imgH)
+  if (typeof o.method === 'string' && (CALIB_METHOD_IDS as string[]).includes(o.method)) {
+    out.method = o.method as CalibrationMethod
+  }
+  if (typeof o.refObject === 'string' && o.refObject.trim()) out.refObject = o.refObject.trim().slice(0, 80)
+  return out
+}
+
+/** Oblika točk, ki jo sprejmejo VSI vhodi (issue #15 faza 2): normalizirane
+ *  0..1 ali že piksli; `src` se ohrani samo za znani vrednosti, neznani izpade.
+ *  Pred tem je imel vsak endpoint svoj `parsePt` — zato so se pravila o
+ *  predlogih (PREDLOG ne šteje) lahko tiho razhajala. */
+export function parseEnginePoints (v: unknown, max = 64): EnginePoint[] {
+  if (!Array.isArray(v)) return []
+  const out: EnginePoint[] = []
+  for (const p of v.slice(0, max)) {
+    if (!p || typeof p !== 'object') continue
+    const q = p as { x?: unknown; y?: unknown; src?: unknown }
+    const x = Number(q.x); const y = Number(q.y)
+    // Pikslovne koordinate nad 1 M so vedno napaka vnosa ali tuji podatek;
+    // takšna točka bi geometrijo pokvarila brez kakršnega koli opozorila.
+    if (!Number.isFinite(x) || !Number.isFinite(y) || Math.abs(x) > 1e6 || Math.abs(y) > 1e6) continue
+    out.push({ x, y, ...(q.src === 'ROCNO' || q.src === 'PREDLOG' ? { src: q.src } : {}) })
+  }
+  return out
+}
+
+/** Oblika za `params.calibration` — ključi ostanejo BITNO enaki dosedanjim. */
+export function calibrationToParams (c: EngineCalib): Record<string, number | string> {
+  const out: Record<string, number | string> = { px: c.px, cm: c.cm }
+  if (c.pxY != null && c.cmY != null) { out.pxY = c.pxY; out.cmY = c.cmY }
+  if (c.imgW != null) out.imgW = c.imgW
+  if (c.imgH != null) out.imgH = c.imgH
+  if (c.method != null) out.method = c.method
+  if (c.refObject != null) out.refObject = c.refObject
+  return out
+}
+
+/**
+ * Kalibracija za SHRAMBO (params.calibration). Razlika od `parseCalibration`:
+ * če popolnega para px/cm ni, vseeno zapišemo dokumentarne vrednosti (metoda,
+ * referenčni objekt, dimenzije slike, posamezno referenco), da starejši ali
+ * nepopolni klienti ne izgubijo zapisa — merilo pa kljub temu ostane NEZNANO,
+ * zato tak zapis nikoli ne more biti poslovna mera (`deriveMeasurementStatus`).
+ */
+export function calibrationForParams (v: unknown): Record<string, number | string> | null {
+  const full = parseCalibration(v)
+  if (full) return calibrationToParams(full)
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return null
+  const o = v as Record<string, unknown>
+  const out: Record<string, number | string> = {}
+  const pos = (x: unknown): number | null => {
+    const n = Number(x)
+    return Number.isFinite(n) && n > 0 ? n : null
+  }
+  const px = pos(o.px); const cm = pos(o.cm)
+  if (px !== null) out.px = px
+  if (cm !== null) out.cm = cm
+  const pxY = pos(o.pxY); const cmY = pos(o.cmY)
+  if (pxY !== null) out.pxY = pxY
+  if (cmY !== null) out.cmY = cmY
+  const imgW = pos(o.imgW); const imgH = pos(o.imgH)
+  if (imgW !== null) out.imgW = Math.round(imgW)
+  if (imgH !== null) out.imgH = Math.round(imgH)
+  if (typeof o.method === 'string' && (CALIB_METHOD_IDS as string[]).includes(o.method)) out.method = o.method
+  if (typeof o.refObject === 'string' && o.refObject.trim()) out.refObject = o.refObject.trim().slice(0, 80)
+  return Object.keys(out).length > 0 ? out : null
+}
+
+/**
+ * Dovoleni nabor rezultatov engine-a, ki SMEJO biti shranjeni v `params.engine`
+ * (revizija/izvoz). Isti seznam uporablja tudi offline sinhronizacija — prej je
+ * imela vsaka pot svojga in je zato izpustila `scale`/`validity`.
+ */
+export const ENGINE_EXTRA_KEYS = ['domain', 'validation', 'confidence', 'captureGuide', 'scale', 'validity'] as const
+export const ENGINE_MAX_BYTES = 8000
+
+export function pickEngineExtras (e: unknown): Record<string, unknown> | null {
+  if (!e || typeof e !== 'object' || Array.isArray(e)) return null
+  const src = e as Record<string, unknown>
+  const picked: Record<string, unknown> = {}
+  if (src.domain && typeof src.domain === 'object') picked.domain = src.domain
+  if (Array.isArray(src.validation)) picked.validation = src.validation.slice(0, 40)
+  if (src.confidence && typeof src.confidence === 'object') picked.confidence = src.confidence
+  if (src.captureGuide && typeof src.captureGuide === 'object') picked.captureGuide = src.captureGuide
+  // issue #15 faza 1: model merila in veljavnost po količinah morata preživeti
+  // v zapisu — sicer bi revizija videla samo številke brez vira resnice.
+  if (src.scale && typeof src.scale === 'object') picked.scale = src.scale
+  if (src.validity && typeof src.validity === 'object') picked.validity = src.validity
+  if (Object.keys(picked).length === 0) return null
+  if (JSON.stringify(picked).length > ENGINE_MAX_BYTES) return null
+  return picked
+}
+
+export interface StoredPoint { x: number; y: number; label?: string; src?: 'ROCNO' | 'PREDLOG' }
+
+/**
+ * Točke za SHRAMBO v `params` (issue #15 faza 2): enotna normalizacija za mrežno
+ * potrjevanje in offline sinhronizacijo. Prej je vsaka pot pasala surov seznam
+ * naprej, zato so se neveljavne točke lahko usedle v zapis in pri ponovnem
+ * izračunu tiho spremenile dolžino. `label`/`src` ostaneta; neveljavne točke
+ * (NaN ali koordinate zunaj razumnega območja) se vržejo ven.
+ */
+export function pointsForStorage (v: unknown, max = 64): StoredPoint[] | null {
+  if (!Array.isArray(v)) return null
+  const out: StoredPoint[] = []
+  for (const p of v.slice(0, max)) {
+    if (!p || typeof p !== 'object') continue
+    const q = p as { x?: unknown; y?: unknown; label?: unknown; src?: unknown }
+    const x = Number(q.x); const y = Number(q.y)
+    if (!Number.isFinite(x) || !Number.isFinite(y) || Math.abs(x) > 1e6 || Math.abs(y) > 1e6) continue
+    const label = typeof q.label === 'string' && q.label.trim() ? q.label.trim().slice(0, 60) : null
+    const src = q.src === 'ROCNO' || q.src === 'PREDLOG' ? q.src : null
+    out.push({ x, y, ...(label ? { label } : {}), ...(src ? { src } : {}) })
+  }
+  return out.length > 0 ? out : null
+}
+
+/**
+ * ENOTNA oblika dodatnega pogleda (issue #15 faza 2). Obstajali so trije ločeni
+ * parse-i (confirm, sync, kamera) in je offline pot iz pogleda izpustila metodo
+ * kalibracije in ločeno Y referenco — isti zajem je imel zato na terenu in v
+ * pisarni različno merilo.
+ */
+export function viewForStorage (v: unknown): Record<string, unknown> | null {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return null
+  const o = v as { photoId?: unknown; points?: unknown; calibration?: unknown }
+  const out: Record<string, unknown> = {}
+  if (typeof o.photoId === 'string' && o.photoId) out.photoId = o.photoId
+  const pts = pointsForStorage(o.points)
+  if (pts) out.points = pts
+  const cal = calibrationForParams(o.calibration)
+  if (cal) out.calibration = cal
+  return Object.keys(out).length > 0 ? out : null
+}
+
+/**
+ * Dolžina ENEGA pogleda iz točk + kalibracije (R487): tanek sloj nad obstoječim
+ * determinističnim computeGeometry — merilnega jedra ne podvajamo. Točke so
+ * normalizirane 0..1 (takrat `imgW`/`imgH` v kalibraciji) ali že v pikslih;
+ * predlogi (PREDLOG) ne štejejo, ker avtomatika ni avtoriteta (§5).
+ */
+export function viewLengthCm (points: unknown, calibration: unknown): number | null {
+  const calib = parseCalibration(calibration)
+  if (!calib) return null
+  const pts = parseEnginePoints(points)
+  if (pts.length < 2) return null
+  const total = computeGeometry(pts, calib).totalLengthCm
+  return total > 0 ? total : null
+}
+
+export interface MultiViewConsolidation {
+  count: number
+  values: number[]
+  mean: number
+  spreadPct: number
+  conflict: boolean
+  manualOverride?: boolean
+}
+
+/**
+ * R487/R501: konsolidacija več pogledov — ISTI izračun za mrežno potrditev in
+ * offline sinhronizacijo. Prej je ga poznala samo mrežna pot, zato je bil
+ * kritičen konflikt pogledov na terenu mogoč brez kakršnega koli sledu —
+ * vrata bi bila zaobiti s pošiljanjem, ko pade signal.
+ *
+ * `conflict` je VIDLJIVO dejstvo (razpršenost > praga) in ga ročni popravek NE
+ * izniči — ostane v zapisu za revizijo. `blocked` je VRATA: zaprta samo, kadar
+ * konflikta nihče ni razrešil z ročnim popravkom in razlogom. Obe poti
+ * (confirm in sync) uporabita `blocked`, sicer bi bila teren strožji od
+ * pisarne in bi monter zares izmerjene mere ne morel oddati.
+ */
+export function consolidateViews (args: {
+  primaryPoints: unknown
+  primaryCalibration: unknown
+  views: unknown[]
+  manualOverride: boolean
+  conflictPct: number
+}): { multiView: MultiViewConsolidation | null; conflict: boolean; blocked: boolean } {
+  const lengths: number[] = []
+  const primary = viewLengthCm(args.primaryPoints, args.primaryCalibration)
+  if (primary !== null) lengths.push(primary)
+  for (const v of args.views) {
+    if (!v || typeof v !== 'object') continue
+    const l = viewLengthCm((v as { points?: unknown }).points, (v as { calibration?: unknown }).calibration)
+    if (l !== null) lengths.push(l)
+  }
+  const stats = multiViewStats(lengths)
+  if (!stats) return { multiView: null, conflict: false, blocked: false }
+  const conflict = stats.spreadPct > args.conflictPct
+  const multiView: MultiViewConsolidation = {
+    count: stats.count,
+    values: stats.values,
+    mean: stats.mean,
+    spreadPct: stats.spreadPct,
+    conflict,
+    ...(args.manualOverride ? { manualOverride: true } : {}),
+  }
+  return { multiView, conflict, blocked: conflict && !args.manualOverride }
 }
 
 export interface Segment { from: number; to: number; lengthCm: number; angleDeg: number; heightDiffCm: number; horizontalCm: number }
@@ -111,6 +345,20 @@ export const MODE_RULES: Record<MeasureMode, ModeRule> = {
     polygon: false, minPoints: 2, range: { minCm: 1, maxCm: 100000 }, legacyType: 'OSTANEO',
     hint: 'Označite točke merjene poti — izračunajo se dolžine, koti in višinske razlike.',
   },
+}
+
+/**
+ * Preslikava STAREGA tipa meritve v način (issue #15 faza 2). Kadar odjemalec
+ * načina (`mode`) ne pošlje, ga strežnik izpelje iz tipa — brez načina ne more
+ * izračunati veljavnosti, veljavnost pa odloča o poslovnem statusu meritve.
+ * Neznani tipovi (FOTO, OSTANEO) spadajo v SPLOSNO, ki ima najširša pravila in
+ * zato ničesar ne zavrne napačno.
+ */
+export function modeForLegacyType (type: string | null | undefined): MeasureMode {
+  const t = (type ?? '').toUpperCase()
+  if (t === 'OGRAJA' || t === 'BALUSTRADA') return 'OGRAJA'
+  if (t === 'NAGIB') return 'STOPNICE'
+  return 'SPLOSNO'
 }
 
 // ── Geometrija (deterministična) ─────────────────────────────────────────────
@@ -554,6 +802,232 @@ export function measureValidity (args: {
     businessMeasureAllowed: status === 'VELJAVNA' && !args.measured.includes('VISINA'),
     quantities,
     reasons,
+  }
+}
+
+// ── issue #15 faza 2: status meritve (provenienca) ──────────────────────────
+
+/**
+ * Lestvica zaupanja je NAMENOMA ista kot `SegmentStatus` v
+ * `src/lib/fence-run-engine.ts:146` (tekač ogradnje jo že uporablja) +
+ * razveljavitev. Podvojene lestvice z enakimi imeni smo se izognili zato, ker
+ * je hierarhija ena sama: ista beseda mora pomeniti isto raven zaupanja.
+ */
+export type MeasurementStatus =
+  | 'ESTIMATED' // številke iz predpostavke (nedokazano merilo) — NE sme v BOM
+  | 'AUTO_SUGGESTED' // samodejni predlog, Monter ga še ni potrdil z lastnim vhodom
+  | 'MANUAL' // človek je vrednost vpisal sam (trak/ročno) — lastna odgovornost
+  | 'CALIBRATED' // merilo je DOKAZANO (pravokoten kader ali ločena Y referenca)
+  | 'VERIFIED' // CALIBRATED + več pogledov se strinja (strežniško izmerjeno)
+  | 'CONFIRMED' // pisarna je meritvo izrecno potrdila za poslovno mero
+  | 'INVALIDATED' // referenca/merilo se je spremenilo PO uporabi — mere niso več zaupanja vredne
+
+export const MEASUREMENT_STATUSES: MeasurementStatus[] = [
+  'ESTIMATED', 'AUTO_SUGGESTED', 'MANUAL', 'CALIBRATED', 'VERIFIED', 'CONFIRMED', 'INVALIDATED',
+]
+
+export const MEASUREMENT_STATUS_LABELS: Record<MeasurementStatus, string> = {
+  ESTIMATED: 'Ocena (merilo ni dokazano)',
+  AUTO_SUGGESTED: 'Samodejni predlog (nepotrjen)',
+  MANUAL: 'Ročni vnos',
+  CALIBRATED: 'Kalibrirano (merilo dokazano)',
+  VERIFIED: 'Preverjeno (več pogledov se strinja)',
+  CONFIRMED: 'Potrjeno (pisarna)',
+  INVALIDATED: 'Razveljavljeno (referenca se je spremenila)',
+}
+
+/** Ravni, ki ju poslovni izračun (BOM/kosovnica) ZAVRNE. */
+export const MEASUREMENT_BLOCKED_STATUSES: MeasurementStatus[] = ['ESTIMATED', 'AUTO_SUGGESTED', 'INVALIDATED']
+
+export function measurementStatusAllowsBusiness (status: string | null | undefined): boolean {
+  // fail-closed v OBE smeri: neznano, prazno ali prihodnje stanje, ki ga lestvica
+  // ne pozna, NI poslovna mera. Sicer bi nov stolpec v bazi tiho odprl vrata.
+  if (!(MEASUREMENT_STATUSES as string[]).includes(status ?? '')) return false
+  return !MEASUREMENT_BLOCKED_STATUSES.includes(status as MeasurementStatus)
+}
+
+/**
+ * Vrstni red ravni zaupanja (najšibkejši člen odloča). `INVALIDATED` tu NI,
+ * ker ni raven na poti navzgor: gre za zunanjo razveljavitev po uporabi, ki
+ * vedno blokira poslovno mero. Tekač ogradnje (`SEGMENT_STATUSES`) uporablja
+ * iste številke — dve lestvici z istim imenom bi bila dva vira resnice.
+ */
+export const MEASUREMENT_STATUS_ORDER: Record<Exclude<MeasurementStatus, 'INVALIDATED'>, number> = {
+  ESTIMATED: 0,
+  AUTO_SUGGESTED: 1,
+  MANUAL: 2,
+  CALIBRATED: 3,
+  VERIFIED: 4,
+  CONFIRMED: 5,
+}
+
+/**
+ * Agregat segmentnega tekača: meritev, ki nastane iz potrjenega tekača, nosi
+ * stanje NAJŠIBKEJŠEGA segmenta. Tekač ima svoja vrata (pod `MANUAL` ne sme
+ * biti potrjen), a dokaz je šele tukaj — en nepreverjen odsek sicer ne more
+ * tiho dvigniti celotne meritve v poslovno raven.
+ */
+export function segmentLadderProvenance (statuses: Array<string | null | undefined>): { status: MeasurementStatus; reason: string } {
+  if (statuses.length === 0) {
+    return { status: 'ESTIMATED', reason: 'tekač nima nobenega segmenta — ni iz česa izračunati mere' }
+  }
+  let najSlabsi: MeasurementStatus = 'CONFIRMED'
+  for (const s of statuses) {
+    const raven = (MEASUREMENT_STATUS_ORDER as Record<string, number | undefined>)[s ?? '']
+    if (raven === undefined) {
+      return { status: 'ESTIMATED', reason: `segment s stanjem «${s ?? 'prazno'}» ni na lestvici zaupanja` }
+    }
+    if (raven < MEASUREMENT_STATUS_ORDER[najSlabsi]) najSlabsi = s as MeasurementStatus
+  }
+  const število = statuses.filter((s) => s === najSlabsi).length
+  return {
+    status: najSlabsi,
+    reason: `najšibkejši člen tekača: ${število}/${statuses.length} segmentov je stanja «${MEASUREMENT_STATUS_SHORT[najSlabsi]}»`,
+  }
+}
+
+/**
+ * Fotografski zapis brez merljene geometrije (stopnja ZAJEM): nima točk ne
+ * merila, zato ga `deriveProvenance` ne more izračunati. Stanje je odločitev
+ * jedra na enem mestu, ker ga ustvari več vstopnih točk (naložena fotografija,
+ * offline sinhronizacija, ročni zapis).
+ */
+export function photoRecordProvenance (): { status: MeasurementStatus; reason: string } {
+  return { status: 'ESTIMATED', reason: 'Fotografski zapis brez merljene geometrije — ni poslovna mera.' }
+}
+
+/**
+ * Izračun statusa IZ PODATKOV, ne iz trditve odjemalca (issue #15: »strežnik
+ * izračuna, odjemalec ne sporoča«). `scale` in `validity` sta rezultat
+ * PONOVO izračunane geometrije na strežniku.
+ *
+ * Lestvica (najšibejši zadetek zmaga):
+ *   • brez merila ali ob napaki geometrije  → ESTIMATED (ne sme v BOM)
+ *   • samo samodejne točke (PREDLOG)        → AUTO_SUGGESTED (ne sme v BOM)
+ *   • ročni popravek z razlogom             → MANUAL (človek prevzame odgovornost)
+ *   • veljavno + dokazano merilo            → CALIBRATED
+ *   • CALIBRATED + vsaj dva pogleda se strinja → VERIFIED
+ *   • pisarna potrdi ročno                  → CONFIRMED (zunanji action, ne ta funkcija)
+ *   • referenca se je spremenila po uporabi  → INVALIDATED (zunanji action)
+ */
+export function deriveMeasurementStatus (args: {
+  /** Ali zapis izvira iz slike (ima točke ALI kalibracijo); sicer je ročni vnos. */
+  fromImage: boolean
+  scale: ScaleModel
+  validity: MeasureValidity
+  /** Vsi vhodi so prišli iz samodejnega predloga (VLM) brez ročnega posega. */
+  autoOnly?: boolean
+  /** Ročni popravek dolžine z razlogom — človek prevzame odgovornost. */
+  manualOverride?: boolean
+  /** Strežniška konsolidacija ≥ 2 pogledov brez kritičnega konflikta. */
+  viewsAgreeing?: boolean
+}): { status: MeasurementStatus; reason: string } {
+  if (!args.fromImage) return { status: 'MANUAL', reason: 'vrednost je brez slikovne geometrije — ročni vnos' }
+  if (args.autoOnly) return { status: 'AUTO_SUGGESTED', reason: 'točke so samodejni predlog; monter jih ni potrdil s svojim vhodom' }
+  if (args.manualOverride) return { status: 'MANUAL', reason: 'ročni popravek dolžine z razlogom — odgovornost je na vpisu, ne na merilu' }
+  if (!args.scale.known) return { status: 'ESTIMATED', reason: 'merilo (px/cm) ni podano — cm-vrednosti so ocena' }
+  if (args.validity.status !== 'VELJAVNA') {
+    return { status: 'ESTIMATED', reason: args.validity.reasons[0] ?? `veljavnost: ${args.validity.status}` }
+  }
+  const dokaz = args.scale.isotropicProven
+    ? `merilo dokazano (${args.scale.basis}): ${args.scale.reasons[0] ?? ''}`
+    : `merilo z dokumentirano referenco, enotnost po smereh je predpostavka (${args.scale.reasons[0] ?? 'nagiba naprave nismo merili'})`
+  if (args.viewsAgreeing) {
+    return { status: 'VERIFIED', reason: `${dokaz} in vsaj dva pogleda se strinja v mejah tolerance` }
+  }
+  return { status: 'CALIBRATED', reason: dokaz }
+}
+
+/**
+ * IZKLJUČEN izračun provenience (issue #15 faza 2): potrditev meritve in
+ * offline sinhronizacija uporabita TO, ne vsaka svoja izpeljava —
+ * sicer bi ista meritve dobila različen status glede na to, kdaj je prišla v
+ * sistem (kar je natanko tisto, kar issue prepoveduje).
+ *
+ * Odjemalčeve trditve NISO vir: `points`/`calibration` se ponovno preračunajo
+ * skozi `computeGeometry` + `validateGeometry` + `measureValidity`.
+ */
+export function deriveProvenance (input: {
+  points: unknown
+  calibration: unknown
+  mode?: MeasureMode | null
+  /** Stari tip meritve (OGRAJA | BALUSTRADA | NAGIB | OSTANEO | FOTO). */
+  legacyType?: string | null
+  manualOverride?: boolean
+  /** Strežniška konsolidacija ≥ 2 pogledov brez kritičnega konflikta. */
+  viewsAgreeing?: boolean
+}): { status: MeasurementStatus; reason: string; scale: ScaleModel; validity: MeasureValidity } {
+  const calib = parseCalibration(input.calibration)
+  const pts = parseEnginePoints(input.points)
+  const mode: MeasureMode = input.mode ?? modeForLegacyType(input.legacyType)
+  const geometry = computeGeometry(pts, calib)
+  const validity = measureValidity({
+    scale: geometry.scale,
+    measured: MODE_QUANTITIES[mode],
+    issues: validateGeometry(mode, pts, calib),
+  })
+  const st = deriveMeasurementStatus({
+    // Zapis je »iz slike«, kadar ima geometrijske vhodne podatke (točke ALI
+    // kalibracijo). Brez merila je taka številka OCENA (ESTIMATED), ne ročni
+    // vnos — sicer bi teren brez kalibracije dobil poslovno dovoljeno stanje,
+    // kar je natanko tisto, kar prepoveduje migracija (issue #15 H2).
+    fromImage: pts.length >= 2 || calib !== null,
+    scale: geometry.scale,
+    validity,
+    autoOnly: pts.length >= 2 && pts.every((p) => p.src === 'PREDLOG'),
+    manualOverride: input.manualOverride === true,
+    viewsAgreeing: input.viewsAgreeing === true,
+  })
+  return { ...st, scale: geometry.scale, validity }
+}
+
+/**
+ * Kratke oznake za značke (UI). BESEDILA so ena sama lestvica za uporabo
+ * (meritve, tekač ogradnje, izvoz) — druga lestvica z istimi imeni bi bila
+ * drugi vir resnice. Dolga razlaga je v `MEASUREMENT_STATUS_LABELS`.
+ */
+export const MEASUREMENT_STATUS_SHORT: Record<MeasurementStatus, string> = {
+  ESTIMATED: 'Ocena',
+  AUTO_SUGGESTED: 'Predlog',
+  MANUAL: 'Ročno',
+  CALIBRATED: 'Kalibrirano',
+  VERIFIED: 'Preverjeno',
+  CONFIRMED: 'Potrjeno',
+  INVALIDATED: 'Razveljavljeno',
+}
+
+/**
+ * Verzija KALIBRACIJSKE POGODBE (issue #15 faza 2: »shrani kalibracijsko
+ * metodo/verzijo in uporabljeno transformacijo«). Kdor prebere stari zapis,
+ * ve, po katerih pravilih je bil napisan — pravila se lahko spreminjajo,
+ * zapis pa ne sme ostati brez oznake.
+ */
+export const CALIB_CONTRACT_VERSION = 'kalibracija/2.0'
+
+/**
+ * Provenienca za SHRAMBO v `params` (issue #15 faza 2): kaj je strežnik
+ * izračunal IN KAKO — stanje, razlog, model merila (transformacija), metoda in
+ * referenčni objekt. Kompakten zapis (brez `engine` podatkov) zato, ker ga
+ * ustvari strežnik in ga mora prebrati tudi revizija/izvoz brez slikovnih
+ * točk. Starejši zapisi polja NIMAJO — bralci morajo tolerirati odsotnost.
+ */
+export function provenanceForParams (p: {
+  status: MeasurementStatus
+  reason: string
+  scale: ScaleModel
+  calibration: EngineCalib | null
+}): Record<string, unknown> {
+  return {
+    v: CALIB_CONTRACT_VERSION,
+    status: p.status,
+    reason: p.reason,
+    basis: p.scale.basis,
+    isotropicProven: p.scale.isotropicProven,
+    cmPerPxX: p.scale.cmPerPxX,
+    cmPerPxY: p.scale.cmPerPxY,
+    ...(p.scale.tiltDeg != null ? { tiltDeg: p.scale.tiltDeg } : {}),
+    ...(p.calibration?.method != null ? { method: p.calibration.method } : {}),
+    ...(p.calibration?.refObject != null ? { refObject: p.calibration.refObject } : {}),
   }
 }
 
@@ -1027,6 +1501,10 @@ export interface ExportSource {
   workOrderCode?: string | null
   workOrderTitle?: string | null
   version?: number | null
+  /** R501 (issue #15 faza 2): provenienca zapisa — stanje in razlog ju izračuna
+   *  strežnik; izvoz ju mora nositi, sicer bi bil PDF videti kot potrjena mera. */
+  status?: string | null
+  statusNote?: string | null
   params?: {
     mode?: string
     calibration?: { method?: string; refObject?: string; px?: number; cm?: number } | null
@@ -1059,6 +1537,14 @@ export function buildExportRows (m: ExportSource): ExportRow[] {
   push('Kontekst', 'Operater', m.authorName ?? '—', '')
   push('Meritev', 'Način', m.mode ?? m.type, '')
   push('Meritev', 'Vir', m.source ?? '—', '')
+  // R501 (issue #15 faza 2): PROVENIENCA v izvozu — kdo je odgovoren za številko
+  // in ali je merilo dokazano. Brez tega vrstica 'Dolžina' izgleda enako ne glede
+  // na to, ali gre za oceno ali potrjeno mero.
+  if (m.status) {
+    push('Provenienca', 'Stanje zapisa', MEASUREMENT_STATUS_LABELS[m.status as MeasurementStatus] ?? m.status, '')
+    push('Provenienca', 'Poslovna mera dovoljena', measurementStatusAllowsBusiness(m.status) ? 'DA' : 'NE', '')
+    if (m.statusNote) push('Provenienca', 'Obrazložitev stanja', m.statusNote, '')
+  }
   push('Meritev', 'Dolžina', m.lengthCm != null ? r1(m.lengthCm).toString().replace('.', ',') : '—', 'cm')
   if (m.heightCm != null) push('Meritev', 'Višina', r1(m.heightCm).toString().replace('.', ','), 'cm')
   if (m.slopeDeg != null) push('Meritev', 'Nagib', String(m.slopeDeg), '°')

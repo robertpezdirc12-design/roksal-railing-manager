@@ -313,16 +313,35 @@ chk('MERILO_NEZADOSTNO' in lib, 'LIB: eksplicitna koda napake za napačno merilo
 chk('export function quantityValidity' in lib and 'export function measureValidity' in lib,
     'LIB: veljavnost je izvožena (uporabljata jo strežnik in UI)')
 conf = src('src/app/api/measurement/confirm/route.ts')
-chk("from '@/lib/measure-engine'" in conf and 'computeGeometry(' in conf
+chk("from '@/lib/measure-engine'" in conf and 'deriveProvenance(' in conf and 'pickEngineExtras(' in conf
     and 'calib.cm / calib.px' not in conf and 'cm / px : 1' not in conf,
-    'CONFIRM: računa dolžine prek obstoječega jedra (brez paralelnega izračuna merila)')
-chk("picked.scale = e.scale" in conf and "picked.validity = e.validity" in conf,
-    'CONFIRM: merilo in veljavnost preživita v params (revizija/izvoz)')
+    'CONFIRM: dolžine in merilo dobi iz obstoječega jedra (brez paralelnega izračuna merila)')
+# R501 (issue #15 faza 2): preskok scale/validity v params je sel v jedro
+# (`pickEngineExtras`) — ruta je ne sme več ponavljati po vrsticah.
+chk('picked.scale = src.scale' in lib and 'picked.validity = src.validity' in lib,
+    'LIB: merilo in veljavnost preživita v params (revizija/izvoz) — ena pot, v jedru')
 an = src('src/app/api/measure-engine/analyze/route.ts')
-chk('pxY' in an and 'cmY' in an, 'ANALYZE: ločena Y referenca je sprejeta po HTTP')
+# R501 (issue #15 faza 2): analiza nima več LASTNE `parseCalib` — ločena Y
+# referenca se zdaj sprejema v ENOTNI pogodbi jedra (`parseCalibration`), ki jo
+# upstream dokazuje C (c_basis: pxY/cmY → ANIZOTROPNO). Ruta mora dokazano
+# uporabljati to pogodbo; sicer bi imel analyze svoj robni primer.
+chk('parseCalibration' in an and 'function parseCalib' not in an
+    and 'pxY' in lib and 'cmY' in lib,
+    'ANALYZE: ločena Y referenca je sprejeta po HTTP (parse v enotni pogodbi jedra)')
 k = src('src/components/roksal/modules/meritve-kamera.tsx')
 chk('analysis.validity' in k and 'analysis.scale' in k, 'KAMERA UI: pošlje scale + validity in ju prikaže')
 chk('KOLICINA_LABEL' in k and 'NEZADOSTNI_PODATKI' in k, 'KAMERA UI: monter vidi, katera količina je dokazana')
+# R501 (issue #15 faza 2): UI nima več LASTNE interpretacije reference —
+# merilo in geometrijo dobi iz jedra (prej je bil tam `view.calib.cm / view.calib.px`).
+chk('computeGeometry(' in k and 'resolveScale(' in k and 'view.calib.cm / view.calib.px' not in k,
+    'KAMERA UI: izračun v živo gre prek enotnega jedra (ne lastne delitve cm/px)')
+chk('merilaPasus' in k and 'calc.scale' in k, 'KAMERA UI: pošteno besedilo o merilu (dokazano / predpostavka) je prikazano')
+# R501: nobena plast ne sme več imeti svojega zapisa istega merila.
+for rel in ('src/app/api/sync/route.ts', 'src/app/api/railing-layout/route.ts',
+            'src/app/api/measurements/route.ts', 'src/components/roksal/modules/meritve-kamera.tsx'):
+    s = src(rel)
+    chk('calib.px > 0' not in s and 'calib.cm / calib.px' not in s and 'cm / view.calib.px' not in s,
+        f'ENOTNO MERILO: {rel} ne računa več svojega cm/px')
 
 print(f'\n══ R500 (issue #15 faza 1): {PASS} ✓ / {FAIL} ✗ ══')
 sys.exit(1 if FAIL else 0)

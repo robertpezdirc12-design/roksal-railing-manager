@@ -16,20 +16,32 @@
 # Okoljske spremenljivke:
 #   BASE_URL   privzeto http://localhost:3000
 #   START_DEV  1 (privzeto) skripta sama zažene `ops/dev-serve.sh` in ga ustavi
+#   EXTERNAL_SERVER  1 = zavestna RABITEV ŽE ŽOČEGA strežnika na $BASE_URL
+#                    (zahteva START_DEV=0; pas njega NIKOLI ne ustavlja)
 #   SKIP_DB    1 preskoči migrate+seed (če je baza že pripravljena)
 #   KEEP       1 pusti dev strežnik teči tudi po zaključku
+#
+# R502 — zakaj je ločena dva režima: Next 16 dovoli EN sam `dev` proces na
+# projektno mapo (blokada `.next/dev/lock`). Zato zunanji strežnik na :3000
+# (a) prepreči skupini r464-notifications, ki si sama zaganja strežnik na :3031
+# v ISTI mapi, in (b) drži `query_engine` DLL, zaradi česar `prisma generate`
+# javi EPERM. Pas torej NE sme tiho predpostavljati, da je obstoječi strežnik
+# njegov: ali ga LASTNO upravlja (privzeto) ali pa ga IZRECNO sprejme
+# (EXTERNAL_SERVER=1) in ga nikoli ne ustavlja.
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
 BASE_URL="${BASE_URL:-http://localhost:3000}"
 LOGS="${LOGS_DIR:-.ci-local-logs}"
 START_DEV="${START_DEV:-1}"
+EXTERNAL_SERVER="${EXTERNAL_SERVER:-0}"
 SKIP_DB="${SKIP_DB:-0}"
 KEEP="${KEEP:-0}"
 DEV_PID=""
 Rdece=0
 Koraki=0
 Skupine=0
+Preskoci=""
 
 need () {
   command -v "$1" >/dev/null 2>&1 || { echo "✗ manjka pogoj: $1 — namesti ga in ponovi."; exit 127; }
@@ -109,7 +121,47 @@ export DATABASE_URL="$DB"
 export AUTH_RATE_MAX="${AUTH_RATE_MAX:-100000}"
 echo "── AUTH_RATE_MAX=$AUTH_RATE_MAX (lokalno; v produkciji je privzeto 30/min/IP)"
 
+# ── 2b. ZANESLJIVost režima strežnika, PREN kot prva stranska učinka (R502) ───
+# Če na $BASE_URL že nekdo odgovarja, pas to VE zdaj, ne šele po tem, ko je
+# zagnal `prisma generate` (EPERM na zaklepen DLL) in seed. V lastnem režimu
+# (START_DEV=1) je zasedena vtičnica razlog za takojšen izhod brez stranskih
+# učinkov; v zunanjem režimu mora biti to izrecno potrjeno (EXTERNAL_SERVER=1).
+if curl -sf "${BASE_URL}/api/public/health" >/dev/null 2>&1; then
+  if [ "$START_DEV" = 1 ]; then
+    echo "✗ na $BASE_URL že odgovarja aplikacija, ki je PAS NI zagnal (START_DEV=1)."
+    echo "  Izhod BEFORE kakršnegakoli ukaza nad bazo ali strežnikom — drevo je nedotaknjeno."
+    echo "  Izberi ENO od:"
+    echo "    a) zunanji strežnik IZRECNO sprejet: START_DEV=0 EXTERNAL_SERVER=1 bash tests/ci-local.sh"
+    echo "    b) lasten režim:              bash ops/dev-serve.sh stop && bash tests/ci-local.sh"
+    exit 1
+  fi
+  if [ "$EXTERNAL_SERVER" != 1 ]; then
+    echo "✗ na $BASE_URL že odgovarja aplikacija, ti pa nisi potrdil zunanjega režima."
+    echo "  Dodaj EXTERNAL_SERVER=1 (pas potem tega procesa NE bo ustavljal) ali"
+    echo "  ustavi zunanji strežnik in pusti pasu svojega (START_DEV=1)."
+    exit 1
+  fi
+  echo "── zunanji strežnik potrjen (EXTERNAL_SERVER=1): pas ga ne bo ustavljal"
+fi
+
 # ── 3. statična kakovost ─────────────────────────────────────────────────────
+# R502: `echo "… `next dev` …"` je v bashu UKAZ, ne besedilo — pas je sredi
+# opozorila izvedel `next dev`, dobil »command not found« in izpisal prazno
+# vrstico. Operator je moral ugibati, kaj je narobe. Nova vrata: harness
+# skripte ne smejo imeti backtick-a v double-quoted izpisu.
+quote_guard () {
+  local najdeno
+  # komentarji so dovoljeni (se ne izvršijo); ukazi v double-quoted izpisu ne.
+  najdeno=$(grep -rnE '(echo|printf)[[:space:]]+"[^"]*`' tests/*.sh ops/*.sh scripts/*.sh 2>/dev/null \
+    | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#')
+  if [ -n "$najdeno" ]; then
+    echo "$najdeno"
+    echo "↑ backtick v double-quoted izpisu pomeni izvršitev ukaza; uporabi enojnice."
+    return 1
+  fi
+  return 0
+}
+korak "harness: brez backtick ukazov" quote_guard
 # R498: avtorja commitov morata biti GitHub račun, ki ga Vercel prepozna. Sicer se
 # production deploy tiho zadrži (BLOCKED) — zelena koda potem NI enaka živi kodi.
 korak "avtorji commitov (Vercel)" bash tests/deploy-author-check.sh
@@ -187,10 +239,25 @@ ustavi_dev () {
   DEV_PID=""
 }
 
-if [ "$START_DEV" = 1 ]; then zazeni_dev; fi
+# ── 5b. zagon ali sprejetje strežnika (reži je §2b že potrdil) ───────────────
+# Tiho prevzem tujega procesa je bil pravi vzrok padca r464-notifications:
+# pas je mislil, da ima mapo prosto, zunanji `dev` pa jo je držal.
+if [ "$START_DEV" = 1 ]; then
+  zazeni_dev
+else
+  vrata="${BASE_URL##*:}"; vrata="${vrata%%/*}"
+  echo "── zunanji strežnik sprejet IZRECNO (EXTERNAL_SERVER=1): $BASE_URL"
+  echo "   poslušalec na vratih $vrata: PID $(dev_poslusalec "$vrata" || echo '?')"
+  echo "   OPOZORILO: pas ne more dokazati, KTERI commit strežnik streže in s kakšnimi"
+  echo "   spremenljivkami okolice teče. Rezultat tega zagona velja za drevo, ki ga"
+  echo "   streže ZUNANJI proces — za dokaz o lastnem drevesu uporabi privzeti režim."
+  echo "   Pas tega procesa NE bo ustavljal."
+fi
+
 if ! cekaj_health "$BASE_URL" 90; then
   echo "✗ $BASE_URL/api/public/health ni dosegljiv — testi potrebujejo živo aplikacijo."
-  echo "  (Zagon ročno: bun run db:up v svojem terminalu, nato START_DEV=0 bash tests/ci-local.sh)"
+  echo "  (Zagon ročno: bun run db:up v svojem terminalu, nato bash ops/dev-serve.sh;"
+  echo "   pas pokliče s START_DEV=0 EXTERNAL_SERVER=1 bash tests/ci-local.sh)"
   exit 1
 fi
 echo "── aplikacija pripravljena: $BASE_URL"
@@ -210,8 +277,14 @@ for g in $(bash tests/ci-matrix.sh --list); do
       echo "  ⏸ r464-notifications: dev strežnik na $BASE_URL začasno ustavljen (Next dev blokada)"
       ustavi_dev; ustavljen=1
     else
-      echo "  ⚠ r464-notifications: skupina si zažene svoj dev strežnik na :3031 — če v tej mapi"
-      echo "    že teče drugi `next dev` (npr. tvoj :3000), Next 16 to zavrne in skupina pade."
+      # Zunanji strežnik ni naš — ustaviti ga bi pomenilo poseg v tuj proces,
+      # tiho pognati pa drugi dev v isti mapi Next zavrne. Edina poštena
+      # možnost: GLASNO preskočiti in to zapisati v povzetek.
+      echo "  ⚠ r464-notifications POŠKOČENA: zunanji strežnik na $BASE_URL drži projektno"
+      echo "    mapo, skupina pa potrebuje izključno lastništvo (svoj dev na :3031)."
+      echo "    Pokrij jo z: bash tests/ci-local.sh  (START_DEV=1, brez zunanjega strežnika)"
+      Preskoci="$Preskoci r464-notifications"
+      continue
     fi
     if bash tests/ci-matrix.sh "$g" > "$LOGS/$g.log" 2>&1; then
       printf '  ✓ %-22s %s\n' "$g" "$(grep -E '^═══' "$LOGS/$g.log" | tail -1)"
@@ -250,6 +323,11 @@ else
   echo "════ RELEJNI PAS: ✗ $Rdece rdečih od $Koraki korakov in $Skupine skupin ════"
   [ -n "$PADLE" ] && echo "PADLE SKUPINE:$PADLE"
   echo "Ne predlagaj deploya, dokler pas ni zelen."
+fi
+if [ -n "$Preskoci" ]; then
+  echo "⚠ PRESKOČENE SKUPINE (niso dokaz, kljub zelenemu izhodu):$Preskoci"
+  echo "  Povzetek NI dokaz celotne matrike. Pokrij jih v lastnem režimu:"
+  echo "  bash ops/dev-serve.sh stop; bash tests/ci-local.sh"
 fi
 echo "Logi: $LOGS/"
 exit "$Rdece"

@@ -315,6 +315,12 @@ model Measurement {
   handrail    Boolean     @default(true)
   slopeDeg    Float?
   source      String      @default("ROCNO") // ROCNO | KAMERA (večtočkovne meritve na fotografiji)
+  // R501 (issue #15 faza 2): provenienca — KAKO dobitna je številka. Izračuna jo
+  // strežnik (deriveMeasurementStatus iz ponovno izračunane veljavnosti);
+  // odjemalec je NE more nastaviti. Pisarna lahko stanje samo stopnjuje
+  // (CONFIRMED) ali razveljavlja (INVALIDATED).
+  status      String      @default("ESTIMATED") // ESTIMATED | AUTO_SUGGESTED | MANUAL | CALIBRATED | VERIFIED | CONFIRMED | INVALIDATED
+  statusNote  String? // zakaj to stanje (razlog izračuna ali razlog ročnega posega)
   params      String? // JSON (profileId, barva, photoId, points, calibration, viz, konfigurator …)
   note        String?
   // R437 (issue #2): javna deljena povezava meritve (žeton /m/[token] izvirnika → /api/public/measure?token=)

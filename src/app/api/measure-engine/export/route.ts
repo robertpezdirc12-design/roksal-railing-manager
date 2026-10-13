@@ -57,6 +57,8 @@ export async function GET (req: NextRequest) {
     segments: m.segments,
     note: m.note,
     source: m.source,
+    status: m.status,
+    statusNote: m.statusNote,
     authorName: m.author?.name ?? null,
     projectCode: m.project?.code ?? null,
     projectTitle: m.project?.title ?? null,

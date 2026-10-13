@@ -14,6 +14,7 @@ import { db } from '@/lib/db'
 import { jsonError, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
 import { ENGINE_VERSION, SEGMENT_STATUSES } from '@/lib/fence-run-engine'
+import { segmentLadderProvenance } from '@/lib/measure-engine'
 import { analyzeContext, loadRunContext, snapshotVersion } from '@/lib/fence-run-service'
 import { fenceRunZaUporabnika } from '@/lib/fence-run-access'
 import { nextPackageCode } from '@/lib/product-core'
@@ -68,10 +69,17 @@ export async function POST (req: NextRequest, { params }: Params) {
   const heights = ctx.nodes.map((n) => n.heightCm).filter((h): h is number => h != null)
   const maxHeight = heights.length > 0 ? Math.max(...heights) : null
 
+  // Stanje kanonične meritve izračuna jedro iz lestvice segmentov (R501):
+  // brez tega privzame stolpec ESTIMATED, nova poslovna vrata pa tiho
+  // zavrnejo kosovnico iz pravilno potrjenega tekača.
+  const ladder = segmentLadderProvenance(ctx.segments.map((s) => s.status))
+
   const measurement = await db.measurement.create({
     data: {
       type: 'OGRAJA',
       source: 'ROCNO',
+      status: ladder.status,
+      statusNote: ladder.reason,
       projectId: ctx.run.projectId,
       workOrderId: ctx.run.workOrderId,
       authorId: user.id,

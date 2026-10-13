@@ -139,6 +139,10 @@ jobs:
           - grupa: r494
           - grupa: r495
           - grupa: r500
+          # R501 (issue #15 faza 2): enotna kalibracijska pogodba + strežniški
+          # statusi meritev — nova skupina MORA biti tudi v tests/ci-matrix.sh
+          # (sicer pas javi razhajanje matrike).
+          - grupa: r501
     services:
       postgres:
         image: postgres:16

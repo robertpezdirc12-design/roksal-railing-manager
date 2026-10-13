@@ -5,7 +5,7 @@
 // R437: javna deljena povezava meritve (POST/DELETE /api/measurements/[id]/share → /api/public/measure)
 
 import { useMemo, useState } from 'react'
-import { Camera, Copy, History, Link2, Loader2, MapPin, Plus, Ruler, Save, Search, TrendingUp, Unlink } from 'lucide-react'
+import { Camera, Check, Copy, History, Link2, Loader2, MapPin, Plus, Ruler, Save, Search, ShieldAlert, TrendingUp, Unlink } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -22,6 +22,7 @@ import { cn } from '@/lib/utils'
 import { apiDelete, apiPatch, apiPost, fmtDate, fmtDateTime, useApi } from '@/lib/api-client'
 import { EmptyState, ErrorBox, LoadingRows, PageHeader } from '@/components/roksal/ui-bits'
 import { hasPerm } from '@/lib/permissions-core'
+import { MEASUREMENT_STATUS_LABELS, MEASUREMENT_STATUS_SHORT, measurementStatusAllowsBusiness, type MeasurementStatus } from '@/lib/measure-engine'
 import { KameraMeritevDialog } from '@/components/roksal/modules/meritve-kamera'
 
 interface MeasurementRow {
@@ -30,6 +31,8 @@ interface MeasurementRow {
   posts: number | null; segments: number | null; handrail: boolean
   slopeDeg: number | null; params: string | null; note: string | null; createdAt: string
   source?: string // ROCNO | KAMERA (večtočkovne meritve na fotografiji)
+  status?: string // R501: provenienca — KAKO dobitna je številka (izračuna strežnik)
+  statusNote?: string | null // zakaj to stanje (razlog izračuna ali ročnega posega)
   shareToken?: string | null // R437: žeton javne povezave (null = ni deljeno)
   author: { name: string } | null
   project: { code: string; title: string } | null
@@ -65,6 +68,34 @@ const TYPE_BADGES: Record<string, { label: string; cls: string }> = {
 function TypeBadge ({ type }: { type: string }) {
   const t = TYPE_BADGES[type] ?? { label: type, cls: 'bg-muted text-muted-foreground' }
   return <Badge variant="secondary" className={cn('border-transparent font-medium', t.cls)}>{t.label}</Badge>
+}
+
+// R501 (issue #15 faza 2): znaczek PROVENIENCE — kako dobitna je številka.
+// Ocene/predlogi/razveljavljene mere so rdeče-rumene in NISO poslovna mera;
+// dokazane/potrdjene so zeleno-sive. Isti besedi kot v tekaču ogradnje in v
+// izvozu (ena lestvica, ne dve).
+const STATUS_TONE: Record<string, string> = {
+  ESTIMATED: 'bg-muted text-muted-foreground',
+  AUTO_SUGGESTED: 'bg-violet-100 text-violet-800 dark:bg-violet-950 dark:text-violet-300',
+  MANUAL: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300',
+  CALIBRATED: 'bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-300',
+  VERIFIED: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300',
+  CONFIRMED: 'bg-secondary text-secondary-foreground',
+  INVALIDATED: 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300',
+}
+
+function StatusBadge ({ status }: { status?: string | null }) {
+  if (!status) return null
+  const s = status as MeasurementStatus
+  return (
+    <Badge
+      variant="secondary"
+      title={MEASUREMENT_STATUS_LABELS[s] ?? status}
+      className={cn('border-transparent px-1.5 py-0 text-[10px] font-medium', STATUS_TONE[s] ?? 'bg-muted text-muted-foreground')}
+    >
+      {MEASUREMENT_STATUS_SHORT[s] ?? status}
+    </Badge>
+  )
 }
 
 // dolžina v metrih (cm / 100, 2 decimalki)
@@ -148,6 +179,7 @@ export default function MeritveModule () {
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <TypeBadge type={m.type} />
+                        <StatusBadge status={m.status} />
                         {m.source === 'KAMERA' ? (
                           <Badge variant="secondary" className="border-transparent bg-violet-100 px-1.5 py-0 text-[10px] font-medium text-violet-800 dark:bg-violet-950 dark:text-violet-300">
                             KAMERA
@@ -214,6 +246,93 @@ export default function MeritveModule () {
           />
         ) : null}
       </Dialog>
+    </div>
+  )
+}
+
+// ─── provenienca meritve (R501, issue #15 faza 2) ────────────────────────────
+//
+// Stanje zaupanja IZRAČUNA strežnik (merilno jedro) — vmesnik ga samo prikaže.
+// Pisarna (quotes.approve) ima na voljo dva prehoda: POTRDI (prevzem
+// odgovornosti) in RAZVELJAVI (razlog je obvezen). Monterju gumbov ni — sam
+// ne more odobriti lastne mere.
+function ProvenancePanel ({ initial, onChanged }: {
+  initial: MeasurementRow
+  onChanged: () => Promise<void>
+}) {
+  const user = useAppStore((s) => s.user)
+  const { toast } = useToast()
+  const canApprove = hasPerm(user?.perms, 'quotes.approve')
+  const [status, setStatus] = useState(initial.status ?? 'ESTIMATED')
+  const [note, setNote] = useState(initial.statusNote ?? '')
+  const [reason, setReason] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const dovoljena = measurementStatusAllowsBusiness(status)
+
+  async function prehod (nov: 'CONFIRMED' | 'INVALIDATED') {
+    if (nov === 'INVALIDATED' && reason.trim().length < 3) {
+      toast({ title: 'Razveljavitev potrebuje razlog.', description: 'Vpišite, kaj se je spremenilo (npr. «referenčna mera je bila napačna»).', variant: 'destructive' })
+      return
+    }
+    setBusy(true)
+    try {
+      const res = await apiPatch<{ data: { status: string; statusNote: string | null } }>(
+        `/api/measurements/${initial.id}`,
+        { status: nov, ...(reason.trim() ? { statusNote: reason.trim() } : {}) }
+      )
+      setStatus(res.data.status)
+      setNote(res.data.statusNote ?? '')
+      setReason('')
+      toast({
+        title: nov === 'CONFIRMED' ? 'Meritev potrjena.' : 'Meritev razveljavljena.',
+        description: MEASUREMENT_STATUS_LABELS[res.data.status as MeasurementStatus] ?? res.data.status,
+      })
+      await onChanged()
+    } catch (e) {
+      toast({ title: 'Prehod stanja ni uspel', description: e instanceof Error ? e.message : undefined, variant: 'destructive' })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className={cn('space-y-2 rounded-lg border p-2.5', dovoljena ? 'border-emerald-300 bg-emerald-50/60 dark:border-emerald-900 dark:bg-emerald-950/30' : 'border-amber-300 bg-amber-50/60 dark:border-amber-900 dark:bg-amber-950/30')}>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Provenienca mere</span>
+        <StatusBadge status={status} />
+      </div>
+      <p className="text-xs font-medium text-foreground">{MEASUREMENT_STATUS_LABELS[status as MeasurementStatus] ?? status}</p>
+      {note ? <p className="text-[11px] text-muted-foreground">{note}</p> : null}
+      <p className="text-[11px] font-medium">
+        {dovoljena
+          ? 'Številka je poslovna mera — lahko gre v kosovnico in ponudbo.'
+          : 'Ni poslovna mera — kosovnice iz te meritve ni mogoče generirati (strežnik zavrne).'}
+      </p>
+      {canApprove ? (
+        <div className="space-y-2">
+          {status !== 'INVALIDATED' ? (
+            <Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="razlog (obvezen za razveljavitev)" aria-label="Razlog prehoda stanja" className="h-9" />
+          ) : null}
+          <div className="flex flex-wrap gap-2">
+            {status !== 'CONFIRMED' ? (
+              <Button size="sm" variant="outline" className="min-h-9" disabled={busy} onClick={() => void prehod('CONFIRMED')}>
+                <Check className="size-3.5" aria-hidden /> Potrdi kot poslovno mero
+              </Button>
+            ) : null}
+            {status !== 'INVALIDATED' ? (
+              <Button size="sm" variant="outline" className="min-h-9 text-red-600 hover:text-red-700 dark:text-red-400" disabled={busy} onClick={() => void prehod('INVALIDATED')}>
+                {busy ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <ShieldAlert className="size-3.5" aria-hidden />} Razveljavi
+              </Button>
+            ) : null}
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            Potrditev prevzame odgovornost za številko; razveljavitev jo umakne iz poslovnih izračunov in zazname povezane pakete.
+          </p>
+        </div>
+      ) : (
+        <p className="text-[11px] text-muted-foreground">Potrditev in razveljavitev sta v rokah vodje ali administratorja.</p>
+      )}
     </div>
   )
 }
@@ -447,6 +566,8 @@ function MeasurementForm ({ mode, open, initial, onClose, onSaved, onRefresh }: 
             </div>
           </div>
         ) : null}
+
+        {mode === 'edit' && initial ? <ProvenancePanel initial={initial} onChanged={async () => { await onRefresh?.() }} /> : null}
 
         {mode === 'edit' ? (
           <div className="space-y-2">

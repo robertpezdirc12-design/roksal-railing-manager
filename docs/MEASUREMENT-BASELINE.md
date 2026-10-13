@@ -161,6 +161,93 @@ Regresija, izmerjena ob zaključku faze 1 (lokalna baza :54329): `r454-r458`
 5/5 ✓, `r459-r462` 4/4 ✓ (91 trditev), `r486` ✓ 70, `r487` ✓ 71,
 `r500` ✓ 70 / ✗ 0 — nobena številka obstoječih kontraktov se ni premaknila.
 
+### 5.2 Napredek — kaj je Faza 2 zaprla (mera: `tests/r501.py`, 131 trditev ✓)
+
+Pododdelek dodan PO fazi 2; §5 in §5.1 ostaneta kot izmerjena baseline.
+
+**Enotna kalibracijska pogodba (`kalibracija/2.0`).** `parseCalibration`,
+`parseEnginePoints`, `pointsForStorage`, `viewForStorage`, `viewLengthCm`,
+`consolidateViews`, `deriveProvenance` in `deriveMeasurementStatus` so edni parse-i;
+`/analyze`, `/confirm`, `/sync`, `/measurements`, `railing-layout`, `fence-run-engine`,
+`meritve-kamera.tsx` in `meritve.tsx` jih samo kličejo. Veljavnost te trditve ni
+prepuščena pregledu: `r501` K odsek z regexom dokaže, da v naštetih plasteh ni več
+lastnega `cm/px` izračuna, `r500` J pa, da `/analyze` nima več svojega `parseCalib`.
+Ločena Y referenca je dokazana **čez HTTP** (`POST /api/measure-engine/analyze` →
+`scale.basis = ANIZOTROPNO`, X 0,25 in Y 0,125 cm/px).
+
+**Strežniško izračunani statusi.** `Measurement.status` + `statusNote`
+(`prisma/schema.prisma:322–323`, migracija
+`prisma/migrations/20261019000000_r501_measurement_status`), lestvica in oznaki v jedru,
+odjemalčeva trditev (`body.engine`) za stanje NI vir. Vrata poslovne mere so na eni točki
+(`measurementStatusAllowsBusiness`): `project-packages/[id]/bom` → 409 za ESTIMATED,
+200 po pisarniški potrditvi, spet 409 po razveljavitvi; odvisni paketi se ponovno
+ovrednoteno (`r501` G, I). Stanje je vidljivo v CSV izvozu, na javni povezavi (samo
+`statusLabel`, ne interne obrazložitve) in v plošči provenience.
+
+**Ustvarjalne poti morajo zapisati stanje (regresija, ki jo je ujel relejni pas).**
+Prvi celotni zagon po fazi 2 je bil rdeč (`r488`): štiri poti
+(`fence-run/[id]/confirm`, `measure/photo`, `sync` fotozapis, `measurements`
+FOTO-brez-geometrije) so zapisale meritvo brez `status`, prazno polje pa je prevzelo
+privzetek stolpca `ESTIMATED`. Nova poslovna vrata so nato — pravilno — zavrgla
+kosovnico iz potrjenega tekača, kar se je v r488 pokazalo kot veriga
+`segmentsApplied None` → `kosovnica POTRJEN 404` → `BOM_ID None`. Jedro zato zdaj
+izračuna stanje tudi tam, kjer slikovnih točk ni: `segmentLadderProvenance`
+(odloča najšibkejši člen tekača; stanje izven lestvice pade na ESTIMATED) in
+`photoRecordProvenance` (fotografski zapis je ocena, ne mera). `SEGMENT_STATUSES.order`
+v `fence-run-engine.ts` bere `MEASUREMENT_STATUS_ORDER` iz istega jedra — dve lestvici
+z istimi imeni bi bila dva vira resnice. Pravilo je zajeto strojno: `r501` K pobriše
+vse `db.measurement.create` v `src/` in zahteva, da vsak nastavi `status`.
+
+| Nevarnost | Stanje po fazi 2 | Dokaz / omejitev |
+|---|---|---|
+| H2 proizvodna vrata brez kalibracije | **ZAPRTO** | BOM 409 za oceno/predlog/razveljavljeno; fail-closed tudi za neznano/prazno stanje (`r501` C, G) |
+| H3 fotomeritev nima statusa | **ZAPRTO** | `status`/`statusNote` v bazi, izpeljavo računa strežnik, zgodovina verzij ga nosi (`r501` B, E, I) |
+| H1 (a) eno merilo za vse smeri | **DELNO** | pogodba in HTTP ga podpirata; **kamera UI še nima vnosnega polja za pxY/cmY** → fazi 4–5 |
+| H5 zaupanje ≠ točnost | **DELNO** | `validity` in `status` sta ločena in vidna; `criticalGate` (`capture-qa-engine.ts`) še vedno ničesar ne zadrži |
+| H4 trjena fotogrametrija | **ODPRTO** | faza 3 |
+| H7/H8 (EXIF, višine) | **ODPRTO** | fazi 4–5 |
+| H9 teksture ↮ fotomontaža | **ODPRTO** | #14 |
+
+**Trije resnični defekti, ki jih je našla faza 2 (ne napak v testih):**
+1. `measurementStatusAllowsBusiness` je bil fail-**open** za stanje, ki ga lestvica ne
+   pozna — nov stolpec v bazi bi tiho odprl vrata poslovne mere. Zdaj fail-closed v obe
+   smeri.
+2. `consolidateViews` je imel en izraz za dve različni stvari: *viden podatek*
+   (razpršenost > 15 %) in *vrata*. Posledica: offline (`/sync`) je zavračal tudi
+   konflikte, rešene z ročnim popravkom z razlogom, torej je bil teren strožji od
+   pisarne in monter ni mogel oddati zares izmerjene dolžine. Jedro zdaj vrača
+   `conflict` (vedno resničen) in `blocked` (vrata), oba endpointa uporabita `blocked`.
+3. Pisarniški klik »Potrdi« je bil nedelujoč: `PATCH /api/measurements/[id]` je prazen
+   patch (samo prehod stanja, brez polj) zavrnil z 400, preden je sploh izpeljal
+   statusni prehod. Prehod je zdaj veljavna zahteva; 400 ostane samo, kadar ni početi
+   ne polj ne prehoda.
+
+**Residualne omejitve, ki jih faza 2 NI odpravila (pošteno):**
+- **Produkcija še nima migracije.** `20261019000000_r501_measurement_status` je izvedena
+  samo proti lokalnemu PG (`:54329`). Dokler je ne potrdi lastnik (Neon — po dogovoru
+  ne sme ga poganjati agent), koda te veje v produkciji NE SME biti deployana;
+  brez stolpca bi bile vse merilne route-e 500.
+- Statusna lestvica je **enonsčna**: prehod, ki ga je izračunal strežnik, lahko ročno
+  popravi samo pisarna (`quotes.approve`), Monterjeva ročna pot pa je zapisati
+  `manualOverride` z razlogom (r455) — ta ostane VELJAVNA rešitev, ne zaobhod vrata.
+- `consolidateViews` meri razpršenost pogledov, ne geometrijske drži: dva napačna
+  pogleda se lahko strinjata (H4 ostaja).
+- Javna povezava (`/api/public/measure`) prikaže samo `statusLabel`; interne
+  obrazložitve (`statusNote`, ki lahko imenuje ljudi) se ne razkrijejo — preverjeno v
+  `r501` J.
+- Odstotki natančnosti proti fizični referenci še vedno **ne obstajajo** (§6.1);
+  dokazani so samo odnosi med zapisi, ne točnost.
+
+Regresija po fazi 2 (lokalna baza :54329, `bash tests/ci-matrix.sh <skupina>`):
+`r486` ✓ 70, `r487` ✓ 73, `r488` ✓ 65, `r489` ✓ 128, `r500` ✓ 76 / ✗ 0,
+`r501` ✓ 131 / ✗ 0.
+
+CELI RELEJNI PAS (`bash tests/ci-local.sh`, lastni strežnik, 13. 10. 2026):
+**✓ zeleno — 8 statičnih korakov, 24 skupin, `GATE EXIT 0`**. Preskočenih zaradi
+manjkajočih orodij je 6 testov (`r437.sh`, `r438.sh`, `r439.sh`, `r440.sh`,
+`r441.sh` — jq/imagick/sqlite3; `r477.py`). Preskočen test ni dokaz o kodi; z
+`STRICT_TOOLS=1` bi bili rdeči namesto preskočeni.
+
 ---
 
 ## 6. Kaj manjka za dokončanje (pošteno)

@@ -2106,3 +2106,85 @@ Work Log:
   cev (`... | tail -60`): izhodna koda cevi je koda zadnjega programa (`tail`),
   ne skripta. Drugi poskus je bil usmerjen v datoteko loga in je pokazal
   pravilno izhodno kodo. Ukaz: poganjalca nikoli ne cevopelj za oceno uspeha.
+
+---
+Task ID: R501+R502
+Agent: Qoder (lokalno merjeno, 13. 10. 2026)
+
+Task: issue #15 Faza 2 — enotna kalibracijska pogodba in strežniški statusi; varna razrešitev konflikta razvojnega strežnika v relejnem pasu
+
+Work Log:
+- FAZA 2 (koda; mera `tests/r501.py` ✓ 131 / ✗ 0): kalibracijska pogodba je zdaj
+  ena sama (`parseCalibration`, `pointsForStorage`, `viewForStorage`,
+  `consolidateViews` v `src/lib/measure-engine.ts`). Mrežna pot
+  (`/api/measurement/confirm`) in offline pot (`/api/sync`) klicata isti izraz,
+  ne pa svoje razlage. Strojni dokaz: odsek K v `tests/r501.py` z regexom
+  prepove `calib.\s*cm\s*/` v šestih plasteh, da si noben klicatelj ne izmisli
+  lastnega deljenja px s cm.
+- TRI RESNIČNE NAPAKE v kodi, ne v testih:
+  1. Poslovna vrata so bila odprta namesto zaprta (fail-open): kosovnica je
+     filtrirala samo `lengthCm > 0`, zato je fotomeritev brez referenčne mere
+     prišla do kosovnice in ponudbe (baseline H2). Zdaj
+     `measurementStatusAllowsBusiness` (fail-closed v obe smeri) preverja
+     `/api/project-packages/[id]/bom` in vrne 409 z razlogom.
+  2. Mrežna pot je bila strožja od terenske: `conflict` (vidna razpršenost) je
+     služil kot vrata, ročni popravek z razlogom pa jih ni odprl. Monter je
+     popravek lahko opravil na terenu, pisarna po isti poti ne. Sedaj sta
+     ločena: `conflict` je podatek, `blocked` je odločitev; obe poti uporabita
+     `blocked`.
+  3. Pisarniška potrditev prek `PATCH /api/measurements/[id]` ni delovala:
+     varovalka »ni sprememb« je tekla pred izpeljavo stanja, zato je prazen
+     patch (prehod v CONFIRMED) padel na 400. Vrstni red je popravljen in
+     zajet s trditvijo `0 <= find('statusWanted') < find("'Ni sprememb…'")`.
+- STATUSI V BAZI: `Measurement.status` in `statusNote` (plus `shareToken`).
+  Migracija `prisma/migrations/20261019000000_r501_measurement_status` je
+  izvedena SAMO na lokalnem PG (:54329). Produkcijska baza Neon NI migrirana:
+  to je dejanje lastnika in ostaja zapisano kot odprto, ne kot opravljeno.
+- REGRESIJA, KI JO JE UJEL PAS (najpomembnejši zapis tega bloka): novi statusi
+  so bili izpeljani na nekaterih ustvarjalnih poteh, na štirih pa ne — prazno
+  polje je prevzelo privzetek stolpca `ESTIMATED`, nova (sicer pravilna)
+  poslovna vrata pa so zavrgla kosovnico iz pravilno potrjenega tekača. Veriga
+  v r488: `segmentsApplied None` → `0/0 vrstic` → `kosovnica POTRJEN 404` →
+  `BOM_ID None` → `TypeError: replace() argument 2 must be str, not None`.
+  Popravek je v jedru, ne v testu: `segmentLadderProvenance` (odloča
+  najšibkejši člen; neznano stanje padne na ESTIMATED) in
+  `photoRecordProvenance` (fotografski zapis je ocena, ne mera).
+  `SEGMENT_STATUSES.order` v `fence-run-engine.ts` ne nosi več svojih številk,
+  ampak bere `MEASUREMENT_STATUS_ORDER` iz istega jedra — dve lestvici z istimi
+  imeni bi bila dva vira resnice. `tests/r501.py` zdaj strojno preveri, da
+  vsak `db.measurement.create` v `src/` nastavi `status`.
+- R502 (harness, BREZ SPREMEMBE MERILNEGA JEDRA — uporabnikova zahteva):
+  `tests/ci-local.sh` ima dva jasna režisa. Privzeto pas upravlja svoj strežnik
+  (`ops/dev-serve.sh`). `START_DEV=0 EXTERNAL_SERVER=1` pomeni zavestno rabo že
+  delujočega strežnika: tujega procesa ne ustavlja, skupino
+  `r464-notifications` glasno preskoči in na koncu izpiše omejitev — zunanjemu
+  strežniku ne more dokazati, katerega commita postreže. Trditev iz prejšnjega
+  bloka, da je skupina r478 stalno rdeča, sem preveril: v tem zagonu je
+  `r475-r478` ✓ 3 / ✗ 0, torej sta bili takratni odpovedi posledica ostankov
+  prekinjenega r488, ne lastna napaka testa.
+- NAPAKA POGANJALCA, NAJDENA Z DOKAZOM: `tests/ci-local.sh:214` je imel v
+  double-quoted `echo` ukaz v backtickih, zato ga je izvedel
+  (`next: command not found`) namesto izpisal. Dodan je korak `quote_guard`, ki
+  preišče `tests/*.sh ops/*.sh scripts/*.sh` in napove rdeče vsak backtick v
+  double-quoted izpisu. `ops/dev-serve.sh stop` je zdaj res implementiran
+  (ustavi samo poslušalca na `$DEV_PORT` in preveri, da so vrata prosta); prej
+  je ukaz za ustavitev obstajal samo kot nasvet v sporočilu.
+- CELI PAS — KONČNI IZMERJENI REZULTAT (`bash tests/ci-local.sh`, lastni
+  strežnik, log `.ci-local-r503.log`): ✓ zeleno, 8 statičnih korakov in
+  24 skupin, `GATE EXIT 0`. Skupine: r437-r445 3 ✓ / 0 ✗ / 5 preskočenih,
+  r446-r452 7 ✓, r454-r458 5 ✓, r459-r462 4 ✓, r464 2 ✓, r464-notifications
+  1 ✓, r465-r474 8 ✓, r475-r478 3 ✓ / 1 preskočen, r479–r495 vse ✓,
+  r486 ✓ 70, r487 ✓ 73, r488 ✓ 65, r489 ✓ 128, r500 ✓ 76, r501 ✓ 131.
+- PRESKOČENO ZARADI ORODIJ (6 testov; to NI dokaz o kodi): r437.sh, r438.sh,
+  r439.sh, r440.sh, r441.sh (manjkajo jq, imagick, sqlite3) in r477.py. Z
+  `STRICT_TOOLS=1` bi bili rdeči namesto preskočeni.
+- POGON BREZ CEVI: tokrat je bila izhodna koda zapisana v log (`GATE EXIT …`),
+  ne steklena skozi `tail` — navidezni »exit 0 kljub rdečim« v prejšnjem bloku
+  je bil moja napaka pri pogonu, ne napaka poganjalca.
+- KAJ NI DOKAZANO (pošteno): pravi fotoaparat ni bil uporabljen (E2E nalaga
+  datoteke, r486); LiDAR oz. senzor za globino ni na voljo; točnost proti
+  fizični referenci ni izmerjena (vzorčni primeri znanih dimenzij za fazo 7
+  manjkajo); fotogrametrije ni — `recommendMethod` še vedno trdi
+  »rekonstruiramo geometrijo« (H4, faza 3); UI kamere še nima vnosnega polja za
+  ločeno Y referenco (`pxY`/`cmY` je podprt v jedru in endpointih, zato H1(a)
+  ostane DELNO); javna povezava `/api/public/measure` pokaže samo naziv stanja.

@@ -22,7 +22,8 @@ import { getSessionUser, jsonError, managesAssignments, readsAllData, type Sessi
 import { writeAudit } from '@/lib/audit'
 import { emitEvent } from '@/lib/notify'
 import { izvediAkcijo, type AkcijaVhod } from '@/lib/playbook-engine'
-import { MEASURE_MODES } from '@/lib/measure-engine'
+import { MEASURE_MODES, calibrationForParams, parseCalibration, pointsForStorage, viewForStorage, pickEngineExtras, consolidateViews, deriveProvenance, photoRecordProvenance, provenanceForParams, type MeasureMode } from '@/lib/measure-engine'
+import { MEASURE_CONFLICT_PCT } from '@/lib/scene-understanding-core'
 import { posodobiCheck, preveriBlokadoZakljucka } from '@/lib/montaza-qa-core'
 
 // R439: terenski tok — VERBATIM iz /api/nalog/[id]/transition
@@ -103,30 +104,13 @@ async function customerOf (projectId: string | null): Promise<{ email: string | 
   return { email: p?.customer?.email ?? null, name: p?.customer?.name ?? null }
 }
 
-/** R486: normalizira en pogled (enako parseView iz confirm). */
+/**
+ * R486: normalizira en pogled. R501 (issue #15 faza 2): pogodba je v jedru
+ * (`viewForStorage`) — isto kot pri mrežnem /api/measurement/confirm, zato
+ * offline pot ne more več izgubiti metode kalibracije ali ločene Y reference.
+ */
 function parseViewSync (v: unknown): Record<string, unknown> | null {
-  if (!v || typeof v !== 'object') return null
-  const o = v as { photoId?: unknown; points?: unknown; calibration?: unknown }
-  const out: Record<string, unknown> = {}
-  if (typeof o.photoId === 'string' && o.photoId) out.photoId = o.photoId
-  if (Array.isArray(o.points)) {
-    const pts = o.points.slice(0, 64).filter((p) => {
-      if (!p || typeof p !== 'object') return false
-      const q = p as { x?: unknown; y?: unknown }
-      return Number.isFinite(Number(q.x)) && Number.isFinite(Number(q.y))
-    })
-    if (pts.length > 0) out.points = pts
-  }
-  if (o.calibration && typeof o.calibration === 'object') {
-    const c = o.calibration as { px?: unknown; cm?: unknown; imgW?: unknown; imgH?: unknown }
-    const cal: Record<string, number> = {}
-    if (Number.isFinite(Number(c.px)) && Number(c.px) > 0) cal.px = Number(c.px)
-    if (Number.isFinite(Number(c.cm)) && Number(c.cm) > 0) cal.cm = Number(c.cm)
-    if (Number.isFinite(Number(c.imgW)) && Number(c.imgW) > 0) cal.imgW = Math.round(Number(c.imgW))
-    if (Number.isFinite(Number(c.imgH)) && Number(c.imgH) > 0) cal.imgH = Math.round(Number(c.imgH))
-    if (Object.keys(cal).length > 0) out.calibration = cal
-  }
-  return Object.keys(out).length > 0 ? out : null
+  return viewForStorage(v)
 }
 
 /**
@@ -138,25 +122,14 @@ function parseViewSync (v: unknown): Record<string, unknown> | null {
  */
 function parseExtras (payload: Record<string, unknown>): Record<string, unknown> {
   const extra: Record<string, unknown> = {}
-  if (Array.isArray(payload.points)) {
-    const pts = payload.points.slice(0, 64).filter((p) => {
-      if (!p || typeof p !== 'object') return false
-      const q = p as { x?: unknown; y?: unknown }
-      return Number.isFinite(Number(q.x)) && Number.isFinite(Number(q.y))
-    })
-    if (pts.length > 0) extra.points = pts
-  }
-  if (payload.calibration && typeof payload.calibration === 'object' && !Array.isArray(payload.calibration)) {
-    const c = payload.calibration as { px?: unknown; cm?: unknown; imgW?: unknown; imgH?: unknown; method?: unknown; refObject?: unknown }
-    const cal: Record<string, unknown> = {}
-    if (Number.isFinite(Number(c.px)) && Number(c.px) > 0) cal.px = Number(c.px)
-    if (Number.isFinite(Number(c.cm)) && Number(c.cm) > 0) cal.cm = Number(c.cm)
-    if (Number.isFinite(Number(c.imgW)) && Number(c.imgW) > 0) cal.imgW = Math.round(Number(c.imgW))
-    if (Number.isFinite(Number(c.imgH)) && Number(c.imgH) > 0) cal.imgH = Math.round(Number(c.imgH))
-    if (typeof c.method === 'string' && ['MARKER', 'ZNANA_MERA', 'ZUNANJA_NAPRAVA', 'LIDAR', 'ROCNO'].includes(c.method)) cal.method = c.method
-    if (typeof c.refObject === 'string' && c.refObject.trim()) cal.refObject = c.refObject.trim().slice(0, 80)
-    if (Object.keys(cal).length > 0) extra.calibration = cal
-  }
+  // R501 (issue #15 faza 2): točke, kalibracija, pogledi in rezultat engine-a
+  // grejo skozi ENOTNO pogodbo iz merilnega jedra — enako kot confirm. Prej je
+  // imela offline pot svoj parse, ki je tiho izpustil pxY/cmY in scale/validity,
+  // zato je bil teren v reviziji viden kot manj dokumentiran zajem.
+  const pts = pointsForStorage(payload.points)
+  if (pts) extra.points = pts
+  const cal = calibrationForParams(payload.calibration)
+  if (cal) extra.calibration = cal
   if (Array.isArray(payload.views)) {
     const vs = payload.views.slice(0, 4).map(parseViewSync).filter((v): v is Record<string, unknown> => v !== null)
     if (vs.length > 0) extra.views = vs
@@ -184,15 +157,8 @@ function parseExtras (payload: Record<string, unknown>): Record<string, unknown>
   }
   const mode = str(payload.mode)
   if (mode && (MEASURE_MODES as string[]).includes(mode)) extra.mode = mode
-  if (payload.engine && typeof payload.engine === 'object' && !Array.isArray(payload.engine)) {
-    const e = payload.engine as Record<string, unknown>
-    const picked: Record<string, unknown> = {}
-    if (e.domain && typeof e.domain === 'object') picked.domain = e.domain
-    if (Array.isArray(e.validation)) picked.validation = e.validation.slice(0, 40)
-    if (e.confidence && typeof e.confidence === 'object') picked.confidence = e.confidence
-    if (e.captureGuide && typeof e.captureGuide === 'object') picked.captureGuide = e.captureGuide
-    if (Object.keys(picked).length > 0 && JSON.stringify(picked).length <= 8000) extra.engine = picked
-  }
+  const eng = pickEngineExtras(payload.engine)
+  if (eng) extra.engine = eng
   return extra
 }
 
@@ -232,10 +198,59 @@ async function opMeritev (
     if (wo) projectId = wo.projectId ?? projectId
   }
 
+  // ── R501 (issue #15 faza 2): ENaka poslovna logika kot /api/measurement/confirm ──
+  // Offline vrsta ne sme biti zaobid vrat: konflikt pogledov (>15 %) BREZ ročnega
+  // popravka z razlogom je tu CONFLICT (ostane v odjemalski vrsti in je monterju
+  // viden), ne tiho shranjena mera.
+  const extras = parseExtras(payload)
+  const hasManualOverride = extras.manualOverride !== undefined
+  const viewsArr = Array.isArray(extras.views) ? extras.views : []
+  const consolidation = viewsArr.length > 0
+    ? consolidateViews({
+      primaryPoints: extras.points,
+      primaryCalibration: extras.calibration,
+      views: viewsArr,
+      manualOverride: hasManualOverride,
+      conflictPct: MEASURE_CONFLICT_PCT,
+    })
+    : { multiView: null, conflict: false, blocked: false }
+  // R501: vrata so ZAPRTA samo za nerešen konflikt. Ročni popravek z razlogom je
+  // veljavna rešitev (enako kot na mrežni poti) — sicer bi teren strožje merilo
+  // kot pisarna in monter ne bi mogel oddati zares izmerjene dolžine.
+  if (consolidation.blocked) {
+    const mv = consolidation.multiView
+    return {
+      conflict: true,
+      error: `Pogledi se preveč razlikujejo (razpršenost ${mv ? mv.spreadPct : 0} % > ${MEASURE_CONFLICT_PCT} %) — popravite točke ali kalibracijo, ali podajte ročni popravek dolžine z razlogom.`,
+    }
+  }
+  if (consolidation.multiView) extras.multiView = consolidation.multiView
+
+  // Provenienca izračuna STREŽNIK iz ponovno preračunane geometrije; odjemalčeva
+  // trditev zanjo ni vir (issue #15 H2: ocena ne sme v BOM).
+  const provenance = deriveProvenance({
+    points: extras.points,
+    calibration: extras.calibration,
+    mode: extras.mode as MeasureMode | null,
+    legacyType: type,
+    manualOverride: hasManualOverride,
+    viewsAgreeing: consolidation.multiView !== null && consolidation.multiView.count >= 2 && !consolidation.multiView.conflict,
+  })
+  // ISTI zapis provenience kot mrežna pot (verzija pogodbe + model merila) —
+  // sicer bi bila teren in pisarna isti zajem videla različno dokumentiran.
+  extras.provenance = provenanceForParams({
+    status: provenance.status,
+    reason: provenance.reason,
+    scale: provenance.scale,
+    calibration: parseCalibration(extras.calibration),
+  })
+
   const measurement = await db.measurement.create({
     data: {
       type,
       source,
+      status: provenance.status,
+      statusNote: provenance.reason,
       projectId,
       workOrderId,
       authorId: user.id,
@@ -248,7 +263,7 @@ async function opMeritev (
       slopeDeg,
       // R486 (issue #7 §6): razširjeni merilni podatki iz offline vrste —
       // ENAKA struktura kot confirm (brez njih params ostane kot prej).
-      params: JSON.stringify({ ...(photoId ? { photoId } : {}), ...parseExtras(payload), synced: true }),
+      params: JSON.stringify({ ...(photoId ? { photoId } : {}), ...extras, synced: true }),
       note: str(payload.note),
     },
     include: {
@@ -267,6 +282,7 @@ async function opMeritev (
       data: JSON.stringify({
         type, lengthCm, heightCm, posts, segments, handrail, slopeDeg,
         location: measurement.location, note: measurement.note, params: measurement.params,
+        status: provenance.status, statusNote: provenance.reason,
       }),
       note: photoId ? 'Potrjeno s kamero (offline sinhronizacija)' : 'Shranjeno prek sinhronizacije (offline)',
     },
@@ -278,7 +294,7 @@ async function opMeritev (
     entity: 'measurement',
     entityId: measurement.id,
     projectId,
-    detail: { photoId, type, lengthCm, heightCm, slopeDeg, workOrderId, location: measurement.location, synced: true },
+    detail: { photoId, type, lengthCm, heightCm, slopeDeg, workOrderId, location: measurement.location, synced: true, status: provenance.status, statusReason: provenance.reason },
   })
 
   // R438: potrjena meritev → statusno obvestilo stranki (EMAIL, maskiran naslov)
@@ -321,10 +337,13 @@ async function opFoto (
     resolvedProjectId = wo?.projectId ?? projectId
   }
 
+  const zapis = photoRecordProvenance()
   const photo = await db.measurement.create({
     data: {
       type: 'FOTO',
       source: 'KAMERA',
+      status: zapis.status,
+      statusNote: zapis.reason,
       projectId: resolvedProjectId,
       workOrderId,
       authorId: user.id,

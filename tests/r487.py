@@ -237,8 +237,11 @@ s, d = callj('POST', '/api/measurement/confirm', monter, {
 chk(s == 201, f'klasična potrditev brez views 201 ({s})')
 M6 = d.get('data', {}).get('id')
 pr6 = json.loads(meas_params(M6).get('params') or '{}') if M6 else {}
-chk(set(pr6.keys()) == {'photoId', 'source', 'points', 'calibration'},
-    f'legacy params točno {{photoId, source, points, calibration}} ({sorted(pr6.keys())})')
+# R501 (issue #15 faza 2): h grelu dodan `provenance` (strežniški izračun, kako
+# je številka pridobljena) — ZAVESTNA rast pogodbe, ne regresa: stari ključi
+# ostanejo enaki, noben nov ključ se ne doda mimo jedra.
+chk(set(pr6.keys()) == {'photoId', 'source', 'points', 'calibration', 'provenance'},
+    f'legacy params točno {{photoId, source, points, calibration, provenance}} ({sorted(pr6.keys())})')
 
 # B7: ponovljivost — enaki vhodi → enak multiView (determinizem §6)
 s, d = callj('POST', '/api/measurement/confirm', monter, {
@@ -336,13 +339,18 @@ ui = [
     ('src/components/roksal/modules/meritve-kamera.tsx', 'NE tiho povprečje', 'KAMERA: konflikt → final ni tiho povprečje'),
     ('src/components/roksal/modules/meritve-kamera.tsx', 'laser', 'KAMERA: laserska rešitev z razlogom'),
     # (c) strežniška konsolidacija
-    ('src/app/api/measurement/confirm/route.ts', 'viewLengthCm', 'CONFIRM: per-view izračun'),
+    # R501 (issue #15 faza 2): per-view izračun (viewLengthCm) in statistika
+    # (multiViewStats) sta seli V JEDRO `consolidateViews` — ruta ju kliče,
+    # ne ponavlja več (mrežna in offline pot si delita ISTO konsolidacijo).
+    ('src/app/api/measurement/confirm/route.ts', 'consolidateViews', 'CONFIRM: konsolidacija pogledov prek enotnega jedra'),
     ('src/app/api/measurement/confirm/route.ts', 'computeGeometry', 'CONFIRM: obstoječi computeGeometry (NE tretja semantika)'),
-    ('src/app/api/measurement/confirm/route.ts', 'multiViewStats', 'CONFIRM: statistika iz lib'),
+    ('src/lib/measure-engine.ts', 'viewLengthCm', 'LIB: per-view izračun dolžine je v jedru'),
+    ('src/lib/measure-engine.ts', 'multiViewStats', 'LIB: multiViewStats izvoz'),
     ('src/app/api/measurement/confirm/route.ts', 'MEASURE_CONFLICT_PCT', 'CONFIRM: prag 15 % deljen z AR konsolidatorjem'),
     ('src/app/api/measurement/confirm/route.ts', 'extra.multiView', 'CONFIRM: params.multiView zapis'),
+    ('src/app/api/sync/route.ts', 'consolidateViews', 'SYNC: offline pot uporabi ISTO konsolidacijo (brez terenskega obvoza)'),
+    ('src/app/api/sync/route.ts', 'deriveProvenance', 'SYNC: stanje izračuna strežnik, ne trditev odjemalca'),
     # (d) export
-    ('src/lib/measure-engine.ts', 'multiViewStats', 'LIB: multiViewStats izvoz'),
     ('src/lib/measure-engine.ts', 'Število pogledov', 'EXPORT: skupina Pogledi'),
     ('src/lib/measure-engine.ts', 'Razpršenost', 'EXPORT: razpršenost v izvozu'),
 ]

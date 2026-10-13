@@ -10,46 +10,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { jsonError, requirePermission } from '@/lib/auth'
 import {
-  MEASURE_MODES, runAnalysis,
-  type AnalyzeInput, type DomainOptions, type EngineCalib, type EnginePoint,
+  MEASURE_MODES, runAnalysis, parseCalibration, parseEnginePoints,
+  type AnalyzeInput, type DomainOptions, type EnginePoint,
   type MeasureMode, type Opening,
 } from '@/lib/measure-engine'
 
 const MAX_POINTS = 64
 
-function parsePoint (v: unknown): EnginePoint | null {
-  if (!v || typeof v !== 'object') return null
-  const o = v as { x?: unknown; y?: unknown; src?: unknown }
-  const x = Number(o.x); const y = Number(o.y)
-  if (!Number.isFinite(x) || !Number.isFinite(y) || x < -1e6 || x > 1e6 || y < -1e6 || y > 1e6) return null
-  const src = o.src === 'PREDLOG' ? 'PREDLOG' : 'ROCNO'
-  return { x, y, src }
-}
-
 function numOrNull (v: unknown, min: number, max: number): number | null {
   const n = Number(v)
   return Number.isFinite(n) && n >= min && n <= max ? n : null
-}
-
-/** §4: kalibracija z metapodatki (metoda/referenčni objekt). */
-function parseCalib (v: unknown): EngineCalib | null {
-  if (!v || typeof v !== 'object') return null
-  const o = v as { px?: unknown; cm?: unknown; pxY?: unknown; cmY?: unknown; imgW?: unknown; imgH?: unknown; method?: unknown; refObject?: unknown }
-  const px = Number(o.px); const cm = Number(o.cm)
-  if (!Number.isFinite(px) || px <= 0 || !Number.isFinite(cm) || cm <= 0 || cm > 100000) return null
-  const out: EngineCalib = { px, cm }
-  // issue #15 faza 1: ločena Y referenca (nagnjen kader) sme v merilo samo v
-  // paru in v območju — sicer ostane enotno, ne tiha polovična vrednost.
-  const pxY = Number(o.pxY); const cmY = Number(o.cmY)
-  if (Number.isFinite(pxY) && pxY > 0 && Number.isFinite(cmY) && cmY > 0 && cmY <= 100000) { out.pxY = pxY; out.cmY = cmY }
-  const imgW = Number(o.imgW); const imgH = Number(o.imgH)
-  if (Number.isFinite(imgW) && imgW > 0) out.imgW = Math.round(imgW)
-  if (Number.isFinite(imgH) && imgH > 0) out.imgH = Math.round(imgH)
-  if (typeof o.method === 'string' && ['MARKER', 'ZNANA_MERA', 'ZUNANJA_NAPRAVA', 'LIDAR', 'ROCNO'].includes(o.method)) {
-    out.method = o.method as EngineCalib['method']
-  }
-  if (typeof o.refObject === 'string' && o.refObject.trim()) out.refObject = o.refObject.trim().slice(0, 80)
-  return out
 }
 
 function parseOptions (v: unknown): DomainOptions {
@@ -102,13 +72,15 @@ export async function POST (req: NextRequest) {
   }
   const rawPts: unknown[] = Array.isArray(body.points) ? body.points : []
   if (rawPts.length > MAX_POINTS) return jsonError(400, `Preveč točk (max ${MAX_POINTS}).`)
-  const points = rawPts.map(parsePoint).filter((p): p is EnginePoint => p !== null)
+  const points: EnginePoint[] = parseEnginePoints(rawPts, MAX_POINTS)
   if (points.length === 0) {
     return jsonError(400, 'Manjkajo točke.', 'Podajte vsaj 1 točko (x, y) — minimalno število po načinu preveri validacija.')
   }
 
   // §4: brez eksplicitne reference ni avtomatske potrditve — kalibracija je OBVEZNA
-  const calibration = parseCalib(body.calibration)
+  // R501 (issue #15 faza 2): ENOTNA pogodba — iste kalibracije ne sme en endpoint
+  // sprejeti, drug pa tiho zavreči.
+  const calibration = parseCalibration(body.calibration)
   if (!calibration) {
     return jsonError(400, 'Manjka referenčna kalibracija.', 'calibration: { px, cm, method?, refObject? } — brez reference avtomatska dimenzija ni veljavna (§4).')
   }

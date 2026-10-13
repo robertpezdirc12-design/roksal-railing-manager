@@ -57,8 +57,10 @@ import { getCachedNalogi, queuePhoto, useOnline } from '@/lib/offline'
 import { clearDraft, loadDraft, saveDraft, type MeasureDraft, type MeasureDraftSnapshot } from '@/lib/measure-draft'
 import { useAppStore } from '@/lib/store'
 import {
-  CALIB_METHODS, MEASURE_MODES, MODE_RULES, captureGuide, detectDeviceCaps, recommendMethod,
+  CALIB_METHODS, MEASURE_MODES, MEASUREMENT_STATUS_LABELS, MODE_RULES, captureGuide, computeGeometry,
+  detectDeviceCaps, measurementStatusAllowsBusiness, recommendMethod, resolveScale,
   type AnalyzeResult, type CalibrationMethod, type DeviceCaps, type DomainOptions, type MeasureMode,
+  type MeasurementStatus, type ScaleModel,
 } from '@/lib/measure-engine'
 import { EmptyState, ErrorBox } from '@/components/roksal/ui-bits'
 import SceneOverlay from '@/components/roksal/scene-overlay'
@@ -190,26 +192,45 @@ const KOLICINA_STATE_LABEL: Record<'VELJAVNA' | 'PREDPOSTAVKA' | 'NEZADOSTNI_POD
   VELJAVNA: 'dokazano', PREDPOSTAVKA: 'predpostavka', NEZADOSTNI_PODATKI: 'manjka podatek',
 }
 
-/** R455: izračun dolžin segmentov za en pogled (točke + kalibracija). */
-function calcView (view: View) {
+/** R455: izračun dolžin segmentov za en pogled (točke + kalibracija).
+ *  R501 (issue #15 faza 2): cm-vrednosti niso več LASTNA delitev `cm / px` —
+ *  merilo in geometrijo vrne ENOTNO jedro (`computeGeometry`/`resolveScale`),
+ *  UI sam šteje samo piksle (prikaz, ko kalibracije še ni). S tem monter v
+ *  živi predogledu vidi ISTO število kot strežnik ob potrditvi. */
+interface CalcSeg { i: number; j: number; pxLen: number; cmLen: number | null; angleDeg: number; dVCm: number | null }
+interface CalcResult { pts: Pt[]; segs: CalcSeg[]; totalPx: number; totalCm: number | null; cmPerPx: number | null; scale: ScaleModel }
+
+function calcView (view: View): CalcResult {
   const pts = view.points.filter((p) => p.src !== 'PREDLOG') // predlogi ne štejejo (§2)
-  const cmPerPx = view.calib ? view.calib.cm / view.calib.px : null
-  const segs: { i: number; j: number; pxLen: number; cmLen: number | null; angleDeg: number; dVCm: number | null }[] = []
+  const geo = computeGeometry(pts, view.calib ? { px: view.calib.px, cm: view.calib.cm, imgW: view.imgW, imgH: view.imgH } : null)
+  const segs: CalcSeg[] = []
   for (let i = 0; i + 1 < pts.length; i++) {
     const a = pts[i]; const b = pts[i + 1]
     const dx = (b.x - a.x) * view.imgW; const dy = (b.y - a.y) * view.imgH
-    const pxLen = Math.hypot(dx, dy)
-    const angleDeg = Math.round((Math.atan2(dy, dx) * 180) / Math.PI * 10) / 10
+    const g = geo.segments[i] // jedro vrne segmente v istem vrstnem redu kot pts
     segs.push({
-      i, j: i + 1, pxLen,
-      cmLen: cmPerPx !== null ? Math.round(pxLen * cmPerPx * 10) / 10 : null,
-      angleDeg,
-      dVCm: cmPerPx !== null ? Math.round(dy * cmPerPx * 10) / 10 : null,
+      i, j: i + 1,
+      pxLen: Math.hypot(dx, dy),
+      cmLen: g ? g.lengthCm : null,
+      angleDeg: g ? g.angleDeg : Math.round((Math.atan2(dy, dx) * 180) / Math.PI * 10) / 10,
+      dVCm: g ? g.heightDiffCm : null,
     })
   }
   const totalPx = segs.reduce((s, x) => s + x.pxLen, 0)
-  const totalCm = cmPerPx !== null ? Math.round(totalPx * cmPerPx * 10) / 10 : null
-  return { pts, segs, totalPx, totalCm, cmPerPx }
+  return { pts, segs, totalPx, totalCm: geo.scale.known ? geo.totalLengthCm : null, cmPerPx: geo.cmPerPx, scale: geo.scale }
+}
+
+/** Rezultat brez pogleda — aktivne fotografije še ni (isti tip kot `calcView`). */
+const CALC_PRAZEN: CalcResult = { pts: [], segs: [], totalPx: 0, totalCm: null, cmPerPx: null, scale: resolveScale(null) }
+
+/** R501 (issue #15 faza 2): pošteno besedilo o merilu, zloženo iz ENOTNEGA
+ *  modela merila (`ScaleModel`) — monter vidi, katera količina je dokazana in
+ *  katera je predpostavka, že v živi predogledu (ne šele na strežniku). */
+function merilaPasus (scale: ScaleModel): string {
+  if (!scale.known) return 'Merilo ni znano — mere so v pikslih; cm-vrednost še NI izračunana.'
+  if (scale.basis === 'ANIZOTROPNO') return `Merilo je dokazano ločeno za X in Y — ${scale.reasons[0] ?? ''}.`
+  if (scale.isotropicProven) return `Merilo je dokazano v vseh smereh — ${scale.reasons[0] ?? ''}.`
+  return `Merilo je za vse smeri PREDPOSTAVKA — ${scale.reasons[0] ?? ''}`
 }
 
 /** R457: domenski rezultat kot vrstice za prikaz/tabelo (§8–§11). */
@@ -760,7 +781,7 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
   }, [view])
 
   /** R455: izračun v živo za AKTIVNI pogled. */
-  const calc = useMemo(() => (view ? calcView(view) : { pts: [] as Pt[], segs: [], totalPx: 0, totalCm: null, cmPerPx: null }), [view])
+  const calc = useMemo(() => (view ? calcView(view) : CALC_PRAZEN), [view])
 
   /** R455: primerjava vseh pogledov + zaupanje (§3). */
   const multi = useMemo(() => {
@@ -902,7 +923,7 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
     }
     setBusy(true)
     try {
-      const res = await apiPost<{ data: { id: string } }>('/api/measurement/confirm', {
+      const res = await apiPost<{ data: { id: string; status?: MeasurementStatus; statusNote?: string | null } }>('/api/measurement/confirm', {
         photoId: views[0].photoId,
         type: stairMode ? 'NAGIB' : type,
         location: location.trim() || null,
@@ -956,9 +977,14 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
           : undefined,
       })
       setSavedId(res.data.id)
+      // R501 (issue #15 faza 2): o poslovni meri odloči STREŽNIK — monterju
+      // pokažemo njegovo stanje (in razlog), ne lastno trditev.
+      const stanje = res.data.status ? MEASUREMENT_STATUS_LABELS[res.data.status] : null
       toast({
         title: 'Meritev potrjena in shranjena.',
-        description: `${fmt1(finalLengthCm / 100)} m · zaupanje ${multi.conf} % — uporabljena bo v konfiguratorju in BOM-u.`,
+        description: stanje
+          ? `${fmt1(finalLengthCm / 100)} m · stanje: ${stanje}${measurementStatusAllowsBusiness(res.data.status) ? ' — uporabljena bo v konfiguratorju in BOM-u.' : ' — v BOM JE NE sme (korak: dokazano merilo ali pisarniška potrditev).'}`
+          : `${fmt1(finalLengthCm / 100)} m · zaupanje ${multi.conf} % — uporabljena bo v konfiguratorju in BOM-u.`,
       })
       if (again) {
         setNote(''); setOverrideOn(false); setOverrideLen(''); setOverrideReason(''); setServerLayout(null)
@@ -1038,7 +1064,7 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
       })
       toast({
         title: 'Shranjeno lokalno — sinhroniziralo se bo samodejno',
-        description: `${finalLengthCm ? `Meritev ${fmt1(finalLengthCm / 100)} m in fotografija` : 'Fotografija'} bosta poslani, ko se signal vrne.`,
+        description: `${finalLengthCm ? `Meritev ${fmt1(finalLengthCm / 100)} m in fotografija` : 'Fotografija'} bosta poslani, ko se signal vrne. Ali bo številka poslovna mera ali ocena, na sinhronizaciji odloči strežnik (merilo px/cm).`,
       })
       resetAll()
       // R486 (issue #7 §6): offline shranjeno v vrsto → osnutek ni več potreben
@@ -1508,9 +1534,9 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
                     </Button>
                   ) : null}
                 </p>
-                {view.calib ? (
+                {calc.cmPerPx !== null ? (
                   <span className="text-xs text-muted-foreground">
-                    1 px = {fmt1(view.calib.cm / view.calib.px)} cm
+                    1 px = {fmt1(calc.cmPerPx)} cm
                     {!view.calibLocked ? (
                       <Button size="sm" variant="ghost" className="ml-2 h-7 px-2" onClick={() => { snapshot(); setViews((vs) => vs.map((v) => (v.key === view.key ? { ...v, calib: null } : v))) }}>
                         <Trash2 className="size-3.5" aria-hidden /> ponastavi
@@ -1518,7 +1544,7 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
                     ) : null}
                   </span>
                 ) : (
-                  <span className="text-xs text-muted-foreground">izberite 2 točki + vnesite realno razdaljo</span>
+                  <span className="text-xs text-muted-foreground">{view.calib ? 'neveljavna referenca — px in cm morata biti večja od 0' : 'izberite 2 točki + vnesite realno razdaljo'}</span>
                 )}
               </div>
               {/* R457 (§4): metoda kalibracije + referenčni objekt */}
@@ -1756,14 +1782,14 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
                     </Button>
                   ) : null}
                 </p>
-                {view.calib ? (
-                  <span className="text-xs text-muted-foreground">1 px = {fmt1(view.calib.cm / view.calib.px)} cm{!view.calibLocked ? (
+                {calc.cmPerPx !== null ? (
+                  <span className="text-xs text-muted-foreground">1 px = {fmt1(calc.cmPerPx)} cm{!view.calibLocked ? (
                     <Button size="sm" variant="ghost" className="ml-2 h-7 px-2" onClick={() => { snapshot(); setViews((vs) => vs.map((v) => (v.key === view.key ? { ...v, calib: null } : v))) }}>
                       <Trash2 className="size-3.5" aria-hidden /> ponastavi
                     </Button>
                   ) : null}</span>
                 ) : (
-                  <span className="text-xs text-muted-foreground">označite 2 točki znane razdalje na sliki, ju izberite in kalibrirajte</span>
+                  <span className="text-xs text-muted-foreground">{view.calib ? 'neveljavna referenca — px in cm morata biti večja od 0' : 'označite 2 točki znane razdalje na sliki, ju izberite in kalibrirajte'}</span>
                 )}
               </div>
               {!view.calib ? (
@@ -1839,6 +1865,11 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
                   <span>Skupaj: <strong className="text-foreground">{calc.totalCm !== null ? `${fmt1(calc.totalCm / 100)} m` : `${Math.round(calc.totalPx)} px`}</strong></span>
                   {views.length > 1 && multi.mean !== null ? <span>Povprečje {views.length} pogledov: <strong className="text-foreground">{fmt1(multi.mean / 100)} m</strong></span> : null}
                 </div>
+                {/* R501 (issue #15 faza 2): enako pojasnilo merila kot na strežniku
+                    — jedro (resolveScale) pove, KAJ je dokazano in kaj predpostavljeno. */}
+                <p className={`text-[11px] ${calc.scale.known && calc.scale.isotropicProven ? 'text-emerald-700 dark:text-emerald-400' : 'text-amber-700 dark:text-amber-400'}`}>
+                  {merilaPasus(calc.scale)}
+                </p>
               </CardContent>
             </Card>
           ) : (
