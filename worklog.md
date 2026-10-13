@@ -2246,7 +2246,7 @@ Work Log:
     `r437.sh` in `r440.sh` zdaj telo vedno oddata prek začasne datoteke.
   • `tests/r477.py`: Xpdf 4.06 na Windows NE podpira `pdftotext - -`
     (rc 99, stdout prazen), zato je pomožnik vedno vrnil `''` in je padlo
-    vseh 9 PDF-preverb kljub POVSEM PRAVILNEMU PDF-ju. Zdaj piše/bere začasno
+    vseh 9 PDF-prever kljub POVSEM PRAVILNEMU PDF-ju. Zdaj piše/bere začasno
     datoteko in izrecno `-enc UTF-8` (brez tega Windows Xpdf izgubi Č/Š/Ž,
     poppler na Linuxu je privzeto UTF-8 — meritev ne bi bila prenosljiva).
     Rezultat: `r477.py` ✓ 81 / ✗ 0 (prej 72 / 9).
@@ -2259,7 +2259,7 @@ Work Log:
   vmesnik (uuid, curl argv, pdftotext stdin), (b) prenosljivost operacijskega
   jedra (hostname, bun, MSYS-pot, ločnik kontrolne vsote), (c) umazano
   čiščenje testa, ki je skrilo pravo stanje baze. Nobena merilna trditev ni bila
-  omiljena: vsi popravki bodisi updobljajo dokaz (ToUnicode, `-enc UTF-8`) bodisi
+  omiljena: vsi popravki bodisi utrdijo dokaz (ToUnicode, `-enc UTF-8`) bodisi
   vrnejo test v stanje, kjer dejansko preverja kodo.
 - LASTNA NAPAKA PRI POGONU, ZAPISANA DOKAZNO: vmes sem za hiter poskus zagnal
   `ops/dev-serve.sh` BREZ `DATABASE_URL` (repo nima `.env`), zato je strežnik
@@ -2292,8 +2292,8 @@ Work Log:
   na zajem v UI, točnost proti fizični meri ni izmerjena (manjkajo vzorčni
   primeri znanih dimenzij); (4) UI kamere še nima `pxY`/`cmY` vnosnega polja
   (H1a DELNO); (5) `ops/backup.sh`/`restore.sh` še vedno potrebujeta `python3`
-  (v pasu shimiran; na golo Windows okolje brez Pythona korak 4/6 odpove z
-  jasnim mesajem, ne tiho); (6) MSYS `curl` pokvari ne-ASCII `argv` — ostali
+  (v pasu shimiran; v golo Windows okolje brez Pythona korak 4/6 odpove z
+  jasnim sporočilom, ne tiho); (6) MSYS `curl` pokvari ne-ASCII `argv` — ostali
   suite-i lahko slovenske tekste primerjajo »simetrično pokvarjeno«, zato jih je
   treba prenašati prek datoteke, kot je zdaj storjeno v `r437.sh`/`r440.sh`;
   (7) 36 obstoječih `react-hooks` eslint opozoril je dokumentiran tehnični dolg;
@@ -2301,4 +2301,103 @@ Work Log:
   tega zagona NI dokaz; lokalni pas je. Deploya ne predlagam, dokler pas ni
   zelen — tokrat je, a ob uporabi pogoja (1)–(2) je promocija na `main`
   lastnikova odločitev.
+
+
+---
+Task ID: R506 (issue #15 — fazi 4+5 dokončani: vodeni zajem, geometrija po tipih, ločena Y referenca in EXIF dokaz)
+Agent: Qoder (lokalno merjeno, 14. 10. 2026, Windows Git Bash + lokalni PG :54329)
+
+Task: iz issue #15 sta bili odprtih še dve točki, ki ju je baseline sam pripisal
+fazama 4–5: (H1 a) anizotropno merilo `pxY`/`cmY` je bilo podprto v jedru in
+endpointih, a monter v kameri ni imel kam vpisati; (H8) EXIF orientacija je bila
+predpostavka, ne preveritev. Poleg tega fazi 4+5 domenske številke prikazata po
+izvoru (vpisano / privzeto / pravilo) in ne smeta ustvariti drugega merilnega ali
+cenovnega jedra (§7).
+
+Work Log:
+- IZVOR VHODOV (koda; `tests/r503.py` bloki A, C, G, K, M): domenska polja v kameri
+  se začnejo PRAZNA; `domainInputs` vsako količino označi kot `VNOS`/`PRIVZET`/
+  `PRAVILO`, `privzetiVnosi` in `manjkajociVnosi` imenujeta konkretno polje, izvoz pa
+  dobi skupino »Viri domenskih vhodov« samo, kadar nekaj ni izmerjeno.
+- ZAVRNJEN VNOS NI VNOS: razmak 400 cm, višina 10 cm in naklon 85° ostaneta brez
+  oznake VPISANO — koda ne more tiho uporabiti privzetka in trditi, da je nekaj
+  izmerjenega (`r503` C).
+- GEOMETRIJA PO TIPIH (faza 5): odprtina, večja od ploskve, je NAPAKA pri fasadi IN
+  keramiki; neto ostane 0, status meritve je `NESKLADJE_GEOMETRIJE` in poslovna mera
+  je zaprta (`r503` D). `domainFindings` (INFO/NAPAKA) je edini vir teh sporočil — UI
+  jih ne formulira posebej.
+- VODENI ZAJEM: `capturePlan` ima korake za vsak tip objekta, `captureProgress`
+  stanje koraka izračuna iz dejanskih podatkov zajema (točke, kalibracija, število
+  pogledov, nagib) in pozna tri stanja; koraka, ki ga koda ne more vedeti, ni nikoli
+  označen kot narejen (`r503` E, F).
+- H1 (a) ZAPRTO v kameri: `YRefBlock` vpiše `pxY`/`cmY` SAMO kot par (enolični par je
+  zavrnjen), `applyYRef` par tudi odstrani, `calcView` ga posreduje jedru in
+  `DraftView.calib` ga hrani, da ga obnovljen osnutek ne izgubi; `confirm`/`sync`
+  gresta skozi ENOTNO pogodbo `parseCalibration` (`r503` M).
+- H8 (DELNO) — nov čist modul `src/lib/exif-orientation.ts`: iz JPEG bajtov prebere
+  orientacijo (tag 0x0112, TIFF II in MM) in dimenzije kodeka (SOF0..SOF15),
+  `swapsAxes` ve, da osi zamenjata samo 5..8, `checkOrientation` pa razloži stanje
+  UPORABLJENA / NEUPORABLJENA / NI_DOKAZA / PRAVOKOTNA / NI_PODATKA. Kadar je stanje
+  NEUPORABLJENA, kamera obrat izvede SAMA (`normalizedSize` + `orientationMatrix`,
+  vrstni red `scale` → `transform` → `drawImage`); monter ugotovitev vidi kot napis z
+  razlogom. Živi zajem in izbira obstoječe FOTO stanje ponastavita, da dokaz ne
+  preživi po drugem viru (`r503` N, N2, N3).
+- ŠTEVKE OHRANJENE: numerična regresija (700 cm, 12 m², 35 plošč, 14,65 m² pri 35°,
+  16,97 m² pri 45°, 15 × 16,7 cm) je nespremenjena — fazi 4+5 sta spremenila samo
+  OPIS teh številk, ne njihovih vrednosti (`r503` B); `params.engine` ostane pod
+  8000 B in `inputs`/`plan` nista dodana h ključem (`r503` H); INFO ne spremeni
+  `confidence` (`r503` I).
+- RESNIČNI DEFEKTI, KI JIH JE NAŠLA TA Faza (ne napak v testih):
+  1. `calcView` je kalibracjo rekonstruiral kot `{ px, cm, imgW, imgH }` in je pri
+     tem IZGUBLJAL `pxY`/`cmY` — živi predogled bi kazal drugačno dolžino kot
+     strežnik. Zdaj se posreduje cel objekt.
+  2. Ob anizotropnem merilu `computeGeometry` vrne `cmPerPx = null` (dve merili nista
+     eno), UI pa je to izpisal kot »neveljavna referenca — px in cm morata biti večja
+     od 0« in je MONTERJU LAGAL o popolnoma veljavnem vnosu. Izpis je zdaj
+     `meriloOznaka(scale)`, ki pokaže X in Y ločeno, `posts` pa je odvisen od
+     `scale.known`, ne od enega samega razmerja.
+  3. `DraftView.calib` je bil tipiziran samo `{ px, cm }`, zato bi obnovljen osnutek
+     (IndexedDB) Y referenco tiho izpustil.
+  4. Domenska polja so bila predpolnjena (120/60/3/35), jedro pa jih je videlo kot
+     VPISANO — številka na zaslonu je bila videti kot izmerjena, čeprav je monter ni
+     nikoli vnesel.
+- MERITVE (končni rezultati, ne ocena): `tests/r503.py` ✓ 155 / ✗ 0 (bloki A–N,
+  deterministične funkcije + izvorni dokazi, brez baze in brez strežnika);
+  `npx tsc --noEmit` EXIT 0; `eslint` na meritve-kamera + exif-orientation: 0 napak
+  (18 obstoječih `react-hooks/refs` opozoril).
+- CELI RELEJNI PAS (`bash tests/ci-local.sh`, LASTNI strežnik, log
+  `.ci-local-r506b.log`): ✓ ZELEN, 8 statičnih korakov in 26 skupin, `GATE EXIT 0`.
+  Iz skupinskih dnevnikov seštete potrjene trditve: 2462 ✓ (25 skupin s številčno
+  obliko »✓ N / ✗ M«) + 76 ✓ iz `r502`, ki piše »76 OK / 0 NAPAK« — **skupaj 2538
+  potrjenih trditev, 0 napak**. Preskoki: **4**, vsi v `r437-r445` in z istim
+  vzrokom — GitLab off-site preverbe (API, zaščita, pipelines, MR) brez
+  `GITLAB_TOKEN`; odvisnost okolja, ne dokaz o kodi (repozitorij je prešel na
+  GitHub). Tokrat ni preskokov zaradi manjkajočih orodij.
+- KONFLIK RAZVOJNEGA STREŽNIKA, RAZREŠEN PO NAVODILU: v prvem poskusu je pas izstopil
+  BREZ kakršnegakoli posega (`✗ na http://localhost:3000 že odgovarja aplikacija, ki
+  je PAS NI zagnal`). Poslušalec je bil moj ostanek iz prejšnjega zagona (PID 18508,
+  `repo/node_modules/next`); ustavljen je bil z `ops/dev-serve.sh stop` (lasten
+  nadzor, brez ubijanja tretjih procesov), vrata 3000 so bila prosta in je nato pas
+  poganjal LASTEN strežnik. Zunanji strežnik NI bil sprejet z `EXTERNAL_SERVER=1`,
+  ker testni potek njegove lastnosti ne more potrditi.
+- KAJ NI DOKAZANO / OSTANJA TVEGANJA (pošteno): (1) migracija
+  `20261019000000_r501_measurement_status` na Neonu ŠE NI izvedena — dejanje lastnika;
+  (2) produkcijska gesla administracije/demo so javno znana in nerotirana — lastnik;
+  (3) EXIF dokaz se NE ZAPIŠE v `params` (`viewForStorage` beli seznam ključev je
+  namenoma ostal nespremenjen, da se oblika obstoječih zapisov ne spremeni): monter ga
+  vidi med meritvijo, iz izvoza pa je razviden samo vir domenskih številk;
+  (4) zrcaljenja in zasuka za 180° (orientacija 2/3/4) s primerjavo dimenzij NI mogoče
+  dokazati — ti pošteno dobijo `NI_DOKAZA` in opozorilo, ne samodejnega popravka;
+  (5) EXIF hoja teče samo za NALOŽENE datoteke (živi zajem in obstoječa FOTO nimata
+  kodeksa); (6) orientacija je preverjena na sintetičnih bajtih, ne na fizičnem
+  telefonu monterja — aparat/modela za ta zagon ni bilo na voljo; (7) fotogrametrija
+  (faza 3) ostane dokaz izvedljivosti brez priklopa na UI; (8) tolerance mora
+  potrditi lastnik, referenčni nabor fotografij z neodvisno fizično izmerjenimi
+  dimenzijami (§6.1) pa še ne obstaja — brez njiju fazi 6–7 ne moreta trditi
+  nobenega odstotka točnosti; (9) 18 `react-hooks` opozoril v kameri je dokumentiran
+  tehnični dolg; (10) GitHub Actions minute so porabljene do 1. 11. 2026, zato GitHub
+  preverba tega zagona NI dokaz — dokaz je lokalni pas. Deploya ne predlagam, dokler
+  pas ni zelen; zdaj je zelen, a glede na (1) in (2) je promocija na `main` lastnikova
+  odločitev. `public/assets/roksal/src/MANIFEST.json` je v delovnem drevesu sprememnjen
+  s strani uvoženih sredstev in NAMENOMA ni v tem commitu.
 

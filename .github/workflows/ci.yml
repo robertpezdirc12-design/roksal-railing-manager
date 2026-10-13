@@ -146,6 +146,10 @@ jobs:
           # R502 (issue #15 faza 3): dokazni protokol fotogrametrije brez AI —
           # rekonstrukcija iz sintetičnega para slik proti znani istini.
           - grupa: r502
+          # R503 (issue #15 faza 4+5): izvor domenskih vhodov (VNOS/PRIVZET/
+          # PRAVILO), zajemski načrt po tipu objekta in nemogoče geometrije —
+          # nova skupina MORA biti tudi v tests/ci-matrix.sh.
+          - grupa: r503
     services:
       postgres:
         image: postgres:16

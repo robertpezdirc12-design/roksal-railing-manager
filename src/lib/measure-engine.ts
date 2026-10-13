@@ -1035,6 +1035,26 @@ export function provenanceForParams (p: {
 
 export interface Opening { wCm: number; hCm: number; count: number }
 
+// ── issue #15 faza 4: VIR vsakega domenskega vhoda ───────────────────────────
+//
+// Domenski paketi (§8–§11) imajo vrednosti, ki jih monter NI vpisal, ampak jih
+// je dala koda (razmak 120 cm, naklon 35°, vzpon 17 cm, odpad 10 %). Faza 1 je
+// takšno stanje označila samo pri naklonu strehe (`pitchSource`); pravilo je
+// zdaj splošno in brez izjeme: noben privzet ali pravilom izpeljan podatek ne
+// sme v PDF-ju, CSV-ju ali UI-ju izgledati kot izmerjen.
+
+/** `VNOS` = monter je vrednost vpisal; `PRIVZET` = dala jo je koda, ker vnosa
+ *  ni bilo; `PRAVILO` = inženirski približek (npr. 4 kg/m² lepkar C2). */
+export type InputSource = 'VNOS' | 'PRIVZET' | 'PRAVILO'
+
+export const INPUT_SOURCE_LABELS: Record<InputSource, string> = {
+  VNOS: 'vpisano',
+  PRIVZET: 'PRIVZETO — ni izmerjeno',
+  PRAVILO: 'izračunano po pravilu (ni izmerjeno)',
+}
+
+export interface DomainInput { key: string; label: string; vrednost: string; enota: string; vir: InputSource }
+
 export interface DomainOptions {
   maxSpanCm?: number // OGRAJA: razmak stebrov (privzeto 120)
   heightCm?: number // OGRAJA: višina polnila (privzeto 100)
@@ -1055,8 +1075,12 @@ export interface OgrajaDomain {
   corners: Corner[]
   posts: number
   spacingCm: number
+  /** faza 4: višina polnila, iz katere je izračunana površina — brez tega
+   *  izvoz pokaže m², za katere ni vedeti, iz katere višine so. */
+  infillHeightCm: number
   handrailM: number
   infillM2: number
+  sources: Partial<Record<'maxSpanCm' | 'heightCm', InputSource>>
 }
 
 export interface KeramikaDomain {
@@ -1077,6 +1101,11 @@ export interface KeramikaDomain {
   wastePct: number
   adhesiveKg: number
   fugueKg: number
+  sources: Partial<Record<'tileWcm' | 'tileHcm' | 'jointMm' | 'pattern' | 'openings', InputSource>>
+  /** faza 4: INŽENIRSKI PRIBLIŽKI, ki so vplivali na številko. Niso mera in
+   *  niso monterjev vnos — izvoz ju mora izpisati, sicer je 39 kg lepaka videti
+   *  kot izračun iz meritve (je pa iz pravila 4 kg/m²). */
+  rules: string[]
 }
 
 export interface StrehaDomain {
@@ -1093,6 +1122,11 @@ export interface StrehaDomain {
   material: 'BETONNA' | 'KOVINSKA'
   wastePct: number
   materialM2: number
+  sources: Partial<Record<'pitchDeg' | 'roofMaterial', InputSource>>
+  /** faza 4: slemen je IZBRAN kot najdaljši rob — model enoslivne strehe, ne
+   *  izmerjen podatek. Brez oznake bi izvoz trdil, da je slemen premerjen. */
+  ridgeBasis: 'NAJDALJSI_ROB'
+  rules: string[]
 }
 
 export interface FasadaDomain {
@@ -1102,6 +1136,10 @@ export interface FasadaDomain {
   openings: { wCm: number; hCm: number; count: number; areaM2: number }[]
   openingsM2: number
   netM2: number
+  sources: Partial<Record<'openings', InputSource>>
+  /** faza 4: odprtine so lahko večje od ploskve (napačen vnos) — neto se NE
+   *  sme tiho pripeti na 0. */
+  openingsExceedGross: boolean
 }
 
 export interface StopniceDomain {
@@ -1117,6 +1155,10 @@ export interface StopniceDomain {
   steps: number
   riseCm: number
   runCm: number
+  sources: Partial<Record<'steps', InputSource>>
+  /** faza 4: kadar stopnic ni nihče prešteel, jih koda predpostavi po 17 cm
+   *  vzponu. Vrednost pravila mora biti zapisana, ne tiho. */
+  stepsRuleCm: number | null
 }
 
 export interface ProstorDomain {
@@ -1126,18 +1168,308 @@ export interface ProstorDomain {
   diagonals: Diagonal[]
   rectangleOk: boolean | null
   closureCm: number
+  rules: string[]
 }
 
 export interface SplosnoDomain { mode: 'SPLOSNO'; totalLengthCm: number; segments: Segment[] }
 
 export type DomainResult = OgrajaDomain | KeramikaDomain | StrehaDomain | FasadaDomain | StopniceDomain | ProstorDomain | SplosnoDomain
 
+/**
+ * issue #15 faza 4: ENOTNI pogled na domenske vhode z oznako vira. UI, izvoz
+ * (CSV/PDF) in testi uporabijo ta seznam, zato privzete vrednosti ne more
+ * nobena plast pokazati kot izmerjene — dodajanje novega prikaza ne sme
+ * pozabiti na vir, ker vir že živi v podatku.
+ */
+export function domainInputs (d: DomainResult): DomainInput[] {
+  const n1 = (n: number): string => String(r1(n)).replace('.', ',')
+  const i = (key: string, label: string, vrednost: string, enota: string, vir: InputSource): DomainInput =>
+    ({ key, label, vrednost, enota, vir })
+  switch (d.mode) {
+    case 'OGRAJA':
+      return [
+        i('maxSpanCm', 'Razmak stebrov', String(Math.round(d.spacingCm)), 'cm', d.sources.maxSpanCm ?? 'PRIVZET'),
+        i('heightCm', 'Višina polnila', String(Math.round(d.infillHeightCm)), 'cm', d.sources.heightCm ?? 'PRIVZET'),
+        // število stebrov je posledica razmaka — nasleduje njegov vir
+        i('posts', 'Število stebrov (iz razmaka)', String(d.posts), 'kos', d.sources.maxSpanCm ?? 'PRIVZET'),
+      ]
+    case 'KERAMIKA':
+      return [
+        i('tileWcm', 'Širina ploščice', String(Math.round(d.tileWcm)), 'cm', d.sources.tileWcm ?? 'PRIVZET'),
+        i('tileHcm', 'Višina ploščice', String(Math.round(d.tileHcm)), 'cm', d.sources.tileHcm ?? 'PRIVZET'),
+        i('jointMm', 'Fuga', String(d.jointMm), 'mm', d.sources.jointMm ?? 'PRIVZET'),
+        i('pattern', 'Vzorec polaganja', d.pattern, '', d.sources.pattern ?? 'PRIVZET'),
+        i('openings', 'Odprtine', d.openingsM2 > 0 ? `${n1(d.openingsM2)} m²` : 'brez (ni vpisano)', 'm²', d.sources.openings ?? 'PRIVZET'),
+        ...d.rules.map((r) => i(`rule:${r}`, `Pravilo: ${r}`, '—', '', 'PRAVILO')),
+      ]
+    case 'STREHA':
+      return [
+        i('pitchDeg', 'Naklon strehe', String(Math.round(d.pitchDeg)), '°', d.sources.pitchDeg ?? 'PRIVZET'),
+        i('roofMaterial', 'Material kritine', d.material, '', d.sources.roofMaterial ?? 'PRIVZET'),
+        i('ridgeCm', 'Slemen (najdaljši rob)', n1(d.ridgeCm), 'cm', 'PRAVILO'),
+        ...d.rules.map((r) => i(`rule:${r}`, `Pravilo: ${r}`, '—', '', 'PRAVILO')),
+      ]
+    case 'FASADA':
+      return [
+        i('openings', 'Odprtine', d.openings.length > 0 ? `${d.openings.length} vrst, ${n1(d.openingsM2)} m²` : 'brez (ni vpisano)', 'm²', d.sources.openings ?? 'PRIVZET'),
+      ]
+    case 'STOPNICE':
+      return [
+        i('steps', 'Število stopnic', String(d.steps), '', d.sources.steps ?? 'PRIVZET'),
+        ...(d.stepsRuleCm != null
+          ? [i('stepsRule', `Pravilo: predpostavljen vzpon ${d.stepsRuleCm} cm`, String(d.stepsRuleCm), 'cm', 'PRAVILO' as InputSource)]
+          : []),
+      ]
+    case 'PROSTOR':
+      return d.rules.map((r) => i(`rule:${r}`, `Pravilo: ${r}`, '—', '', 'PRAVILO'))
+    default:
+      return []
+  }
+}
+
+/** Samo tisto, kar monter NI izmeril/vpisal — to mora biti videti drugače. */
+export function privzetiVhodi (d: DomainResult): DomainInput[] {
+  return domainInputs(d).filter((x) => x.vir !== 'VNOS')
+}
+
+/**
+ * issue #15 faza 4: ugotovitve, ki jih geometrijska kontrola (§14) ne more
+ * vedeti, ker so odvisne od VHOPOV domenskega paketa. NAMENOMA samo tri vrste,
+ * da ne dvignejo praga za obstoječe mere:
+ *  • NAPAKA — številka je Nemogoča (odprtine večje od ploskve),
+ *  • INFO   — številka je veljavna, a NEIZMERJENA (privzeti naklon, predpostavljen
+ *             niz stopnic, odprtine »brez«), da review zaslon vidi od kod gre.
+ * OPOZORILO tu namenoma NI, ker bi znižalo `confidence` (§13) in s tem
+ * preoblikovalo že izmerjene vrednosti obstoječih meritev.
+ */
+export function domainFindings (d: DomainResult): ValidationIssue[] {
+  const out: ValidationIssue[] = []
+  if (d.mode === 'FASADA' && d.openingsExceedGross) {
+    out.push({
+      code: 'FASADA_ODPRINE_NEMOGOCE',
+      severity: 'NAPAKA',
+      message: `Vpisane odprtine (${r2(d.openingsM2)} m²) presegajo fasadno ploskev (${r2(d.grossM2)} m²) — neto površina je lahko samo 0, kar pomeni napačen vnos, ne meritve. Preveri dimenzije ali število odprtin.`,
+    })
+  }
+  if (d.mode === 'KERAMIKA' && d.openingsM2 > d.areaM2 + 0.005) {
+    out.push({
+      code: 'KERAMIKA_ODPRINE_NEMOGOCE',
+      severity: 'NAPAKA',
+      message: `Vpisane odprtine (${r2(d.openingsM2)} m²) presegajo merjeno ploskev (${r2(d.areaM2)} m²) — neto površina je lahko samo 0, kar pomeni napačen vnos, ne meritve. Preveri dimenzije ali število odprtin.`,
+    })
+  }
+  if (d.mode === 'STREHA' && d.pitchSource === 'PRIVZET') {
+    out.push({ code: 'STREHA_NAKLON_PRIVZET', severity: 'INFO', message: 'Naklon 35° je PRIVZET (ni izmerjen) — površina ploskve in količina materiala sta posledično oceni. Izmeri naklon in ga vpiši.' })
+  }
+  if (d.mode === 'STOPNICE' && d.sources.steps === 'PRIVZET') {
+    out.push({ code: 'STOPNICE_STETJE_PRIVZETO', severity: 'INFO', message: `Število stopnic (${d.steps}) je izpeljano iz predpostavljenega vzpona ${d.stepsRuleCm} cm, ne prešteeto. Preštej stopnice na terenu in vpiši število.` })
+  }
+  if (d.mode === 'OGRAJA' && (d.sources.maxSpanCm === 'PRIVZET' || d.sources.heightCm === 'PRIVZET')) {
+    const kaj = [
+      d.sources.maxSpanCm === 'PRIVZET' ? `razmak stebrov (privzeto ${d.spacingCm} cm) ni vpisan` : null,
+      d.sources.heightCm === 'PRIVZET' ? `višina polnila (privzeto ${d.infillHeightCm} cm) ni vpisana` : null,
+    ].filter(Boolean).join(' in ')
+    out.push({ code: 'OGRAJA_VHOD_PRIVZET', severity: 'INFO', message: `Pri ograji ${kaj} — število stebrov in površina polnila se računata iz privzetka, ne iz naročila.` })
+  }
+  if ((d.mode === 'FASADA' || d.mode === 'KERAMIKA') && d.sources.openings === 'PRIVZET') {
+    out.push({ code: `${d.mode}_ODPRINE_BREZ`, severity: 'INFO', message: 'Odprtine niso vpisane — neto površina predpostavlja, da odprtin NI. Če na objektu obstajajo okna ali vrata, jih vpiši.' })
+  }
+  return out
+}
+
+/**
+ * issue #15 faza 4: VODENI ZAJEM PO TIPU OBJEKTA. Načrt pove, kaj mora monter
+ * za ta tip dejansko narediti, da številka sploh lahko velja — brez AI-ja,
+ * brez obljub. `obvezno: true` pomeni: dokler manjka, je rezultat ocena, ne mera.
+ */
+export interface CapturePlanStep { key: string; navodilo: string; obvezno: boolean }
+export interface CapturePlan { mode: MeasureMode; steps: CapturePlanStep[]; minTock: number; minPogledi: number }
+
+const CAPTURE_PLANS: Record<MeasureMode, Omit<CapturePlan, 'mode' | 'minTock'>> = {
+  OGRAJA: {
+    minPogledi: 2,
+    steps: [
+      { key: 'VOGALI', navodilo: 'Označi vogale ograje v zaporedju (tloris) — vsak vogal je točka.', obvezno: true },
+      { key: 'REFERENCA', navodilo: 'Postavi referenčno mero na TAKI ravnini kot je merjena ograja (npr. znana širina stopa 100 cm).', obvezno: true },
+      { key: 'RAZMAK', navodilo: 'Vpiši razmak stebrov iz naročila (brez vpisa jih koda predpostavi 120 cm — to NI mera).', obvezno: false },
+      { key: 'VISINA', navodilo: 'Vpiši višino polnila (brez vpisa se predpostavi 100 cm — površina polnila je potem ocena).', obvezno: false },
+      { key: 'DRUGI_POGLED', navodilo: 'Posnemi še drugi konec ograje, da se dolžina potrdi z dvema pogledoma.', obvezno: false },
+    ],
+  },
+  PROSTOR: {
+    minPogledi: 1,
+    steps: [
+      { key: 'VOGALI', navodilo: 'Označi vse vogale prostora — poligon se sam zapre; pri 4 točkah se preverita diagonali.', obvezno: true },
+      { key: 'PRAVOKOTNOST', navodilo: 'Izmeri obe diagonali; brez njiju pravokotnost ni dokazana (prag 1 %).', obvezno: false },
+      { key: 'REFERENCA', navodilo: 'Referenčna mera mora ležati na tleh, ne na steni — sicer je površina napačna.', obvezno: true },
+    ],
+  },
+  KERAMIKA: {
+    minPogledi: 1,
+    steps: [
+      { key: 'VOGALI', navodilo: 'Označi vogale prostora v smeri urnega kazalca.', obvezno: true },
+      { key: 'PLOSCICA', navodilo: 'Vpiši dimenzijo ploščice in fugo (brez vpisa 60×60 cm oziroma 3 mm — zaloga je potem približek).', obvezno: false },
+      { key: 'ODPRINE', navodilo: 'Vpiši odprtine (vrata, okna). Če jih ne vpíšeš, neto površina predpostavlja, da jih NI.', obvezno: false },
+      { key: 'REFERENCA', navodilo: 'Referenca na tleh; pravokoten kader (nagib ≤ 10°), sicer je merilo po smerih različno.', obvezno: true },
+    ],
+  },
+  STREHA: {
+    minPogledi: 2,
+    steps: [
+      { key: 'TLORIS', navodilo: 'Označi obris strešne ploskve (tloris) — vsaj 3 točke.', obvezno: true },
+      { key: 'NAKLON', navodilo: 'IZMERI naklon (nagibomer/laser) in ga vpiši. Brez vpisa koda predpostavi 35° — površina ploskve je takrat ocena, ne mera.', obvezno: false },
+      { key: 'MATERIAL', navodilo: 'Vpiši material kritine (betonska 10 % / kovinska 7 % odpada sta pravili, ne meritev).', obvezno: false },
+      { key: 'SLIV', navodilo: 'Načrt predpostavi ENOSLIVNO ploskev; večslivna streha potrebuje ločene ploskve (po en poligon na ploskev).', obvezno: false },
+      { key: 'SLEMEN', navodilo: 'Slemen je izbran kot najdaljši rob tlorisa — na terenu ga preveri z dvema pogledoma.', obvezno: false },
+    ],
+  },
+  FASADA: {
+    minPogledi: 2,
+    steps: [
+      { key: 'OBRIS', navodilo: 'Označi obris fasadne ploskve (vogali) — za pravokotno steno 4 točke.', obvezno: true },
+      { key: 'PRAVOKOTNOST', navodilo: 'Stoj približno pravokotno na steno (nagib ≤ 10°) ali dodaj Y referenco; sicer je površina popačena.', obvezno: true },
+      { key: 'ODPRINE', navodilo: 'Vpiši odprtine (širina × višina × število). Brez vpisa neto trdi, da odprtin ni.', obvezno: false },
+      { key: 'VEC_POGLEDOV', navodilo: 'Posnemi fasado iz dveh mest, da se robovi ujemajo (razpršenost > 15 % je konflikt).', obvezno: false },
+    ],
+  },
+  STOPNICE: {
+    minPogledi: 2,
+    steps: [
+      { key: 'ROB', navodilo: 'Označi spodnji in zgornji rob stopnišča (za en niz zadostata 2 točki).', obvezno: true },
+      { key: 'STETJE', navodilo: 'PREŠTEJ stopnice in vpiši število. Brez vpisa ga koda predpostavi po 17 cm vzponu — višina posamezne stopnice je potem ocena.', obvezno: false },
+      { key: 'VISINA', navodilo: 'Višina iz slike je PROJEKCIJA, ne izmerjena višina — za poslovno mero potrebuješ levelirno ali globinsko referenco.', obvezno: true },
+      { key: 'ERGONOMIKA', navodilo: 'Preveri vzpon 15–20 cm in čežnost; izven območja jedro javi opozorilo.', obvezno: false },
+    ],
+  },
+  SPLOSNO: {
+    minPogledi: 1,
+    steps: [
+      { key: 'TOCKE', navodilo: 'Označi točke merjene poti — izračunajo se dolžine, koti in višinske razlike.', obvezno: true },
+      { key: 'REFERENCA', navodilo: 'Postavi znano mero v isti ravnini.', obvezno: true },
+    ],
+  },
+}
+
+/** Načrt zajema za tip objekta. `minTock` je vedno ISTO pravilo kot pri
+ *  geometrijski validaciji (`MODE_RULES.minPoints`) — druga številka v načrtu
+ *  bi bila drugi vir resnice. */
+export function capturePlan (mode: MeasureMode): CapturePlan {
+  return { mode, minTock: MODE_RULES[mode].minPoints, ...CAPTURE_PLANS[mode] }
+}
+
+/** Kaj od obveznega vnosa za tip objekta še manjka (prazno = vse vpisano). */
+export function manjkajociVnosi (mode: MeasureMode, opts: DomainOptions = {}): string[] {
+  const ima = (k: keyof DomainOptions): boolean => {
+    const v = opts[k]
+    if (k === 'openings') return Array.isArray(v) && (v as Opening[]).length > 0
+    if (typeof v === 'string') return v.length > 0
+    return typeof v === 'number' && Number.isFinite(v)
+  }
+  const OUT: Record<MeasureMode, [string, string][]> = {
+    OGRAJA: [['maxSpanCm', 'Razmak stebrov (privzeto 120 cm)'], ['heightCm', 'Višina polnila (privzeto 100 cm)']],
+    KERAMIKA: [['tileWcm', 'Dimenzija ploščice (privzeto 60 cm)'], ['jointMm', 'Fuga (privzeto 3 mm)'], ['openings', 'Odprtine (privzeto: brez)']],
+    STREHA: [['pitchDeg', 'Naklon strehe (privzeto 35°)'], ['roofMaterial', 'Material kritine (privzeto betonska)']],
+    FASADA: [['openings', 'Odprtine (privzeto: brez odprtin)']],
+    STOPNICE: [['steps', 'Število stopnic (privzeto izračun po 17 cm vzponu)']],
+    PROSTOR: [],
+    SPLOSNO: [],
+  }
+  return OUT[mode].filter(([k]) => !ima(k as keyof DomainOptions)).map(([, label]) => label)
+}
+
+/**
+ * issue #15 faza 4: napredek vodnega zajema. Stanje koraka se IZRAČUNA iz
+ * dejanskih podatkov (točke, kalibracija, pogledi, vnosi) — monter ne more
+ * »obkljukati« koraka, ki ga ni naredil, zato seznam ne more lagati.
+ * Tri stanja so namenoma:
+ *  • ZAKLJUČENO  — pogoj je v podatkih izpolnjen,
+ *  • MANJKA      — pogoj v podatkih ni izpolnjen (in ga lahko monter še naredi),
+ *  • PREVERI_ROČNO — pogoja iz teh podatkov ni mogoče vedeti (nagibomer,
+ *                    preverjanje slemena na terenu, ergonomija stopnic);
+ *                    koda ne trdi, da je narejeno, in ne trdi, da manjka.
+ */
+export type CaptureStepState = 'ZAKLJUČENO' | 'MANJKA' | 'PREVERI_ROČNO'
+
+export interface CaptureContext {
+  pointCount: number
+  calibPresent: boolean
+  viewCount: number
+  tiltDeg: number | null
+  options: DomainOptions
+}
+
+export interface CaptureProgressStep extends CapturePlanStep { state: CaptureStepState; dokaz: string }
+export interface CaptureProgress { mode: MeasureMode; steps: CaptureProgressStep[]; obvezniManjkajo: string[] }
+
+const TOCKE_KEYS = ['VOGALI', 'TLORIS', 'OBRIS', 'TOCKE', 'ROB']
+const POGLEDI_KEYS = ['DRUGI_POGLED', 'VEC_POGLEDOV']
+const ROCNO_KEYS = ['SLIV', 'SLEMEN', 'ERGONOMIKA']
+
+export function captureProgress (mode: MeasureMode, ctx: CaptureContext): CaptureProgress {
+  const plan = capturePlan(mode)
+  const o = ctx.options
+  const ima = (k: keyof DomainOptions): boolean => {
+    const v = o[k]
+    if (k === 'openings') return Array.isArray(v) && (v as Opening[]).length > 0
+    if (typeof v === 'string') return v.length > 0
+    return typeof v === 'number' && Number.isFinite(v)
+  }
+  const steps = plan.steps.map((s): CaptureProgressStep => {
+    if (TOCKE_KEYS.includes(s.key)) {
+      const ok = ctx.pointCount >= plan.minTock
+      return { ...s, state: ok ? 'ZAKLJUČENO' : 'MANJKA', dokaz: `točk ${ctx.pointCount} / ${plan.minTock}` }
+    }
+    if (s.key === 'REFERENCA') {
+      return { ...s, state: ctx.calibPresent ? 'ZAKLJUČENO' : 'MANJKA', dokaz: ctx.calibPresent ? 'referenca je postavljena' : 'referenca še ni postavljena' }
+    }
+    if (POGLEDI_KEYS.includes(s.key)) {
+      const ok = ctx.viewCount >= plan.minPogledi
+      return { ...s, state: ok ? 'ZAKLJUČENO' : 'MANJKA', dokaz: `pogledov ${ctx.viewCount} / ${plan.minPogledi}` }
+    }
+    if (s.key === 'RAZMAK' || s.key === 'NAKLON' || s.key === 'MATERIAL' || s.key === 'STETJE') {
+      const kluc: keyof DomainOptions = s.key === 'RAZMAK' ? 'maxSpanCm' : s.key === 'NAKLON' ? 'pitchDeg' : s.key === 'MATERIAL' ? 'roofMaterial' : 'steps'
+      return { ...s, state: ima(kluc) ? 'ZAKLJUČENO' : 'MANJKA', dokaz: ima(kluc) ? 'vpisano' : 'ni vpisano' }
+    }
+    if (s.key === 'VISINA') {
+      if (mode === 'STOPNICE') {
+        return { ...s, state: 'PREVERI_ROČNO', dokaz: 'slikovna višina je projekcija — §12 jo vedno označi kot NEZADOSTNI_PODATKI, ročna potrditev z levelirno/globinsko referenco' }
+      }
+      return { ...s, state: ima('heightCm') ? 'ZAKLJUČENO' : 'MANJKA', dokaz: ima('heightCm') ? 'vpisano' : 'ni vpisano' }
+    }
+    if (s.key === 'PLOSCICA') {
+      const ok = ima('tileWcm') && ima('tileHcm') && ima('jointMm')
+      return { ...s, state: ok ? 'ZAKLJUČENO' : 'MANJKA', dokaz: ok ? 'vpisano' : 'manjka ploščica ali fuga' }
+    }
+    if (s.key === 'ODPRINE') {
+      return { ...s, state: ima('openings') ? 'ZAKLJUČENO' : 'PREVERI_ROČNO', dokaz: ima('openings') ? 'vpisano' : 'ni vpisano — neto predpostavlja, da odprtin NI' }
+    }
+    if (s.key === 'PRAVOKOTNOST') {
+      if (mode === 'FASADA') {
+        if (ctx.tiltDeg == null) return { ...s, state: 'PREVERI_ROČNO', dokaz: 'nagib merjenja ni podan' }
+        return { ...s, state: ctx.tiltDeg <= 10 ? 'ZAKLJUČENO' : 'MANJKA', dokaz: `nagib ${r1(ctx.tiltDeg)}° (prag 10°)` }
+      }
+      return { ...s, state: 'PREVERI_ROČNO', dokaz: 'diagonali morata biti izmerjene in vpisani, ne samo posneti' }
+    }
+    if (ROCNO_KEYS.includes(s.key)) {
+      return { ...s, state: 'PREVERI_ROČNO', dokaz: 'tega iz podatkov o zajemu ni mogoče vedeti' }
+    }
+    return { ...s, state: 'PREVERI_ROČNO', dokaz: 'ročni pregled' }
+  })
+  return {
+    mode,
+    steps,
+    obvezniManjkajo: steps.filter((s) => s.obvezno && s.state === 'MANJKA').map((s) => s.navodilo),
+  }
+}
+
 export function analyzeDomain (mode: MeasureMode, pts: EnginePoint[], calib: EngineCalib | null | undefined, opts: DomainOptions = {}, geoCtx: { tiltDeg?: number | null } = {}): DomainResult {
   const geo = computeGeometry(pts, calib, { tiltDeg: geoCtx.tiltDeg ?? null })
   switch (mode) {
     case 'OGRAJA': {
-      const maxSpan = opts.maxSpanCm != null && opts.maxSpanCm >= 40 && opts.maxSpanCm <= 300 ? opts.maxSpanCm : 120
-      const height = opts.heightCm != null && opts.heightCm > 10 && opts.heightCm <= 300 ? opts.heightCm : 100
+      const maxSpanVnos = opts.maxSpanCm != null && opts.maxSpanCm >= 40 && opts.maxSpanCm <= 300
+      const heightVnos = opts.heightCm != null && opts.heightCm > 10 && opts.heightCm <= 300
+      const maxSpan = maxSpanVnos ? (opts.maxSpanCm as number) : 120
+      const height = heightVnos ? (opts.heightCm as number) : 100
       const raw = geo.segments.reduce((acc, s) => acc + Math.max(1, Math.ceil(s.lengthCm / maxSpan)) + 1, 0)
       const posts = Math.max(geo.segments.length > 0 ? 2 : 0, raw - Math.max(0, geo.segments.length - 1))
       return {
@@ -1147,15 +1479,25 @@ export function analyzeDomain (mode: MeasureMode, pts: EnginePoint[], calib: Eng
         corners: geo.corners,
         posts,
         spacingCm: maxSpan,
+        infillHeightCm: height,
         handrailM: r2(geo.totalLengthCm / 100),
         infillM2: r2((geo.totalLengthCm / 100) * (height / 100)),
+        sources: {
+          maxSpanCm: maxSpanVnos ? 'VNOS' : 'PRIVZET',
+          heightCm: heightVnos ? 'VNOS' : 'PRIVZET',
+        },
       }
     }
     case 'KERAMIKA': {
       const poly = polygonMetrics(pts, calib, { tiltDeg: geoCtx.tiltDeg ?? null })
-      const tileW = opts.tileWcm != null && opts.tileWcm > 0 ? opts.tileWcm : 60
-      const tileH = opts.tileHcm != null && opts.tileHcm > 0 ? opts.tileHcm : 60
-      const jointMm = opts.jointMm != null && opts.jointMm >= 0 && opts.jointMm <= 30 ? opts.jointMm : 3
+      const tileWVnos = opts.tileWcm != null && opts.tileWcm > 0
+      const tileHVnos = opts.tileHcm != null && opts.tileHcm > 0
+      const jointVnos = opts.jointMm != null && opts.jointMm >= 0 && opts.jointMm <= 30
+      const patternVnos = opts.pattern === 'DIAGONALNO' || opts.pattern === 'PRAVOKOTNO'
+      const openingsVnos = Array.isArray(opts.openings) && opts.openings.length > 0
+      const tileW = tileWVnos ? (opts.tileWcm as number) : 60
+      const tileH = tileHVnos ? (opts.tileHcm as number) : 60
+      const jointMm = jointVnos ? (opts.jointMm as number) : 3
       const pattern = opts.pattern === 'DIAGONALNO' ? 'DIAGONALNO' : 'PRAVOKOTNO'
       const openingsM2 = r2((opts.openings ?? []).reduce((s, o) => s + (o.wCm * o.hCm * o.count) / 10000, 0))
       const netAreaM2 = r2(Math.max(0, poly.areaM2 - openingsM2))
@@ -1176,12 +1518,22 @@ export function analyzeDomain (mode: MeasureMode, pts: EnginePoint[], calib: Eng
         mode: 'KERAMIKA', areaM2: poly.areaM2, openingsM2, netAreaM2, perimeterCm: poly.perimeterCm,
         tileWcm: tileW, tileHcm: tileH, jointMm, pattern, rows, cols, tilesCount: tiles, cuts,
         netTiles, wastePct, adhesiveKg: Math.max(0, adhesiveKg), fugueKg: Math.max(0, fugueKg),
+        sources: {
+          tileWcm: tileWVnos ? 'VNOS' : 'PRIVZET',
+          tileHcm: tileHVnos ? 'VNOS' : 'PRIVZET',
+          jointMm: jointVnos ? 'VNOS' : 'PRIVZET',
+          pattern: patternVnos ? 'VNOS' : 'PRIVZET',
+          openings: openingsVnos ? 'VNOS' : 'PRIVZET',
+        },
+        // faza 4: KJE približek se dotakne številke, mora biti tudi zapisan.
+        rules: ['RAZPOREDITEV_IZ_OKVIRA_TLORISA', 'LEPAK_C2_4_KG_M2', 'FUGA_8_MM_G_1600', ...(pattern === 'DIAGONALNO' ? ['DIAGONALNO_DODATEK_10_PCT'] : [])],
       }
     }
     case 'STREHA': {
       const poly = polygonMetrics(pts, calib, { tiltDeg: geoCtx.tiltDeg ?? null })
       const pitchVnos = opts.pitchDeg != null && opts.pitchDeg >= 0 && opts.pitchDeg < 85
       const pitch = pitchVnos ? (opts.pitchDeg as number) : 35
+      const materialVnos = opts.roofMaterial === 'KOVINSKA' || opts.roofMaterial === 'BETONNA'
       const material = opts.roofMaterial === 'KOVINSKA' ? 'KOVINSKA' : 'BETONNA'
       const faceArea = r2(poly.areaM2 / Math.cos((pitch * Math.PI) / 180))
       const sorted = [...poly.edges].sort((a, b) => b.lengthCm - a.lengthCm)
@@ -1192,21 +1544,30 @@ export function analyzeDomain (mode: MeasureMode, pts: EnginePoint[], calib: Eng
         mode: 'STREHA', footprintM2: poly.areaM2, pitchDeg: pitch, pitchSource: pitchVnos ? 'VNOS' : 'PRIVZET', faceAreaM2: faceArea,
         perimeterCm: poly.perimeterCm, ridgeCm: ridge, eaveCm: eave, material, wastePct,
         materialM2: r2(faceArea * (1 + wastePct / 100)),
+        sources: { pitchDeg: pitchVnos ? 'VNOS' : 'PRIVZET', roofMaterial: materialVnos ? 'VNOS' : 'PRIVZET' },
+        ridgeBasis: 'NAJDALJSI_ROB',
+        rules: [material === 'KOVINSKA' ? 'ODPAD_KOVINSKA_KRITINA_7_PCT' : 'ODPAD_BETONNA_KRITINA_10_PCT', 'ENOSLIVNA_PLOSKEV_KOS_TANT'],
       }
     }
     case 'FASADA': {
       const poly = polygonMetrics(pts, calib, { tiltDeg: geoCtx.tiltDeg ?? null })
+      const openingsVnos = Array.isArray(opts.openings) && opts.openings.length > 0
       const openings = (opts.openings ?? []).map((o) => ({ wCm: o.wCm, hCm: o.hCm, count: o.count, areaM2: r2((o.wCm * o.hCm * o.count) / 10000) }))
       const openingsM2 = r2(openings.reduce((s, o) => s + o.areaM2, 0))
       return {
         mode: 'FASADA', grossM2: poly.areaM2, perimeterCm: poly.perimeterCm, openings,
         openingsM2, netM2: r2(Math.max(0, poly.areaM2 - openingsM2)),
+        sources: { openings: openingsVnos ? 'VNOS' : 'PRIVZET' },
+        // faza 4: če je vpisanih odprtin več kot ploskve, neto NA PAPIRJU ni
+        // resničen — numericno ga pripnem na 0, a tega ne smem zamolčati.
+        openingsExceedGross: openingsM2 > poly.areaM2 + 0.005,
       }
     }
     case 'STOPNICE': {
       const s = geo.segments[0] ?? { lengthCm: 0, heightDiffCm: 0, horizontalCm: 0, angleDeg: 0, from: 0, to: 1 }
       const heightDiff = Math.abs(s.heightDiffCm)
-      const steps = opts.steps != null && opts.steps > 0 ? Math.round(opts.steps) : Math.max(1, Math.ceil(heightDiff / 17))
+      const stepsVnos = opts.steps != null && opts.steps > 0
+      const steps = stepsVnos ? Math.round(opts.steps as number) : Math.max(1, Math.ceil(heightDiff / 17))
       return {
         mode: 'STOPNICE',
         slopeLengthCm: s.lengthCm,
@@ -1217,6 +1578,8 @@ export function analyzeDomain (mode: MeasureMode, pts: EnginePoint[], calib: Eng
         steps,
         riseCm: r1(heightDiff / steps),
         runCm: r1(s.horizontalCm / steps),
+        sources: { steps: stepsVnos ? 'VNOS' : 'PRIVZET' },
+        stepsRuleCm: stepsVnos ? null : 17,
       }
     }
     case 'PROSTOR': {
@@ -1225,7 +1588,7 @@ export function analyzeDomain (mode: MeasureMode, pts: EnginePoint[], calib: Eng
       const rectangleOk = diags.length === 2 && diags[1].lengthCm > 0
         ? Math.abs(diags[0].lengthCm - diags[1].lengthCm) / Math.max(diags[0].lengthCm, diags[1].lengthCm) <= 0.01
         : null
-      return { mode: 'PROSTOR', areaM2: poly.areaM2, perimeterCm: poly.perimeterCm, diagonals: diags, rectangleOk, closureCm: poly.closureCm }
+      return { mode: 'PROSTOR', areaM2: poly.areaM2, perimeterCm: poly.perimeterCm, diagonals: diags, rectangleOk, closureCm: poly.closureCm, rules: ['PRAVOKOTNOST_PRAG_1_PCT'] }
     }
     default:
       return { mode: 'SPLOSNO', totalLengthCm: geo.totalLengthCm, segments: geo.segments }
@@ -1433,6 +1796,10 @@ export interface AnalyzeResult {
   confidence: ConfidenceResult
   captureGuide: { checks: CaptureCheck[]; status: CheckState }
   domain: DomainResult
+  /** issue #15 faza 4: od kod poznamo vsako domensko številko (VNOS/PRIVZET/PRAVILO). */
+  inputs: DomainInput[]
+  /** issue #15 faza 4: vodeni zajem po tipu objekta (pravi pogled + obvezni vnosi). */
+  plan: CapturePlan
   generatedAt: string
 }
 
@@ -1443,12 +1810,17 @@ export function runAnalysis (input: AnalyzeInput): AnalyzeResult {
   const scale = geometry.scale
   const polygon = rule.polygon ? polygonMetrics(input.points, input.calibration, { tiltDeg: tilt }) : null
   const diagonals = diagonalMetrics(input.points, input.calibration, { tiltDeg: tilt })
-  const validation = validateGeometry(input.mode, input.points, input.calibration, {
-    manualLengthCm: input.manualLengthCm ?? null,
-    computedLengthCm: input.manualLengthCm != null ? geometry.totalLengthCm : null,
-    steps: input.options?.steps ?? null,
-    tiltDeg: tilt,
-  })
+  const domain = analyzeDomain(input.mode, input.points, input.calibration, input.options ?? {}, { tiltDeg: tilt })
+  const validation = [
+    ...validateGeometry(input.mode, input.points, input.calibration, {
+      manualLengthCm: input.manualLengthCm ?? null,
+      computedLengthCm: input.manualLengthCm != null ? geometry.totalLengthCm : null,
+      steps: input.options?.steps ?? null,
+      tiltDeg: tilt,
+    }),
+    // issue #15 faza 4: ugotovitve, ki jih §14 ne more vedeti (vhodi paketa).
+    ...domainFindings(domain),
+  ]
   const validity = measureValidity({ scale, measured: MODE_QUANTITIES[input.mode], issues: validation })
   const confidence = computeConfidence({
     calibMethod: input.calibration.method ?? null,
@@ -1473,7 +1845,11 @@ export function runAnalysis (input: AnalyzeInput): AnalyzeResult {
     validity,
     confidence,
     captureGuide: guide,
-    domain: analyzeDomain(input.mode, input.points, input.calibration, input.options ?? {}, { tiltDeg: tilt }),
+    domain,
+    /** faza 4: vir vsakega domenskega vhoda (vpisano / privzeto / pravilo). */
+    inputs: domainInputs(domain),
+    /** faza 4: vodeni zajem po tipu objekta. */
+    plan: capturePlan(input.mode),
     generatedAt: new Date().toISOString(),
   }
 }
@@ -1637,6 +2013,15 @@ export function buildExportRows (m: ExportSource): ExportRow[] {
       case 'SPLOSNO':
         push(g, 'Skupna dolžina', f1(d.totalLengthCm), 'cm')
         break
+    }
+    // issue #15 faza 4: izvor domenskih številk MORA biti v izvozu. Brez te
+    // skupine bi bil »Naklon 35°« v PDF-ju videti enako, če ga je monter izmeril
+    // ali pa ga je predpostavila koda.
+    const neizmerjeni = domainInputs(d).filter((x) => x.vir !== 'VNOS')
+    if (neizmerjeni.length > 0) {
+      const vg = 'Viri domenskih vhodov'
+      push(vg, 'Opozorilo', 'Spodnje številke NISO izmerjene na terenu.', '')
+      neizmerjeni.forEach((x) => push(vg, x.label, `${x.vrednost === '—' ? '' : `${x.vrednost} ${x.enota}`.trim()} — ${INPUT_SOURCE_LABELS[x.vir]}`.trim(), ''))
     }
   }
   const val = m.params?.engine?.validation

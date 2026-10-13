@@ -242,6 +242,48 @@ Regresija po fazi 2 (lokalna baza :54329, `bash tests/ci-matrix.sh <skupina>`):
 `r486` ✓ 70, `r487` ✓ 73, `r488` ✓ 65, `r489` ✓ 128, `r500` ✓ 76 / ✗ 0,
 `r501` ✓ 131 / ✗ 0.
 
+### 5.3 Napredek — kaj je Faza 4+5 zaprla (mera: `tests/r503.py`, 155 trditev ✓ / ✗ 0)
+
+Fazi 4 (vodeni zajem) in 5 (geometrija po tipih) nista novi merilni jedri (§7): obe
+živita v `src/lib/measure-engine.ts`, kamera ju samo POVE in prikaže. Tri stvari so manjkale:
+domenske številke so bile prikazane kot izmerjene brez dokaza, kdo jih je vpisal; anizotropno
+merilo je bilo v pogodbi, a nedosegljivo iz UI-ja; in EXIF orientacija je bila predpostavka,
+ne preveritev.
+
+| Nevarnost | Stanje po fazi 4+5 | Dokaz |
+|---|---|---|
+| Izvor domenskih vhodov (»tiho predpolnjeni« privzetki) | **ZAPRTO** | polja se začnejo PRAZNA; vsaka količina nosi `VNOS`/`PRIVZET`/`PRAVILO` (`domainInputs`, `privzetiVnosi`, `manjkajociVnosi`); `r503` A, C, K |
+| Zavrnjen vnos je obravnavan kot vnos | **ZAPRTO** | razmak 400 cm / višina 10 cm / naklon 85° ne dobi oznake VPISANO (`r503` C) |
+| Odprtina večja od ploskve | **ZAPRTO** | napaka pri fasadi IN keramiki, neto ostane 0, status `NESKLADJE_GEOMETRIJE`, poslovna mera zaprta (`r503` D) |
+| Vodeni zajem po tipu objekta | **ZAPRTO** | `capturePlan` (vsak tip) + `captureProgress` iz DEJANSKIH podatkov; tri stanja, koraka, ga koda ne more vedeti, ni označen kot narejen (`r503` E, F) |
+| H1 (a) eno merilo za vse smeri | **ZAPRTO (kamera UI)** | `YRefBlock` v kameri: pxY/cmY se vpišeta SAMO kot par, živi predogled ju uporabi (`calcView` → `computeGeometry`), osnutek ju preživi, `confirm`/`sync` pa jima spustita skozi ENOTNO pogodbo (`r503` M) |
+| Merilo, ki je ob Y referenci lagalo | **ZAPRTO** | izpis `1 px = … cm` (ob anizotropiji `cmPerPx = null` → »neveljavna referenca«) je zamenjan z `meriloOznaka(scale)`, ki pokaže X in Y ločeno; `posts` je odvisen od `scale.known` (`r503` M) |
+| H8 EXIF orientacija | **DELNO** | `src/lib/exif-orientation.ts` (bere orientacijo in dimenzije iz JPEG bajtov, BIG in LITTLE endian) + `checkOrientation` presoja UPORABLJENA / NEUPORABLJENA / NI_DOKAZA; kamera obrat izvede SAMA, kadar ga brskalnik ni, in ugotovitev pokaže monterju. **Ni odpravljeno:** dokaz se NE shrani (`viewForStorage` dovoli samo `photoId`/`points`/`calibration`) in zrcaljenja/180° (2/3/4) s primerjavo dimenzij ni dokazati — ti pošteno dobijo `NI_DOKAZA` (`r503` N) |
+| H4 trjena fotogrametrija | **ODPRTO** | faza 3 (sintetična scena) je dokaz izvedljivosti; ni priklopljena na UI in nima referenčnega nabora |
+| H9 teksture ↮ fotomontaža | **ODPRTO** | #14 |
+
+**Kaj faza 4+5 NI odpravila (pošteno):**
+- **Zapisane meritve ne nosijo dokaza o orientaciji.** `viewForStorage` beli seznam
+  ključev (`photoId`/`points`/`calibration`) je namenoma ostal nespremenjen — nov ključ
+  bi spremenil obliko `params` pri obstoječih zapisih. Monter ugotovitev vidi MED
+  meritvijo, iz izvoza pa je razviden vir vsake domenske številke (`Viri domenskih
+  vhodov`, `r503` G), ne pa EXIF stanja fotografije.
+- **EXIF hoja teče samo za naložene datoteke.** Živi zajem (canvas) in izbira
+  obstoječe FOTO nimata EXIF kodeksa, zato tam stanje ostane `null` — kamera ne
+  podeduje dokaza po prejšnji datoteki (`r503` N2).
+- **Ni novega merilnega ali cenovnega jedra** (§7): `capturePlan`, `captureProgress` in
+  `domainFindings` so v `measure-engine.ts`; datoteki `measure-kamera-core.ts`,
+  `capture-plan.ts`, `pricing-core.ts` in `measure-pricing.ts` ne obstajata (`r503` L).
+- **Numerična regresija obstoječih meritev je nespremenjena** (700 cm, 12 m², 35 plošč,
+  14,65 m² pri 35°, 16,97 m² pri 45°, 15 × 16,7 cm): faza 4+5 je spremenila samo njihov
+  OPIS (`r503` B).
+- **Tolerance in referenčni nabor ostajata odprta** (§6.1, §6.3): tolerance mora
+  potrditi lastnik, za dokaz o točnosti pa so potrebne fotografije z neodvisno fizično
+  izmerjenimi dimenzijami. Brez njiju fazi 6–7 ne moreta trditi nobenega odstotka.
+
+---
+
+
 CELI RELEJNI PAS (`bash tests/ci-local.sh`, lastni strežnik, 13. 10. 2026):
 **✓ zeleno — 8 statičnih korakov, 24 skupin, `GATE EXIT 0`**. Preskočenih zaradi
 manjkajočih orodij je 6 testov (`r437.sh`, `r438.sh`, `r439.sh`, `r440.sh`,

@@ -41,7 +41,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import {
-  Camera, Check, CloudUpload, Cpu, Crosshair, Eraser, FileJson, FileSpreadsheet, Grid3x3, Image as ImageIcon, Loader2, Lock, LockOpen,
+  Camera, Check, CloudUpload, Cpu, Crosshair, Eraser, FileJson, FileSpreadsheet, Grid3x3, Image as ImageIcon, Loader2, Lock, LockOpen, ArrowDownToLine,
   Redo2, Ruler, Sparkles, SquarePlus, Trash2, Undo2, WifiOff,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
@@ -57,11 +57,16 @@ import { getCachedNalogi, queuePhoto, useOnline } from '@/lib/offline'
 import { clearDraft, loadDraft, saveDraft, type MeasureDraft, type MeasureDraftSnapshot } from '@/lib/measure-draft'
 import { useAppStore } from '@/lib/store'
 import {
-  CALIB_METHODS, MEASURE_MODES, MEASUREMENT_STATUS_LABELS, MODE_RULES, captureGuide, computeGeometry,
+  CALIB_METHODS, INPUT_SOURCE_LABELS, MEASURE_MODES, MEASUREMENT_STATUS_LABELS, MODE_RULES, captureGuide,
+  captureProgress, computeGeometry, manjkajociVnosi,
   detectDeviceCaps, measurementStatusAllowsBusiness, recommendMethod, resolveScale,
-  type AnalyzeResult, type CalibrationMethod, type DeviceCaps, type DomainOptions, type MeasureMode,
-  type MeasurementStatus, type ScaleModel,
+  type AnalyzeResult, type CalibrationMethod, type CaptureStepState, type DeviceCaps, type DomainOptions,
+  type MeasureMode, type MeasurementStatus, type ScaleModel,
 } from '@/lib/measure-engine'
+import {
+  checkOrientationFromBytes, normalizedSize, orientationMatrix,
+  type OrientationCheck, type OrientationStatus, type RawSize,
+} from '@/lib/exif-orientation'
 import { EmptyState, ErrorBox } from '@/components/roksal/ui-bits'
 import SceneOverlay from '@/components/roksal/scene-overlay'
 import { useSceneUnderstanding } from '@/hooks/use-scene-understanding'
@@ -95,7 +100,11 @@ interface View {
   imgH: number
   quality: Quality | null
   points: Pt[]
-  calib: { px: number; cm: number } | null
+  /** R506 (issue #15 faza 4): `pxY`/`cmY` sta LOČENA referenca v smeri Y na
+   *  sliki. Kadar obstaja par, merilo ni enako v vseh smereh (nagnjen kader)
+   *  in jedro računa anizotropno. Polovičen par (samo ena vrednost) jedro
+   *  zavrže — zato ju UI vedno nastavi skupaj. */
+  calib: { px: number; cm: number; pxY?: number; cmY?: number } | null
   calibLocked: boolean
 }
 
@@ -106,20 +115,69 @@ const BLUR_THRESHOLD = 45
 
 const PHASES = ['Zajem', 'Kalibracija', 'Meritev', 'Preverjanje', 'Potrditev'] as const
 
-/** Zmanjša sliko na max širino in vrne JPEG dataUrl. */
-async function shrinkToDataUrl (dataUrl: string): Promise<string> {
+/**
+ * R506 (issue #15 faza 4, H8): kratek, POŠTEN napis ugotovitve o orientaciji.
+ *『NI DOKAZA』je namenoma neprijeten — koda z njim prizna, da usklajenosti
+ * pikselnega in prikaznega prostora ni mogla potrditi, ne pa da trdi »v redu«.
+ */
+const ORIENTACIJA_NAPIS: Record<OrientationStatus, string> = {
+  NI_PODATKA: 'brez EXIF',
+  PRAVOKOTNA: 'ravna (EXIF 1)',
+  UPORABLJENA: 'EXIF uporabljen',
+  NEUPORABLJENA: 'EXIF obrat smo izvedli sami',
+  NI_DOKAZA: 'orientacija NI DOKAZANA',
+}
+
+/**
+ * Zmanjša sliko na max širino in vrne JPEG dataUrl.
+ *
+ * issue #15 faza 4 (H8): canvas upošteva EXIF orientacijo SAMO, če jo upošteva
+ * tudi brskalnik pri `drawImage`. Kadar `samiObrni` nosi orientacijo (modul
+ * `exif-orientation` je dokazal, da brskalnik obrata NI uporabil), ga
+ * izvedemo sami — sicer nastane slika, ki je zasukana glede na to, kar
+ * monter vidi, in vsaka mera je sistematicno napačna.
+ */
+async function shrinkToDataUrl (dataUrl: string, samiObrni?: OrientationCheck | null): Promise<string> {
   return await new Promise((resolve) => {
     const img = new Image()
     img.onload = () => {
-      const scale = Math.min(1, MAX_IMG_W / img.naturalWidth)
-      const w = Math.max(1, Math.round(img.naturalWidth * scale))
-      const h = Math.max(1, Math.round(img.naturalHeight * scale))
+      const natural = { w: img.naturalWidth, h: img.naturalHeight }
+      const obrni = samiObrni?.popraviRočno === true && samiObrni.exif !== null
+      const cilj = obrni ? normalizedSize(natural, samiObrni.exif) : natural
+      if (cilj.w <= 0 || cilj.h <= 0) { resolve(dataUrl); return }
+      const scale = Math.min(1, MAX_IMG_W / cilj.w)
+      const w = Math.max(1, Math.round(cilj.w * scale))
+      const h = Math.max(1, Math.round(cilj.h * scale))
       const canvas = document.createElement('canvas')
       canvas.width = w; canvas.height = h
-      canvas.getContext('2d')?.drawImage(img, 0, 0, w, h)
+      const ctx = canvas.getContext('2d')
+      if (!ctx) { resolve(dataUrl); return }
+      if (obrni && samiObrni.exif !== null) {
+        // Zaporedje je POMEMNO: najprej merilo, nato obrat okoli izvirnih
+        // dimenzij — obratno bi sliko potisnilo iz platna.
+        ctx.scale(scale, scale)
+        const m = orientationMatrix(samiObrni.exif, natural.w, natural.h)
+        ctx.transform(m[0], m[1], m[2], m[3], m[4], m[5])
+        ctx.drawImage(img, 0, 0, natural.w, natural.h)
+      } else {
+        ctx.drawImage(img, 0, 0, w, h)
+      }
       resolve(canvas.toDataURL('image/jpeg', 0.85))
     }
     img.onerror = () => resolve(dataUrl) // če gre kaj narobe, pošljemo izvirnik
+    img.src = dataUrl
+  })
+}
+
+/**
+ * issue #15 faza 4 (H8): dimenzije, kot jih UPORABLJA brskalnik (natural*),
+ * za primerjavo z izvirnim JPEG okvirom.
+ */
+async function imageSize (dataUrl: string): Promise<RawSize | null> {
+  return await new Promise((resolve) => {
+    const img = new Image()
+    img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight })
+    img.onerror = () => resolve(null)
     img.src = dataUrl
   })
 }
@@ -202,7 +260,7 @@ interface CalcResult { pts: Pt[]; segs: CalcSeg[]; totalPx: number; totalCm: num
 
 function calcView (view: View): CalcResult {
   const pts = view.points.filter((p) => p.src !== 'PREDLOG') // predlogi ne štejejo (§2)
-  const geo = computeGeometry(pts, view.calib ? { px: view.calib.px, cm: view.calib.cm, imgW: view.imgW, imgH: view.imgH } : null)
+  const geo = computeGeometry(pts, view.calib ? { ...view.calib, imgW: view.imgW, imgH: view.imgH } : null)
   const segs: CalcSeg[] = []
   for (let i = 0; i + 1 < pts.length; i++) {
     const a = pts[i]; const b = pts[i + 1]
@@ -231,6 +289,111 @@ function merilaPasus (scale: ScaleModel): string {
   if (scale.basis === 'ANIZOTROPNO') return `Merilo je dokazano ločeno za X in Y — ${scale.reasons[0] ?? ''}.`
   if (scale.isotropicProven) return `Merilo je dokazano v vseh smereh — ${scale.reasons[0] ?? ''}.`
   return `Merilo je za vse smeri PREDPOSTAVKA — ${scale.reasons[0] ?? ''}`
+}
+
+/** R506 (issue #15 faza 4): kratka oznaka merila, sestavljena iz modela
+ *  merila (`ScaleModel`), ki ga vrne jedro. Ankoraz pri anizotropnem merilu
+ *  `cmPerPx` ni eno samo razmerje — takrat UI ne sme izpisati
+ *  »neveljavna referenca«, ker referenca JE veljavna, samo po smereh ločena. */
+function meriloOznaka (scale: ScaleModel): string | null {
+  if (!scale.known || scale.cmPerPxX === null) return null
+  if (scale.cmPerPxY !== null && scale.cmPerPxY !== scale.cmPerPxX) {
+    return `X ${fmt1(scale.cmPerPxX)} cm/px · Y ${fmt1(scale.cmPerPxY)} cm/px (ločeno)`
+  }
+  return `1 px = ${fmt1(scale.cmPerPxX)} cm`
+}
+
+/**
+ * R506 (issue #15 faza 4, H1 a): vnos LOČENE Y reference.
+ *
+ * Ena `px/cm` referenca dokže merilo samo v smeri, v kateri je bila izmerjena.
+ * Pri nagnjenem kadru smer Y na sliki NI enaka smeri X, zato jedro potrebuje
+ * second par (`pxY`/`cmY`). Brez tega vnosnega polja je bila anizotropna
+ * pogodba v jedru sicer izvedena, a nedosegljiva monterju — to je zaprto tu.
+ *
+ * UI nastavi par SAMO skupaj (in ga tudi skupaj odstrani): polovičen par bi
+ * merilo tiho spremenil iz dokazanega v nedokazano, kar `parseCalibration`
+ * zavrne. Delitev cm/px ostane v jedru.
+ */
+function YRefBlock ({ view, pxOf, onApply, idp }: {
+  view: View
+  pxOf: (a: Pt, b: Pt) => number
+  onApply: (pxY: number | null, cmY: number | null) => void
+  idp: string
+}) {
+  const [a, setA] = useState<number | null>(null)
+  const [b, setB] = useState<number | null>(null)
+  const [cmS, setCmS] = useState('')
+  const cm = Number(cmS.replace(',', '.'))
+  const par = a !== null && b !== null ? [view.points[a], view.points[b]] : null
+  const pxY = par && par[0] && par[1] ? Math.round(pxOf(par[0], par[1])) : 0
+  const vecerno = par && par[0] && par[1]
+    ? Math.abs(par[1].y - par[0].y) * view.imgH >= Math.abs(par[1].x - par[0].x) * view.imgW
+    : true
+  const velja = pxY > 0 && Number.isFinite(cm) && cm > 0 && a !== b
+
+  if (view.calib?.pxY && view.calib.cmY) {
+    return (
+      <div className="space-y-1 rounded-md border border-sky-500/40 bg-sky-500/5 p-2">
+        <p className="text-[11px] font-semibold text-sky-700">Ločena Y referenca je nastavljena</p>
+        <p className="text-[11px] text-muted-foreground">
+          {view.calib.pxY} px = {fmt1(view.calib.cmY)} cm v smeri Y · X referenca: {view.calib.px} px = {fmt1(view.calib.cm)} cm.
+          Merilo se računa ločeno za obe smeri (vrednosti dobi jedro).
+        </p>
+        {!view.calibLocked ? (
+          <Button size="sm" variant="outline" className="h-7 px-2 text-[11px]" onClick={() => onApply(null, null)}>
+            <Trash2 className="size-3.5" aria-hidden /> Odstrani Y referenco
+          </Button>
+        ) : null}
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-1 rounded-md border border-dashed p-2">
+      <p className="text-[11px] font-semibold">Ločena Y referenca (priporočeno, če slika ni pravokotna na ravnino)</p>
+      <p className="text-[11px] text-muted-foreground">
+        Izberite dve točki, med katerma je na terenu izmerjena NAVPIČNA razdalja (npr. višina stebra, robov stopnice).
+        Brez tega eno merilo velja za vse smeri samo kot predpostavka.
+      </p>
+      <div className="flex flex-wrap items-end gap-2">
+        <div className="space-y-1">
+          <Label htmlFor={`${idp}-y-a`} className="text-[11px]">Y: 1. točka</Label>
+          <Select value={a !== null ? String(a) : 'none'} onValueChange={(v) => setA(v === 'none' ? null : Number(v))}>
+            <SelectTrigger id={`${idp}-y-a`} className="h-8 w-24" aria-label="Prva točka Y reference"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">—</SelectItem>
+              {view.points.map((p, i) => <SelectItem key={i} value={String(i)}>Točka {i + 1}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor={`${idp}-y-b`} className="text-[11px]">Y: 2. točka</Label>
+          <Select value={b !== null ? String(b) : 'none'} onValueChange={(v) => setB(v === 'none' ? null : Number(v))}>
+            <SelectTrigger id={`${idp}-y-b`} className="h-8 w-24" aria-label="Druga točka Y reference"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">—</SelectItem>
+              {view.points.map((p, i) => <SelectItem key={i} value={String(i)}>Točka {i + 1}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor={`${idp}-y-cm`} className="text-[11px]">Realna višina (cm)</Label>
+          <Input id={`${idp}-y-cm`} className="h-8 w-28" type="number" min="1" inputMode="decimal" value={cmS} onChange={(e) => setCmS(e.target.value)} placeholder="npr. 110" />
+        </div>
+        <Button size="sm" className="h-8" disabled={!velja || !view.calib} onClick={() => onApply(pxY, cm)}>
+          <ArrowDownToLine className="size-4" aria-hidden /> Nastavi Y merilo
+        </Button>
+      </div>
+      {!view.calib ? (
+        <p className="text-[11px] text-muted-foreground">Najprej nastavite X referenco — Y merilo brez osnovne kalibracije nima smisla.</p>
+      ) : !velja && a !== null && b !== null && a === b ? (
+        <p className="text-[11px] text-muted-foreground">Izberite DVE različni točki.</p>
+      ) : !vecerno && a !== null && b !== null ? (
+        <p className="text-[11px] text-roksal-amber">Izbrana para sta bolj VODORAVNA kot navpična — Y referenca naj meri višino.</p>
+      ) : null}
+    </div>
+  )
 }
 
 /** R457: domenski rezultat kot vrstice za prikaz/tabelo (§8–§11). */
@@ -333,6 +496,13 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
   const [activeView, setActiveView] = useState(0)
   const viewKey = useRef(1)
 
+  // R506 (issue #15 faza 4, H8): EXIF ugotovitev nazadnje naložene DOTOKE.
+  // Ni merilni podatek in se ne shrani (viewForStorage dovoli samo
+  // photoId/points/calibration) — je pa dokaz, ki ga mora monter VIDETI, kadar
+  // obrata ni mogoče potrditi. Pri živem zajemu in pri izbiri obstoječe FOTO je
+  // stanje null: pikselni prostor tu že določi canvas, ne EXIF kodeksa.
+  const [orientacija, setOrientacija] = useState<OrientationCheck | null>(null)
+
   // R455: undo/redo (§4) — posnetki {views, activeView}
   const past = useRef<{ views: View[]; activeView: number }[]>([])
   const future = useRef<{ views: View[]; activeView: number }[]>([])
@@ -354,21 +524,25 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
   const [analyzing, setAnalyzing] = useState(false)
   const [savedId, setSavedId] = useState<string | null>(null)
   // domenske možnosti (§8–§11)
-  const [maxSpanS, setMaxSpanS] = useState('120')
-  const [tileW, setTileW] = useState('60')
-  const [tileH, setTileH] = useState('60')
-  const [jointMm, setJointMm] = useState('3')
+  // R506 (issue #15 faza 4): polja se začnejo PRAZNA. Predpolnjen 120/60/3/35
+  // je engine videl kot »vpisano«, zato je bila številka na zaslonu videti kot
+  // izmerjena, čeprav je monter ni nikoli vnesel. Pravila ostanejo v jedru —
+  // tu so samo placeholderji, ki povedo, kaj bo predpostavljeno.
+  const [maxSpanS, setMaxSpanS] = useState('')
+  const [tileW, setTileW] = useState('')
+  const [tileH, setTileH] = useState('')
+  const [jointMm, setJointMm] = useState('')
   const [pattern, setPattern] = useState<'PRAVOKOTNO' | 'DIAGONALNO'>('PRAVOKOTNO')
-  const [pitchDeg, setPitchDeg] = useState('35')
+  const [pitchDeg, setPitchDeg] = useState('')
   const [roofMaterial, setRoofMaterial] = useState<'BETONNA' | 'KOVINSKA'>('BETONNA')
   const [stepsS, setStepsS] = useState('')
-  const [opW, setOpW] = useState('100')
-  const [opH, setOpH] = useState('120')
-  const [opCount, setOpCount] = useState('0')
+  const [opW, setOpW] = useState('')
+  const [opH, setOpH] = useState('')
+  const [opCount, setOpCount] = useState('')
 
   // faza 5: potrditev + R455 ročni popravek
   const [type, setType] = useState('OGRAJA')
-  const [heightS, setHeightS] = useState('100')
+  const [heightS, setHeightS] = useState('')
   const [note, setNote] = useState('')
   const [overrideOn, setOverrideOn] = useState(false)
   const [overrideLen, setOverrideLen] = useState('')
@@ -587,17 +761,41 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
     canvas.getContext('2d')?.drawImage(video, 0, 0, canvas.width, canvas.height)
     const url = canvas.toDataURL('image/jpeg', 0.85)
     stopCamera()
+    // Živi zajem nima EXIF kodeka (canvas slika je že v prikaznem prostoru) —
+    // poštenje zahteva, da prejšnji dokaz o datoteki ne preživi v novem kadru.
+    setOrientacija(null)
     void acceptImage(url)
   }
 
-  async function onFile (f: File | undefined): Promise<void> {
-    if (!f) return
-    const url = await new Promise<string>((resolve) => {
+  /**
+   * issue #15 faza 4 (H8): SKUPNA priprava naložene fotografije za obe vnosni
+   * poti (1. pogled in dodaten pogled). Brskalnikove EXIF domneve NISO
+   * dokaz: orientacija se prebere iz bajtov, dimenzije kodeksa se primerjajo z
+   * dimenzijami, ki jih upošteva brskalnik, in obrat se po potrebi izvede SAM.
+   * Rezultat vrne tudi zato, da ga UI lahko POŠTENO pokaže (NEUPORABLJENA
+   * pomeni, da obrata niti sami nismo mogli dokazati/izvesti).
+   */
+  async function naložiDatoteko (f: File): Promise<{ url: string; orientacija: OrientationCheck | null }> {
+    const raw = await new Promise<string>((resolve) => {
       const reader = new FileReader()
       reader.onload = () => resolve(String(reader.result))
       reader.readAsDataURL(f)
     })
-    await acceptImage(await shrinkToDataUrl(url))
+    const natural = await imageSize(raw)
+    let check: OrientationCheck | null = null
+    try {
+      if (natural) check = checkOrientationFromBytes(new Uint8Array(await f.arrayBuffer()), natural)
+    } catch {
+      check = null // branju bajtov ni uspelo → NI_PODATKA, ne lažna trditev
+    }
+    setOrientacija(check)
+    return { url: await shrinkToDataUrl(raw, check), orientacija: check }
+  }
+
+  async function onFile (f: File | undefined): Promise<void> {
+    if (!f) return
+    const { url } = await naložiDatoteko(f)
+    await acceptImage(url)
   }
 
   /** Nastavi sliko kot PRVI pogled in ponastavi označevanje + R455 kakovost. */
@@ -659,18 +857,15 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
 
   async function onFileView (f: File | undefined): Promise<void> {
     if (!f) return
-    const url = await new Promise<string>((resolve) => {
-      const reader = new FileReader()
-      reader.onload = () => resolve(String(reader.result))
-      reader.readAsDataURL(f)
-    })
-    await addView(await shrinkToDataUrl(url))
+    const pri = await naložiDatoteko(f)
+    await addView(pri.url)
   }
 
   /** Izbere obstoječo FOTO meritev. */
   function pickExisting (p: PhotoRow): void {
     const url = parsePhoto(p.params)
     if (!url) return
+    setOrientacija(null) // shranjena slika je že normaliziran canvas — EXIF datoteke ni
     void acceptImage(url)
   }
 
@@ -681,6 +876,7 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
     const url = parsePhoto(p.params)
     if (!url) return
     setAddingView(false)
+    setOrientacija(null) // glej pickExisting: shranjena FOTO nima EXIF dokaza
     void addView(url)
   }
 
@@ -782,6 +978,20 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
 
   /** R455: izračun v živo za AKTIVNI pogled. */
   const calc = useMemo(() => (view ? calcView(view) : CALC_PRAZEN), [view])
+
+  /** R506 (issue #15 faza 4): Y referenca se vedno nastavi ali odstrani v PARU
+   *  (`pxY`+`cmY`) — polovičen par bi merilo tiho spremenil iz dokazanega v
+   *  nedokazano. Isti par nosita `/analyze` in `/confirm` (vojna pogodba
+   *  `parseCalibration` ga filtrira na strežniku). */
+  const applyYRef = useCallback((pxY: number | null, cmY: number | null) => {
+    if (!view) return
+    snapshot()
+    setViews((vs) => vs.map((v) => {
+      if (v.key !== view.key || !v.calib) return v
+      const { pxY: _o, cmY: _o2, ...osnova } = v.calib
+      return { ...v, calib: pxY !== null && cmY !== null && pxY > 0 && cmY > 0 ? { ...osnova, pxY, cmY } : osnova }
+    }))
+  }, [view])
 
   /** R455: primerjava vseh pogledov + zaupanje (§3). */
   const multi = useMemo(() => {
@@ -930,7 +1140,7 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
         lengthCm: finalLengthCm,
         heightCm: Number(heightS.replace(',', '.')) > 0 ? Number(heightS.replace(',', '.')) : null,
         slopeDeg: calc.segs.length === 1 ? Math.round(calc.segs[0].angleDeg * 10) / 10 : null,
-        posts: calc.cmPerPx !== null
+        posts: calc.scale.known
           ? Math.max(calc.pts.length >= 2 ? 2 : 0, calc.segs.reduce((acc, s) => acc + Math.max(1, Math.ceil((s.cmLen ?? 0) / 120)) + 1, 0) - Math.max(0, calc.segs.length - 1))
           : null,
         segments: calc.segs.length,
@@ -1091,6 +1301,7 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
     setOverrideOn(false); setOverrideLen(''); setOverrideReason('')
     // R457: počisti analizo/nagib; savedId ostane (izvoz zadnje shranjene meritve)
     setAnalysis(null); setMaxTilt(null)
+    setOrientacija(null) // R506: brez dokaza o orientaciji, dokler ni nove datoteke
     past.current = []; future.current = []
   }
 
@@ -1114,10 +1325,13 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
       }
       case 'KERAMIKA': {
         const o: DomainOptions = {}
-        const w = n(tileW); const hh = n(tileH); const j = Number(jointMm)
+        const w = n(tileW); const hh = n(tileH)
+        // prazno polje fugue pomeni »ni vpisano«, ne 0 mm — sicer bi jedro
+        // videlo VNOS in založilo 0 mm fugo kot izmerjeno (R506)
+        const j = jointMm.trim() === '' ? null : Number(jointMm.replace(',', '.'))
         if (w != null) o.tileWcm = w
         if (hh != null) o.tileHcm = hh
-        if (Number.isFinite(j) && j >= 0) o.jointMm = j
+        if (j != null && Number.isFinite(j) && j >= 0) o.jointMm = j
         o.pattern = pattern
         const op = openings(); if (op != null) o.openings = op
         return o
@@ -1442,6 +1656,18 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
                 {view.quality.blurry ? ' · mehka' : ''}{view.quality.dark ? ' · temna' : ''}{view.quality.bright ? ' · presočena' : ''}
               </Badge>
             ) : null}
+            {/* R506 (H8): napis se pokaže SAMO, kadar je ugotovitev odprta ali
+                zahteva poseg. NI_PODATKA/PRAVOKOTNA sta tiho — sicer bi vsak
+                zajem trdil, da je bil analiziran, kar ni res. */}
+            {orientacija && orientacija.status !== 'NI_PODATKA' && orientacija.status !== 'PRAVOKOTNA' ? (
+              <Badge
+                title={orientacija.razlog}
+                className={orientacija.status === 'UPORABLJENA'
+                  ? 'border-transparent bg-emerald-100 text-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-300'
+                  : 'border-transparent bg-amber-100 text-amber-900 dark:bg-amber-950/50 dark:text-amber-300'}>
+                {ORIENTACIJA_NAPIS[orientacija.status]}
+              </Badge>
+            ) : null}
             {!view.photoId ? (
               <Button size="sm" onClick={() => void uploadPhoto()} disabled={busy}>
                 {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null} Naloži fotografijo
@@ -1493,6 +1719,54 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
             )
           })()}
 
+          {/* R506 (issue #15 faza 4): VODENI ZAJEM PO TIPU OBJEKTA. Koraki so
+              iz jedra (`capturePlan`), stanje pa se izračuna iz dejanskih
+              podatkov zajema — monter ne more obkljukati koraka, ki ga ni
+              naredil. Tri stanja: ✓ opravljeno, ✗ manjka, ◻ ročna predba
+              (tega iz teh podatkov ni mogoče vedeti — koda ne trdi ne nečesa). */}
+          {(() => {
+            const prog = captureProgress(mode, {
+              pointCount: view.points.filter((p) => p.src !== 'PREDLOG').length,
+              calibPresent: view.calib !== null,
+              viewCount: views.length,
+              tiltDeg: maxTilt,
+              options: buildOptions(),
+            })
+            const znaki: Record<CaptureStepState, string> = { ZAKLJUČENO: '✓', MANJKA: '✗', PREVERI_ROČNO: '◻' }
+            return (
+              <div className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2" role="group" aria-label={`Načrt zajema — ${MODE_RULES[mode].label}`}>
+                <p className="text-xs font-semibold">
+                  Načrt zajema — {MODE_RULES[mode].label}
+                  {prog.obvezniManjkajo.length > 0
+                    ? <span className="ml-1 font-normal text-red-700 dark:text-red-400">({prog.obvezniManjkajo.length} obveznih korakov manjka — rezultat je ocena, ne mera)</span>
+                    : null}
+                </p>
+                <ol className="mt-1 space-y-0.5">
+                  {prog.steps.map((s) => (
+                    <li key={s.key} className="flex items-start gap-1.5 text-[11px]">
+                      <span aria-hidden>{znaki[s.state]}</span>
+                      <span>
+                        {s.navodilo}
+                        {' '}
+                        <span className="text-muted-foreground">
+                          {s.obvezno ? '[obvezno]' : '[neobvezno]'} · {s.dokaz}
+                        </span>
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+                {(() => {
+                  const manj = manjkajociVnosi(mode, buildOptions())
+                  return manj.length > 0 ? (
+                    <p className="mt-1 text-[11px] text-amber-800 dark:text-amber-300">
+                      Manjkajoči vnosi (jedro bo uporabil privzeto pravilo): {manj.join(' · ')}
+                    </p>
+                  ) : null
+                })()}
+              </div>
+            )
+          })()}
+
           <div className="mx-auto inline-block max-w-full rounded-lg border bg-muted/40 p-1">
             <div className="relative inline-block cursor-crosshair" onClick={onImageClick} role="application" aria-label="Fotografija za kalibracijo — klik dodaja referenčni točki">
               <img src={view.dataUrl} alt="Teren za merjenje" className="block h-auto max-h-[380px] w-auto max-w-full select-none" draggable={false} />
@@ -1534,9 +1808,9 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
                     </Button>
                   ) : null}
                 </p>
-                {calc.cmPerPx !== null ? (
+                {meriloOznaka(calc.scale) !== null ? (
                   <span className="text-xs text-muted-foreground">
-                    1 px = {fmt1(calc.cmPerPx)} cm
+                    {meriloOznaka(calc.scale)}
                     {!view.calibLocked ? (
                       <Button size="sm" variant="ghost" className="ml-2 h-7 px-2" onClick={() => { snapshot(); setViews((vs) => vs.map((v) => (v.key === view.key ? { ...v, calib: null } : v))) }}>
                         <Trash2 className="size-3.5" aria-hidden /> ponastavi
@@ -1602,6 +1876,7 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
                   </div>
                 </>
               ) : null}
+              {view.calib ? <YRefBlock key={`y1-${view.key}`} view={view} pxOf={px} onApply={applyYRef} idp="km1" /> : null}
             </CardContent>
           </Card>
 
@@ -1782,8 +2057,8 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
                     </Button>
                   ) : null}
                 </p>
-                {calc.cmPerPx !== null ? (
-                  <span className="text-xs text-muted-foreground">1 px = {fmt1(calc.cmPerPx)} cm{!view.calibLocked ? (
+                {meriloOznaka(calc.scale) !== null ? (
+                  <span className="text-xs text-muted-foreground">{meriloOznaka(calc.scale)}{!view.calibLocked ? (
                     <Button size="sm" variant="ghost" className="ml-2 h-7 px-2" onClick={() => { snapshot(); setViews((vs) => vs.map((v) => (v.key === view.key ? { ...v, calib: null } : v))) }}>
                       <Trash2 className="size-3.5" aria-hidden /> ponastavi
                     </Button>
@@ -1826,6 +2101,7 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
                   </Button>
                 </div>
               ) : null}
+              {view.calib ? <YRefBlock key={`y2-${view.key}`} view={view} pxOf={px} onApply={applyYRef} idp="km2" /> : null}
             </CardContent>
           </Card>
 
@@ -1972,16 +2248,18 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
                 </Button>
               </div>
 
-              {/* domenske možnosti po načinu (§8–§11) */}
+              {/* domenske možnosti po načinu (§8–§11) — R506: prazno polje NI
+                  enako 0; pomeni »monter tega ni izmeril«, jedro številko
+                  označi kot PRIVZETO in jo izpisuje kot oceno. */}
               {mode === 'OGRAJA' ? (
                 <div className="grid gap-2 sm:grid-cols-2">
                   <div className="space-y-1">
-                    <Label htmlFor="km-maxspan" className="text-xs">Razmak stebrov (cm)</Label>
-                    <Input id="km-maxspan" className="h-9" type="number" min="40" max="300" inputMode="numeric" value={maxSpanS} onChange={(e) => setMaxSpanS(e.target.value)} />
+                    <Label htmlFor="km-maxspan" className="text-xs">Razmak stebrov (cm) — brez vpisa se predpostavi 120</Label>
+                    <Input id="km-maxspan" className="h-9" type="number" min="40" max="300" inputMode="numeric" placeholder="npr. 120 (iz naročila)" value={maxSpanS} onChange={(e) => setMaxSpanS(e.target.value)} />
                   </div>
                   <div className="space-y-1">
-                    <Label htmlFor="km-height-eng" className="text-xs">Višina polnila (cm)</Label>
-                    <Input id="km-height-eng" className="h-9" type="number" min="20" inputMode="numeric" value={heightS} onChange={(e) => setHeightS(e.target.value)} />
+                    <Label htmlFor="km-height-eng" className="text-xs">Višina polnila (cm) — brez vpisa se predpostavi 100</Label>
+                    <Input id="km-height-eng" className="h-9" type="number" min="20" inputMode="numeric" placeholder="npr. 100 (izmeri ali poišči v naročilu)" value={heightS} onChange={(e) => setHeightS(e.target.value)} />
                   </div>
                 </div>
               ) : null}
@@ -1989,15 +2267,15 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
                   <div className="space-y-1">
                     <Label htmlFor="km-tilew" className="text-xs">Ploščica Š (cm)</Label>
-                    <Input id="km-tilew" className="h-9" type="number" min="1" inputMode="numeric" value={tileW} onChange={(e) => setTileW(e.target.value)} />
+                    <Input id="km-tilew" className="h-9" type="number" min="1" inputMode="numeric" placeholder="60" value={tileW} onChange={(e) => setTileW(e.target.value)} />
                   </div>
                   <div className="space-y-1">
                     <Label htmlFor="km-tileh" className="text-xs">Ploščica V (cm)</Label>
-                    <Input id="km-tileh" className="h-9" type="number" min="1" inputMode="numeric" value={tileH} onChange={(e) => setTileH(e.target.value)} />
+                    <Input id="km-tileh" className="h-9" type="number" min="1" inputMode="numeric" placeholder="60" value={tileH} onChange={(e) => setTileH(e.target.value)} />
                   </div>
                   <div className="space-y-1">
                     <Label htmlFor="km-joint" className="text-xs">Fuga (mm)</Label>
-                    <Input id="km-joint" className="h-9" type="number" min="0" max="30" inputMode="numeric" value={jointMm} onChange={(e) => setJointMm(e.target.value)} />
+                    <Input id="km-joint" className="h-9" type="number" min="0" max="30" inputMode="numeric" placeholder="3" value={jointMm} onChange={(e) => setJointMm(e.target.value)} />
                   </div>
                   <div className="space-y-1">
                     <Label htmlFor="km-pattern" className="text-xs">Vzorec</Label>
@@ -2010,11 +2288,11 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
                     </Select>
                   </div>
                   <div className="space-y-1">
-                    <Label htmlFor="km-opcount" className="text-xs">Odprtine (Š×V, št.)</Label>
+                    <Label htmlFor="km-opcount" className="text-xs">Odprtine (št., Š×V)</Label>
                     <div className="flex gap-1">
-                      <Input id="km-opcount" className="h-9" type="number" min="0" inputMode="numeric" value={opCount} onChange={(e) => setOpCount(e.target.value)} />
-                      <Input aria-label="Širina odprtine" className="h-9 w-14" type="number" min="1" inputMode="numeric" value={opW} onChange={(e) => setOpW(e.target.value)} />
-                      <Input aria-label="Višina odprtine" className="h-9 w-14" type="number" min="1" inputMode="numeric" value={opH} onChange={(e) => setOpH(e.target.value)} />
+                      <Input id="km-opcount" className="h-9" type="number" min="0" inputMode="numeric" placeholder="0" value={opCount} onChange={(e) => setOpCount(e.target.value)} />
+                      <Input aria-label="Širina odprtine" className="h-9 w-14" type="number" min="1" inputMode="numeric" placeholder="Š" value={opW} onChange={(e) => setOpW(e.target.value)} />
+                      <Input aria-label="Višina odprtine" className="h-9 w-14" type="number" min="1" inputMode="numeric" placeholder="V" value={opH} onChange={(e) => setOpH(e.target.value)} />
                     </div>
                   </div>
                 </div>
@@ -2022,8 +2300,8 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
               {mode === 'STREHA' ? (
                 <div className="grid gap-2 sm:grid-cols-2">
                   <div className="space-y-1">
-                    <Label htmlFor="km-pitch" className="text-xs">Naklon strehe (°)</Label>
-                    <Input id="km-pitch" className="h-9" type="number" min="0" max="84" inputMode="numeric" value={pitchDeg} onChange={(e) => setPitchDeg(e.target.value)} />
+                    <Label htmlFor="km-pitch" className="text-xs">Naklon strehe (°) — izmeri z nagibomerom; brez vpisa se predpostavi 35°</Label>
+                    <Input id="km-pitch" className="h-9" type="number" min="0" max="84" inputMode="numeric" placeholder="npr. 35 (brez vpisa = ocena)" value={pitchDeg} onChange={(e) => setPitchDeg(e.target.value)} />
                   </div>
                   <div className="space-y-1">
                     <Label htmlFor="km-roofmat" className="text-xs">Kritina</Label>
@@ -2041,15 +2319,15 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
                 <div className="grid gap-2 sm:grid-cols-3">
                   <div className="space-y-1">
                     <Label htmlFor="km-opw-f" className="text-xs">Okna/vrata Š (cm)</Label>
-                    <Input id="km-opw-f" className="h-9" type="number" min="1" inputMode="numeric" value={opW} onChange={(e) => setOpW(e.target.value)} />
+                    <Input id="km-opw-f" className="h-9" type="number" min="1" inputMode="numeric" placeholder="npr. 100" value={opW} onChange={(e) => setOpW(e.target.value)} />
                   </div>
                   <div className="space-y-1">
                     <Label htmlFor="km-oph-f" className="text-xs">Okna/vrata V (cm)</Label>
-                    <Input id="km-oph-f" className="h-9" type="number" min="1" inputMode="numeric" value={opH} onChange={(e) => setOpH(e.target.value)} />
+                    <Input id="km-oph-f" className="h-9" type="number" min="1" inputMode="numeric" placeholder="npr. 120" value={opH} onChange={(e) => setOpH(e.target.value)} />
                   </div>
                   <div className="space-y-1">
-                    <Label htmlFor="km-opcount-f" className="text-xs">Število odprtin</Label>
-                    <Input id="km-opcount-f" className="h-9" type="number" min="0" inputMode="numeric" value={opCount} onChange={(e) => setOpCount(e.target.value)} />
+                    <Label htmlFor="km-opcount-f" className="text-xs">Število odprtin — brez vpisa neto trdi, da odprtin ni</Label>
+                    <Input id="km-opcount-f" className="h-9" type="number" min="0" inputMode="numeric" placeholder="0" value={opCount} onChange={(e) => setOpCount(e.target.value)} />
                   </div>
                 </div>
               ) : null}
@@ -2104,6 +2382,28 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
                         </tbody>
                       </table>
                     </div>
+                    {/* R506 (issue #15 faza 4): IZVOR vsake domenske številke.
+                        Seznam zloži jedro (`domainInputs`), zato ga noben
+                        prikaz ne more pozabiti — številka, ki je monter ni
+                        izmeril, je tukaj označena, ne izgine iz zaslona. */}
+                    {(() => {
+                      const nep = analysis.inputs.filter((x) => x.vir !== 'VNOS')
+                      return nep.length > 0 ? (
+                        <div className="mt-1 rounded-md border border-amber-300 bg-amber-50 p-2 text-[11px] text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200" role="status" aria-label="Številke, ki niso izmerjene">
+                          <p className="font-semibold">Te številke niso izmerjene na terenu:</p>
+                          <ul className="mt-0.5 space-y-0.5">
+                            {nep.map((x) => (
+                              <li key={x.key}>
+                                <strong>{x.label}</strong>
+                                {x.vrednost !== '—' ? `: ${x.vrednost}${x.enota ? ` ${x.enota}` : ''}` : ''}
+                                {' — '}
+                                {INPUT_SOURCE_LABELS[x.vir]}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null
+                    })()}
                   </div>
                 </>
               ) : (
@@ -2201,8 +2501,8 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
               {stairMode ? <p className="text-[11px] text-muted-foreground">Stopniški način → tip NAGIB</p> : null}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="km-height">Višina (cm)</Label>
-              <Input id="km-height" type="number" min="20" inputMode="numeric" value={heightS} onChange={(e) => setHeightS(e.target.value)} />
+              <Label htmlFor="km-height">Višina (cm) — izmerjena; brez vpisa ostane nepovestna</Label>
+              <Input id="km-height" type="number" min="20" inputMode="numeric" placeholder="npr. 100 (brez vpisa ni vpisana)" value={heightS} onChange={(e) => setHeightS(e.target.value)} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="km-note">Opomba</Label>

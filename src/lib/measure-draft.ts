@@ -25,7 +25,7 @@ export interface DraftView {
   imgH: number
   quality: DraftQuality | null
   points: DraftPoint[]
-  calib: { px: number; cm: number } | null
+  calib: { px: number; cm: number; pxY?: number; cmY?: number } | null
   calibLocked: boolean
 }
 
