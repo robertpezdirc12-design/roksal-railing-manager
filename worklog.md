@@ -36,7 +36,7 @@ Work Log:
 - Iz imen datotek v commitih: src/lib/{nav-registry,permissions-core,dto-minimizacija,audit,access,ia-register}.ts, src/components/roksal/{danes-tab,invoice-manager}.tsx; permissions katalog 38 pravic; vloge ADMIN/VODJA/MONTER(15)/SKLADISCE(9)/PROIZVODNJA(10)
 
 Stage Summary:
-- Izbris GitHub računa je SVEŽ (~4 h) → okno za obnovitev prek GitHub Support (retencija ~90 dni) — najvišja prioritetа
+- Izbris GitHub računa je SVEŽ (~4 h) → okno za obnovitev prek GitHub Support (retencija ~90 dni) — najvišja prioriteta
 - Baza (Neon) z VSI poslovnimi podatki je cela in živa — največja vrednost je varna
 - Varnost: exfil workflow je stal 17.9.–6.10. (~3 tedne) → rotacija Neon gesla, SESSION_SECRET, API_KEY_PEPPER, BLOB_READ_WRITE_TOKEN, ROKSAL_SETUP_TOKEN obvezna; tudi žetona, prilepljena v ta chat
 - Rezenrvena pot: rekonstrukcija iz blueprinta (route map + RBAC katalog + IA + imena datotek + živa aplikacija kot referenca)
@@ -182,7 +182,7 @@ Work Log:
 - bun run lint: ČIST (0 errorjev, 0 opozoril); tsc --noEmit brez napak v mojih datotekah
 
 Stage Summary:
-- Vseh 29 zavihkov sedaj ima polne module (od 22 polnih + 7 šolsjk do 26 + 4 novo polni; ostali 3 — viz/ar/pdf — so nalogа 6-b)
+- Vseh 29 zavihkov sedaj ima polne module (od 22 polnih + 7 šolsjk do 26 + 4 novo polni; ostali 3 — viz/ar/pdf — so naloga 6-b)
 - Komercialni tok zaključen do konca: podpis → PostSig kokpit → račun/plačilo + proizvodni nalog; orodjarina samopostrežna z revizijo vsake spremembe
 - Odstopanja dokumentirana v agent-ctx/6-a-full-stack-developer.md (popravek podpisa PON-2026-004, restart dev serverja, min-w-0 popravki)
 
@@ -460,7 +460,7 @@ Task: R440-f — UI validacija 29 zavihkov v brskalniku (GitLab issue #4)
 
 Work Log:
 - agent-browser (Chromium headless) proti http://localhost:3000; prijava admin/monter/skladisce prek obrazca (ne demo gumbov); tab preklop prek stranske vrstice (store persist v localStorage)
-- ADMIN: obiskani VSILI 29 zavihkov (danes, dashboard, projekti, stranke, ponudbe, racuni, nalogi, teren, meritve, foto, nagib, kalkulator, signatura, material-v5, orodjarina, viz, ar, crm, dokumenti, zaloga, katalog, logistika, proizvodnja, galerija, varnost, vodja-ekipa, pdf, postsig, profil) — za vsakegа preverjen izris, dejanski podatki (P-2026-001..009, N-2026-001..008, PON/RA kode, 10 strank, 12 profilov, zaloga/losi, orodjarina EV/OR, CRM pipeline) in konzola (clear → obisk → prever) — 0 errorjev/0 opozoril (samo Fast Refresh dev logi), 0 page errors
+- ADMIN: obiskani VSILI 29 zavihkov (danes, dashboard, projekti, stranke, ponudbe, racuni, nalogi, teren, meritve, foto, nagib, kalkulator, signatura, material-v5, orodjarina, viz, ar, crm, dokumenti, zaloga, katalog, logistika, proizvodnja, galerija, varnost, vodja-ekipa, pdf, postsig, profil) — za vsakega preverjen izris, dejanski podatki (P-2026-001..009, N-2026-001..008, PON/RA kode, 10 strank, 12 profilov, zaloga/losi, orodjarina EV/OR, CRM pipeline) in konzola (clear → obisk → prever) — 0 errorjev/0 opozoril (samo Fast Refresh dev logi), 0 page errors
 - Interaktivni vzorci: nalogi detail N-2026-001 (vodnik terena 6 korakov, offline dejanja, ČASOVNICA DOGODKOV Dodeljen/Začetek dela, meritve 12,40 m); meritve urejanje (ZGODOVINA VERZIJ v1 »Potrjeno s kamero«, JAVNA POVEZAVA); projekti detail P-2026-001 (PONUDBE/RAČUNI/NALOGI/MERITVE/3D PREDOGLED z 7 SVG + yaw/pitch/GARANCIJA/PORTAL); CRM (3 vodi + 3 priložnosti, pipeline 25.300 €); varnost (sistemski revizijski dnevnik s Zapisi + seje + obvestila + vzdrževanje + licenca); profil Obveščanje (preklop EMAIL za WO_ASSIGNED → persist v bazi prek /api/notifications/prefs, povrnjeno nazaj); PDF (PON-2026-001 → Predogled → iframe embed)
 - RBAC MONTER (19/29 zavihkov): vidi Danes/Preglednica/Projekti/Stranke/Ponudbe/Nalogi/Teren/Meritve/Foto/Nagib/Orodjarina/Viz/AR/CRM/Dokumenti/Zaloga/Katalog/Galerija/Profil (skladno z 15 pravicami — crm.read/inventory.read/catalog.read/documents.read/gallery.read imajo read-only dostop); NE vidi Računi/Kalkulator/Signatura/Material V5/Logistika/Proizvodnja/Varnost/Vodja-ekipa/PDF/PostSig (10)
 - Fail-closed testi monter: URL ?tab=varnost BREZ učinka (aplikacija ne bere URL parametra, ostane na trenutnem zavihku); injekcija tab=varnost neposredno v persisted store (localStorage roksal-session) + reload → »Dostop zavrnjen — Ta zavihek zahteva pravico audit.read«, NI predvida podatkov; Danes/Nalogi monterja prikazujeta SAMO lastne naloge (Luka Novak; N-2026-007/Matej in N-2026-002/nedodeljen izpuščena, števci 8→6)
@@ -672,7 +672,7 @@ Work Log:
 - prisma/schema.prisma: +2 modeli po §13 — InstallationChecklist (label/done/doneAt/doneBy/sortOrder, index [workOrderId, sortOrder]) in InstallationMaterialUsage (itemId/qty>0/note/user, index [workOrderId]); relacijska polja dodana na User (checklistDone/usageUser), WorkOrder (checklist/materialUsage), InventoryItem (usageItems); WorkOrderEvent.type komentar dopolnjen s TEZAVA; bun run db:push (brez izgube podatkov) + prisma generate + PONOVEN ZAGON dev strežnika (obvezno po push)
 - NOVE API rute (vse fail-closed, obseg: monter SAMO svoji nalogi prek readsAllData — enako kot /api/nalog; mutacije v revizijo):
   - GET/POST/PATCH /api/nalog/[id]/checklist (nalog.read / nalog.write) — seznam, dodaj točko {label ≤300}, odkljuk {id, done} z doneAt/doneBy; revizija CHECKLIST_ADD/CHECKLIST_TOGGLE; PATCH preverja, da točka pripada temu nalogu (404 sicer)
-  - GET/POST /api/nalog/[id]/material (nalog.read / nalog.write) — seznam porabe z artikli; POST {itemId, qty>0, note} SAMO za nalog dodeljen uporabniku ALI inventory.write (403 sicer); zaporedje: recordMovement({IZDAJA, refType:'workOrder', refId, note:'Poraba na terenu — <kodа>'}) → InstallationMaterialUsage (ob napaki zapisu kompenzacija z VRACILO gibanjem — dnevnik ostane dosleden); prekratek zaloga → 409 (iz recordMovement); revizija STOCK_USAGE s projectId
+  - GET/POST /api/nalog/[id]/material (nalog.read / nalog.write) — seznam porabe z artikli; POST {itemId, qty>0, note} SAMO za nalog dodeljen uporabniku ALI inventory.write (403 sicer); zaporedje: recordMovement({IZDAJA, refType:'workOrder', refId, note:'Poraba na terenu — <koda>'}) → InstallationMaterialUsage (ob napaki zapisu kompenzacija z VRACILO gibanjem — dnevnik ostane dosleden); prekratek zaloga → 409 (iz recordMovement); revizija STOCK_USAGE s projectId
   - POST /api/nalog/[id]/events (nalog.write) — SAMO prosti tipi TEZAVA|KOMENTAR|OPOMBA (statusni ZACETEK/ZAJEM/… ostanejo izključno na /transition → 400); TEZAVA → revizija WO_TROUBLE
 - danes.tsx PREOBLIKOVAN v MOJ DAN (mobile-first, dotikalni elementi ≥44px — h-11/min-h-11): 7-fazni delovni tok kot LEPLJIV vodoravno drsen stepper (sticky top-14 pod glavo) — PRESLIKAVA (dokumentirana v komentarju): PRIHOD=NAPROGRAMIRAN, PRED ZAČETKOM=V_TEKU, ZAJEM=V_ZAJEMU, MONTAŽA=implicitno opravljena ob V_PREVERI (faza 3 brez lastnega statusa — model se NI spreminjal), KONTROLA=V_PREVERI, ZAKLJUČEK=ZAKLJUCEN, PREDAJA=poročilo; podrobnost naloga (razširljiva kartica): navodila, kontrolni seznam (progress X/Y + dodajanje + odkljukovanje, aria role=checkbox), poraba materiala (izbira artikla iz /api/stock z razpoložljivo zalogo, količina, opomba; toast s preostalo fizično zalogo), gumb Zabeleži težavo (event TEZAVA), povezavi na Meritve/Foto zajem, povzetek ob zaključku (V_PREVERI → obrazec z opombo, ki gre v WorkOrder.summary) in POROČILO O PREDAJI (zaključek/meritve/checklist/poraba + summary); vreme (R434) ohranjeno; nova sekcija "Zaključeno danes — predaja" (scope=all, filter completedAt ≥ danes, brez podvajanj) — sicer bi zaključen nalog izginil in poročilo ne bi bilo dosegljivo
 - CSS hrošč odkrit in popravljen pri brskalniški verifikaciji: sr-only (position:absolute) vsebina kovčkov stepperja je ušla iz drsečega območja ol, ker je containing block postal lepljivi (positioned) prednik → VODORAVNI PRELIV strani na mobilnem (scrollWidth 786/390); popredek: ol dobi relative (sr-only ostane znotraj drsečega območja) → 390/390 ✓
@@ -1160,7 +1160,7 @@ Work Log:
 
 Stage Summary:
 - R461 REALITY CAPTURE QA + DIGITAL TWIN ZAKLJUČEN: coverage gate + vodena ruta + drift + multi-reference mreža + kritična vrata (ZA PONUDBO/KONFIGURACIJO/PROIZVODNJO) + digitalni dvojček AS-MEASURED→AS-DESIGNED→AS-PRODUCED→AS-INSTALLED z geometry diff in cross-checkom — vse revizijsko sledljivo, IDOR-varno, brez podvajanja tekača
-- issue #16 pokritost: §1–§25 vse ✓ (§6 VERIFIED/statusi že v tekaču R460 — sloj jih bere; §20 playbook integracija prek opravljenih korakov rutе + evidence modela R458)
+- issue #16 pokritost: §1–§25 vse ✓ (§6 VERIFIED/statusi že v tekaču R460 — sloj jih bere; §20 playbook integracija prek opravljenih korakov rute + evidence modela R458)
 - stanje issues: #1–#16 zaprti po merge · odprti #17–#30 (naslednji po vrsti: #17 ROKSAL REALITY-TO-PRODUCTION)
 - opombe za prihodnje seje: (1) nov žeton glpat-c47P… (read_api+write_repository, BREZ api) je v git remote — za API OPERACIJE (MR merge, issue komentar/zaprtje) uporabljaj stari žeton iz .env.recovery (api scope, velja do 2026-11-06); (2) GitLab API POST/GET /merge-rows trenutno vrača 404/403 (Cloudflare) — MR ustvarjaj prek git push options, merge/comment poskusi po ohlajanju z retry; (3) useApi<T> vedno vrača { data: T } — dostopaj .data.data; (4) parse* helperji sprejemajo RAZČLENJEN objekt, nikoli JSON niz; (5) FenceSegment.order je 0-based
 
@@ -2089,5 +2089,20 @@ Work Log:
   `validity.businessMeasureAllowed` je zdaj izračunan in shranjen, a ga
   še ne preverja noben ustvarjalni endpoint (BOM/ponudba). Vzorčni primeri znanih
   dimenzij za Fazo 7 (tolerance) manjkajo — brez njih faz 6–7 ni mogoče zaključiti.
-- CELI PAS (`bash tests/ci-local.sh`) je zagnan šele PO tem commitu;
-  dokler ni zelen, deploy ni predlagan.
+- CELI PAS (`bash tests/ci-local.sh`) — IZMERJENO: **✓ zeleno, 7 statičnih
+  korakov in 23 skupin** (zadnja r500). Prvi poskus je bil rdeč pri dveh
+  korakih, noben razlog ni bila koda:
+  1. `ci.yml` in `ci-matrix.sh` sta se razšla, ker sem r500 vpisal samo v
+     matriko — popravek registrira skupino tudi v workflow (pas takšno
+     razhajanje že preverja in je zato deloval).
+  2. `prisma generate` je vrnil `EPERM` na `query_engine-windows.dll.node` —
+     to je Windows **zaklep datoteke** (dev strežnik je še tekel na :3000),
+     ne napaka kode; dokaz je uspešen samostojni `npm run db:generate`.
+     `ci-local.sh` zdaj ta primer prepozna in operatorju pove, kateri proces
+     ustaviti, namesto da lažno javlja rdečo kodo.
+  Popravek lastne trditve iz prejšnjega zapisa: »pogon kljub rdečim izhaja z 0«
+  **NI bila napaka poganjalca**. `tests/ci-local.sh:255` konča z `exit "$Rdece"`,
+  torej vrne ≠ 0. Zmoten sem bil jaz, ker sem prvi poskus pognal skozi
+  cev (`... | tail -60`): izhodna koda cevi je koda zadnjega programa (`tail`),
+  ne skripta. Drugi poskus je bil usmerjen v datoteko loga in je pokazal
+  pravilno izhodno kodo. Ukaz: poganjalca nikoli ne cevopelj za oceno uspeha.

@@ -122,6 +122,13 @@ korak "lint" "${RUNNER[@]}" lint
 # ── 4. baza ──────────────────────────────────────────────────────────────────
 if [ "$SKIP_DB" != 1 ]; then
   korak "prisma generate" "${PRISMA[@]}" generate
+  # R500: EPERM na query_engine DLL je Windows ZAKLEP datoteke (teče še kak
+  # dev strežnik s Prisma clientom), ne napaka kode. Pas strežnik zažene šele
+  # za tem korakom, zato sporočilo pove operatorju, kaj naj ustavi.
+  if grep -q EPERM "$LOGS/prisma_generate.log" 2>/dev/null; then
+    echo "   ↳ zaklep (EPERM): na $BASE_URL verjetno že teče dev strežnik — ustavite ga"
+    echo "     (bash ops/dev-serve.sh stop) in ponovite pas. To NI napaka kode."
+  fi
   korak "migrate deploy" "${PRISMA[@]}" migrate deploy
   korak "db:seed" "${RUNNER[@]}" db:seed
 fi
