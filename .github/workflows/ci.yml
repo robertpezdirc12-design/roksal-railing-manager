@@ -18,6 +18,39 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # R499: production deploy Vercel TIHO zadrži (BLOCKED), če e-pošta avtorja vrha
+  # ni povezana z GitHub računom. Brez tega joba je CI lahko zelen, produkcija pa
+  # zastarela — izmerjeno za devet deployev R493 … R495.
+  avtorji:
+    name: Avtorji commitov (Vercel)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Range base..head potrebuje zgodovino; privzeti plitek klon je ne da.
+          fetch-depth: 0
+      - name: pregled avtorjev
+        env:
+          # Vrednosti iz githubovega konteksta grejo v ENV, ne v shell-izraz —
+          # interpolation neposredno v `run:` je injekcijski tveganje.
+          ROKSAL_BEFORE: ${{ github.event.before }}
+          ROKSAL_BASE: ${{ github.event.pull_request.base.sha }}
+          ROKSAL_EVENT: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          if [ "$ROKSAL_EVENT" = pull_request ] && [ -n "${ROKSAL_BASE:-}" ]; then
+            obseg="${ROKSAL_BASE}..${GITHUB_SHA}"
+          elif [ -n "${ROKSAL_BEFORE:-}" ] && ! printf '%s' "$ROKSAL_BEFORE" | grep -q '^0\+$'; then
+            obseg="${ROKSAL_BEFORE}..${GITHUB_SHA}"
+          else
+            # Nov branch ali force-push: `before` je nič, primerjati ni kaj. Vercel
+            # gradi VRH, zato je vrh tudi edino, kar je treba pregledati.
+            echo "opomba: brez predhodnega commita (nov branch/force-push) — pregledan samo vrh"
+            obseg="-n 1 HEAD"
+          fi
+          echo "pregled: $obseg"
+          bash tests/deploy-author-check.sh $obseg
+
   quality:
     name: Kvaliteta (tsc + lint)
     runs-on: ubuntu-latest
