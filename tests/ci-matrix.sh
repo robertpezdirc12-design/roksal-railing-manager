@@ -15,7 +15,7 @@ cd "$(dirname "$0")/.."
 source tests/toolshim.sh
 
 # --- edina definicija: vrstni red skupin + njihove datoteke -------------------
-GRUPE=(r437-r445 r446-r452 r454-r458 r459-r462 r464 r464-notifications r465-r474 r475-r478 r479 r480 r481 r483 r484 r485 r486 r487 r488 r489 r490 r493 r494 r495 r500 r501)
+GRUPE=(r437-r445 r446-r452 r454-r458 r459-r462 r464 r464-notifications r465-r474 r475-r478 r479 r480 r481 r483 r484 r485 r486 r487 r488 r489 r490 r493 r494 r495 r500 r501 r502)
 
 declare -A CLANI
 CLANI[r437-r445]="r437.sh r438.sh r439.sh r440.sh r441.sh r440-smoke.py r443.py r445.py"
@@ -42,6 +42,7 @@ CLANI[r494]="r494.py"
 CLANI[r495]="r495.py"
 CLANI[r500]="r500.py"
 CLANI[r501]="r501.py"
+CLANI[r502]="r502.py"
 
 PASS=0; FAILED=0; SKIPPED=0; FAILED_LIST=""; SKIPPED_LIST=""
 STRICT_TOOLS="${STRICT_TOOLS:-0}"

@@ -143,6 +143,9 @@ jobs:
           # statusi meritev — nova skupina MORA biti tudi v tests/ci-matrix.sh
           # (sicer pas javi razhajanje matrike).
           - grupa: r501
+          # R502 (issue #15 faza 3): dokazni protokol fotogrametrije brez AI —
+          # rekonstrukcija iz sintetičnega para slik proti znani istini.
+          - grupa: r502
     services:
       postgres:
         image: postgres:16

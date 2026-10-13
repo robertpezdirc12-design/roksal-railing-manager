@@ -2188,3 +2188,117 @@ Work Log:
   »rekonstruiramo geometrijo« (H4, faza 3); UI kamere še nima vnosnega polja za
   ločeno Y referenco (`pxY`/`cmY` je podprt v jedru in endpointih, zato H1(a)
   ostane DELNO); javna povezava `/api/public/measure` pokaže samo naziv stanja.
+
+---
+Task ID: R505 (dokončana Faza 3 + prenosljivost operacijskega jedra)
+Agent: Qoder (lokalno merjeno, 13.–14. 10. 2026, Windows Git Bash + lokalni PG :54329)
+
+Task: issue #15 Faza 3 — fotogrametrija brez AI; nato odprava tistih padcev
+relejnega pasu, ki so bili posledica orodja in ne kode, ter končni izmerjen
+rezultat CELOTE matrike (pogoj uporabnika pred worklogom in commitom).
+
+Work Log:
+- FAZA 3 (koda; `tests/r502.py` ✓ 76 / ✗ 0 klasična SfM veriga):
+  `src/lib/photogrammetry-core.ts` (ZERO uvozov — Harris/Shi-Tomasi vogli,
+  BRIEF-binarni opisi, rANSAC fundamentalna matrica, DLT triangulacija,
+  LU razcep in po-potegi iteracija) + `src/lib/photogrammetry-proof.ts`
+  (dokazni nosilec). Dokumentacija `docs/PHOTOGRAMMETRY-3D.md`, strojno berljiv
+  dokaz `docs/artefacts/fotogrametrija-dokaz.json`, dve ponovljivi sondi
+  `tests/probe/fotogrametrija-*.mjs`. Pošteno: dokaz je OFFLINE in ni priklopljen
+  na UI; `measure-engine.ts` na vprašanje metodo še vedno odgovori »SfM NI
+  izvedena«, ker je ni v izvedbi odčitka.
+- RESNIČNA NAPAKA APLIKACIJE, ki jo je našel test (ne obratno): PDF-ji
+  `src/lib/pdf-mini.ts` so bili strojno NEberljivi — Type1 s `/Differences`
+  nosi samo glife, brez Unicode-točke, zato `pdftotext`, iskalniki in bralke za
+  oslepje niso dobili NITI ENE besede. Dodan je `/ToUnicode` CMap, odveden od
+  ISTEGA vira (`SPECIAL_BYTES`) kot `charByte`, da je izkopano besedilo enako
+  natisnjenemu. Dokazano na živi generaciji: 19 464 B PDF, `pdftotext` 2 845 B
+  besedila, MONTAŽNA SKICA / VOZLIŠČ / »ni sličic zajema« bere pravilno.
+- PRENOSLJIVOST OPERACIJSKEGA JEDRA (tri ločene napake, vse izmerjene;
+  nobena ni popuščanje merila):
+  1. `ops/backup.sh:147` `hostname -s` — Windows/mac `hostname` te zastavice NE
+     pozna in pod `set -e` ustavi korak 4/6; `:132` je trd `bun`. Nova
+     `ime_gosta` in `zagon_js` (bun → node) v `ops/lib.sh`.
+  2. `python3 -c "…open('$STAGE/…')"`: Git Bash pretvarja POSIX-pot v Windows-pot
+     SAMO za argumente, ne znotraj `-c` niza → korak 6/6 je prijavil
+     `FileNotFoundError: /tmp/tmp.1a9E8xzeEU/manifest.json` kljub pravilno
+     napisanemu manifestu. V `backup.sh` (1×) in `restore.sh` (2×) poti zdaj
+     potujejo kot argumenti.
+  3. AGREGATNA KONTROLNA VSOTA exporta je bila platformno odvisna: GNU
+     `sha256sum` na Linuxu izpiše `<sha>␣␣<ime>`, MSYS `sha256sum` pa binarni
+     označevalec `<sha>␣*<ime>`. ISTIH 93 datotek je dalo dva različna
+     agregata (`40fbc9f8…` proti `759cc88e…`), zato `restore.sh --verify` nad
+     Windows-kopijo NI MOGEL uspeti. Pred razvrščanjem se ločnik normalizira na
+     dva presledka; na Linuxu je to brez učinka, zato ostanejo STARE kopije
+     preverljive. Izmerjeno po popravku: `backup.sh` RC 0 (92 tabel, 3 318
+     vrstic, 35 113 360 B `.rkb`, 6 s), `restore.sh --verify` RC 0
+     (»3 318 vrstic v 92 tabelah — vsi števci se ujemajo«, obnovljena baza se ujema).
+- PADCI TESTNEGA OKOLJA, KI SO IZGLEDALI KOT NAPAKE KODE:
+  • `/proc/sys/kernel/random/uuid` na Windows NE obstaja; `uuid()` v
+    `r439.sh`/`r440.sh`/`r441.sh` je vračal PRAZEN niz, zato je celotna
+    idempotentnost skupina padla brez krivde aplikacije. Generator je zdaj
+    prenosljiv (Linux → uuidgen → node → bun → python3) in suite SAM TAKOJ
+    preveri, da res da veljaven UUID — drugače javi razlog in stopi, namesto da
+    kasneje lažno krivi kodo.
+  • `curl` na tem sistemu je domorodni MSYS/UCRT64 build, ki pokvari NE-ASCII
+    `argv` (UTF-8 → U+FFFD). Test je shranil `stopni??e` namesto `stopnišče`.
+    Dokazano: `cleared=0` z `-d`, `cleared=1` z `--data-binary @datoteka`.
+    `r437.sh` in `r440.sh` zdaj telo vedno oddata prek začasne datoteke.
+  • `tests/r477.py`: Xpdf 4.06 na Windows NE podpira `pdftotext - -`
+    (rc 99, stdout prazen), zato je pomožnik vedno vrnil `''` in je padlo
+    vseh 9 PDF-preverb kljub POVSEM PRAVILNEMU PDF-ju. Zdaj piše/bere začasno
+    datoteko in izrecno `-enc UTF-8` (brez tega Windows Xpdf izgubi Č/Š/Ž,
+    poppler na Linuxu je privzeto UTF-8 — meritev ne bi bila prenosljiva).
+    Rezultat: `r477.py` ✓ 81 / ✗ 0 (prej 72 / 9).
+  • `tests/r440-smoke.py` je plačila 0,01 brisal neposredno iz baze in pustil
+    `invoice.paid` za 0,01 nad vsoto (600,01 ob Σ 600,00); `r437.sh` je to
+    kazal kot napačen obračun. Čiščenje zdaj poravna `paid`/`status` po ISTI
+    formuli kot `recalcInvoice` (`src/app/api/payments/[id]/route.ts`).
+- VZROČNA LOČITEV (bistvo tega bloka): ob začetku je bilo rdečih pet skupin.
+  Odpravljene so bile TRI različne vzročne vrste — (a) orodje/manjkajoč
+  vmesnik (uuid, curl argv, pdftotext stdin), (b) prenosljivost operacijskega
+  jedra (hostname, bun, MSYS-pot, ločnik kontrolne vsote), (c) umazano
+  čiščenje testa, ki je skrilo pravo stanje baze. Nobena merilna trditev ni bila
+  omiljena: vsi popravki bodisi updobljajo dokaz (ToUnicode, `-enc UTF-8`) bodisi
+  vrnejo test v stanje, kjer dejansko preverja kodo.
+- LASTNA NAPAKA PRI POGONU, ZAPISANA DOKAZNO: vmes sem za hiter poskus zagnal
+  `ops/dev-serve.sh` BREZ `DATABASE_URL` (repo nima `.env`), zato je strežnik
+  javljal `{"ok":false,"db":"napaka"}` in so prijave vračale prazne žetone —
+  `r441.sh` je nad njim lažno padel na 500, ker `python3` v njegovem `PATH` ni
+  bil shimiran. Produkcijska baza NI bila dotaknjena (brez URL-ja → Prisma pade
+  na manjkajočo spremenljivko; preverjeno, nobenega odhoda ni). Strežnik sem
+  ustavil (`bash ops/dev-serve.sh stop` → »✓ vrata 3000 prosta«) in ga pred
+  ponovnim poskusom zagnal ENAKO kot pas: `DATABASE_URL` + `tests/toolshim.sh`.
+  Posledično: `r441.sh` ✓ 53 / ✗ 0.
+- CELI PAS — KONČNI IZMERJENI REZULTAT (`bash tests/ci-local.sh`, lastni
+  strežnik, log `.ci-local-r506.log`): ✓ ZELENO, 8 statičnih korakov in
+  25 skupin, `GATE EXIT 0`. Po meritvi iz posameznih skupinskih dnevnikov:
+  **4 135 potrjenih trditev, 0 napak, 4 izrecno označeni preskoki (⟿)**.
+  Skupine: r437-r445 8 ✓, r446-r452 7 ✓, r454-r458 5 ✓, r459-r462 4 ✓, r464 2 ✓,
+  r464-notifications 1 ✓, r465-r474 8 ✓, r475-r478 4 ✓, r479…r495 vse ✓,
+  r500 1 ✓, r501 1 ✓, r502 1 ✓. Vsi štirje preskoki so v `r441.sh` in imajo ISTI
+  vzrok: GitLab off-site preverbe (API, zaščita, pipelines, MR) brez
+  `GITLAB_TOKEN` — odvisnost okolja, ne dokaz o kodi; repozitorij je prešel na
+  GitHub. Ločeno in NE šteto kot preskok: `r440-smoke.py` javlja 75 RBAC
+  odločitev `⊘ brez fiksure` (seed teh entityjev ne ustvari: fence, capture,
+  playbook, ar, foto_viz, pravilo_verzija) — odločitev je pravilna, pot je
+  nepokrita. Tokrat NI preskokov zaradi orodij (jq/sqlite3/pdftotext/magick so
+  na tej mizi nameščeni — število preskokov je zato drugačno kot v R502/R503,
+  kjer jih je bilo 6 zaradi manjkajočih orodij).
+- KAJ NI DOKAZANO / OSTANJA TVEGANJA (pošteno): (1) migracija
+  `20261019000000_r501_measurement_status` na Neonu ŠE NI izvedena — dejanje
+  lastnika; (2) produkcijska gesla administracije/demo so javno znana in
+  nerotirana — lastnik; (3) fotogrametrija je dokazana offline, ni priklopljena
+  na zajem v UI, točnost proti fizični meri ni izmerjena (manjkajo vzorčni
+  primeri znanih dimenzij); (4) UI kamere še nima `pxY`/`cmY` vnosnega polja
+  (H1a DELNO); (5) `ops/backup.sh`/`restore.sh` še vedno potrebujeta `python3`
+  (v pasu shimiran; na golo Windows okolje brez Pythona korak 4/6 odpove z
+  jasnim mesajem, ne tiho); (6) MSYS `curl` pokvari ne-ASCII `argv` — ostali
+  suite-i lahko slovenske tekste primerjajo »simetrično pokvarjeno«, zato jih je
+  treba prenašati prek datoteke, kot je zdaj storjeno v `r437.sh`/`r440.sh`;
+  (7) 36 obstoječih `react-hooks` eslint opozoril je dokumentiran tehnični dolg;
+  (8) GitHub Actions minute so porabljene do 1. 11. 2026, zato GitHub preverba
+  tega zagona NI dokaz; lokalni pas je. Deploya ne predlagam, dokler pas ni
+  zelen — tokrat je, a ob uporabi pogoja (1)–(2) je promocija na `main`
+  lastnikova odločitev.
+

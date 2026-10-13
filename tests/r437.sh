@@ -18,11 +18,24 @@ numt() { # numt <opis> <pričakovano> <dejansko> — številsko primerjanje (±0
 }
 
 # req <žeton> <metoda> <url> [json-telo] → nastavi CODE in BODY
+# R505: telo gre VEDNO prek datoteke (`--data-binary @`), nikoli prek `-d "$d"`.
+# Izmerjeno na tej mizi: `curl` je MSYS2/UCRT64 nativni binarni paket
+# (/ucrt64/bin/curl), argv pa Windows prejme prek aktivne kodepage — UTF-8
+# večbajtne znake (…, š, č) porobi v nadomestni znak. Posledica: `clear` na
+# prikrito ključ 'measure:testto…' je na strežnik prispel pokvarjen in je
+# vrnil cleared=0, kljub temu da je aplikacija pravilna (z datoteko: cleared=1).
+BODYF="${TMPDIR:-/tmp}/r437-body.$$.json"
+trap 'rm -f "$BODYF"' EXIT
+send_body () { # send_body <telo> → pot do datoteke z BAJTNO ISTIM telesom
+  printf '%s' "$1" > "$BODYF"
+  printf '%s' "$BODYF"
+}
 req() {
   local tok="$1" m="$2" u="$3" d="${4:-}"
-  local out
+  local out f
   if [ -n "$d" ]; then
-    out=$(curl -s -w "\n%{http_code}" -X "$m" "$u" -H "Authorization: Bearer $tok" -H 'Content-Type: application/json' -d "$d")
+    f=$(send_body "$d")
+    out=$(curl -s -w "\n%{http_code}" -X "$m" "$u" -H "Authorization: Bearer $tok" -H 'Content-Type: application/json' --data-binary "@$f")
   else
     out=$(curl -s -w "\n%{http_code}" -X "$m" "$u" -H "Authorization: Bearer $tok")
   fi
@@ -32,9 +45,10 @@ req() {
 # pub <metoda> <url> [json-telo] — javni klic brez avtentikacije
 pub() {
   local m="$1" u="$2" d="${3:-}"
-  local out
+  local out f
   if [ -n "$d" ]; then
-    out=$(curl -s -w "\n%{http_code}" -X "$m" "$u" -H 'Content-Type: application/json' -d "$d")
+    f=$(send_body "$d")
+    out=$(curl -s -w "\n%{http_code}" -X "$m" "$u" -H 'Content-Type: application/json' --data-binary "@$f")
   else
     out=$(curl -s -w "\n%{http_code}" -X "$m" "$u")
   fi
@@ -42,7 +56,13 @@ pub() {
   BODY=$(echo "$out" | sed '$d')
 }
 noauth() { # brez žetona (401 teste)
-  CODE=$(curl -s -o /dev/null -w "%{http_code}" -X "$1" "$2" ${3:+-H 'Content-Type: application/json' -d "$3"})
+  local f
+  if [ -n "${3:-}" ]; then
+    f=$(send_body "$3")
+    CODE=$(curl -s -o /dev/null -w "%{http_code}" -X "$1" "$2" -H 'Content-Type: application/json' --data-binary "@$f")
+  else
+    CODE=$(curl -s -o /dev/null -w "%{http_code}" -X "$1" "$2")
+  fi
 }
 
 echo "════ R437 — testi novih API rut ════"

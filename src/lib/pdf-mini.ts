@@ -59,6 +59,47 @@ function esc (s: string): string {
   return s.replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)')
 }
 
+// ─── /ToUnicode CMap (bajt → Unicode) ────────────────────────────────────────
+// R505: brez te preslikave je besedilo v PDF-ju SAMO risba: `pdftotext`,
+// iskalniki in bralke za oslepje ne dobijo nobene besede, ker Type1 s
+// /Differences ne nosi Unicode-točke. Preslikava je odvedena od SPECIAL_BYTES,
+// torej od ISTEGA vira kot charByte — izkopano besedilo je enako natisnjenemu.
+const TOUNICODE_IDENTITY: Array<[number, number]> = [
+  [0x20, 0x7E],
+  // 0xC8 (Č) in 0xE8 (č) sta izpuščena: nista Latin-1, ampak caron po dogovoru.
+  [0xA0, 0xC7], [0xC9, 0xE7], [0xE9, 0xFF],
+]
+
+function toUnicodeCMap (): string {
+  const hex = (n: number, širina = 2) => n.toString(16).toUpperCase().padStart(širina, '0')
+  const pozivni: Array<[number, number]> = []
+  for (const [ch, b] of Object.entries(SPECIAL_BYTES)) pozivni.push([b, ch.codePointAt(0) ?? 0x3F])
+  pozivni.sort((a, b) => a[0] - b[0])
+  const bfchar = pozivni.map(([b, u]) => `<${hex(b)}> <${hex(u, 4)}>`)
+  const ranges = TOUNICODE_IDENTITY.map(([lo, hi]) => `<${hex(lo)}> <${hex(hi)}> <${hex(lo, 4)}>`)
+  return [
+    '/CIDInit /ProcSet findresource begin',
+    '12 dict begin',
+    'begincmap',
+    '/CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) /Supplement 0 >> def',
+    '/CMapName /Adobe-Identity-UCS def',
+    '/CMapType 2 def',
+    '1 begincodespacerange',
+    '<00> <FF>',
+    'endcodespacerange',
+    `${ranges.length} beginbfrange`,
+    ...ranges,
+    'endbfrange',
+    `${bfchar.length} beginbfchar`,
+    ...bfchar,
+    'endbfchar',
+    'endcmap',
+    'CMapName currentdict /CMap defineresource pop',
+    'end',
+    'end',
+  ].join('\n')
+}
+
 // ─── širine znakov Helvetica / Helvetica-Bold (1/1000 em, vir: standardni AFM) ─
 const W_DIGITS = 556
 
@@ -283,8 +324,9 @@ export class PdfDoc {
     const nPages = this.pages.length
     const nImages = this.images.length
     // objekti: 1 katalog, 2 pages, 3/4 fonti, nato 5+2i stran, 6+2i vsebina,
-    // za njimi 4+2*nPages+k JPEG XObjecti (R459)
-    const totalObjs = 4 + 2 * nPages + nImages
+    // za njimi 4+2*nPages+k JPEG XObjecti (R459) in zadnji /ToUnicode (R505)
+    const toUnicodeObj = 4 + 2 * nPages + nImages + 1
+    const totalObjs = toUnicodeObj
 
     const chunks: Uint8Array[] = []
     const offsets: number[] = new Array(totalObjs + 1).fill(0)
@@ -307,10 +349,11 @@ export class PdfDoc {
 
     // fonti — WinAnsi + Differences: caron glifi na dogovorjenih bytih
     const DIFFS = '/BaseEncoding /WinAnsiEncoding /Differences [138 /Scaron 154 /scaron 142 /Zcaron 158 /zcaron 200 /Ccaron 232 /ccaron]'
+    const TUNI = `/ToUnicode ${toUnicodeObj} 0 R`
     offsets[3] = pos
-    push(`3 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding << ${DIFFS} >> >>\nendobj\n`)
+    push(`3 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding << ${DIFFS} >> ${TUNI} >>\nendobj\n`)
     offsets[4] = pos
-    push(`4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding << ${DIFFS} >> >>\nendobj\n`)
+    push(`4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding << ${DIFFS} >> ${TUNI} >>\nendobj\n`)
 
     for (let i = 0; i < nPages; i++) {
       const content = encodePdf(this.pages[i].ops.join('\n'))
@@ -336,6 +379,13 @@ export class PdfDoc {
       push(im.bytes)
       push('\nendstream\nendobj\n')
     }
+
+    // /ToUnicode CMap — zadnji objekt, da številčenje strani in slik ne splava
+    const cmap = encodePdf(toUnicodeCMap())
+    offsets[toUnicodeObj] = pos
+    push(`${toUnicodeObj} 0 obj\n<< /Length ${cmap.length} >>\nstream\n`)
+    push(cmap)
+    push('\nendstream\nendobj\n')
 
     // xref + trailer
     const xrefPos = pos

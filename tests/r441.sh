@@ -60,7 +60,28 @@ req() {
 dbq() { # dbq <skripta> — poizvedba direktno v bazo (Prisma) → izpis stdout
   (cd "$ROOT" && DATABASE_URL="$DB_URL" bun -e "$1" 2>/dev/null)
 }
-uuid() { cat /proc/sys/kernel/random/uuid; }
+uuid() { # prenosljiv UUID: Linux /proc → uuidgen → node → bun → python3.
+  # R505: na Windows Git Bash `/proc/sys/kernel/random/uuid` NE obstaja. `cat` je
+  # javil napako na stderr, izhod pa je bil prazen niz — vsi opId-i so bili
+  # prazni, zato je celotna skupina padla brez krivde aplikacije.
+  local u=''
+  [ -r /proc/sys/kernel/random/uuid ] && u=$(cat /proc/sys/kernel/random/uuid 2>/dev/null)
+  [ -n "$u" ] || u=$(uuidgen 2>/dev/null)
+  [ -n "$u" ] || u=$(node -e 'console.log(require("crypto").randomUUID())' 2>/dev/null)
+  [ -n "$u" ] || u=$(bun -e 'console.log(crypto.randomUUID())' 2>/dev/null)
+  [ -n "$u" ] || u=$(python3 -c 'import uuid;print(uuid.uuid4())' 2>/dev/null)
+  case "$u" in
+    *[!0-9a-fA-F-]*) u='' ;;
+  esac
+  [ -n "$u" ] || { echo "uuid: noben generator ni na voljo" >&2; return 1; }
+  printf '%s\n' "$u" | tr 'A-Z' 'a-z'
+}
+# Generator preverimo takoj: prazen id bi zavrnil VSE zahteve, skupina pa bi
+# javila napako brez razloga. Tu je razlog jasen.
+if ! uuid | grep -Eq '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'; then
+  echo "✗ R441: /proc, uuidgen, node, bun in python3 ne dajo UUID-ja — idempotenca se ne more preverjati." >&2
+  exit 1
+fi
 
 echo "════ R441 — testi disaster recovery & security (issue #3, R464: PG) ════"
 

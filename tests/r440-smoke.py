@@ -484,7 +484,24 @@ const {PrismaClient}=require('@prisma/client');const p=new PrismaClient();
   // R440S brez projekta: proizvodnja, QC, plačila 0,01, KAMERA potrditve
   await p.productionOrder.deleteMany({where:{title:{contains:P}}});
   await p.qcCheck.deleteMany({where:{OR:[{item:{contains:P}},{note:{contains:P}}]}});
+  // R505: plačil 0,01 NE smemo izbrisati kar iz baze in tam pustiti invoice.paid.
+  // Merjeno 13.10.2026: po brisanju je račun ostal pri 600,01, vsota preostalih
+  // plačil pa 600,00 — naslednji suite (r437: `invoice.paid pravilno preštet`)
+  // je to kazal kot napako aplikacije, vzrok pa je bilo umazano čiščenje.
+  // Poravnava uporabi ISTO formulo kot recalcInvoice (src/app/api/payments/[id]).
+  const r440sPlačila = await p.payment.findMany({where:{amount:0.01},select:{invoiceId:true}});
   await p.payment.deleteMany({where:{amount:0.01}});
+  const r440sRačuni = [...new Set(r440sPlačila.map(x => x.invoiceId))];
+  const round2 = n => Math.round(n * 100) / 100;
+  for (const invoiceId of r440sRačuni) {
+    const inv = await p.invoice.findUnique({where:{id:invoiceId},include:{payments:true}});
+    if (!inv) continue;
+    const paid = round2(inv.payments.reduce((s, x) => s + Number(x.amount), 0));
+    const total = Number(inv.total);
+    const status = inv.status === 'ZAPRT' ? 'ZAPRT'
+      : (paid + 0.005 >= total ? 'PLACAN' : paid > 0 ? 'DELNO_PLACAN' : 'IZDAN');
+    await p.invoice.update({where:{id:invoiceId},data:{paid,status}});
+  }
   const today=new Date(); today.setHours(0,0,0,0);
   await p.measurement.deleteMany({where:{AND:[{type:'OGRAJA'},{source:'KAMERA'},{lengthCm:100},{location:null},{note:null},{createdAt:{gte:today}}]}});
   await p.punchEntry.deleteMany({where:{note:{contains:'R440S'}}});

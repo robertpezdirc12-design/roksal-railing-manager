@@ -1375,7 +1375,12 @@ export async function detectDeviceCaps (): Promise<DeviceCaps> {
   return caps
 }
 
-export interface MethodRecommendation { method: 'KAMERA_REFERENCA' | 'FOTOGRAMETRIJA' | 'ROCNO'; label: string; reason: string }
+/**
+ * Priporočilo metodi. POZOR (issue #15 H4): besedilo NE SME obljubljati
+ * 3D-rekonstrukcije, je ni. Več pogledov združujemo izključno statistično
+ * (`consolidateViews`), vsak pogled rabi svojo referenčno mero.
+ */
+export interface MethodRecommendation { method: 'KAMERA_REFERENCA' | 'VEC_POGLEDOV' | 'ROCNO'; label: string; reason: string }
 
 /** §16/§18: priporočena metoda iz zmogljivosti (provider-agnostic, brez vezave). */
 export function recommendMethod (caps: DeviceCaps): MethodRecommendation {
@@ -1383,7 +1388,7 @@ export function recommendMethod (caps: DeviceCaps): MethodRecommendation {
     return { method: 'ROCNO', label: 'Ročni vnos + referenca', reason: 'Kamera ni na voljo — profesionalni ročni način s skico in referenčnimi merami (§12).' }
   }
   if (caps.orientation && caps.webgl) {
-    return { method: 'FOTOGRAMETRIJA', label: 'Kamera + več pogledov (fotogrametrija)', reason: 'Naprava brez dostopa do LiDAR/depth — iz več fotografij istega objekta rekonstruiramo geometrijo (2.–4. pogled).' }
+    return { method: 'VEC_POGLEDOV', label: 'Kamera + več pogledov (statistika)', reason: 'Naprava ne javlja LiDAR/depth. Več fotografij združimo samo kot povprečje in razpršenost pogledov — prava 3D-rekonstrukcija (SfM) v tej aplikaciji NI izvedena, zato mora vsak pogled nositi svojo referenčno mero.' }
   }
   return { method: 'KAMERA_REFERENCA', label: 'Kamera + referenčna mera', reason: 'En foto pogled z eksplicitno referenco (marker/znana mera/zunanja naprava).' }
 }

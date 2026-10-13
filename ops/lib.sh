@@ -48,6 +48,29 @@ die () { printf '[%s] NAPAKA: %s\n' "$(date +%H:%M:%S)" "$*" >&2; exit 1; }
 
 sha256_of () { sha256sum "$1" | cut -d' ' -f1; }
 
+# R505: prenosljivo kratko ime gostitelja. Windows/mac `hostname` NE pozna
+# Linuxove `-s` (merjeno: `hostname: unknown option -- s`), pod `set -e` pa ta
+# napaka ustavi korak 4/6 cele varnostne kopije. Prva točka je povsod kratko ime.
+ime_gosta () {
+  local h
+  h="$(hostname 2>/dev/null | tr -d '\r\n' | cut -d. -f1)"
+  [ -n "$h" ] || h="${COMPUTERNAME:-}"
+  [ -n "$h" ] || h="$(uname -n 2>/dev/null | cut -d. -f1)"
+  printf '%s' "${h:-neznano}"
+}
+
+# R505: JS-zagonilec za ops skripte (export-db.mjs itd.) — bun, sicer node.
+# Razlog: obnovljeno machinesko okolje (docs/RECOVERY.md korak 2) ima node,
+# nima pa nujno bun; trd `bun` je bil doslej edina pot.
+zagon_js () {
+  if command -v bun >/dev/null 2>&1; then
+    bun "$@"
+  else
+    command -v node >/dev/null 2>&1 || die "manjka JS-zagonilec (niti bun niti node)"
+    node "$@"
+  fi
+}
+
 # Maskiranje žetona/ključa za izpis (prvih 10 znakov).
 mask () {
   local s="$1"
