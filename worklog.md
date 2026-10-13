@@ -1889,3 +1889,27 @@ Stage Summary:
 - Koda je na GitHubu in je lokalno dokazano zelena tudi po združitvi z `main`; nič v produkciji ni bilo spremenjeno (samo javne GET točke).
 - Deploy je pripravljen, a ne more biti izveden iz te seje: manjkata **Neon povezava** (za aditivno migracijo) in **Vercel žeton/deploy hook** (za build in okoljske spremenljivke); GitLab kopija potrebuje nov žeton, ker je stari preklican.
 - Največje tveganje ni koda, ampak gesla: dokler pet računov (vključno z ADMIN) nima zamenjanih gesel, je javno znan nabor veljaven ne glede na to, katera koda je deployana.
+
+---
+Task ID: R498-dodatek
+Agent: Qoder (merjenje na živo, 13. 10. 2026)
+
+Task: Zakaj produkcija zaostaja in kaj je bilo vgrajenega v relejna vrata
+
+Work Log:
+- IZMERJENO: produkcija je živo na `main-fe11901` (R492; `GET /api/public/health` → `{"ok":true,"db":"ok"}`), medtem ko je na `origin/main` združenih 8 commitov več (R493 … R495-dodatek). Razlika NI v kodi ali v bazi.
+- VZROK (dokazano, ne ugibanje): Vercel je zadržal 9 zaporednih production deployev (`readyState: BLOCKED`) z razlogom »The deployment was blocked because Vercel couldn't find a Git account for the commit author.« Vrhi na `main` so bili avtorizirani kot `Z User <z@container>` (R493 … R495) oziroma `Z.ai Code <zai@roksal.local>` (R490); nazadnje je `main` pognal commit z `robert.pezdirc12@gmail.com` (fe11901) in deploy je bil READY.
+- KONTROLNI PRIMER: ista vsebina na veji `varnostni-popravki-2026-10` z avtorjem `robertpezdirc12-design@users.noreply.github.com` je dala 4 preview deploye READY. Odloča torej izključno identiteta avtorja VRHA, ne globina zgodovine — moja merge veja ima prednike `z@container` in kljub temu zgradi.
+- VARNOSTNI REŽIM: žetoni (Vercel projekt, Neon API, GitLab) so bili uporabljeni SAMO kot prehodne vrednosti znotraj posameznega ukaza; nič ni bilo zapisano na disk, nič izpisano, nič dodano v repozitorij. Poskus branja migracijskega stanja produkcijskega Neona (SQL over HTTP, samo `SELECT`) je zavrnila varnostna politika seje — zato STANJE PRODUKCIJSKE SHEME NI POTRJENO in migracija `20261018000000_r493_product_assets` NI izvedena.
+- GITLAB KOPIJA: žeton `glpat-…` je NEVELJAVEN (`400 Bad Request` na `/api/v4/user`; na `git ls-remote` »HTTP Basic: Access denied«) — sinhronizacija tokrat NI mogoča, potrebujete nov žeton (veljavnost preverite z `GET /api/v4/user`).
+- Vercel: projekt `prj_gADsin7EWWetd1gTYshTgVDXEvQA` (team »robertpezdirc12-designs-projects«), `productionBranch` ni nastavljen (= `main`); preview deployi so pod Deployment Protection (302 na zaščitenem URL-ju), zato kode v pred-objavi prek URL-ja ni bilo mogoče preizkusiti brez interaktivne prijave.
+- Neon: dva projekta — `patient-violet-36825841` (veji `prod-v2` in `main`) in `young-hall-93273873`. Branje je šlo samo po imena projektov in vej; povezave in gesla niso bila dotaknjena.
+- VGRAJENO V VRATA: `tests/deploy-author-check.sh` (pregled avtorjev obsega `origin/main..HEAD`; izhod 1 = blokiran avtor, izhod 2 = ni git podatkov in NIKOLI ne šteje zeleno) je dodana med statične korake `tests/ci-local.sh`. Število korakov in skupin zdaj izpije izvedba, ne hardcodedirana številka.
+- NOVO: `ops/deploy-status.sh` — alarm za zastarelo produkcijo prek JAVNE `/api/public/health` (brez žetonov, brez branja baze). Izmerjeni izhod: `ZASTARELO: produkcija = main-fe11901, vrh origin/main = main-aa424c0 (zaostanek: 8 commitov)`.
+- PREIZKUSI NOVIH SKRIPT: `bash -n` ✓; avtorski pregled ✓ zelen na `origin/main..HEAD` (5 commitov), ✓ rdeč na ožjem dovoljenem seznamu (sporni avtorji so pravilno izpisani po en na vrstico), ✓ fallback brez `origin/main` preizkušen v plitkem klonu (`file://` klon, preverjen samo vrh, izhod 0 z opombo). `ops/deploy-status.sh` preizkušen po PETIH vejah z začasnim lokalnim strežnikom (USKLAJENO pri JSON-u brez in s presledki okoli dvopičja, okvarjena baza → 1, napačna oznaka builda → 1 z »zaostanek: neznano«, manjkajoč `build` → 2); strežnik je ustavljen, vrat ni za seboj.
+- UJET BUG MED IZVOJEM: bash prepozna samo ASCII identifikatorje, zato je `Pričakovano="$X"` razpadlo na `Pri` + `Pričakovano=…: command not found`. Imena spremenljivk v skriptah so zdaj brez šumnikov (opomba je zapisana v sami skripti).
+
+Stage Summary:
+- Tiha blokada produkcije je razložena in izmerjena: vzrok je identiteta avtorja commita, zato je preizkus vgrajen v relejna vrata in v operacijski alarm.
+- Deploy R493 … R498 OSTANE ZAPRT zaradi dveh neodvisnih pogojev: (a) aditivna migracija `20261018000000_r493_product_assets` (1 tabela + 3 indeksi + FK — brez nje panel »Produktna gradiva« javi napako, ostalo deluje; aditivnost pomeni, da je izvedljiva pred ALI za deployem brez izpada), (b) rotacija petih produkcijskih gesel (§ 4.1 ANALIZA), kar je lastnikova odločitev.
+- Izvedba deploya iz te seje NI mogoča: branje stanja produkcijske sheme je zavrnila varnostna politika seje, GitLab žeton je preklican, GitHub Actions minute so porabljene (≈2026-11-01).

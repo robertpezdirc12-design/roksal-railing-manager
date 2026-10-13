@@ -78,6 +78,19 @@ sheme ročno. V peskovnici job poganja upravitelj oz. cron vnosi (glej §7).
    prejšnjega taga `v*`). Po rollbacku ponovno preveriti `/api/health` in
    dnevnik napak. Baza ostaja (SQLite v peskovnici / Neon v produkciji) —
    migracije so aditivne, zato stara koda + nova shema ostajata združljivi.
+7. **Avtor commita je del cevovoda (R498):** production deploy Vercel SAMODELNO
+   zadrži (`readyState: BLOCKED`, "couldn't find a Git account for the commit
+   author"), če e-pošta avtorja vrha veje `main` ni povezana s povezanim GitHub
+   računom. To NI napaka kode: ime, oznaka in vsebina so lahko povsem pravilni,
+   produkcija pa tiho zastane. Zato relejna vrata pregledajo avtorje
+   (`bash tests/deploy-author-check.sh`, privzeto `origin/main..HEAD`); agent
+   COMITA SAMO z `git -c user.name="Robert Pezdirc" -c user.email="robert.pezdirc12@gmail.com"`
+   (ali uradno noreply e-pošto računa), nikoli s `z@container` / `*.local`.
+8. **Kontrola žive kode (R498):** `bash ops/deploy-status.sh` primerja oznako
+   builda z javne `/api/public/health` z vrhom `origin/main` in izpiše zaostanek.
+   Izhod `1 = ZASTARELO` je incident, ne opomba — brez tega preizkusa se
+   razlika med "združeno na GitHubu" in "dejavno v produkciji" pozna šele, ko
+   monter na terenu ne vidi nove vsebine.
 
 ### Sprožitev deployja ročno iz GitLaba (rezervni mehanizem)
 

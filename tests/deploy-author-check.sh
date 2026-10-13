@@ -17,9 +17,9 @@
 # izključno za identiteto avtorja, ne za vsebino.
 #
 # Uporaba: tests/deploy-author-check.sh [<rev-range>]
-#   privzeto origin/main..HEAD; če ta veja ni dosegljiva (plitek checkout),
-#   se preverí zadnjih 20 commitov na HEAD. Argument je lahko tudi oblika
-#   `git rev-list` (npr. `bash tests/deploy-author-check.sh -n 1 HEAD`).
+#   privzeto origin/main..HEAD; če distančna veja ni dosegljiva (svež/plitek
+#   klon), se preverí samo vrh — tistega Vercel gradi. Argument je lahko tudi
+#   oblika `git rev-list` (npr. `bash tests/deploy-author-check.sh -n 1 HEAD`).
 # Izhod:  0 = vsi avtorji so dovoljeni
 #         1 = najden avtor, ki bi zadržal production deploy
 #         2 = pogojev za preverjanje ni (ni git podatkov) — NIKOLI ne štej zeleno
@@ -40,14 +40,18 @@ if [ -z "$Obseg" ]; then
   if git rev-parse --verify -q origin/main > /dev/null 2>&1; then
     Obseg="origin/main..HEAD"
   else
-    Obseg="-n 20 HEAD"
+    # Ni distančne veje (svež/plitek klon): Vercel gradi VRH, zgodovinskih commitov
+    # ne moremo več popravljati — brez tega bi bila vrata večno rdeča zaradi
+    # stanja, ki ga noben agent ne more več spremeniti.
+    Obseg="-n 1 HEAD"
+    echo "opomba: origin/main ni dosegljiv — preverjen je samo vrh (ga Vercel gradi)" >&2
   fi
 fi
 
-# `git rev-list` razume obe obliki: "A..B" in zastavice ("-n 20 HEAD").
+# `git rev-list` razume obe obliki: "A..B" in zastavice ("-n 1 HEAD").
 if ! Commiti=$(git rev-list $Obseg 2>/dev/null); then
-  echo "range '$Obseg' ni razumljen (plitek checkout?) — preverjenih zadnjih 20 commitov" >&2
-  Commiti=$(git rev-list -n 20 HEAD)
+  echo "range '$Obseg' ni razumljen (plitek checkout?) — preverjen vrh" >&2
+  Commiti=$(git rev-list -n 1 HEAD)
 fi
 
 # Prazen range = vrat ne bi pregledala ničesar; vrh je vseeno tisti, ga Vercel gradi.
