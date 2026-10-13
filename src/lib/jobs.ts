@@ -20,16 +20,24 @@ export interface JobDef {
 /** Opravila po imenih izvirnika (cron jobs). */
 export const JOB_DEFS: JobDef[] = [
   { job: 'seje-gc', label: 'Čiščenje sej', desc: 'Izbriše potekle prijavne seje (varnostna higiena).', cron: 'vsak dan 03:00 (izvirnik)' },
-  { job: 'portal-gc', label: 'Čiščenje portala', desc: 'Odstrani potekle/preklicane povezave portala strank po 30 dneh.', cron: 'vsak teden (izvirnik: viz/gc)' },
+  { job: 'portal-gc', label: 'Čiščenje portala', desc: 'Odstrani potekle/preklicane povezave portala strank po 30 dneh.', cron: 'vsak dan 03:30 (jobs/run — R496; izvirnik: viz/gc)' },
   { job: 'obvestila-gc', label: 'Čiščenje obvestil', desc: 'Izbriše prebrana obvestila, starejša od 30 dni.', cron: 'vsak dan 03:10 (izvirnik)' },
   { job: 'obvestila-retry', label: 'Ponovitev obvestil', desc: 'Ponovi neuspešne/čakajoče dostave obvestil (max 3 poskusi, varno pred podvajanjem).', cron: 'vsakih 15 min (issue #5)' },
   { job: 'webhook-retry', label: 'Ponovitev webhookov', desc: 'Ponovi neuspešne webhook dostave partnerjem (backoff 1/5/30 min, mrtvo pismo po 5 poskusih — R481 issue #9 §9).', cron: 'dnevno ob 03:30 (jobs/run) — zamuda dokumentirana v docs/webhooks.md' },
-  { job: 'varnostna-kopija', label: 'Varnostna kopija', desc: 'Šifrirana kopija (baza + cel repozitorij) z off-site nalaganjem na GitLab — recovery v docs/RECOVERY.md.', cron: 'vsak dan 04:00 (issue #3)' },
+  { job: 'varnostna-kopija', label: 'Varnostna kopija', desc: 'Šifrirana kopija (baza + cel repozitorij) z off-site nalaganjem na GitLab — recovery v docs/RECOVERY.md.', cron: 'ROČNO (ops/backup.sh, issue #3) — ne v cronu: potrebuje tar/openssl in GitLab žeton, kar serverless nima' },
 ]
 
 export function isKnownJob (key: string): boolean {
   return JOB_DEFS.some((d) => d.job === key)
 }
+
+/**
+ * Opravila, ki jih zažene Vercel cron (GET /api/jobs/run, vercel.json 03:30 UTC).
+ * `varnostna-kopija` NAMENO manjka — kopija teče ročno prek `ops/backup.sh` oziroma
+ * POST /api/jobs, ker potrebuje GitLab žeton za off-site nalaganje in zunanje orodje
+ * (tar/openssl), kar v serverless funkciji ni zanesljivo na voljo.
+ */
+export const CRON_JOB_KEYS = ['seje-gc', 'portal-gc', 'obvestila-gc', 'obvestila-retry', 'webhook-retry']
 
 export interface RunJobResult {
   job: string

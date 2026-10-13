@@ -3,8 +3,9 @@
 # Preverja: 50 povezav gradiv iz Roksalovih galerij (colorName POTRJEN z naslovom vira),
 # 4 variante POLNA 57/32 (stran ograj: »štiri barve« + lestvica KUBO), vrtno pohištvo s fotografijami,
 # matrika 0 MANJKA, BREZ samodejnega vnosa cen (izrecno navodilo lastnika 2026-10-13),
-# idempotenco seida (z env.sh bazo).
+# idempotenco seida (baza prek tests/dbenv.py verige).
 import json, os, sys, hashlib, subprocess, urllib.request, urllib.error
+import dbenv
 
 BASE = os.environ.get('BASE_URL', 'http://localhost:3000')
 REPO = os.environ.get('REPO_DIR', os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -43,16 +44,9 @@ def db_rows (script, timeout=120):
     assert r.returncode == 0, r.stderr[-300:]
     return [json.loads(l) for l in r.stdout.strip().splitlines() if l.startswith('{')]
 
-# DATABASE_URL iz env.sh (sistemski sqlite bi preusmeril na napačno bazo)
-DBURL = ''
-try:
-    with open(os.path.join(REPO, 'env.sh'), encoding='utf-8') as f:
-        for line in f:
-            if 'DATABASE_URL=' in line and 'export' in line:
-                DBURL = line.split('"')[1]; break
-except Exception:
-    pass
-assert DBURL.startswith('postgresql://'), 'manjka DATABASE_URL iz env.sh'
+# R496: veriga TEST_DB_URL → env.sh → DATABASE_URL, vedno z zahtevo po postgresql://
+# (sistemski sqlite bi preusmeril seide in neposredne BP pogovore na napačno bazo)
+DBURL = dbenv.db_url(REPO)
 
 print('═══ R495: GALERIJSKE FOTOGRAFIJE PROFIL×BARVA ═══')
 

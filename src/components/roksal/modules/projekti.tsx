@@ -463,7 +463,10 @@ interface PortalLinkRow {
 function PortalSection ({ projectId, projectCode }: { projectId: string; projectCode: string }) {
   const user = useAppStore((s) => s.user)
   const { toast } = useToast()
-  const links = useApi<{ data: PortalLinkRow[] }>(`/api/portal?projectId=${projectId}`, [projectId])
+  // R496: seznam žetonov portala je pod portal.manage (strežnik vrata tudi
+  // preverja) — odjemalec jih ne sme nabračati z vlogami brez te pravice.
+  const canManage = hasPerm(user?.perms, 'portal.manage')
+  const links = useApi<{ data: PortalLinkRow[] }>(canManage ? `/api/portal?projectId=${projectId}` : null, [projectId, canManage])
   const [preview, setPreview] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
@@ -502,6 +505,8 @@ function PortalSection ({ projectId, projectCode }: { projectId: string; project
       toast({ title: 'Kopiranje ni uspelo.', description: url, variant: 'destructive' })
     }
   }
+
+  if (!canManage) return null
 
   return (
     <section aria-label="Portal stranke">

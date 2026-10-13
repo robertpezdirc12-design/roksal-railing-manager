@@ -4,6 +4,7 @@
 # iskrenost statusov (manjkajo barvne lestvice so VIDNE, ne skrite),
 # datoteke na disku z sha256, UI nizi, RAL_HEX približek ločen od uradnega.
 import json, os, sys, hashlib, urllib.request, urllib.error
+import dbenv
 
 BASE = os.environ.get('BASE_URL', 'http://localhost:3000')
 REPO = os.environ.get('REPO_DIR', os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -155,17 +156,9 @@ chk('Pogosti RAL kodi → hex (približek' in core, 'photo-replace-core: RAL_HEX
 
 # ── 11. seed idempotenca (baza) — R494: veriga r493→r494 ──
 import subprocess
-# seedi VEDNO uporabljajo bazo tega repozitorija (env.sh) — sistemski DATABASE_URL
-# (npr. sqlite od my-project predloge) bi jih preusmeril na napačno bazo
-subenv = dict(os.environ)
-try:
-    with open(os.path.join(REPO, 'env.sh'), encoding='utf-8') as f:
-        for line in f:
-            if 'DATABASE_URL=' in line and 'export' in line:
-                subenv['DATABASE_URL'] = line.split('"')[1]
-                break
-except Exception:
-    pass
+# seidi VEDNO uporabljajo bazo tega repozitorija (tests/dbenv.py veriga) — sistemski
+# DATABASE_URL (npr. sqlite od my-project predloge) bi jih preusmeril na napačno bazo
+subenv = dbenv.seed_env(REPO)
 r = subprocess.run(['node', 'prisma/seed-r493.cjs'], cwd=REPO, capture_output=True, text=True, timeout=180, env=subenv)
 chk(r.returncode == 0, f'seed-r493 ponovni zagon: brez napake ({r.stderr.strip()[:120] if r.returncode else "ok"})')
 r = subprocess.run(['node', 'prisma/seed-r494.cjs'], cwd=REPO, capture_output=True, text=True, timeout=180, env=subenv)

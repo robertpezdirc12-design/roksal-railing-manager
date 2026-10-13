@@ -15,13 +15,9 @@ import { RoksalMark } from '@/components/roksal/logo'
 import { useAppStore, type SessionUser } from '@/lib/store'
 import { apiGet, apiPost } from '@/lib/api-client'
 
-const DEMO_USERS = [
-  { email: 'admin@roksal.si', password: 'Admin123!', label: 'Administrator', hint: 'Robert Pezdirc' },
-  { email: 'vodja@roksal.si', password: 'Vodja123!', label: 'Vodja', hint: 'Matej Kovač' },
-  { email: 'monter@roksal.si', password: 'Monter123!', label: 'Monter', hint: 'Luka Novak' },
-  { email: 'skladisce@roksal.si', password: 'Skladisce123!', label: 'Skladišče', hint: 'Tomaž Zupan' },
-  { email: 'proizvodnja@roksal.si', password: 'Proizvodnja123!', label: 'Proizvodnja', hint: 'Ana Kos' },
-]
+// R496: demo računove pridobimo s strežnika (GET /api/auth/demo) — gesla NISO
+// več v odjemalskem svežnju. Demo panel se izriše samo, če je DEMO_ACCESS=on.
+interface DemoAccount { email: string; label: string; hint: string }
 
 export function LoginScreen () {
   const { toast } = useToast()
@@ -30,6 +26,7 @@ export function LoginScreen () {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [demoLoading, setDemoLoading] = useState<string | null>(null)
+  const [demoAccounts, setDemoAccounts] = useState<DemoAccount[]>([])
 
   // R435: stanje začetne namestitve (javni GET /api/setup)
   const [setupNeeded, setSetupNeeded] = useState<boolean | null>(null)
@@ -43,6 +40,9 @@ export function LoginScreen () {
     apiGet<{ data: { needed: boolean } }>('/api/setup')
       .then((res) => { if (!cancelled) setSetupNeeded(res.data.needed) })
       .catch(() => { if (!cancelled) setSetupNeeded(false) })
+    apiGet<{ data: { enabled: boolean; accounts: DemoAccount[] } }>('/api/auth/demo')
+      .then((res) => { if (!cancelled) setDemoAccounts(res.data.enabled ? res.data.accounts : []) })
+      .catch(() => { if (!cancelled) setDemoAccounts([]) })
     return () => { cancelled = true }
   }, [])
 
@@ -68,10 +68,12 @@ export function LoginScreen () {
     }
   }
 
-  async function demoLogin (u: (typeof DEMO_USERS)[number]) {
-    setDemoLoading(u.email)
+  async function demoLogin (account: DemoAccount) {
+    setDemoLoading(account.email)
     try {
-      await login(u.email, u.password)
+      const res = await apiPost<{ data: { token: string; user: SessionUser } }>('/api/auth/demo', { email: account.email })
+      setAuth(res.data.token, res.data.user)
+      toast({ title: `Demo: ${account.label}`, description: `Prijavljeni kot ${res.data.user.role}.` })
     } catch (err) {
       toast({ title: 'Demo prijava ni uspela', description: err instanceof Error ? err.message : undefined, variant: 'destructive' })
     } finally {
@@ -179,24 +181,26 @@ export function LoginScreen () {
                 </CardContent>
               </Card>
 
-              <div className="mt-5">
-                <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-widest text-muted-foreground">
-                  <span className="h-px flex-1 bg-border" /> Demo dostop <span className="h-px flex-1 bg-border" />
+              {demoAccounts.length > 0 && (
+                <div className="mt-5">
+                  <div className="mb-2 flex items-center gap-2 text-xs font-medium uppercase tracking-widest text-muted-foreground">
+                    <span className="h-px flex-1 bg-border" /> Demo dostop <span className="h-px flex-1 bg-border" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    {demoAccounts.map((u) => (
+                      <Button
+                        key={u.email} type="button" variant="outline" size="sm"
+                        className="h-auto flex-col items-start gap-0.5 py-2 text-left"
+                        onClick={() => void demoLogin(u)} disabled={!!demoLoading}
+                        aria-label={`Demo prijava: ${u.label}`}
+                      >
+                        <span className="text-xs font-semibold">{u.label}</span>
+                        <span className="text-[10px] font-normal text-muted-foreground">{u.hint}</span>
+                      </Button>
+                    ))}
+                  </div>
                 </div>
-                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                  {DEMO_USERS.map((u) => (
-                    <Button
-                      key={u.email} type="button" variant="outline" size="sm"
-                      className="h-auto flex-col items-start gap-0.5 py-2 text-left"
-                      onClick={() => void demoLogin(u)} disabled={!!demoLoading}
-                      aria-label={`Demo prijava: ${u.label}`}
-                    >
-                      <span className="text-xs font-semibold">{u.label}</span>
-                      <span className="text-[10px] font-normal text-muted-foreground">{u.hint}</span>
-                    </Button>
-                  ))}
-                </div>
-              </div>
+              )}
             </>
           )}
         </div>

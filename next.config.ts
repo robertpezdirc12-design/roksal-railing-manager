@@ -23,6 +23,26 @@ function resolveBuildLabel (): string {
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  // R496 (izrec audita): varnostne glave. CSP NAMENO ni v tem koraku — zahteva
+  // prehod na stagingu (Next injicira skripte, uporablja se Blob slike, AR kamera);
+  // napačno nastavljen CSP bi zlomil prijavo in AR modul.
+  // Izbira je konservativna in preverjena glede na dejansko rabo v kodi:
+  //  • Permissions-Policy pustuje camera/geolocation (ar.tsx, meritve-kamera.tsx,
+  //    measure-engine.ts) — izklopljen je samo microphone, ki ga aplikacija ne rabi;
+  //  • brez COOP/COEP: vsi window.open klici so že 'noopener', COEP pa bi zlomil
+  //    vloge iz Vercel Bloba (foto, PDF, viz renderji).
+  headers: async () => [
+    {
+      source: "/:path*",
+      headers: [
+        { key: "X-Content-Type-Options", value: "nosniff" },
+        { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+        { key: "X-Frame-Options", value: "SAMEORIGIN" },
+        { key: "Permissions-Policy", value: "camera=(self), geolocation=(self), microphone=()" },
+        { key: "Strict-Transport-Security", value: "max-age=15552000; includeSubDomains" },
+      ],
+    },
+  ],
   // R464 (issue #1 §6): production build NE sme ignorirati TypeScript napak.
   // CI in build imata enako semantiko tipovne pravilnosti (tsc --noEmit + next build).
   reactStrictMode: false,

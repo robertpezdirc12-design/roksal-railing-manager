@@ -6,20 +6,26 @@ import { writeAudit } from '@/lib/audit'
 import { emitEvent } from '@/lib/notify'
 
 // /api/portal — povezave portala stranke (route-map izvirnika: /portal + /p/[token])
-// GET  (projects.read): ?projectId=… → povezave projekta (+ status veljavnosti)
+// GET  (portal.manage): ?projectId=… → povezave projekta (+ status veljavnosti)
 // POST (projects.write): { projectId, days?, note? } → nova povezava (žeton, rok)
 // Revizija: PORTAL_CREATE.
 
 export async function GET (req: NextRequest) {
-  const auth = await requirePermission(req, 'projects.read')
+  // R496: žeton portala je EDINI kontrola javnega dostopa do strankinih podatkov.
+  // Seznam žetonov zato spada pod portal.manage (ADMIN/VODJA — isti vzorec kot
+  // projects/[id]/viz-link in fence-run/[id]/review-link), ne pod projects.read,
+  // ki ga imajo tudi MONTER/SKLADISCE/PROIZVODNJA. projectId je obvezen: brez
+  // njega bi en klic razkril žetone vseh projektov naenkrat.
+  const auth = await requirePermission(req, 'portal.manage')
   if (auth instanceof NextResponse) return auth
 
   const url = new URL(req.url)
   const projectId = url.searchParams.get('projectId')
+  if (!projectId) return jsonError(400, 'Manjka projekt.', 'GET /api/portal zahteva projectId.')
   const now = new Date()
 
   const links = await db.portalLink.findMany({
-    where: projectId ? { projectId } : {},
+    where: { projectId },
     include: { project: { select: { code: true, title: true } } },
     orderBy: { createdAt: 'desc' },
   })

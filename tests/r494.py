@@ -2,8 +2,9 @@
 # tests/r494.py — R494: URADNE BARVNE LESTVICE + POLNA PALETA ODTENKOV + VRTNO POHIŠTVO
 # Preverja: lestvice VERIFIED z datotekami/sha256, polna paleta variant po profilih,
 # vrtno pohištvo (8 izdelkov), tehnične dopolnitve, API colors, matrika, UI,
-# idempotenco seida (z env.sh bazo — sistemski DATABASE_URL ne sme izsiliti napačne baze).
+# idempotenco seida (baza prek tests/dbenv.py — sistemski DATABASE_URL ne sme izsiliti napačne baze).
 import json, os, sys, hashlib, subprocess, urllib.request, urllib.error
+import dbenv
 
 BASE = os.environ.get('BASE_URL', 'http://localhost:3000')
 REPO = os.environ.get('REPO_DIR', os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -161,17 +162,9 @@ chk('object-contain' in kat, 'UI: lestvica neskrčena (object-contain)')
 chk('2026-10-12' in kat and 'galerijskih fotografij' in kat, 'UI: iskrena opomba o viru potrditve (lestvice + galerije)')
 chk('Golden teak in White' in kat, 'UI: opomba omejitve (Golden teak/White samo s slike)')
 
-# ── 9. seed idempotenca (z env.sh bazo) ──
-subenv = dict(os.environ)
-try:
-    with open(os.path.join(REPO, 'env.sh'), encoding='utf-8') as f:
-        for line in f:
-            if 'DATABASE_URL=' in line and 'export' in line:
-                subenv['DATABASE_URL'] = line.split('"')[1]
-                break
-except Exception:
-    pass
-chk(subenv.get('DATABASE_URL', '').startswith('postgresql://'), f'subenv DATABASE_URL iz env.sh ({subenv.get("DATABASE_URL", "?")[:30]}…)')
+# ── 9. seed idempotenca (baza prek tests/dbenv.py verige) ──
+subenv = dbenv.seed_env(REPO)
+chk(subenv['DATABASE_URL'].startswith('postgresql://'), f'subenv DATABASE_URL ({subenv["DATABASE_URL"][:30]}…)')
 r = subprocess.run(['node', 'prisma/seed-r494.cjs'], cwd=REPO, capture_output=True, text=True, timeout=180, env=subenv)
 chk(r.returncode == 0 and 'KONEC: 5 lestvic VERIFIED' in r.stdout, 'seed-r494 idemponten: 5 lestvic, brez podvajanj')
 s, d = callj('GET', '/api/product-assets?status=VERIFIED', tok_adm)

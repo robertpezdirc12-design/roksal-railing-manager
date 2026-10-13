@@ -36,6 +36,35 @@ export function maskKey (key: string): string {
   return prefix + token.slice(0, 6) + '…'
 }
 
+// ─── Prijava / začetna namestitev (R496: brute-force vrata) ─────────────────
+
+/**
+ * Največ poskusov prijave na IP v oknu RATE_LIMIT_WINDOW_MS (60 s).
+ * 30/min je močna zavora proti napadu z gesli (sicer 1800 poskusov uro),
+ * hkrati pa ne ovira regresijskega suite-a, ki se večkrat zapored prijavlja
+ * z 127.0.0.1.
+ */
+export const AUTH_RATE_MAX = 30
+
+/** IP naslov odjemalca (Vercel in Caddy nastavita x-forwarded-for). */
+export function requestIp (req: { headers: { get (name: string): string | null } }): string {
+  const forwarded = req.headers.get('x-forwarded-for')
+  if (forwarded) return forwarded.split(',')[0]?.trim() || 'neznano'
+  return req.headers.get('x-real-ip')?.trim() || 'neznano'
+}
+
+/**
+ * Vrata za prijavo in začetno namestitev. ISKRENO omejitev: števec živi v
+ * pomnilniku POSAMEZNEGA procesa, zato na serverless arhitekturi (Vercel
+ * funkcije) zavre ponavljanje istega IP-ja znotraj ene funkcije, ne pa
+ * porazdeljenega napada. Trajna zaščita potrebuje deljeno shrambo na robu
+ * (edge/redis) ali uporabniško zaklenitev računa — dokler tega ni, je edini
+ * trdni dokaz tabela `session` + revizija LOGIN.
+ */
+export function authRateLimited (req: { headers: { get (name: string): string | null } }): boolean {
+  return rateLimited(`login:ip:${requestIp(req)}`, AUTH_RATE_MAX)
+}
+
 export interface RateLimitBucketInfo {
   /** prikrit ključ (brez žetona) */
   bucket: string

@@ -65,21 +65,70 @@ export function serializeWebhookEvents (events: readonly string[]): string {
   return JSON.stringify([...new Set(events)])
 }
 
-// ─── Validacija URL (SSRF osnovna vrata) ────────────────────────────────────
+// ─── Validacija URL (SSRF vrata) ────────────────────────────────────────────
 
-/** Loopback vzorci (smejo v razvoju prek http — testni sprejemnik). */
-const URL_LOOPBACK_SUBSTRINGS = ['localhost', '127.', '0.0.0.0', '[::1]', '::1/']
-/** Privatna/link-local območja — ZAVEK zavrnjena (SSRF; tudi https, tudi razvoj). */
-const URL_PRIVATE_SUBSTRINGS = ['10.', '192.168.', '169.254.']
+/** Razred gostitelja: vrnjen ali nikoli (INTERNI) ali zunanje javni. */
+export type WebhookHostClass = 'LOOPBACK' | 'INTERNI' | 'JAVNI'
+
+/**
+ * Razred gostitelja po NASLOVU (ne po DNS-u). Poenostavitev v razmerju do
+ * prejšnjih podniznih vrat: `172.16.`–`172.31.` so bila prezrta (172.16/12),
+ * manjkala pa so tudi CGNAT 100.64/10 (Tailscale ipd.), reserved 240/4,
+ * multicast, IPv6 ULA (fc00::/7) in link-local (fe80::/10).
+ * Poštena meja ostaja: to je razred naslova, NE resolucija — DNS, ki kaže na
+ * interni naslov (rebinding), teh vrat ne zaobide šele tukaj (glej dostavo).
+ */
+export function classifyWebhookHost (hostname: string): WebhookHostClass {
+  const h = hostname.trim().toLowerCase().replace(/^\[+/, '').replace(/[\].]+$/, '')
+  if (h === 'localhost' || h.endsWith('.localhost') || h.endsWith('.local') ||
+      h.endsWith('.internal') || h.endsWith('.localdomain')) return 'LOOPBACK'
+
+  // IPv4-mapped IPv6 obravnavamo kot IPv4. WHATWG URL normalizira obliko v
+  // šestitice (`[::ffff:10.0.0.1]` → hostname `::ffff:a00:1`), zato obe obliki.
+  const mappedHex = /^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(h)
+  if (mappedHex) {
+    const hi = parseInt(mappedHex[1], 16)
+    const lo = parseInt(mappedHex[2], 16)
+    return classifyWebhookHost(`${hi >> 8}.${hi & 0xff}.${lo >> 8}.${lo & 0xff}`)
+  }
+  const mapped = /^::ffff:(.+)$/.exec(h)
+  const ipForm = mapped ? mapped[1] : h
+
+  const v4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(ipForm)
+  if (v4) {
+    const octets = v4.slice(1).map(Number)
+    if (octets.some((o) => o > 255)) return 'INTERNI' // neveljavna oblika: raje zavrnjeno
+    const [a, b] = octets
+    if (a === 127 || a === 0) return 'LOOPBACK'
+    if (a === 10) return 'INTERNI'                              // 10/8
+    if (a === 172 && b >= 16 && b <= 31) return 'INTERNI'       // 172.16/12
+    if (a === 192 && b === 168) return 'INTERNI'                // 192.168/16
+    if (a === 169 && b === 254) return 'INTERNI'                // link-local
+    if (a === 100 && b >= 64 && b <= 127) return 'INTERNI'      // CGNAT 100.64/10
+    if (a === 198 && (b === 18 || b === 19)) return 'INTERNI'   // benchmarking 198.18/15
+    if (a >= 224) return 'INTERNI'                              // multicast + reserved
+    return 'JAVNI'
+  }
+
+  if (h.includes(':')) {
+    if (h === '::1' || h === '::') return 'LOOPBACK'
+    if (/^f[cd]/.test(h)) return 'INTERNI'                   // ULA fc00::/7
+    if (/^fe[89ab]/.test(h)) return 'INTERNI'                // link-local fe80::/10
+    return 'JAVNI'
+  }
+
+  return 'JAVNI'
+}
 
 /**
  * Veljaven URL webhook naročnine:
  *  • https (produkcija) — vedno dovoljen protokol za javne gostitelje;
  *  • http SAMO z allowLocal (razvoj/testi) in SAMO za loopback naslove
  *    (127.0.0.1 sprejemnik) — http do zunanjih gostov je zavrnjen TUDI v razvoju;
- *  • privatna/link-local območja (10./192.168./169.254.) so zavrnjena VEDEN
- *    (osnovna SSRF zaščita — string vrata, ne resolucija DNS: poštena meja
- *    za brez-npm implementacijo).
+ *  • INTERNI območja (10/8, 172.16/12, 192.168/16, 169.254/16, 100.64/10,
+ *    198.18/15, multicast/reserved, IPv6 ULA/link-local) so zavrnjena VEDEN
+ *    (SSRF vrata — razred naslova, ne resolucija DNS: poštena meja za
+ *    brez-npm implementacijo).
  */
 export function validWebhookUrl (url: string | null | undefined, opts: { allowLocal?: boolean } = {}): boolean {
   if (typeof url !== 'string') return false
@@ -87,12 +136,11 @@ export function validWebhookUrl (url: string | null | undefined, opts: { allowLo
   if (!u || u.length > 2048) return false
   let parsed: URL
   try { parsed = new URL(u) } catch { return false }
-  const host = parsed.hostname.toLowerCase()
-  if (URL_PRIVATE_SUBSTRINGS.some((s) => host.includes(s))) return false // privatno: vedno ne
-  const loopback = URL_LOOPBACK_SUBSTRINGS.some((s) => host.includes(s))
-  if (loopback && !opts.allowLocal) return false // loopback: samo razvoj
+  const hostClass = classifyWebhookHost(parsed.hostname)
+  if (hostClass === 'INTERNI') return false // interni naslov: vedno ne
+  if (hostClass === 'LOOPBACK' && !opts.allowLocal) return false // loopback: samo razvoj
   if (parsed.protocol === 'https:') return true
-  if (opts.allowLocal && loopback && parsed.protocol === 'http:') return true
+  if (opts.allowLocal && hostClass === 'LOOPBACK' && parsed.protocol === 'http:') return true
   return false
 }
 

@@ -20,3 +20,5 @@
 | `API_KEY_PEPPER` | Pepper za API ključe | production, preview |
 | `ROKSAL_SETUP_TOKEN` | Setup žeton (prva namestitev) | production |
 | `ROKSAL_SETUP_EMAIL` | Setup e-pošta | production |
+| `CRON_SECRET` | Skupna skrivnost Vercel crona — brez nje GET `/api/jobs/run` vrne 401 (cron je onemogočen). Nastavi naključni long secret. | production, preview |
+| `DEMO_ACCESS` | `on` vklopi demo račune in gumbe na prijavnem ekranu (`/api/auth/demo`). V produkciji mora biti **nastavljena na karkoli drugega ali prazno** —demo gesla so javno znana. | preview (razvoj) |

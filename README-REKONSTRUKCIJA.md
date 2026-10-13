@@ -55,21 +55,45 @@ Vseh 29 zavihkov IA je implementiranih (R432) — ni več placeholder šolsjk.
 
 ```bash
 bun install
-bun run db:push        # ustvari SQLite bazo (prisma/schema.prisma)
-bunx node prisma/seed.cjs   # demo podatki (uporabniki, stranke, projekti, zaloga, profili, orodjarina, galerija)
-bun run dev            # http://localhost:3000
-bash tests/r437.sh && bash tests/r438.sh && bash tests/r439.sh   # regresija (dev strežnik mora teči)
+bun run db:up                              # lokalni PostgreSQL (embedded-postgres, :54329)
+source env.sh                              # DATABASE_URL (brez njega: postgresql://roksal:roksal@localhost:54329/roksal)
+bunx prisma migrate deploy                 # SHEMA samo prek migracij (db:push je recovery orodje in opozori)
+bun run db:seed                            # demo podatki (uporabniki, stranke, projekti, zaloga, profili, orodjarina, galerija)
+bun run dev                                # http://localhost:3000
 ```
 
-### Demo prijava
+### Testi in relejni pas (R496)
 
-| Vloga | E-pošta | Geslo |
-|---|---|---|
-| Administrator | `admin@roksal.si` | `Admin123!` |
-| Vodja | `vodja@roksal.si` | `Vodja123!` |
-| Monter | `monter@roksal.si` | `Monter123!` |
-| Skladišče | `skladisce@roksal.si` | `Skladisce123!` |
-| Proizvodnja | `proizvodnja@roksal.si` | `Proizvodnja123!` |
+```bash
+bash tests/ci-local.sh                     # ENO VSTOPNO MESTO: typecheck + lint + migracije + seed
+                                           # + živa aplikacija + vse skupine; logi v .ci-local-logs/
+bash tests/ci-matrix.sh --list             # seznam skupin (edini vir resnice)
+bash tests/ci-matrix.sh r437-r445          # ena skupina (točno tako jih kliče GitHub Actions)
+bash tests/run-all.sh                      # = ci-matrix.sh --all (ohranjen zaradi starih ukazov)
+bash tests/r437.sh                         # posamezen suite (aplikacija mora že teči)
+```
+
+`tests/ci-local.sh` zavrne zagon, če `DATABASE_URL`/`TEST_DB_URL` ne kaže na lokalno
+bazo — pas migrira in seed-a, zato produkcija (Neon) ni dovoljena. `bun run db:up`
+je dolgotrajen proces, zato ga zaženi v svojem terminalu (`SKIP_DB=1`,
+`START_DEV=0` in `KEEP=1` za ročne poglede). GitHub Actions ima minute porabljene
+do 2026-11-01 — ta pas je nadomestilo, ki deluje takoj.
+
+### Demo prijava (samo razvijeni/seedani podatki)
+
+| Vloga | E-pošta |
+|---|---|
+| Administrator | `admin@roksal.si` |
+| Vodja | `vodja@roksal.si` |
+| Monter | `monter@roksal.si` |
+| Skladišče | `skladisce@roksal.si` |
+| Proizvodnja | `proizvodnja@roksal.si` |
+
+Gesla so razvojna fiksatura — nimajo jih v README-ju (R496): jedrno geslo vsakega
+računa je v `prisma/seed.cjs` (demo) in `prisma/seed-test.cjs` (`[TEST]` računi).
+**V produkciji se pred pravo uporabo zamenjajo** — javno znano geslo pomeni
+prevzem računa. Gumbi za hitro demo prijavo so na voljo samo, ko je nastavljen
+`DEMO_ACCESS=on` (`GET/POST /api/auth/demo`); sicer se panel ne izriše.
 
 ### Demo dodatki (R435)
 
@@ -113,11 +137,22 @@ Po incidentu z izgubo GitHub računa ima sistem trajno neodvisno obnovitveno pot
 - **Recovery drill** (`ops/drill.sh`): simulacija popolne izgube → obnova IZKLJUČNO iz off-site kopije + gesla → `bun install` + `tsc` → zagon aplikacije (ločena vrata 3100) → prijava + poslovni test; izmerjeno **RTO 65 s** (cilj ≤ 30 min), **RPO ~3,5 min** (cilj ≤ 24 h) — poročila v `docs/RECOVERY-DRILL-*.md`.
 - **`GET /api/health`:** javni deploy-check (200/503) za verifikacijo namestitve in sprožitev rollbacka; `/api/public/health` route-mape ostaja nespremenjena.
 - **Dokumentacija:** `docs/RECOVERY.md` (runbook: CI/CD → deploy → health → rollback, incident checklist, preslikava na Neon/Blob), `docs/SECRETS.md` (inventar poverilnic BREZ vrednosti + vrstni red rotacije), `docs/BLOB-INVENTORY.md` (vsak trajen podatek: lokacija, kopija, obnova).
+- **Vzdrževalni cron (R496):** `vercel.json` → `GET /api/jobs/run` 03:30 UTC; Vercel cron
+  pošlje GET in z `CRON_SECRET` samodejno doda `Authorization: Bearer <secret>` — preverja
+  ga `src/lib/cron.ts` (primerjava v konstantnem času). Brez nastavljene `CRON_SECRET`
+  endpoint vrne 401, tj. cron je **onemogočen in ne odprt**. Brez njega se `seje-gc`,
+  `portal-gc`, `obvestila-gc`, `obvestila-retry` in `webhook-retry` poganjajo ročno
+  (Varnost → Vzdrževanje). Mrtvi cron `/api/viz/gc` (route ne obstaja → 404) je odstranjen iz
+  `vercel.json` in `config/vercel.json`; `varnostna-kopija` v cronu NI (rabi zunanja
+  orodja in GitLab žeton — ročno prek `ops/backup.sh`).
+- **Varnostne glave (R496):** `next.config.ts` → `X-Content-Type-Options`, `Referrer-Policy`,
+  `X-Frame-Options: SAMEORIGIN`, `Permissions-Policy` (camera/geolocation ostanjena za AR
+  in meritve), HSTS. CSP zavestno še ni — potrebuje prehod na stagingu.
 - Odstranjen `.github/workflows/sync.yml` — ostareli dvosmerni most GitHub↔GitLab iz obdobja rekonstrukcije (točno tveganje, ki ga issue naslavlja).
 
 ## Tehnologija
 
-Next.js 16 (App Router) · TypeScript · Tailwind CSS 4 + shadcn/ui · Prisma (SQLite; original: PostgreSQL/Neon) · zustand · lucide-react
+Next.js 16 (App Router) · TypeScript · Tailwind CSS 4 + shadcn/ui · Prisma 6 (PostgreSQL — lokalno `embedded-postgres` na :54329, produkcija Neon; SQLite je bil prehodni korak rekonstrukcije) · zustand · lucide-react
 
 ## Povezava na produkcijo
 
