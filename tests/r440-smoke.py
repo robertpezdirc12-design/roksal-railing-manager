@@ -117,10 +117,44 @@ else:
 s3, b3 = call('GET', '/api/engineering-rules', admin)
 try: ids['pravilo'] = json.loads(b3)['data'][0]['id']
 except Exception: ids['pravilo'] = None
-s2, b2 = call('GET', '/api/portal', admin)
+# R496: GET /api/portal zahteva projectId (brez njega so žetoni cepili se
+# preko seznama vseh projektov). Test sledi novi pogodbi, ne stari.
+portal_qs = f"/api/portal?projectId={ids['projekt']}" if ids['projekt'] else '/api/portal'
+s2, b2 = call('GET', portal_qs, admin)
 try: ids['portal'] = json.loads(b2)['data'][0]['id']
 except Exception: ids['portal'] = 'ne-obstaja'
 print('✓ ID-ji zbrani:', {k: (v[:8] + '…' if v else v) for k, v in ids.items()})
+
+# R497: regenerirana matrika (297 endpointov, bilo je 127) prinese 43 novih
+# dinamičnih segmentov. Brez prave fiksure sweep dobi 404 — to NI napaka
+# aplikacije, ampak nezabeležena covered-točnost, zato sweep now loci
+# NO_FIXTURE (pošten preskočen) od pravega BROKEN.
+for klj, pot in [
+    ('servis', '/api/service-cases'), ('izdelek', '/api/products'),
+    ('ekipa', '/api/crews'), ('zahtevek', '/api/claims'),
+    ('dostava', '/api/deliveries'), ('bom', '/api/bom'),
+    ('prevzem', '/api/picking'), ('katalog_verzija', '/api/catalog/versions'),
+    ('fence', '/api/fence-run'), ('capture', '/api/capture-session'),
+    ('playbook', '/api/playbook/runs'), ('ar', '/api/ar-snapshots'),
+    ('foto_viz', '/api/photo-visualization'), ('pravilo_verzija', None),
+    ('viz', None),
+]:
+    ids[klj] = first_id(pot) if pot else None
+if ids.get('pravilo'):
+    s4, b4 = call('GET', f"/api/engineering-rules/{ids['pravilo']}/versions", admin)
+    try: ids['pravilo_verzija'] = json.loads(b4)['data'][0]['id']
+    except Exception: ids['pravilo_verzija'] = None
+ids['paket'] = None
+if ids.get('projekt'):
+    s5, b5 = call('GET', f"/api/project-packages?projectId={ids['projekt']}", admin)
+    try: ids['paket'] = json.loads(b5)['data'][0]['id']
+    except Exception: ids['paket'] = None
+# entity, ki jih seed ne ustvari (zahtevajo napravo/tekač): sweep jih NE sme
+# razglasiti za zeleno, ampak pojasni, da fiksure ni.
+NI_FIXURE = [k for k in ('fence', 'capture', 'playbook', 'ar', 'foto_viz', 'paket',
+                         'pravilo_verzija') if not ids.get(k)]
+if NI_FIXURE:
+    print('⊘ brez fiksure (seed teh entityjev ne ustvari):', ', '.join(NI_FIXURE))
 
 # ── matrika ──────────────────────────────────────────────────────────────────
 matrix = json.loads((ROOT / 'docs' / 'E2E-MATRIX.json').read_text())
@@ -142,16 +176,50 @@ PATH_IDS = {
     '/api/production/:id': 'proizvodnja',
     '/api/projects/:id': 'projekt', '/api/projects/:id/command': 'projekt', '/api/projects/:id/timeline': 'projekt',
     '/api/quotes/:id': 'ponudba', '/api/quotes/:id/sign': 'ponudba',
+    # R497: novi segmenti iz regenerirane matrike
+    '/api/service-cases/:id': 'servis', '/api/service-cases/:id/visits': 'servis',
+    '/api/products/:id': 'izdelek',
+    '/api/crews/:id': 'ekipa',
+    '/api/claims/:id': 'zahtevek',
+    '/api/deliveries/:id': 'dostava',
+    '/api/bom/:id': 'bom',
+    '/api/picking/:id': 'prevzem',
+    '/api/catalog/versions/:id': 'katalog_verzija',
+    '/api/engineering-rules/:id/versions': 'pravilo',
+    '/api/engineering-rules/versions/:id': 'pravilo_verzija',
+    '/api/production/:id/elements': 'proizvodnja',
+    '/api/project-packages/:id': 'paket',
+    '/api/photo-visualization/:id': 'foto_viz',
+    '/api/ar-snapshots/:id': 'ar', '/api/ar-snapshots/:id/scene-element': 'ar',
+    '/api/playbook/runs/:id': 'playbook',
+    '/api/fence-run/:id': 'fence', '/api/fence-run/:id/model': 'fence',
+    '/api/fence-run/:id/review': 'fence', '/api/fence-run/:id/review-link': 'fence',
+    '/api/capture-session/:id': 'capture', '/api/capture-session/:id/qa': 'capture',
+    '/api/capture-session/:id/reference': 'capture',
+    '/api/capture-session/:id/replay': 'capture',
+    '/api/capture-session/:id/geo-reference': 'capture',
+    '/api/projects/:id/progress': 'projekt', '/api/projects/:id/viz-choices': 'projekt',
+    '/api/projects/:id/viz-link': 'projekt',
+    # seed ne ustvari vizualizacijskega projekta → /api/viz/projects/:id ostane
+    # brez fiksure (NO_FIXTURE, ne lažno zelena).
+    '/api/viz/projects/:id': 'viz',
+    '/api/export/:kind/:id': 'ponudba',
 }
 
 def resolve (path):
+    # vrne (pot, fiksura): fiksura=False pomeni, da v tej bazi NI zapisa za
+    # dinamični segment — 404/400 potem ni napaka aplikacije (NO_FIXTURE).
+    klj = PATH_IDS.get(path)
+    fiksura = not (klj and not ids.get(klj))
     # PATH_IDS najprej (izvirna pot s :type), šele nato zamenjava :type
-    key = PATH_IDS.get(path)
+    key = klj
     val = ids.get(key) if key else None
     if val:
         path = path.replace(':id', val)
     if path.startswith('/api/pdf/'):
         path = path.replace(':type', 'quote')
+    # R497: /api/export/:kind/:id — 'kind' je vrsta dokumenta (quote/invoice/nalog)
+    path = path.replace(':kind', 'quote')
     path = path.replace(':id', ids.get('id') or 'x')
     path = path.replace(':token', 'neveljaven').replace(':key', 'x')
     # query dopolnila za GET brez parametrov
@@ -161,13 +229,34 @@ def resolve (path):
         path += '?measurementId=' + ids['kamera']
     if path == '/api/search':
         path += '?q=test'
+    # R497: novi endpointi, ki ZAHTEVAJO poizvedbni parameter (brez njega vrnijo
+    # 400, kar bi sweep napačno razglasil za zlomljeno aplikacijo).
+    if path.startswith('/api/digital-twin') and ids.get('projekt'):
+        path += f'?projectId={ids["projekt"]}' + ('&key=seg-1' if path.endswith('/element') else '')
+        # diff/element rabita SHRANJEN snapshot (AS_DESIGNED) in veljaven
+        # segmentni ključ — teh v seedu ni; scenarij s snapshoti pokriva r461.py.
+        if path.startswith('/api/digital-twin/diff') or path.startswith('/api/digital-twin/element'):
+            fiksura = False
+    if path == '/api/project-packages' and ids.get('projekt'):
+        path += '?projectId=' + ids['projekt']
+    if path.startswith('/api/pins'):
+        path += '?fenceRunId=' + (ids.get('fence') or 'brez-fiksure')
+        fiksura = bool(ids.get('fence'))
+    if path == '/api/measure-engine/export' and ids.get('meritev'):
+        path += '?id=' + ids['meritev']
+    if path == '/api/reports':
+        path += '?type=prodaja'
+    # R496: GET /api/portal zahteva projectId (brez njega se jedri vrne 400, da
+    # se cepi preko seznama vseh projektov). RBAC sweep mora spremljati to pogodbo.
+    if path == '/api/portal' and ids.get('projekt'):
+        path += '?projectId=' + ids['projekt']
     if path == '/api/aktivacija':
         path += '?token=test'
     if path == '/api/public/portal':
         path += '?token=neveljaven'
     if path == '/api/public/measure':
         path += '?token=neveljaven'
-    return path
+    return path, fiksura
 
 IMG = ('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNg'
        'YGBgAAAABQABh6FO1AAAAABJRU5ErkJggg==')
@@ -244,7 +333,7 @@ print('═══ SMOKE (admin/dovoljena vloga) ═══')
 for e in matrix['endpoints']:
     method, raw_path = e['method'], e['path']
     key = (method, raw_path)
-    path = resolve(raw_path)
+    path, fiksura = resolve(raw_path)
     body = BODIES.get(key)
     role = e['roles'][0] if e.get('roles') else 'ADMIN'
     token = tokens.get(role) or admin
@@ -253,12 +342,23 @@ for e in matrix['endpoints']:
         results.append({**e, 'status': 'SKIPPED_SAFE', 'http': None,
                         'note': 'klic izpuščen (stranski učinek); logika preverjena v r440.sh'})
         continue
+    if e['kind'] == 'CRON':
+        # R497: cron vhod overja CRON_SECRET, ne vloga — z usernim žetonom mora
+        # dobiti 401. Dejanski prenos je pokrit v r437.sh (kron z secretom).
+        results.append({**e, 'status': 'SKIPPED_SAFE', 'http': None,
+                        'note': 'cron (CRON_SECRET), ne vloga'})
+        continue
 
     code, resp = call(method, path, token, body)
     if '/api/weather' in path and code == 502:
         status = 'PASS_EXTERNAL'  # odvisnost od api.open-meteo.com (nedosegljiv v peskovnici)
     elif code == e['allow']:
         status = 'PASS'
+    elif method == 'GET' and code in (400, 404) and not fiksura:
+        # R497: GET, kjer matrika pričakuje 200, dobi 400/404 — fiksura (pravi
+        # id/poizvedba) v tej bazi ni na voljo. PASS_VALIDATION bi bila LAŽNA
+        # zelenica; NO_FIXTURE poimensko pove, kaj sweep ni prekrijel.
+        status = 'NO_FIXTURE'
     elif code in VALIDATION_OK and method in ('POST', 'PATCH', 'DELETE') and not body:
         status = 'PASS_VALIDATION'
     elif code in VALIDATION_OK:
@@ -273,17 +373,23 @@ print(f"  smoke: {dict(smoke)}")
 for r in results:
     if r['status'] == 'BROKEN':
         print(f"  ✗ BROKEN: {r['method']} {r['path']} → {r['http']} ({r['note']})")
+nofix = [r for r in results if r['status'] == 'NO_FIXTURE']
+if nofix:
+    print(f"  ⊘ NO_FIXTURE ({len(nofix)}) — v tej bazi ni zapisa/poizvedbe za pot:")
+    for r in nofix:
+        print(f"      {r['method']} {r['path']} → {r['http']}")
 
 # ── RBAC sweep: GET endpointi × vse vloge ────────────────────────────────────
 print('═══ RBAC (GET × 5 vlog) ═══')
 rbac = []
 for e in matrix['endpoints']:
-    if e['method'] != 'GET' or e['kind'] == 'PUBLIC':
+    if e['method'] != 'GET' or e['kind'] in ('PUBLIC', 'CRON'):
         continue
-    path = resolve(e['path'])
+    path, fiksura = resolve(e['path'])
     for role, _, _ in ROLES:
         allowed = role in e['roles']
         code, resp = call('GET', path, tokens[role])
+        ok = None  # None = ni česa preveriti (brez fiksure) — ne zeleno, ne rdeče
         if '/api/weather' in path and code in (200, 502):
             ok = True  # zunanja odvisnost (open-meteo) — ne šteje
         elif allowed and code == 200:
@@ -292,13 +398,20 @@ for e in matrix['endpoints']:
             ok = True
         elif allowed and code == 403 and role in ('MONTER',):
             ok = True  # obseg (fail-closed): monter na tujem zapisu — PRAVILNA zavrnitev
+        elif allowed and code in (400, 404) and not fiksura:
+            ok = None  # dovoljena vloga je SPRED (ni 403), manjka zapis/parameter
         else:
             ok = False
             print(f"  ✗ RBAC: {role} {path} → {code} (pričakovano {'200' if allowed else '403'})")
         rbac.append({'method': 'GET', 'path': e['path'], 'role': role, 'http': code,
-                     'expected': 'ALLOW' if allowed else 'DENY', 'ok': ok})
-rbac_fail = sum(1 for r in rbac if not r['ok'])
-print(f"  rbac: {len(rbac)} preverjanj, spodletelih: {rbac_fail}")
+                     'expected': 'ALLOW' if allowed else 'DENY', 'ok': ok,
+                     'status': {True: 'PASS', False: 'FAIL', None: 'NO_FIXTURE'}[ok]})
+rbac_fail = sum(1 for r in rbac if r['ok'] is False)
+rbac_nofix = sum(1 for r in rbac if r['status'] == 'NO_FIXTURE')
+print(f"  rbac: {len(rbac)} preverjanj, spodletelih: {rbac_fail}, brez fiksure: {rbac_nofix}")
+if rbac_nofix:
+    print('  ⊘ NO_FIXTURE pomeni: RBAC odločitev je pravilna (dovoljena vloga ni dobila 403),')
+    print('    ampak v tej bazi ni zapisa za pot — endpoint NI dokazan, ne pa zlomljen.')
 
 # ── izhod ─────────────────────────────────────────────────────────────────────
 out = {
@@ -311,6 +424,8 @@ out = {
         'smoke': dict(smoke),
         'rbacChecks': len(rbac),
         'rbacFailures': rbac_fail,
+        'rbacNoFixture': rbac_nofix,
+        'noFixturePaths': sorted({f"{r['method']} {r['path']}" for r in nofix}),
     },
 }
 (ROOT / 'docs' / 'E2E-RESULTS.json').write_text(json.dumps(out, ensure_ascii=False, indent=2))

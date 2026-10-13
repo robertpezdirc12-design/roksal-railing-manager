@@ -79,6 +79,32 @@ je dolgotrajen proces, zato ga zaženi v svojem terminalu (`SKIP_DB=1`,
 `START_DEV=0` in `KEEP=1` za ročne poglede). GitHub Actions ima minute porabljene
 do 2026-11-01 — ta pas je nadomestilo, ki deluje takoj.
 
+#### Pogoji po operacijskem sistemu (R497)
+
+| Kaj | Linux / macOS | Windows (Git Bash) |
+|---|---|---|
+| JS izvajalec | `bun` | `bun` ali `npm` — pas sam preide na `npm run` (isti skripti) |
+| Python | `python3` | `python` — `python3` je lahko Store alias, ki **ne izvrši ničesar**; `tests/toolshim.sh` to zazna in uporabi izvajalni prevod |
+| `jq` | namesti | namesti (skupine r437–r441 ga rabijo) |
+| ImageMagick | `magick`/`convert` | pazi: `convert.exe` v `System32` NI ImageMagick — prevod preveri izpis `--version` |
+| `poppler-utils` (`pdftotext`) | `apt install` | namesti iz poppler windows release (r477/r488) |
+| `sqlite3` | prisoten | namesti, ali skupina r441 preskoči |
+
+Če orodje manjka, pas skupine **ne** prikaže kot zelene ne kot padle, ampak kot
+`⊘ PRESKOČENO (manjka: …)` in to ponovi v povzetku — povzetek s preskočenimi ni dokaz
+celotne matrike. V CI-ju (kjer so orodja nameščena) zahtevaj strogo obnašanje z
+`STRICT_TOOLS=1`; takrat manjkajoče orodje šteje kot napaka.
+
+**Baza na Windows:** `scripts/dev-db.mjs` cluster vedno ustvari z
+`--encoding=UTF8 --locale=C`. Brez tega initdb vzame lokalno kodo (WIN1250) in prva
+migracija z ne-ASCII znakom pade na `SQLSTATE 22P05`. Če imaš star WIN1250
+cluster, ga izbriši in zaženi `bun run db:up` znova — migracije se ponovno izvedejo.
+
+**Lokalni `AUTH_RATE_MAX`:** prijava je omejena na 30 poskusov/min/IP, matrika pa se
+prijavi 22-krat zapored z `127.0.0.1`. Zato pas in CI nastavita
+`AUTH_RATE_MAX=100000`; **v produkciji ta spremenljivka mora ostati prazna**
+(sicer je vrata odprta). `config/ENV-VARS.md` to opisuje.
+
 ### Demo prijava (samo razvijeni/seedani podatki)
 
 | Vloga | E-pošta |

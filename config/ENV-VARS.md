@@ -21,4 +21,5 @@
 | `ROKSAL_SETUP_TOKEN` | Setup žeton (prva namestitev) | production |
 | `ROKSAL_SETUP_EMAIL` | Setup e-pošta | production |
 | `CRON_SECRET` | Skupna skrivnost Vercel crona — brez nje GET `/api/jobs/run` vrne 401 (cron je onemogočen). Nastavi naključni long secret. | production, preview |
-| `DEMO_ACCESS` | `on` vklopi demo račune in gumbe na prijavnem ekranu (`/api/auth/demo`). V produkciji mora biti **nastavljena na karkoli drugega ali prazno** —demo gesla so javno znana. | preview (razvoj) |
+| `DEMO_ACCESS` | `on` vklopi demo račune in gumbe na prijavnem ekranu (`/api/auth/demo`). V produkciji mora biti **nastavljena na karkoli drugega ali prazno** — demo gesla so javno znana. | preview (razvoj) |
+| `AUTH_RATE_MAX` | Meja poskusov prijave na IP/min (privzeto **30**, veljavna samo celo število >0). Lokalni pas in CI nastavita 100000, ker se 22 skupin zaporedoma prijavlja z 127.0.0.1; v produkciji pusti PRAZNO — sicer so brute-force vrata odprta. | razvoj, CI |

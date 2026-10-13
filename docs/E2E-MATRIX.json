@@ -88,7 +88,8 @@
       "portal.manage",
       "security.read",
       "gallery.read",
-      "equipment.read"
+      "equipment.read",
+      "integrations.manage"
     ],
     "VODJA": [
       "projects.read",
@@ -126,10 +127,11 @@
       "audit.read",
       "portal.manage",
       "gallery.read",
-      "equipment.read"
+      "equipment.read",
+      "integrations.manage"
     ]
   },
-  "routeMapDocumentedLines": 77,
+  "routeMapDocumentedLines": 78,
   "endpoints": [
     {
       "method": "GET",
@@ -156,6 +158,138 @@
       "deny": 403
     },
     {
+      "method": "POST",
+      "path": "/api/ar/analyze",
+      "file": "ar/analyze/route.ts",
+      "permission": "measurements.write",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "GET",
+      "path": "/api/ar-snapshots/:id",
+      "file": "ar-snapshots/[id]/route.ts",
+      "permission": "projects.read",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/ar-snapshots/:id",
+      "file": "ar-snapshots/[id]/route.ts",
+      "permission": "measurements.write",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/ar-snapshots/:id",
+      "file": "ar-snapshots/[id]/route.ts",
+      "permission": "measurements.write",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "GET",
+      "path": "/api/ar-snapshots/:id/scene-element",
+      "file": "ar-snapshots/[id]/scene-element/route.ts",
+      "permission": "projects.read",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/ar-snapshots/:id/scene-element",
+      "file": "ar-snapshots/[id]/scene-element/route.ts",
+      "permission": "measurements.write",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "POST",
+      "path": "/api/ar-snapshots/:id/scene-element",
+      "file": "ar-snapshots/[id]/scene-element/route.ts",
+      "permission": "measurements.write",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "GET",
+      "path": "/api/ar-snapshots",
+      "file": "ar-snapshots/route.ts",
+      "permission": "projects.read",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "POST",
+      "path": "/api/ar-snapshots",
+      "file": "ar-snapshots/route.ts",
+      "permission": "measurements.write",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
       "method": "GET",
       "path": "/api/audit",
       "file": "audit/route.ts",
@@ -168,6 +302,26 @@
       ],
       "allow": 200,
       "deny": 403
+    },
+    {
+      "method": "GET",
+      "path": "/api/auth/demo",
+      "file": "auth/demo/route.ts",
+      "permission": null,
+      "kind": "PUBLIC",
+      "roles": [],
+      "allow": 200,
+      "deny": 401
+    },
+    {
+      "method": "POST",
+      "path": "/api/auth/demo",
+      "file": "auth/demo/route.ts",
+      "permission": null,
+      "kind": "PUBLIC",
+      "roles": [],
+      "allow": 200,
+      "deny": 401
     },
     {
       "method": "POST",
@@ -260,6 +414,324 @@
       "deny": 401
     },
     {
+      "method": "POST",
+      "path": "/api/bom/:id/release",
+      "file": "bom/[id]/release/route.ts",
+      "permission": "inventory.write",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "SKLADISCE"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "POST",
+      "path": "/api/bom/:id/reserve",
+      "file": "bom/[id]/reserve/route.ts",
+      "permission": "inventory.write",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "SKLADISCE"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "GET",
+      "path": "/api/bom/:id",
+      "file": "bom/[id]/route.ts",
+      "permission": "inventory.read",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/bom/:id",
+      "file": "bom/[id]/route.ts",
+      "permission": "inventory.write",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "SKLADISCE"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "GET",
+      "path": "/api/bom",
+      "file": "bom/route.ts",
+      "permission": "inventory.read",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "POST",
+      "path": "/api/capture-session/:id/drift",
+      "file": "capture-session/[id]/drift/route.ts",
+      "permission": "measurements.write",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "POST",
+      "path": "/api/capture-session/:id/finish",
+      "file": "capture-session/[id]/finish/route.ts",
+      "permission": "measurements.write",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "GET",
+      "path": "/api/capture-session/:id/geo-reference",
+      "file": "capture-session/[id]/geo-reference/route.ts",
+      "permission": "measurements.read",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "POST",
+      "path": "/api/capture-session/:id/geo-reference",
+      "file": "capture-session/[id]/geo-reference/route.ts",
+      "permission": "measurements.write",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "POST",
+      "path": "/api/capture-session/:id/loop",
+      "file": "capture-session/[id]/loop/route.ts",
+      "permission": "measurements.write",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "POST",
+      "path": "/api/capture-session/:id/photo",
+      "file": "capture-session/[id]/photo/route.ts",
+      "permission": "measurements.write",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "GET",
+      "path": "/api/capture-session/:id/qa",
+      "file": "capture-session/[id]/qa/route.ts",
+      "permission": "measurements.read",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "GET",
+      "path": "/api/capture-session/:id/reference",
+      "file": "capture-session/[id]/reference/route.ts",
+      "permission": "measurements.read",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "POST",
+      "path": "/api/capture-session/:id/reference",
+      "file": "capture-session/[id]/reference/route.ts",
+      "permission": "measurements.write",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/capture-session/:id/reference",
+      "file": "capture-session/[id]/reference/route.ts",
+      "permission": "measurements.write",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "POST",
+      "path": "/api/capture-session/:id/register",
+      "file": "capture-session/[id]/register/route.ts",
+      "permission": "measurements.write",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "GET",
+      "path": "/api/capture-session/:id/replay",
+      "file": "capture-session/[id]/replay/route.ts",
+      "permission": "measurements.read",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "GET",
+      "path": "/api/capture-session/:id",
+      "file": "capture-session/[id]/route.ts",
+      "permission": "measurements.read",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/capture-session/:id",
+      "file": "capture-session/[id]/route.ts",
+      "permission": "measurements.write",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/capture-session/:id",
+      "file": "capture-session/[id]/route.ts",
+      "permission": "measurements.write",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "GET",
+      "path": "/api/capture-session",
+      "file": "capture-session/route.ts",
+      "permission": "measurements.read",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "POST",
+      "path": "/api/capture-session",
+      "file": "capture-session/route.ts",
+      "permission": "measurements.write",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
       "method": "PATCH",
       "path": "/api/catalog/:id",
       "file": "catalog/[id]/route.ts",
@@ -301,6 +773,158 @@
         "SKLADISCE"
       ],
       "allow": 201,
+      "deny": 403
+    },
+    {
+      "method": "GET",
+      "path": "/api/catalog/versions/:id",
+      "file": "catalog/versions/[id]/route.ts",
+      "permission": "catalog.read",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "GET",
+      "path": "/api/catalog/versions",
+      "file": "catalog/versions/route.ts",
+      "permission": "catalog.read",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "GET",
+      "path": "/api/claims/:id",
+      "file": "claims/[id]/route.ts",
+      "permission": "projects.read",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/claims/:id",
+      "file": "claims/[id]/route.ts",
+      "permission": "projects.write",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "GET",
+      "path": "/api/claims",
+      "file": "claims/route.ts",
+      "permission": "projects.read",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "POST",
+      "path": "/api/claims",
+      "file": "claims/route.ts",
+      "permission": "projects.write",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "GET",
+      "path": "/api/crews/:id",
+      "file": "crews/[id]/route.ts",
+      "permission": "projects.read",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/crews/:id",
+      "file": "crews/[id]/route.ts",
+      "permission": "projects.write",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "GET",
+      "path": "/api/crews",
+      "file": "crews/route.ts",
+      "permission": "projects.read",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "POST",
+      "path": "/api/crews",
+      "file": "crews/route.ts",
+      "permission": "projects.write",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER"
+      ],
+      "allow": 200,
       "deny": 403
     },
     {
@@ -442,7 +1066,7 @@
       "method": "GET",
       "path": "/api/dashboard",
       "file": "dashboard/route.ts",
-      "permission": "projects.read",
+      "permission": "projects.read + invoices.read + crm.read",
       "kind": "AUTH",
       "roles": [
         "ADMIN",
@@ -478,6 +1102,190 @@
         "VODJA"
       ],
       "allow": 201,
+      "deny": 403
+    },
+    {
+      "method": "GET",
+      "path": "/api/deliveries/:id",
+      "file": "deliveries/[id]/route.ts",
+      "permission": "projects.read",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/deliveries/:id",
+      "file": "deliveries/[id]/route.ts",
+      "permission": "projects.read + projects.write",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "GET",
+      "path": "/api/deliveries",
+      "file": "deliveries/route.ts",
+      "permission": "projects.read",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "POST",
+      "path": "/api/deliveries",
+      "file": "deliveries/route.ts",
+      "permission": "projects.write",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER"
+      ],
+      "allow": 201,
+      "deny": 403
+    },
+    {
+      "method": "GET",
+      "path": "/api/digital-twin/as-built",
+      "file": "digital-twin/as-built/route.ts",
+      "permission": "projects.read",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "GET",
+      "path": "/api/digital-twin/consistency",
+      "file": "digital-twin/consistency/route.ts",
+      "permission": "projects.read",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "GET",
+      "path": "/api/digital-twin/diff",
+      "file": "digital-twin/diff/route.ts",
+      "permission": "projects.read",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "GET",
+      "path": "/api/digital-twin/element",
+      "file": "digital-twin/element/route.ts",
+      "permission": "projects.read",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "GET",
+      "path": "/api/digital-twin",
+      "file": "digital-twin/route.ts",
+      "permission": "projects.read",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "GET",
+      "path": "/api/digital-twin/snapshot",
+      "file": "digital-twin/snapshot/route.ts",
+      "permission": "prijavljen (seja)",
+      "kind": "SESSION",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 401
+    },
+    {
+      "method": "POST",
+      "path": "/api/digital-twin/snapshot",
+      "file": "digital-twin/snapshot/route.ts",
+      "permission": null,
+      "kind": "PUBLIC",
+      "roles": [],
+      "allow": 200,
+      "deny": 401
+    },
+    {
+      "method": "GET",
+      "path": "/api/digital-twin/timeline",
+      "file": "digital-twin/timeline/route.ts",
+      "permission": "projects.read",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
       "deny": 403
     },
     {
@@ -542,6 +1350,22 @@
     },
     {
       "method": "GET",
+      "path": "/api/engineering-rules/:id/versions",
+      "file": "engineering-rules/[id]/versions/route.ts",
+      "permission": "projects.read",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "GET",
       "path": "/api/engineering-rules",
       "file": "engineering-rules/route.ts",
       "permission": "projects.read",
@@ -568,6 +1392,22 @@
         "PROIZVODNJA"
       ],
       "allow": 201,
+      "deny": 403
+    },
+    {
+      "method": "GET",
+      "path": "/api/engineering-rules/versions/:id",
+      "file": "engineering-rules/versions/[id]/route.ts",
+      "permission": "projects.read",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
       "deny": 403
     },
     {
@@ -647,6 +1487,203 @@
     },
     {
       "method": "GET",
+      "path": "/api/export/:kind/:id",
+      "file": "export/[kind]/[id]/route.ts",
+      "permission": "quotes.read",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "POST",
+      "path": "/api/fence-run/:id/confirm",
+      "file": "fence-run/[id]/confirm/route.ts",
+      "permission": "measurements.write",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "POST",
+      "path": "/api/fence-run/:id/layout",
+      "file": "fence-run/[id]/layout/route.ts",
+      "permission": "measurements.write",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "GET",
+      "path": "/api/fence-run/:id/model",
+      "file": "fence-run/[id]/model/route.ts",
+      "permission": "measurements.read",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "GET",
+      "path": "/api/fence-run/:id/review",
+      "file": "fence-run/[id]/review/route.ts",
+      "permission": "measurements.read",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "GET",
+      "path": "/api/fence-run/:id/review-link",
+      "file": "fence-run/[id]/review-link/route.ts",
+      "permission": "portal.manage",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "POST",
+      "path": "/api/fence-run/:id/review-link",
+      "file": "fence-run/[id]/review-link/route.ts",
+      "permission": "portal.manage",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/fence-run/:id/review-link",
+      "file": "fence-run/[id]/review-link/route.ts",
+      "permission": "portal.manage",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "GET",
+      "path": "/api/fence-run/:id",
+      "file": "fence-run/[id]/route.ts",
+      "permission": "measurements.read",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/fence-run/:id",
+      "file": "fence-run/[id]/route.ts",
+      "permission": "measurements.write",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/fence-run/:id",
+      "file": "fence-run/[id]/route.ts",
+      "permission": "measurements.write",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "POST",
+      "path": "/api/fence-run/:id/verify",
+      "file": "fence-run/[id]/verify/route.ts",
+      "permission": "measurements.write",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "GET",
+      "path": "/api/fence-run",
+      "file": "fence-run/route.ts",
+      "permission": "measurements.read",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "POST",
+      "path": "/api/fence-run",
+      "file": "fence-run/route.ts",
+      "permission": "measurements.write",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "GET",
       "path": "/api/gallery",
       "file": "gallery/route.ts",
       "permission": "gallery.read",
@@ -655,6 +1692,45 @@
         "ADMIN",
         "VODJA",
         "MONTER"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "GET",
+      "path": "/api/guide",
+      "file": "guide/route.ts",
+      "permission": "prijavljen (seja)",
+      "kind": "SESSION",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 401
+    },
+    {
+      "method": "GET",
+      "path": "/api/health",
+      "file": "health/route.ts",
+      "permission": null,
+      "kind": "PUBLIC",
+      "roles": [],
+      "allow": 200,
+      "deny": 401
+    },
+    {
+      "method": "POST",
+      "path": "/api/import/:kind",
+      "file": "import/[kind]/route.ts",
+      "permission": "quotes.create",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA"
       ],
       "allow": 200,
       "deny": 403
@@ -809,6 +1885,16 @@
       "deny": 403
     },
     {
+      "method": "GET",
+      "path": "/api/jobs/run",
+      "file": "jobs/run/route.ts",
+      "permission": "CRON_SECRET (glava Authorization)",
+      "kind": "CRON",
+      "roles": [],
+      "allow": 200,
+      "deny": 401
+    },
+    {
       "method": "POST",
       "path": "/api/jobs/run",
       "file": "jobs/run/route.ts",
@@ -880,6 +1966,22 @@
       "deny": 403
     },
     {
+      "method": "GET",
+      "path": "/api/material-suggestions",
+      "file": "material-suggestions/route.ts",
+      "permission": "inventory.read",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
       "method": "POST",
       "path": "/api/measure/photo",
       "file": "measure/photo/route.ts",
@@ -891,6 +1993,35 @@
         "MONTER"
       ],
       "allow": 201,
+      "deny": 403
+    },
+    {
+      "method": "POST",
+      "path": "/api/measure-engine/analyze",
+      "file": "measure-engine/analyze/route.ts",
+      "permission": "measurements.write",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "GET",
+      "path": "/api/measure-engine/export",
+      "file": "measure-engine/export/route.ts",
+      "permission": "measurements.read",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
       "deny": 403
     },
     {
@@ -1033,6 +2164,247 @@
         "ADMIN",
         "VODJA",
         "MONTER"
+      ],
+      "allow": 201,
+      "deny": 403
+    },
+    {
+      "method": "GET",
+      "path": "/api/nalog/:id/checklist",
+      "file": "nalog/[id]/checklist/route.ts",
+      "permission": "nalog.read",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "POST",
+      "path": "/api/nalog/:id/checklist",
+      "file": "nalog/[id]/checklist/route.ts",
+      "permission": "nalog.write",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/nalog/:id/checklist",
+      "file": "nalog/[id]/checklist/route.ts",
+      "permission": "nalog.write",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "POST",
+      "path": "/api/nalog/:id/events",
+      "file": "nalog/[id]/events/route.ts",
+      "permission": "nalog.write",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "GET",
+      "path": "/api/nalog/:id/handover",
+      "file": "nalog/[id]/handover/route.ts",
+      "permission": "nalog.read",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "POST",
+      "path": "/api/nalog/:id/handover",
+      "file": "nalog/[id]/handover/route.ts",
+      "permission": "nalog.write",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "PROIZVODNJA"
+      ],
+      "allow": 201,
+      "deny": 403
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/nalog/:id/handover",
+      "file": "nalog/[id]/handover/route.ts",
+      "permission": "nalog.write",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "GET",
+      "path": "/api/nalog/:id/material",
+      "file": "nalog/[id]/material/route.ts",
+      "permission": "nalog.read",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "POST",
+      "path": "/api/nalog/:id/material",
+      "file": "nalog/[id]/material/route.ts",
+      "permission": "nalog.write + inventory.write",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "POST",
+      "path": "/api/nalog/:id/qa/action",
+      "file": "nalog/[id]/qa/action/route.ts",
+      "permission": "nalog.write",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/nalog/:id/qa/action",
+      "file": "nalog/[id]/qa/action/route.ts",
+      "permission": "nalog.write",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/nalog/:id/qa/check",
+      "file": "nalog/[id]/qa/check/route.ts",
+      "permission": "nalog.write",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "POST",
+      "path": "/api/nalog/:id/qa/deviation",
+      "file": "nalog/[id]/qa/deviation/route.ts",
+      "permission": "nalog.write",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/nalog/:id/qa/deviation",
+      "file": "nalog/[id]/qa/deviation/route.ts",
+      "permission": "nalog.write",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "GET",
+      "path": "/api/nalog/:id/qa",
+      "file": "nalog/[id]/qa/route.ts",
+      "permission": "nalog.read",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "POST",
+      "path": "/api/nalog/:id/qa",
+      "file": "nalog/[id]/qa/route.ts",
+      "permission": "nalog.write",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "PROIZVODNJA"
       ],
       "allow": 201,
       "deny": 403
@@ -1329,6 +2701,304 @@
       "deny": 403
     },
     {
+      "method": "POST",
+      "path": "/api/photo-visualization/:id/export",
+      "file": "photo-visualization/[id]/export/route.ts",
+      "permission": "projects.read",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "GET",
+      "path": "/api/photo-visualization/:id",
+      "file": "photo-visualization/[id]/route.ts",
+      "permission": "projects.read",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/photo-visualization/:id",
+      "file": "photo-visualization/[id]/route.ts",
+      "permission": "measurements.write",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "GET",
+      "path": "/api/photo-visualization",
+      "file": "photo-visualization/route.ts",
+      "permission": "projects.read",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "POST",
+      "path": "/api/photo-visualization",
+      "file": "photo-visualization/route.ts",
+      "permission": "measurements.write",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "GET",
+      "path": "/api/picking/:id",
+      "file": "picking/[id]/route.ts",
+      "permission": "inventory.read",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/picking/:id",
+      "file": "picking/[id]/route.ts",
+      "permission": "inventory.write",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "SKLADISCE"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "GET",
+      "path": "/api/picking",
+      "file": "picking/route.ts",
+      "permission": "inventory.read",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "POST",
+      "path": "/api/picking",
+      "file": "picking/route.ts",
+      "permission": "inventory.write",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "SKLADISCE"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/pins/:id",
+      "file": "pins/[id]/route.ts",
+      "permission": "measurements.write",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/pins/:id",
+      "file": "pins/[id]/route.ts",
+      "permission": "measurements.write",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "GET",
+      "path": "/api/pins",
+      "file": "pins/route.ts",
+      "permission": "measurements.read",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "POST",
+      "path": "/api/pins",
+      "file": "pins/route.ts",
+      "permission": "measurements.write",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "GET",
+      "path": "/api/playbook/defs",
+      "file": "playbook/defs/route.ts",
+      "permission": "nalog.read",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "POST",
+      "path": "/api/playbook/defs",
+      "file": "playbook/defs/route.ts",
+      "permission": "nalog.read",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/playbook/defs",
+      "file": "playbook/defs/route.ts",
+      "permission": "nalog.read",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "POST",
+      "path": "/api/playbook/runs/:id/action",
+      "file": "playbook/runs/[id]/action/route.ts",
+      "permission": "nalog.write",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "GET",
+      "path": "/api/playbook/runs/:id",
+      "file": "playbook/runs/[id]/route.ts",
+      "permission": "nalog.read",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "GET",
+      "path": "/api/playbook/runs",
+      "file": "playbook/runs/route.ts",
+      "permission": "nalog.read",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "POST",
+      "path": "/api/playbook/runs",
+      "file": "playbook/runs/route.ts",
+      "permission": "nalog.write",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
       "method": "DELETE",
       "path": "/api/portal/:id",
       "file": "portal/[id]/route.ts",
@@ -1346,14 +3016,11 @@
       "method": "GET",
       "path": "/api/portal",
       "file": "portal/route.ts",
-      "permission": "projects.read",
+      "permission": "portal.manage",
       "kind": "AUTH",
       "roles": [
         "ADMIN",
-        "VODJA",
-        "MONTER",
-        "SKLADISCE",
-        "PROIZVODNJA"
+        "VODJA"
       ],
       "allow": 200,
       "deny": 403
@@ -1373,9 +3040,141 @@
       "deny": 403
     },
     {
+      "method": "POST",
+      "path": "/api/price-lists/:id/rules",
+      "file": "price-lists/[id]/rules/route.ts",
+      "permission": "price.override",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "POST",
+      "path": "/api/price-lists/calculate",
+      "file": "price-lists/calculate/route.ts",
+      "permission": "catalog.read",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "GET",
+      "path": "/api/price-lists",
+      "file": "price-lists/route.ts",
+      "permission": "catalog.read + price.override",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "POST",
+      "path": "/api/price-lists",
+      "file": "price-lists/route.ts",
+      "permission": "price.override",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "GET",
+      "path": "/api/product-assets",
+      "file": "product-assets/route.ts",
+      "permission": "catalog.read",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "GET",
+      "path": "/api/product-families",
+      "file": "product-families/route.ts",
+      "permission": "catalog.read",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "GET",
+      "path": "/api/production/:id/elements",
+      "file": "production/[id]/elements/route.ts",
+      "permission": "production.read",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
       "method": "PATCH",
       "path": "/api/production/:id",
       "file": "production/[id]/route.ts",
+      "permission": "production.manage",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/production/elements/:id",
+      "file": "production/elements/[id]/route.ts",
+      "permission": "production.manage",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "POST",
+      "path": "/api/production/from-twin",
+      "file": "production/from-twin/route.ts",
       "permission": "production.manage",
       "kind": "AUTH",
       "roles": [
@@ -1415,9 +3214,209 @@
       "deny": 403
     },
     {
+      "method": "POST",
+      "path": "/api/products/:id/bom",
+      "file": "products/[id]/bom/route.ts",
+      "permission": "quotes.create",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/products/:id/components",
+      "file": "products/[id]/components/route.ts",
+      "permission": "catalog.write",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "SKLADISCE"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "GET",
+      "path": "/api/products/:id",
+      "file": "products/[id]/route.ts",
+      "permission": "catalog.read",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/products/:id",
+      "file": "products/[id]/route.ts",
+      "permission": "catalog.write",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "SKLADISCE"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "GET",
+      "path": "/api/products",
+      "file": "products/route.ts",
+      "permission": "catalog.read",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "POST",
+      "path": "/api/products",
+      "file": "products/route.ts",
+      "permission": "catalog.write",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "SKLADISCE"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "POST",
+      "path": "/api/project-packages/:id/bom",
+      "file": "project-packages/[id]/bom/route.ts",
+      "permission": "quotes.create",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "GET",
+      "path": "/api/project-packages/:id",
+      "file": "project-packages/[id]/route.ts",
+      "permission": "projects.read + quotes.create",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/project-packages/:id",
+      "file": "project-packages/[id]/route.ts",
+      "permission": "quotes.create",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "POST",
+      "path": "/api/project-packages/plan",
+      "file": "project-packages/plan/route.ts",
+      "permission": "quotes.create",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "GET",
+      "path": "/api/project-packages",
+      "file": "project-packages/route.ts",
+      "permission": "projects.read + quotes.create",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "POST",
+      "path": "/api/project-packages",
+      "file": "project-packages/route.ts",
+      "permission": "quotes.create",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
       "method": "GET",
       "path": "/api/projects/:id/command",
       "file": "projects/[id]/command/route.ts",
+      "permission": "projects.read",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "POST",
+      "path": "/api/projects/:id/consent",
+      "file": "projects/[id]/consent/route.ts",
+      "permission": "customers.write",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/:id/progress",
+      "file": "projects/[id]/progress/route.ts",
       "permission": "projects.read",
       "kind": "AUTH",
       "roles": [
@@ -1464,6 +3463,77 @@
       "method": "GET",
       "path": "/api/projects/:id/timeline",
       "file": "projects/[id]/timeline/route.ts",
+      "permission": "projects.read",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/:id/viz-choices",
+      "file": "projects/[id]/viz-choices/route.ts",
+      "permission": "projects.read",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/:id/viz-link",
+      "file": "projects/[id]/viz-link/route.ts",
+      "permission": "portal.manage",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "POST",
+      "path": "/api/projects/:id/viz-link",
+      "file": "projects/[id]/viz-link/route.ts",
+      "permission": "portal.manage",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA"
+      ],
+      "allow": 201,
+      "deny": 403
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/projects/:id/viz-link",
+      "file": "projects/[id]/viz-link/route.ts",
+      "permission": "portal.manage",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "GET",
+      "path": "/api/projects/next-actions",
+      "file": "projects/next-actions/route.ts",
       "permission": "projects.read",
       "kind": "AUTH",
       "roles": [
@@ -1538,8 +3608,38 @@
     },
     {
       "method": "GET",
+      "path": "/api/public/review",
+      "file": "public/review/route.ts",
+      "permission": null,
+      "kind": "PUBLIC",
+      "roles": [],
+      "allow": 200,
+      "deny": 401
+    },
+    {
+      "method": "GET",
       "path": "/api/public/version",
       "file": "public/version/route.ts",
+      "permission": null,
+      "kind": "PUBLIC",
+      "roles": [],
+      "allow": 200,
+      "deny": 401
+    },
+    {
+      "method": "GET",
+      "path": "/api/public/viz",
+      "file": "public/viz/route.ts",
+      "permission": null,
+      "kind": "PUBLIC",
+      "roles": [],
+      "allow": 200,
+      "deny": 401
+    },
+    {
+      "method": "POST",
+      "path": "/api/public/viz-choice",
+      "file": "public/viz-choice/route.ts",
       "permission": null,
       "kind": "PUBLIC",
       "roles": [],
@@ -1701,6 +3801,22 @@
     },
     {
       "method": "GET",
+      "path": "/api/reports",
+      "file": "reports/route.ts",
+      "permission": "projects.read + invoices.read + quotes.read + inventory.read",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "GET",
       "path": "/api",
       "file": "route.ts",
       "permission": null,
@@ -1713,7 +3829,7 @@
       "method": "GET",
       "path": "/api/search",
       "file": "search/route.ts",
-      "permission": "projects.read + customers.read + quotes.read + invoices.read + nalog.read + inventory.read + users.read",
+      "permission": "projects.read + customers.read + quotes.read + invoices.read + nalog.read + inventory.read + catalog.read + users.read",
       "kind": "AUTH",
       "roles": [
         "ADMIN",
@@ -1739,6 +3855,97 @@
     },
     {
       "method": "GET",
+      "path": "/api/service-cases/:id",
+      "file": "service-cases/[id]/route.ts",
+      "permission": "projects.read",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/service-cases/:id",
+      "file": "service-cases/[id]/route.ts",
+      "permission": "projects.write",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "GET",
+      "path": "/api/service-cases/:id/visits",
+      "file": "service-cases/[id]/visits/route.ts",
+      "permission": "projects.read",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "POST",
+      "path": "/api/service-cases/:id/visits",
+      "file": "service-cases/[id]/visits/route.ts",
+      "permission": "nalog.write + projects.write",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "GET",
+      "path": "/api/service-cases",
+      "file": "service-cases/route.ts",
+      "permission": "projects.read",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "POST",
+      "path": "/api/service-cases",
+      "file": "service-cases/route.ts",
+      "permission": "projects.write",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "GET",
       "path": "/api/setup",
       "file": "setup/route.ts",
       "permission": null,
@@ -1756,6 +3963,52 @@
       "roles": [],
       "allow": 200,
       "deny": 401
+    },
+    {
+      "method": "GET",
+      "path": "/api/stock/movements",
+      "file": "stock/movements/route.ts",
+      "permission": "inventory.read",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "POST",
+      "path": "/api/stock/returns",
+      "file": "stock/returns/route.ts",
+      "permission": "inventory.write",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "SKLADISCE"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "GET",
+      "path": "/api/stock",
+      "file": "stock/route.ts",
+      "permission": "inventory.read",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
     },
     {
       "method": "GET",
@@ -1858,6 +4111,36 @@
     },
     {
       "method": "GET",
+      "path": "/api/vehicles",
+      "file": "vehicles/route.ts",
+      "permission": "projects.read",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "POST",
+      "path": "/api/vehicles",
+      "file": "vehicles/route.ts",
+      "permission": "projects.write",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "GET",
       "path": "/api/version",
       "file": "version/route.ts",
       "permission": "prijavljen (seja)",
@@ -1871,6 +4154,94 @@
       ],
       "allow": 200,
       "deny": 401
+    },
+    {
+      "method": "POST",
+      "path": "/api/viz/projects/:id/duplicate",
+      "file": "viz/projects/[id]/duplicate/route.ts",
+      "permission": "measurements.write",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "GET",
+      "path": "/api/viz/projects/:id",
+      "file": "viz/projects/[id]/route.ts",
+      "permission": "projects.read",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/viz/projects/:id",
+      "file": "viz/projects/[id]/route.ts",
+      "permission": "measurements.write",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/viz/projects/:id",
+      "file": "viz/projects/[id]/route.ts",
+      "permission": "measurements.write",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "GET",
+      "path": "/api/viz/projects",
+      "file": "viz/projects/route.ts",
+      "permission": "projects.read",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER",
+        "SKLADISCE",
+        "PROIZVODNJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "POST",
+      "path": "/api/viz/projects",
+      "file": "viz/projects/route.ts",
+      "permission": "measurements.write",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA",
+        "MONTER"
+      ],
+      "allow": 200,
+      "deny": 403
     },
     {
       "method": "GET",
@@ -1916,13 +4287,104 @@
       ],
       "allow": 200,
       "deny": 403
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/webhooks/:id",
+      "file": "webhooks/[id]/route.ts",
+      "permission": "integrations.manage",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/webhooks/:id",
+      "file": "webhooks/[id]/route.ts",
+      "permission": "integrations.manage",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "POST",
+      "path": "/api/webhooks/:id/test",
+      "file": "webhooks/[id]/test/route.ts",
+      "permission": "integrations.manage",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "GET",
+      "path": "/api/webhooks/deliveries",
+      "file": "webhooks/deliveries/route.ts",
+      "permission": "integrations.manage",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "POST",
+      "path": "/api/webhooks/retry",
+      "file": "webhooks/retry/route.ts",
+      "permission": "integrations.manage",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "GET",
+      "path": "/api/webhooks",
+      "file": "webhooks/route.ts",
+      "permission": "integrations.manage",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA"
+      ],
+      "allow": 200,
+      "deny": 403
+    },
+    {
+      "method": "POST",
+      "path": "/api/webhooks",
+      "file": "webhooks/route.ts",
+      "permission": "integrations.manage",
+      "kind": "AUTH",
+      "roles": [
+        "ADMIN",
+        "VODJA"
+      ],
+      "allow": 200,
+      "deny": 403
     }
   ],
   "summary": {
-    "routeFiles": 84,
-    "endpoints": 127,
-    "publicEndpoints": 8,
-    "sessionEndpoints": 14,
-    "authEndpoints": 105
+    "routeFiles": 195,
+    "endpoints": 297,
+    "publicEndpoints": 15,
+    "sessionEndpoints": 16,
+    "authEndpoints": 265
   }
 }

@@ -10,6 +10,10 @@
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
+# R496: `python3` je na Windows lahko Store alias, ki se ne izvrši → skupno
+# odkrivanje + PATH ovojem (tests/pyshim.sh), da tudi .sh suite-i delajo.
+source tests/toolshim.sh
+
 # --- edina definicija: vrstni red skupin + njihove datoteke -------------------
 GRUPE=(r437-r445 r446-r452 r454-r458 r459-r462 r464 r464-notifications r465-r474 r475-r478 r479 r480 r481 r483 r484 r485 r486 r487 r488 r489 r490 r493 r494 r495)
 
@@ -37,17 +41,45 @@ CLANI[r493]="r493.py"
 CLANI[r494]="r494.py"
 CLANI[r495]="r495.py"
 
-PASS=0; FAILED=0; FAILED_LIST=""
+PASS=0; FAILED=0; SKIPPED=0; FAILED_LIST=""; SKIPPED_LIST=""
+STRICT_TOOLS="${STRICT_TOOLS:-0}"
+
+manjkajoce_orodje () { # manjkajoce_orodje <datoteka> → prazno če vse lahko
+  local t
+  for t in $(orodja_za "$1"); do
+    orodje_ok "$t" || printf '%s ' "$t"
+  done
+}
+
+# Suite, ki rabi zunanje orodje, ki ga na tej mizi NI, ne sme pasti rdeče — to
+# bi bil LAZEN podatek (196 "jq: command not found" padcev v R497 je bil prav
+# takšen). Označijo se kot preskočeni in jih povzetek glasno našteje, da pas ne
+# trdi, da je dokazal celotno matriko. STRICT_TOOLS=1 (CI) jih steje kot napako.
+try_run () { # try_run <datoteka> <izvedbeni ukaz...>
+  local f="$1"; shift
+  local manjkajo; manjkajo="$(manjkajoce_orodje "$f")"
+  if [ -n "$manjkajo" ]; then
+    if [ "$STRICT_TOOLS" = 1 ]; then
+      echo "✗ $f: manjkajo zahtevana orodja ($manjkajo) — STRICT_TOOLS=1"
+      FAILED=$((FAILED+1)); FAILED_LIST="$FAILED_LIST $f"
+    else
+      echo "⊘ $f: PRESKOČENO (manjka: $manjkajo)"
+      SKIPPED=$((SKIPPED+1)); SKIPPED_LIST="$SKIPPED_LIST $f"
+    fi
+    return 0
+  fi
+  if "$@"; then PASS=$((PASS+1)); else FAILED=$((FAILED+1)); FAILED_LIST="$FAILED_LIST $f"; fi
+}
 
 run_py () {
   echo "::group::$1"
-  if timeout "${TIMEOUT_PY:-420}" python3 "tests/$1"; then PASS=$((PASS+1)); else FAILED=$((FAILED+1)); FAILED_LIST="$FAILED_LIST $1"; fi
+  try_run "$1" timeout "${TIMEOUT_PY:-420}" python3 "tests/$1"
   echo "::endgroup::"
 }
 
 run_sh () {
   echo "::group::$1"
-  if timeout "${TIMEOUT_SH:-420}" bash "tests/$1"; then PASS=$((PASS+1)); else FAILED=$((FAILED+1)); FAILED_LIST="$FAILED_LIST $1"; fi
+  try_run "$1" timeout "${TIMEOUT_SH:-420}" bash "tests/$1"
   echo "::endgroup::"
 }
 
@@ -55,11 +87,8 @@ run_sh () {
 # in daljšo mejo kot ostali suite-i.
 run_notifications () {
   echo "::group::$1"
-  if BASE_URL="${NOTIFY_BASE_URL:-http://localhost:3031}" timeout "${TIMEOUT_NOTIFY:-600}" python3 "tests/$1"; then
-    PASS=$((PASS+1))
-  else
-    FAILED=$((FAILED+1)); FAILED_LIST="$FAILED_LIST $1"
-  fi
+  try_run "$1" env BASE_URL="${NOTIFY_BASE_URL:-http://localhost:3031}" \
+    timeout "${TIMEOUT_NOTIFY:-600}" python3 "tests/$1"
   echo "::endgroup::"
 }
 
@@ -94,6 +123,7 @@ else
   run_group "$MODE"
 fi
 
-echo "═══ ${MODE}: $PASS ✓ / $FAILED ✗ ═══"
+echo "═══ ${MODE}: $PASS ✓ / $FAILED ✗$( [ "$SKIPPED" -gt 0 ] && printf ' / %s preskočenih' "$SKIPPED" )"
 [ -n "$FAILED_LIST" ] && echo "PADLI:$FAILED_LIST"
+[ -n "$SKIPPED_LIST" ] && { echo "PRESKOČENO (manjkajo orodja):$SKIPPED_LIST"; echo "  Povzetek NI dokaz celotne matrike — namest manjkajoče orodje ali STRICT_TOOLS=1."; }
 exit $FAILED

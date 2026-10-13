@@ -471,8 +471,11 @@ rows = diff.get('rows', [])
 seg1l = next((r for r in rows if r['key'] == 'seg-1:DOLZINA'), {})
 chk(seg1l.get('a') is not None and seg1l.get('diff') is not None, f'seg-1 dolžina primerjana ({seg1l})')
 chk(abs((seg1l.get('diff') or 0) + 1.2) < 0.2, f"seg-1 odstopanje −1,2 cm (dejansko {seg1l.get('diff')})")
-chk(diff.get('compared', 0) >= 3, f'primerjanih mer ≥ 3 (dejansko {diff.get('compared')})')
-chk(diff.get('deviations', 0) >= 1, f'vsaj eno odstopanje (dejansko {diff.get('deviations')})')
+# R497: zunanji narekovaj mora biti drugačen od notranjega — Python 3.11
+# gnezdenja istih narekovajev v f-stringu ne zmore (3.12+ jih) in je celoten
+# suite padel že na parse-u.
+chk(diff.get('compared', 0) >= 3, f"primerjanih mer ≥ 3 (dejansko {diff.get('compared')})")
+chk(diff.get('deviations', 0) >= 1, f"vsaj eno odstopanje (dejansko {diff.get('deviations')})")
 s, _ = callj('GET', f'/api/digital-twin/diff?projectId={P4}&from=AS_DESIGNED&to=CARKA', admin)
 chk(s == 400, f'napačen kind 400 (dejansko {s})')
 s, _ = callj('GET', f'/api/digital-twin/diff?projectId={P3}&from=AS_DESIGNED&to=AS_INSTALLED', admin)

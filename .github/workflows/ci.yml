@@ -86,6 +86,9 @@ jobs:
           - grupa: r454-r458
           - grupa: r459-r462
           - grupa: r464
+          # R497: skupina je bila v matriki tests/ci-matrix.sh, v workflowu pa ne
+          # — tako je bil celoten notification sweep v CI-ju nikoli zagnan.
+          - grupa: r464-notifications
           - grupa: r465-r474
           - grupa: r475-r478
           - grupa: r479
@@ -119,6 +122,10 @@ jobs:
       DATABASE_URL: postgresql://ci:ci@localhost:5432/roksal
       TEST_DB_URL: postgresql://ci:ci@localhost:5432/roksal
       BASE_URL: http://localhost:3000
+      # R497: ena skupin zna makingati prijave hitreje kot produkcijska meja
+      # 30/min/IP (izmerjeno na lokalnem pasu: 429 v zadnjih skupinah). Testni
+      # pregleduje aplikacijo, ne zavore, zato je odprta; produkcija ostane 30.
+      AUTH_RATE_MAX: 100000
     steps:
       - uses: actions/checkout@v4
         with:
@@ -135,6 +142,12 @@ jobs:
       - name: sistemski paketi (poppler-utils — pdftotext za teste PDF)
         run: sudo apt-get update -qq && sudo apt-get install -y -qq poppler-utils
       - name: zagon aplikacije
+        # R497: Next 16 dovoli EN sam `next dev` na projektno mapo (blokada
+        # .next/dev/lock). Skupina r464-notifications si strežnik na :3031 zažene
+        # SAMa (faze A–D potrebujejo različen process.env), zato njen job ne sme
+        # vžgati skupnega na :3000 — sicer blokada zadrži testni strežnik in
+        # skupina pade na health timeoutu.
+        if: matrix.grupa != 'r464-notifications'
         run: |
           bunx next dev -p 3000 > dev.log 2>&1 &
           for i in $(seq 1 60); do

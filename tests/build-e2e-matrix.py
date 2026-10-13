@@ -20,6 +20,14 @@ ROOT = Path(__file__).resolve().parent.parent
 API = ROOT / 'src' / 'app' / 'api'
 PERMS_FILE = ROOT / 'src' / 'lib' / 'permissions-core.ts'
 
+# R497: izpis vsebuje ✓ in slovenske znake; na Windows je stdout cp1250, kar
+# zadnji print OBORNE (rc 1) šele POTEM, ko je register že zapisan — torej
+# navidezno uspešen generator, ki v CI-ju javi napako.
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+if hasattr(sys.stderr, 'reconfigure'):
+    sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+
 # ── 1. vloge → pravice iz permissions-core.ts ────────────────────────────────
 src = PERMS_FILE.read_text(encoding='utf-8')
 
@@ -115,7 +123,10 @@ for f in sorted(API.rglob('route.ts')):
         endpoints.append({
             'method': h,
             'path': path,
-            'file': str(rel),
+            # as_posix: registran je nastal na Linuxu; brez tega Windows
+            # zapiše 'portal\route.ts' in vsak lokalni zagon naredi 3000 vrstic
+            # lažnega diffa namesto dejanskih sprememb.
+            'file': rel.as_posix(),
             'permission': perm_str,
             'kind': kind,
             'roles': roles,
@@ -139,12 +150,25 @@ CREATE_201 = {
     ('POST', '/api/evidence'),
     ('POST', '/api/audit'), ('POST', '/api/users'),
     ('POST', '/api/measurements/:id/share'), ('POST', '/api/crm/:id/pretvorba'),
+    # R497: endpointi iz regeneriranega seznama, ki ustvarijo zapis (201)
+    ('POST', '/api/deliveries'), ('POST', '/api/nalog/:id/handover'),
+    ('POST', '/api/nalog/:id/qa'), ('POST', '/api/projects/:id/viz-link'),
 }
 for e in endpoints:
     if (e['method'], e['path']) in CREATE_201:
         e['allow'] = 201
     if e['method'] == 'DELETE':
         e['allow'] = 200
+
+# R497: cron vhodi se ne overjajo z vlogo, ampak z CRON_SECRET v glavi
+# Authorization (src/lib/cron.ts; brez spremenljivke je cron fail-closed 401).
+# Brez te oznake bi sweep jih štel kot odprte ali zlomljene.
+CRON_ROUTES = {('GET', '/api/jobs/run')}
+for e in endpoints:
+    if (e['method'], e['path']) in CRON_ROUTES:
+        e['kind'] = 'CRON'
+        e['permission'] = 'CRON_SECRET (glava Authorization)'
+        e['roles'] = []
 
 # ── 4. ROUTE-MAP preslikava (dokumentirana pot → dejanski endpoint) ─────────
 route_map_doc = ROOT / 'docs' / 'ROUTE-MAP.md'

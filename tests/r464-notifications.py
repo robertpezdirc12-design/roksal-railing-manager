@@ -27,7 +27,7 @@ Uporaba:
   BASE_URL=http://localhost:3030 TEST_DB_URL=file:/home/z/roksal-d/db/roksal.db \
   python3 tests/r464-notifications.py
 """
-import json, os, re, shutil, signal, subprocess, sys, threading, time
+import json, os, re, shutil, signal, subprocess, sys, tempfile, threading, time
 import urllib.request, urllib.error
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -37,8 +37,10 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DB = os.environ.get('TEST_DB_URL') or 'postgresql://roksal:roksal@localhost:54329/roksal'
 HOOK_PORT = 5998          # lokalni webhook sprejemnik (faza B)
 DEAD_HOOK = 'http://127.0.0.1:59999/neobstoja'  # nihče ne posluša (faza C)
-DEV_LOG = '/tmp/r464-dev.log'
-BUNX = shutil.which('bunx') or '/usr/local/bin/bunx'
+# R497: trdi /tmp na Windows ne obstaja za nativni Python (C:\tmp), zato tempmapa
+# poizvedena preko stdnega kataloga.
+DEV_LOG = os.path.join(tempfile.gettempdir(), 'r464-dev.log')
+
 NOTIFY_VARS = ('NOTIFY_EMAIL_PROVIDER', 'NOTIFY_SMS_PROVIDER', 'NOTIFY_WHATSAPP_PROVIDER',
                'NOTIFY_WEBHOOK_URL', 'SMTP_HOST', 'SMTP_PORT', 'SMTP_USER', 'SMTP_PASS', 'SMTP_FROM')
 PASS, FAIL = 0, 0
@@ -91,26 +93,75 @@ def wait_health (timeout=240):
         time.sleep(1.5)
     return False
 
+def next_cmd ():
+    """Ukaz za zagon `next dev`. R497: `bunx` je najden le, če je res izvedljiv —
+    na Windows nativni Python (`subprocess`) ime brez končnice razširi na `.exe`,
+    zato PATH ovi iz tests/toolshim.sh tu ne zadošča; takrat gremo neposredno na
+    `node node_modules/next/dist/bin/next`, kar je isti vstop kot `next dev`."""
+    k = shutil.which('bunx')
+    if k and os.path.isfile(k):
+        return [k, 'next']
+    node = shutil.which('node') or shutil.which('node.exe')
+    if node:
+        return [node, os.path.join(REPO, 'node_modules', 'next', 'dist', 'bin', 'next')]
+    return None
+
+NEXT_CMD = next_cmd()
+
 def listener_pid (port):
-    """PID procesa, ki posluša na portu (ss -tlnp)."""
-    try:
-        out = subprocess.run(['ss', '-tlnp', f'sport = :{port}'], capture_output=True, text=True).stdout
-        m = re.search(r'pid=(\d+)', out)
-        return int(m.group(1)) if m else None
-    except Exception:
-        return None
+    """PID procesa, ki posluša na portu. Mehanizem je različen po platformah
+    (Linux `ss`, macOS `lsof`, Windows `netstat`) — prej je bil samo `ss`, kar na
+    Git Bash vrne None, zato `kill_server` nikoli ni vedel, kaj naj ustavi."""
+    if shutil.which('ss'):
+        try:
+            out = subprocess.run(['ss', '-tlnp', f'sport = :{port}'],
+                                 capture_output=True, text=True).stdout
+            m = re.search(r'pid=(\d+)', out)
+            if m: return int(m.group(1))
+        except Exception:
+            pass
+    if shutil.which('lsof'):
+        try:
+            out = subprocess.run(['lsof', '-ti', f'tcp:{port}', '-sTCP:LISTEN'],
+                                 capture_output=True, text=True).stdout
+            m = re.search(r'\d+', out)
+            if m: return int(m.group(0))
+        except Exception:
+            pass
+    if shutil.which('netstat'):
+        try:
+            out = subprocess.run(['netstat', '-ano'], capture_output=True, text=True).stdout
+            for vrstica in out.splitlines():
+                deli = vrstica.split()
+                if len(deli) < 5 or deli[0] != 'TCP': continue
+                if not deli[1].endswith(f':{port}'): continue
+                if 'LISTEN' in deli[3].upper() or deli[2] in ('0.0.0.0:0', '[::]:0', '*:*'):
+                    return int(deli[-1])
+        except Exception:
+            pass
+    return None
+
+def kill_pid (pid):
+    """Ustavi proces in njegovo drevo (next dev ima otroke)."""
+    if os.name == 'nt':
+        subprocess.run(['taskkill', '/PID', str(pid), '/T', '/F'], capture_output=True)
+        return
+    for sig in (signal.SIGTERM, signal.SIGKILL):
+        try: os.kill(pid, sig)
+        except (ProcessLookupError, PermissionError): return
+        if listener_pid(PORT) is None: break
+        time.sleep(1)
 
 def kill_server ():
     """Ustavi dev strežnik na portu PORT (CLI + listener + njegov proces)."""
-    subprocess.run(['pkill', '-9', '-f', f'next dev -p {PORT}'], capture_output=True)
+    if shutil.which('pkill'):
+        subprocess.run(['pkill', '-9', '-f', f'next dev -p {PORT}'], capture_output=True)
+    for proc in PROCS:
+        if proc.poll() is None:
+            kill_pid(proc.pid)
     pid = listener_pid(PORT)
     if pid:
-        for sig in (signal.SIGTERM, signal.SIGKILL):
-            try: os.kill(pid, sig)
-            except ProcessLookupError: pass
-            except PermissionError: break
-            if listener_pid(PORT) is None: break
-            time.sleep(1)
+        kill_pid(pid)
     t0 = time.time()
     while time.time() - t0 < 25:
         if listener_pid(PORT) is None:
@@ -125,11 +176,25 @@ def start_server (env_overrides):
     env = {k: v for k, v in os.environ.items() if k not in NOTIFY_VARS}
     env['DATABASE_URL'] = DB  # sandbox vbrizga napačen DATABASE_URL — vedno prepiši
     env.update(env_overrides)
+    if NEXT_CMD is None:
+        print('  ✗ niti bunx niti node/next se ne najdata — skupina na tej mizi ni izvedljiva')
+        return False
+    # R497: testni `@/` resolver (NODE_OPTIONS) v dev strežnik NE sme — aplikacija
+    # mora teči v istem runtime-u kot produkcija.
+    env.pop('NODE_OPTIONS', None)
     logf = open(DEV_LOG, 'a')
-    proc = subprocess.Popen([BUNX, 'next', 'dev', '-p', str(PORT)], cwd=REPO, env=env,
+    proc = subprocess.Popen(NEXT_CMD + ['dev', '-p', str(PORT)], cwd=REPO, env=env,
                             stdout=logf, stderr=subprocess.STDOUT, start_new_session=True)
     PROCS.append(proc)
-    return wait_health()
+    zdravo = wait_health()
+    if not zdravo:
+        # Next 16 dovoli EN sam `next dev` na projektno mapo (blokada v
+        # .next/dev/lock); če jo drži drug strežnik, naš takoj zavrne in health
+        # nikoli ne pride. Brez te povedi je padec videti kot napaka aplikacije.
+        print(f'  ✗ dev strežnik na {PORT} ni zdravo zagnan — če v isti mapi teče '
+              f'drug `next dev` (npr. :3000), ga ustavi; pas ga ob tej skupini '
+              f'zaustavi sam (tests/ci-local.sh).')
+    return zdravo
 
 def phase (name):
     print(f'── {name}')
@@ -176,6 +241,49 @@ def pick (rows, **conds):
 def by_key (rows, keypart):
     return [r for r in rows if keypart in (r.get('event') or {}).get('key', '')]
 
+# ── čakanje na asinhrone dostave ─────────────────────────────────────────────
+KONČNI = ('SENT', 'FAILED', 'SKIPPED')
+MEJA = float(os.environ.get('NOTIFY_WAIT_MAX', '30'))
+
+def cakaj (pogoj, mejo=MEJA):
+    """Počakaj, dokler pogoj ni resničen. Dostave se izvajajo V OZADJU (API vrne
+    200, provider pošlje šele nato), zato fiksen `time.sleep(0.5)` zadošča samo
+    na hitri Linux mizi: na počasnem sistemu je preverjanje prebralo vrstico še v
+    statusu PENDING in je pravilen izid izgledal kot napaka aplikacije.
+    Vrne True, če je pogoj dosežen, sicer False — test potem javi dejansko stanje."""
+    t0 = time.time()
+    while time.time() - t0 < mejo:
+        try:
+            if pogoj(): return True
+        except Exception:
+            pass
+        time.sleep(0.25)
+    return False
+
+def cakaj_dostave (klj, minimalno=1, tip=None):
+    """Vrni dostavne vrstice za event `klj`, ko so VSE končnega statusa
+    (SENT/FAILED/SKIPPED) in jih je vsaj `minimalno`. Če meja poteče, vrne
+    nazadnje videno stanje, da sporočilo napake ostane resnično."""
+    zadnje = []
+    def stanje ():
+        nonlocal zadnje
+        rows = by_key(deliveries(TOK), klj)
+        if tip: rows = [r for r in rows if (r.get('event') or {}).get('type') == tip]
+        zadnje = rows
+        return len(rows) >= minimalno and all(r['status'] in KONČNI for r in rows)
+    cakaj(stanje)
+    return zadnje
+
+def cakaj_poskuse (klj, minimalno=1):
+    """Počakaj, da job `obvestila-retry` poveča `attempts` — tudi to se zgodi v
+    ozadju, zato bi sicer branje takoj za `POST /api/jobs` videlo attempts=0."""
+    def stanje ():
+        rows = [r for r in by_key(deliveries(TOK), klj)
+                if (r.get('event') or {}).get('type') == 'WO_TERMIN']
+        spodleti = [r for r in rows if r.get('status') == 'FAILED']
+        return len(spodleti) >= minimalno and all((r.get('attempts') or 0) >= 1 for r in spodleti)
+    return cakaj(stanje)
+
 # ═══════════════════════════════════ TEST ═════════════════════════════════════
 
 print(f'════ R464 — produkcijski notification adapterji (issue #1 sklop 7) ════')
@@ -213,7 +321,7 @@ WOA = WO_IDS[-1]
 s, d = callj('GET', '/api/notifications', MTOK)
 chk(any('Nov nalog dodeljen' in (n.get('title') or '') for n in d.get('data', [])), 'monter vidi IN_APP obvestilo o dodelitvi')
 
-rows = by_key(deliveries(TOK), WOA)
+rows = cakaj_dostave(WOA, 2)
 chk(len(pick(rows, channel='IN_APP')) == 1 and pick(rows, channel='IN_APP')[0]['status'] == 'SENT',
     'A: IN_APP dostava SENT (notranja — brez providerja)')
 em = pick(rows, channel='EMAIL')
@@ -225,7 +333,7 @@ s, d = post_nalog('R464-A nalog s projektom', {'projectId': PID})
 WOA2 = WO_IDS[-1]
 s, d = post_termin(WOA2, '2026-11-15T08:00:00.000Z')
 chk(s == 200, f'A: POST termin 200 (dobljeno {s})')
-rows = by_key(deliveries(TOK), WOA2)
+rows = cakaj_dostave(WOA2, 3, tip='WO_TERMIN')
 trem = [r for r in rows if r['event']['type'] == 'WO_TERMIN']
 em = pick(trem, channel='EMAIL', userId=None)
 chk(len(em) == 1 and em[0]['status'] == 'SENT', 'A: EMAIL stranke SENT prek privzetega log adapterja')
@@ -253,12 +361,12 @@ chk(s == 200, f'B: monter vklopi EMAIL pref 200 (dobljeno {s})')
 before = len(RECEIVED)
 s, d = post_nalog('R464-B nalog webhook')
 WOB = WO_IDS[-1]
-rows = by_key(deliveries(TOK), WOB)
+rows = cakaj_dostave(WOB, 2)
 inapp = pick(rows, channel='IN_APP')
 em = pick(rows, channel='EMAIL')
 chk(len(inapp) == 1 and inapp[0]['status'] == 'SENT', 'B: IN_APP nedotaknjen ob webhook providerju (SENT)')
 chk(len(em) == 1 and em[0]['status'] == 'SENT', 'B: EMAIL uporabnika SENT prek webhook providerja')
-time.sleep(0.5)
+cakaj(lambda: len(RECEIVED) > before)
 new = [r for r in RECEIVED[before:]]
 email_hooks = [r for r in new if r['body'].get('channel') == 'EMAIL']
 chk(len(email_hooks) == 1, f'B: webhook prejel 1 EMAIL zahtevek (dobljenih {len(email_hooks)})')
@@ -274,12 +382,12 @@ s, d = post_nalog('R464-B nalog stranka', {'projectId': PID})
 WOB2 = WO_IDS[-1]
 s, d = post_termin(WOB2, '2026-11-20T08:00:00.000Z')
 chk(s == 200, f'B: POST termin stranke 200 (dobljeno {s})')
-rows = by_key(deliveries(TOK), WOB2)
+rows = cakaj_dostave(WOB2, 3, tip='WO_TERMIN')
 trem = [r for r in rows if r['event']['type'] == 'WO_TERMIN']
 for ch in ('EMAIL', 'SMS', 'WHATSAPP'):
     rr = pick(trem, channel=ch, userId=None)
     chk(len(rr) == 1 and rr[0]['status'] == 'SENT', f'B: {ch} stranke SENT prek webhook providerja')
-time.sleep(0.5)
+cakaj(lambda: len([r for r in RECEIVED[before:] if r['body'].get('eventType') == 'WO_TERMIN']) >= 3)
 new = [r for r in RECEIVED[before:] if r['body'].get('eventType') == 'WO_TERMIN']
 chans = sorted(r['body'].get('channel') for r in new)
 chk(chans == ['EMAIL', 'SMS', 'WHATSAPP'], f'B: webhook prejel EMAIL+SMS+WHATSAPP (dobljeno {chans})')
@@ -301,13 +409,14 @@ s, d = callj('POST', '/api/notifications/prefs', MTOK, {'event': 'WO_ASSIGNED', 
 chk(s == 200, f'B: monter izklopi EMAIL pref 200 (dobljeno {s})')
 s, d = post_nalog('R464-B nalog opt-out')
 WOB3 = WO_IDS[-1]
-rows = by_key(deliveries(TOK), WOB3)
+rows = cakaj_dostave(WOB3, 2)
 inapp = pick(rows, channel='IN_APP')
 em = pick(rows, channel='EMAIL')
 chk(len(inapp) == 1 and inapp[0]['status'] == 'SENT', 'B: opt-out — IN_APP ostaja SENT')
 chk(len(em) == 1 and em[0]['status'] == 'SKIPPED' and em[0]['error'] == 'izklopljeno v nastavitvah',
     'B: opt-out — EMAIL SKIPPED kljub konfiguriranemu providerju')
-time.sleep(0.5)
+time.sleep(1.5)  # NEGATIVNA trditev: počakati moramo dlje — sicer kasen zahtevek
+                 # pomotoma spade v okno in test lažno uspe.
 chk(len(RECEIVED) == hook_cnt, 'B: opt-out — webhook NI prejel zahtevka za izklopljen kanal')
 
 # ═══ FAZA C — neuspeh + retry (SMTP stub + mrtvi webhook) ════════════════════
@@ -324,7 +433,7 @@ chk(s == 200, f'C: POSLOVNI TOK 200 kljub mrtvim providerjem (dobljeno {s})')
 s, d = callj('GET', '/api/nalog', TOK)
 chk(s == 200, 'C: API ostaja zdr (GET /api/nalog 200)')
 
-rows = by_key(deliveries(TOK), WOC)
+rows = cakaj_dostave(WOC, 3, tip='WO_TERMIN')
 trem = [r for r in rows if r['event']['type'] == 'WO_TERMIN']
 inapp = pick(trem, channel='IN_APP')
 em = pick(trem, channel='EMAIL', userId=None)
@@ -341,6 +450,7 @@ chk(len(sm) == 1 and 'webhook' in (sm[0].get('error') or ''), 'C: webhook napaka
 # retry: job obvestila-retry poveča attempts, dostava ostane FAILED
 s, d = callj('POST', '/api/jobs', TOK, {'job': 'obvestila-retry'})
 chk(s == 200 and d.get('data', {}).get('job') == 'obvestila-retry', f'C: job obvestila-retry 200 (dobljeno {s})')
+cakaj_poskuse(WOC, 3)
 rows = by_key(deliveries(TOK), WOC)
 trem = [r for r in rows if r['event']['type'] == 'WO_TERMIN']
 em = pick(trem, channel='EMAIL', userId=None)

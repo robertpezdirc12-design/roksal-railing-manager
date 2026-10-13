@@ -39,12 +39,18 @@ export function maskKey (key: string): string {
 // ─── Prijava / začetna namestitev (R496: brute-force vrata) ─────────────────
 
 /**
- * Največ poskusov prijave na IP v oknu RATE_LIMIT_WINDOW_MS (60 s).
- * 30/min je močna zavora proti napadu z gesli (sicer 1800 poskusov uro),
- * hkrati pa ne ovira regresijskega suite-a, ki se večkrat zapored prijavlja
- * z 127.0.0.1.
+ * Največ poskusov prijave na IP v oknu RATE_LIMIT_WINDOW_MS (60 s). Privzetih
+ * 30/min je močna zavora proti napadu z gesli (sicer 1800 poskusov uro).
+ *
+ * R497, IZMERJENO: ista meja zadavi lastni regresijski pas — 22 skupin se
+ * zaporedoma prijavlja z 127.0.0.1 in tretjina skupin je od 429 naprej padala na
+ * `AssertionError: prijava admin@roksal.si: 429`. Zato je meja okoljsko
+ * nastavljiva: v produkciji `AUTH_RATE_MAX` pusti prazen (30), lokalni pas in CI
+ * ga dvigneta (tests/ci-local.sh ga nastavi sam).
  */
-export const AUTH_RATE_MAX = 30
+const AUTH_RATE_MAX_ENV = Number(process.env.AUTH_RATE_MAX)
+export const AUTH_RATE_MAX =
+  Number.isInteger(AUTH_RATE_MAX_ENV) && AUTH_RATE_MAX_ENV > 0 ? AUTH_RATE_MAX_ENV : 30
 
 /** IP naslov odjemalca (Vercel in Caddy nastavita x-forwarded-for). */
 export function requestIp (req: { headers: { get (name: string): string | null } }): string {

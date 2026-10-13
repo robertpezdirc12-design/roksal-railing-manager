@@ -22,6 +22,12 @@ const pg = new EmbeddedPostgres({
   password: 'roksal',
   port: PORT,
   persistent: true,
+  // R497: UTF8 JE OBVEZEN, ne ugodnost. Brez flagov initdb na Windows vzame
+  // lokalno kodo (WIN1250), Prisma pa pošilja UTF8 — prva migracija z ne-ASCII
+  // znakom (`→` v 20261012000000_r475_segment_quantities) pade s P3018 /
+  // SQLSTATE 22P05 in lokalni relejni pas ne more steči. `--locale=C` je z
+  // UTF8 dovoljena kombinacija; na Linuxu dobiti enako kot doslej (UTF8/C).
+  initdbFlags: ['--encoding=UTF8', '--locale=C'],
 })
 
 const cmd = process.argv[2] ?? 'up'
