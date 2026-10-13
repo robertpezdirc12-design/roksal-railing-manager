@@ -181,8 +181,12 @@ orodje_ok () { # orodje_ok <ime> — 0 če je orodje ZARES uporabno
     sqlite3) orodje_ima sqlite3 && printf 'select 1;' | sqlite3 :memory: >/dev/null 2>&1 ;;
     openssl) orodje_ima openssl && openssl version >/dev/null 2>&1 ;;
     pdftotext) command -v pdftotext >/dev/null 2>&1 &&
-      # `-v` piše na stderr in izstopa NE-nil (brez datotek) — šteje izpis, ne izhod
-      pdftotext -v 2>&1 | grep -qi "poppler\|pdftotext" ;;
+      # `-v` piše na stderr in IZSTOPI NE-NIL (izmerjeno: 99). Pod `set -o pipefail`,
+      # ki ga uporablja ci-matrix, cev vrne 99 ne glede na to, da je grep
+      # našel zadetek — orodja torej NIKOLI ne bi prepoznal niti na stroju, ki ga
+      # ima (v CI bi bila r477 in r488 večno preskočena). `{ … || true; }`
+      # nevtralizira izhodno kodo, filter pa še vedno šteje samo izpis.
+      { pdftotext -v 2>&1 || true; } | grep -qi "poppler\|pdftotext" ;;
     imagick) { magick -version 2>/dev/null || convert -version 2>/dev/null; } | grep -qi imagemagick ;;
     *) orodje_ima "$1" ;;
   esac

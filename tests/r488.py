@@ -335,9 +335,20 @@ if s == 200 and pdf[:5] == b'%PDF-' and subprocess.run(['which', 'pdftotext'], c
     with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as f:
         f.write(pdf); pdf_path = f.name
     try:
-        txt = subprocess.run(['pdftotext', pdf_path, '-'], capture_output=True, text=True).stdout
+        # `errors='replace'`: XPDF-jev pdftotext izpisuje bytes izven UTF-8, pas
+        # pa izvozi PYTHONUTF8=1 — ob prvem takem byte-u sicer streli
+        # UnicodeDecodeError, kar ni napaka aplikacije. Kontrola bere SAMO črke
+        # brez šumnikov (MERILNI PAKET / ODREZNI SEZNAM), zato zamenjava ne more
+        # prikriti resnične napake.
+        r = subprocess.run(['pdftotext', pdf_path, '-'],
+                           capture_output=True, text=True, errors='replace')
+        # `.stdout` je lahko prazen ali None; brez normalizacije je `in txt` vrgel
+        # TypeError in je skril pravi razlog — napako orodja, ne vsebino PDF-ja.
+        # rc in stderr zato gresta v sporočilo kontrole.
+        txt = r.stdout or ''
         chk('MERILNI PAKET' in txt and 'ODREZNI SEZNAM' in txt,
-            'pdftotext: MERILNI PAKET + ODREZNI SEZNAM')
+            f'pdftotext: MERILNI PAKET + ODREZNI SEZNAM (rc={r.returncode}, '
+            f'znak={len(txt)}, stderr={r.stderr.strip()[:160]!r})')
     finally:
         os.unlink(pdf_path)
 else:

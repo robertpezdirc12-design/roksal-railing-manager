@@ -1913,3 +1913,42 @@ Stage Summary:
 - Tiha blokada produkcije je razložena in izmerjena: vzrok je identiteta avtorja commita, zato je preizkus vgrajen v relejna vrata in v operacijski alarm.
 - Deploy R493 … R498 OSTANE ZAPRT zaradi dveh neodvisnih pogojev: (a) aditivna migracija `20261018000000_r493_product_assets` (1 tabela + 3 indeksi + FK — brez nje panel »Produktna gradiva« javi napako, ostalo deluje; aditivnost pomeni, da je izvedljiva pred ALI za deployem brez izpada), (b) rotacija petih produkcijskih gesel (§ 4.1 ANALIZA), kar je lastnikova odločitev.
 - Izvedba deploya iz te seje NI mogoča: branje stanja produkcijske sheme je zavrnila varnostna politika seje, GitLab žeton je preklican, GitHub Actions minute so porabljene (≈2026-11-01).
+
+---
+Task ID: R499
+Agent: Qoder (merjenje na živo, 13. 10. 2026)
+
+Task: Odpraviti lažno preskočene suite-e in pripraviti promocijo `main`
+
+Work Log:
+- IZMERJENO: `tests/toolshim.sh` je `pdftotext` razglasil za manjkajočega na
+  stroju, kjer je nameščen (`/ucrt64/bin/pdftotext.exe`, XPDF 4.06). Razlog ni
+  PATH, ampak `set -o pipefail`: `orodje_ok` je uporabil cev
+  `pdftotext -v 2>&1 | grep -qi …`, XPDF z `-v` izstopi s 99, pipefail pa vrne
+  PRVO neničelno izhodno vrednost cevi — `grep` je bil uspešen, a je bil
+  rezultat vseeno 99. Posledica: r477 in r488 sta bila PRESKOČENA povsod, tudi
+  v CI, kjer orodje je nameščeno. Popravljeno z `{ … || true; } | grep`.
+- POSLEDICA POPRAVKA (pomembno): sam popravek detekcije BI obrnil r488 iz
+  »preskočen« v »rdeč«, ker je E-faza `pdftotext` klicala brez
+  `errors='replace'`. Pas izvozi `PYTHONUTF8=1` (R497), XPDF pa izpisuje bytes
+  izven UTF-8 → `UnicodeDecodeError`, `.stdout` je bil None in `in txt` je
+  vrgel `TypeError`. Test je torej propadal na lastnem dekodiranju, ne na
+  aplikaciji. Zdaj kontrola javi tudi `rc`, dolžino izpisa in stderr.
+- IZMERJENO NA ŽIVO: `r488.py` ✓ 65 / ✗ 0 (prej nikoli jekel); izpis kontrole
+  `pdftotext: MERILNI PAKET + ODREZNI SEZNAM (rc=0, znak=3792, stderr='')`.
+- CELI RELEJNI PAS ZA NOVIM ZAGONOM: `bash tests/ci-local.sh` → ✓ zeleno
+  (7 statičnih korakov, 22 skupin), izhod 0, log `.ci-local-logs/pas-r499.log`.
+  Preskočenih suite-ov je zdaj 6 (pred tem 7): r437.sh, r438.sh, r439.sh (manjka
+  `jq`), r440.sh (`jq` in `imagick`), r441.sh (`jq` in `sqlite3`) in r477.py
+  (`jq`). Teh orodij na tej mizi NI in jih pas namenoma NE posnema — emulacija
+  orodja bi dala lažen rezultat. Trditev »22/22 skupin« zato NI
+  trditev »vse kontrole izvedene«.
+- DEPLOJI ODLOČITEV (posodobljeno): uporabnik je 13. 10. izrecno umaknil pravilo
+  »ne deployaj, dokler gesla niso rotirana«. Dejstvo, da so javno znana gesla
+  še vedno veljavna, se s tem ne spremeni — rotacija OSTANE lastnikovo dejanje
+  in je zapisana v `docs/RECOVERY.md` §4.
+- STANJE VRAT: `origin/main` je prednik HEAD, zato je promocija hitra
+  (fast-forward) — brez prisilnega pusha in brez prepisovanja zgodovine. Vrhi
+  na `origin/main` so bili `aa424c0 <z@container>`; HEAD veje je
+  `robertpezdirc12-design@users.noreply.github.com`, kar je edino, kar Vercel
+  gleda.
