@@ -39,8 +39,13 @@ export const CALIB_METHODS: { id: CalibrationMethod; label: string; desc: string
 
 export interface EnginePoint { x: number; y: number; src?: 'ROCNO' | 'PREDLOG' }
 export interface EngineCalib {
-  px: number // dolžina reference v pikslih
-  cm: number // dolžina reference v cm
+  px: number // dolžina reference v pikslih (smer X na sliki)
+  cm: number // dolžina reference v cm (smer X na sliki)
+  /** issue #15 faza 1: ločena referenca v smeri Y na sliki. Kadar je podana,
+   *  merilo NI enako v vseh smereh (nagnjen kader) in izračun uporabi
+   *  anizotropno merilo namesto enega globalnega razmerja. */
+  pxY?: number
+  cmY?: number
   imgW?: number
   imgH?: number
   method?: CalibrationMethod
@@ -112,38 +117,157 @@ export const MODE_RULES: Record<MeasureMode, ModeRule> = {
 
 const r1 = (n: number) => Math.round(n * 10) / 10
 const r2 = (n: number) => Math.round(n * 100) / 100
+/** decimalna VEJICA — za besedila, ki jih monter bere (razlogi, note, izvoz). */
+const r1c = (n: number) => String(r1(n)).replace('.', ',')
+const r2c = (n: number) => String(r2(n)).replace('.', ',')
 
-/** Piksli med dvema točkama (normalizirani 0..1 z imgW/imgH ali že v px). */
-function toPx (pts: EnginePoint[], calib: EngineCalib): { x: number; y: number }[] {
-  const hasDim = (calib.imgW ?? 0) > 0 && (calib.imgH ?? 0) > 0
-  return pts.map((p) => ({ x: p.x * (hasDim ? (calib.imgW as number) : 1), y: p.y * (hasDim ? (calib.imgH as number) : 1) }))
+/** §4 / issue #15 faza 1: do kakšnega nagiba je eno globalno merilo za VSE
+ *  smeri še zaglobljivo (napaka ≤ 1,5 % zaradi cos(tilt)). Nad pragom smer Y
+ *  na sliki ni enaka smeri X — potrebuje ločeno referenco (pxY/cmY). */
+export const TILT_ENOTNO_MERILO_MAX_DEG = 10
+
+export type ScaleBasis = 'ENOTNO_Z_DOKAZOM' | 'ENOTNO_BREZ_DOKAZA' | 'ANIZOTROPNO' | 'NEZNANO'
+
+export interface ScaleModel {
+  /** Ali sploh obstaja številsko merilo. `false` = NIKAKIŠNJIH cm-številk ni
+   *  dovoljeno uporabiti (poslovna mera); opomba: TIHO merilo 1 cm/px ne
+   *  obstaja več — prejšnja različica ga je uporabila kot rezervo. */
+  known: boolean
+  /** Ali je eno merilo za vse smeri podprto z dokazom (pravokotnost ali
+   *  ločena Y referenca). `false` pri nagnjenem kaderu brez Y reference. */
+  isotropicProven: boolean
+  cmPerPxX: number | null
+  cmPerPxY: number | null
+  basis: ScaleBasis
+  tiltDeg: number | null
+  /** Največji kot med smermi merjenih segmentov v sliki (0..180). */
+  directionSpreadDeg: number | null
+  /** Merilo velja za smeri pod tem kotom; nad njim je izračun napačen. */
+  validWithinDeg: number | null
+  reasons: string[]
+}
+
+export interface ScaleContext { tiltDeg?: number | null; spreadDeg?: number | null }
+
+/** Ena definicija merila — uporabijo jo vsi geometrijski izračuni (issue #15:
+ *  ne trih ločenih `calib.px > 0 ? … : 1`). */
+export function resolveScale (calib: EngineCalib | null | undefined, ctx: ScaleContext = {}): ScaleModel {
+  const tilt = ctx.tiltDeg != null && Number.isFinite(ctx.tiltDeg) ? Math.abs(ctx.tiltDeg) : null
+  const spread = ctx.spreadDeg != null && Number.isFinite(ctx.spreadDeg) ? ctx.spreadDeg : null
+  const px = Number(calib?.px); const cm = Number(calib?.cm)
+  const base: ScaleModel = {
+    known: false, isotropicProven: false, cmPerPxX: null, cmPerPxY: null,
+    basis: 'NEZNANO', tiltDeg: tilt, directionSpreadDeg: spread, validWithinDeg: null, reasons: [],
+  }
+  if (!(px > 0) || !(cm > 0)) {
+    base.reasons.push('Merilo ni znano (kalibracija px/cm manjka ali je ≤ 0) — cm-vrednosti se NE izračunajo, tudi izpisa s predpostavljenim 1 cm/px ne.')
+    return base
+  }
+  const sx = cm / px
+  const pxY = Number(calib?.pxY); const cmY = Number(calib?.cmY)
+  const sy = pxY > 0 && cmY > 0 ? cmY / pxY : null
+  if (sy !== null) {
+    return {
+      ...base, known: true, isotropicProven: true, cmPerPxX: sx, cmPerPxY: sy, basis: 'ANIZOTROPNO',
+      validWithinDeg: 180,
+      reasons: [`ločena referenca X ${r2c(sx)} cm/px, Y ${r2c(sy)} cm/px — merilo je podano posebej za obe smeri`],
+    }
+  }
+  if (tilt == null) {
+    return {
+      ...base, known: true, isotropicProven: false, cmPerPxX: sx, cmPerPxY: sx, basis: 'ENOTNO_BREZ_DOKAZA',
+      validWithinDeg: TILT_ENOTNO_MERILO_MAX_DEG,
+      reasons: [`eno merilo ${r2c(sx)} cm/px za vse smeri — nagib naprave ni merjen, zato je pravokotnost na ravnino PREDPOSTAVKA in ne dokaz`],
+    }
+  }
+  if (tilt <= TILT_ENOTNO_MERILO_MAX_DEG) {
+    return {
+      ...base, known: true, isotropicProven: true, cmPerPxX: sx, cmPerPxY: sx, basis: 'ENOTNO_Z_DOKAZOM',
+      validWithinDeg: 180,
+      reasons: [`kader je pravokoten na ravnino (nagib ${r1c(tilt)}° ≤ ${TILT_ENOTNO_MERILO_MAX_DEG}°) — eno merilo ${r2c(sx)} cm/px velja v vseh smereh`],
+    }
+  }
+  // Napaka zaradi cos(tilt) v smeri Y: 1/cos − 1 (pri 30° = 15,5 %).
+  const errPct = (1 / Math.cos((tilt * Math.PI) / 180) - 1) * 100
+  const validWithin = spread != null && spread <= TILT_ENOTNO_MERILO_MAX_DEG ? 180 : TILT_ENOTNO_MERILO_MAX_DEG
+  return {
+    ...base, known: true,
+    isotropicProven: spread != null && spread <= TILT_ENOTNO_MERILO_MAX_DEG,
+    cmPerPxX: sx, cmPerPxY: sx, basis: 'ENOTNO_BREZ_DOKAZA',
+    validWithinDeg: validWithin,
+    reasons: [
+      `nagib ${r1c(tilt)}° > ${TILT_ENOTNO_MERILO_MAX_DEG}°: smer Y na sliki je krajšana za ≈ ${r1c(errPct)} %, eno merilo (${r2c(sx)} cm/px) velja samo za smeri blizu reference`,
+      spread != null ? `smeri merjenih segmentov se razhajata do ${r1c(spread)}°` : 'smeri merjenih segmentov nista podani',
+      'rešitev: ločena Y referenca (pxY/cmY) ali kader pravokoten na ravnino',
+    ],
+  }
+}
+
+/** Kot (°) med zaporednima točkama v slikovnih pikslih — za razpršenost smeri. */
+function smerDeg (dx: number, dy: number): number { return (Math.atan2(dy, dx) * 180) / Math.PI }
+
+/** Največje razhajanje med smermi segmentov polyline (0..180, normalize na os). */
+function razprsenostSmer (px: { x: number; y: number }[]): number | null {
+  const smi: number[] = []
+  for (let i = 0; i + 1 < px.length; i++) {
+    const dx = px[i + 1].x - px[i].x; const dy = px[i + 1].y - px[i].y
+    if (dx === 0 && dy === 0) continue
+    let a = smerDeg(dx, dy) % 180
+    if (a < 0) a += 180
+    smi.push(a)
+  }
+  if (smi.length === 0) return null
+  if (smi.length === 1) return 0
+  let worst = 0
+  for (let i = 0; i < smi.length; i++) {
+    for (let j = i + 1; j < smi.length; j++) {
+      let d = Math.abs(smi[i] - smi[j])
+      if (d > 90) d = 180 - d
+      if (d > worst) worst = d
+    }
+  }
+  return r1(worst)
+}
+
+/** Razdalja v pikslih med dvema točkama (normalizirano 0..1 z imgW/imgH ali že v px). */
+function toPx (pts: EnginePoint[], calib: EngineCalib | null | undefined): { x: number; y: number }[] {
+  const hasDim = (calib?.imgW ?? 0) > 0 && (calib?.imgH ?? 0) > 0
+  return pts.map((p) => ({ x: p.x * (hasDim ? (calib?.imgW as number) : 1), y: p.y * (hasDim ? (calib?.imgH as number) : 1) }))
 }
 
 export interface GeometryResult {
   segments: Segment[]
   corners: Corner[]
   totalLengthCm: number
-  cmPerPx: number
+  /** Enotno merilo (cm/px) ali `null`, kadar merila ni. Za odločitev o
+   *  veljavnosti po smereh uporabi `scale` (`issue #15` faza 1). */
+  cmPerPx: number | null
+  scale: ScaleModel
   bbox: { wCm: number; hCm: number }
 }
 
-/** Polilinija: dolžine/koti segmentov + vogali (vzorec railing-layout, §12). */
-export function computeGeometry (ptsIn: EnginePoint[], calib: EngineCalib): GeometryResult {
+/** Polilinija: dolžine/koti segmentov + vogali (vzorec railing-layout, §12).
+ *  `opts.tiltDeg` je dokaz o nagibu naprave; brez njega je eno merilo za vse
+ *  smeri nedokazana predpostavka (`scale.isotropicProven = false`). */
+export function computeGeometry (ptsIn: EnginePoint[], calib: EngineCalib | null | undefined, opts: { tiltDeg?: number | null } = {}): GeometryResult {
   const pts = ptsIn.filter((p) => p.src !== 'PREDLOG') // predlogi ne štejejo (§5 avtomatika ni avtoriteta)
-  const cmPerPx = calib.px > 0 ? calib.cm / calib.px : 1
   const px = toPx(pts, calib)
+  const scale = resolveScale(calib, { tiltDeg: opts.tiltDeg ?? null, spreadDeg: razprsenostSmer(px) })
+  const prazna: GeometryResult = { segments: [], corners: [], totalLengthCm: 0, cmPerPx: null, scale, bbox: { wCm: 0, hCm: 0 } }
+  if (!scale.known || scale.cmPerPxX === null || scale.cmPerPxY === null) return prazna
+  const sx = scale.cmPerPxX; const sy = scale.cmPerPxY
   const segments: Segment[] = []
   let total = 0
   for (let i = 0; i + 1 < px.length; i++) {
     const dx = px[i + 1].x - px[i].x
     const dy = px[i + 1].y - px[i].y
-    const lengthCm = Math.hypot(dx, dy) * cmPerPx
+    const lengthCm = Math.hypot(dx * sx, dy * sy)
     segments.push({
       from: i, to: i + 1,
       lengthCm: r1(lengthCm),
       angleDeg: Math.round((Math.atan2(dy, dx) * 180) / Math.PI * 10) / 10,
-      heightDiffCm: r1(dy * cmPerPx),
-      horizontalCm: r1(Math.abs(dx) * cmPerPx),
+      heightDiffCm: r1(dy * sy),
+      horizontalCm: r1(Math.abs(dx) * sx),
     })
     total += lengthCm
   }
@@ -159,9 +283,10 @@ export function computeGeometry (ptsIn: EnginePoint[], calib: EngineCalib): Geom
   return {
     segments, corners,
     totalLengthCm: r1(total),
-    cmPerPx,
+    cmPerPx: sx === sy ? sx : null,
+    scale,
     bbox: px.length > 0
-      ? { wCm: r1((Math.max(...xs) - Math.min(...xs)) * cmPerPx), hCm: r1((Math.max(...ys) - Math.min(...ys)) * cmPerPx) }
+      ? { wCm: r1((Math.max(...xs) - Math.min(...xs)) * sx), hCm: r1((Math.max(...ys) - Math.min(...ys)) * sy) }
       : { wCm: 0, hCm: 0 },
   }
 }
@@ -173,16 +298,23 @@ export interface PolygonResult {
   areaM2: number // bruto površina (šahovnica)
   perimeterCm: number
   edges: Segment[] // robovi poligona (vključno s zaklepalko)
+  scale: ScaleModel
 }
 
-/** Poligon (§9/§10/§11): samodejno zaprtje, površina (shoelace), obseg. */
-export function polygonMetrics (ptsIn: EnginePoint[], calib: EngineCalib): PolygonResult {
+/** Poligon (§9/§10/§11): samodejno zaprtje, površina (shoelace), obseg.
+ *  Kadar merila ni, so vse cm-vrednosti 0 in `scale.known = false` — NICOČ
+ *  ni izmerjena mera, je pa eksplicitno neznano merilo (issue #15 faza 1). */
+export function polygonMetrics (ptsIn: EnginePoint[], calib: EngineCalib | null | undefined, opts: { tiltDeg?: number | null } = {}): PolygonResult {
   const pts = ptsIn.filter((p) => p.src !== 'PREDLOG')
-  const cmPerPx = calib.px > 0 ? calib.cm / calib.px : 1
   const px = toPx(pts, calib)
+  const scale = resolveScale(calib, { tiltDeg: opts.tiltDeg ?? null, spreadDeg: razprsenostSmer(px) })
+  const sx = scale.cmPerPxX; const sy = scale.cmPerPxY
+  if (!scale.known || sx === null || sy === null) {
+    return { closed: pts.length >= 3, closureCm: 0, closurePct: 100, areaM2: 0, perimeterCm: 0, edges: [], scale }
+  }
   const closed = pts.length >= 3
-  const closureCm = pts.length >= 3 ? r1(Math.hypot(px[0].x - px[px.length - 1].x, px[0].y - px[px.length - 1].y) * cmPerPx) : 0
-  const ring = px.map((p) => ({ x: p.x * cmPerPx, y: p.y * cmPerPx })) // v cm
+  const closureCm = pts.length >= 3 ? r1(Math.hypot((px[0].x - px[px.length - 1].x) * sx, (px[0].y - px[px.length - 1].y) * sy)) : 0
+  const ring = px.map((p) => ({ x: p.x * sx, y: p.y * sy })) // v cm (po smereh)
   // robovi: zaporedni + zaklepalka nazaj na prvo točko
   const edges: Segment[] = []
   let perimeter = 0
@@ -211,17 +343,20 @@ export function polygonMetrics (ptsIn: EnginePoint[], calib: EngineCalib): Polyg
     areaM2: ring.length >= 3 ? r2(Math.abs(area2) / 2 / 10000) : 0,
     perimeterCm: r1(perimeter),
     edges,
+    scale,
   }
 }
 
 /** Diagonale (§12): pri 4 točkah (0↔2, 1↔3), sicer praški prek vogalov. */
-export function diagonalMetrics (ptsIn: EnginePoint[], calib: EngineCalib): Diagonal[] {
+export function diagonalMetrics (ptsIn: EnginePoint[], calib: EngineCalib | null | undefined, opts: { tiltDeg?: number | null } = {}): Diagonal[] {
   const pts = ptsIn.filter((p) => p.src !== 'PREDLOG')
   if (pts.length < 4) return []
-  const cmPerPx = calib.px > 0 ? calib.cm / calib.px : 1
+  const scale = resolveScale(calib, { tiltDeg: opts.tiltDeg ?? null })
+  if (!scale.known || scale.cmPerPxX === null || scale.cmPerPxY === null) return []
+  const sx = scale.cmPerPxX; const sy = scale.cmPerPxY
   const px = toPx(pts, calib)
   const pairs: [number, number][] = pts.length === 4 ? [[0, 2], [1, 3]] : [[0, Math.floor(pts.length / 2)]]
-  return pairs.map(([i, j]) => ({ i, j, lengthCm: r1(Math.hypot(px[j].x - px[i].x, px[j].y - px[i].y) * cmPerPx) }))
+  return pairs.map(([i, j]) => ({ i, j, lengthCm: r1(Math.hypot((px[j].x - px[i].x) * sx, (px[j].y - px[i].y) * sy)) }))
 }
 
 // ── R487 (issue #3 §4C): statistika strinjanja pogledov ──────────────────────
@@ -255,7 +390,7 @@ export function validateGeometry (
   mode: MeasureMode,
   ptsIn: EnginePoint[],
   calib: EngineCalib | null,
-  opts: { manualLengthCm?: number | null; computedLengthCm?: number | null; steps?: number | null } = {}
+  opts: { manualLengthCm?: number | null; computedLengthCm?: number | null; steps?: number | null; tiltDeg?: number | null } = {}
 ): ValidationIssue[] {
   const rule = MODE_RULES[mode]
   const issues: ValidationIssue[] = []
@@ -269,7 +404,20 @@ export function validateGeometry (
     issues.push({ code: 'MANJKA_KALIBRACIJA', severity: 'NAPAKA', message: 'Brez eksplicitne referenčne kalibracije avtomatska dimenzija ni potrjena poslovna mera (§4).' })
     return issues
   }
-  const geo = computeGeometry(pts, calib)
+  const geo = computeGeometry(pts, calib, { tiltDeg: opts.tiltDeg ?? null })
+
+  // issue #15 faza 1: eno globalno merilo za VSE smeri je veljavno samo, kadar
+  // je pravokotnost dokazana (nagib ≤ praga) ali je podana ločena Y referenca.
+  // Nagnjen kader + več smeri merjenja = napaka, ki jo mora videti monter, ne
+  // tiho predelati v številko, ki je videti kot mera.
+  if (geo.scale.basis === 'ENOTNO_BREZ_DOKAZA' && geo.scale.tiltDeg != null &&
+      geo.scale.tiltDeg > TILT_ENOTNO_MERILO_MAX_DEG && (geo.scale.directionSpreadDeg ?? 0) > TILT_ENOTNO_MERILO_MAX_DEG) {
+    issues.push({
+      code: 'MERILO_NEZADOSTNO',
+      severity: 'NAPAKA',
+      message: `Slika ni pravokotna na merjeno ravnino (nagib ${r1c(geo.scale.tiltDeg)}°), merjene smeri pa se razhajajo do ${r1c(geo.scale.directionSpreadDeg ?? 0)}° — eno razmerje cm/piksel ne more veljati v vseh smereh. Dodajte ločeno Y referenco (pxY/cmY) ali posnemite pravokotno na ravnino.`,
+    })
+  }
 
   // poligon: samodejno zaprtje (kot magicplan/MeasureSquare) — obroč = točke +
   // implicirana zaklepalka nazaj na prvo točko. §14 »ali je poligon zaprt« =
@@ -278,7 +426,7 @@ export function validateGeometry (
   // Zamujeni vogal se ne da zanesljivo zaznati geometrijsko — zadnja obramba je
   // review zaslon s narisanim poligonom (§15).
   if (rule.polygon) {
-    const poly = polygonMetrics(pts, calib)
+    const poly = polygonMetrics(pts, calib, { tiltDeg: opts.tiltDeg ?? null })
     if (poly.closurePct < 2 && pts.length >= 3) {
       issues.push({ code: 'ZAKLOPNA_TOCKA', severity: 'INFO', message: 'Prva in zadnja točka se skoraj prekrivata — poligon je eksplicitno zaprt (zaklepalka ničelna).' })
     }
@@ -336,6 +484,79 @@ export function validateGeometry (
   return issues
 }
 
+// ── issue #15 faza 1: veljavnost PO POSAMEZNI quantities ─────────────────────
+// Koser skupne ocene »uspešno/napotno« ločeno ocenimo, kaj iz katerega
+// podatka sploh sme slediti. Iz planarnega overlay-a (točke na SLIKI +
+// merilo) smejo biti dolžine in površine v ravnini; višinske/3D trditve iz
+// njega ne smejo biti — slikovni Δy je projekcija, ne meritev višine.
+
+export type QuantityKind = 'DOLZINA' | 'PLOSCEVINA' | 'KOT' | 'VISINA'
+export type QuantityState = 'VELJAVNA' | 'PREDPOSTAVKA' | 'NEZADOSTNI_PODATKI'
+export interface QuantityValidity { quantity: QuantityKind; state: QuantityState; note: string }
+
+export function quantityValidity (scale: ScaleModel, measured: QuantityKind[]): QuantityValidity[] {
+  const tilt = scale.tiltDeg
+  const out: QuantityValidity[] = []
+  for (const q of measured) {
+    if (!scale.known) {
+      out.push({ quantity: q, state: 'NEZADOSTNI_PODATKI', note: 'merilo (cm/px) ni znano — vrednosti ni iz česa izračunati' })
+      continue
+    }
+    if (q === 'VISINA') {
+      // Višina iz planarnega overlay-a NIKOLI ni dokazana: potrebna je
+      // leveleiranje, globinski senzor ali zunanja naprava.
+      out.push({ quantity: q, state: 'NEZADOSTNI_PODATKI', note: 'slikovni navpični premik je projekcija v ravnini, ne izmerjena višina — potreben je levelirni/globinski podatek' })
+      continue
+    }
+    if (scale.isotropicProven) {
+      out.push({ quantity: q, state: 'VELJAVNA', note: scale.basis === 'ANIZOTROPNO' ? 'ločeni merili X in Y' : `pravokoten kader (nagib ${r1c(tilt ?? 0)}°)` })
+      continue
+    }
+    if (tilt == null) {
+      out.push({ quantity: q, state: 'PREDPOSTAVKA', note: 'pravokotnost na ravnino ni merjena — eno merilo je predpostavka, ne dokaz' })
+      continue
+    }
+    if (q === 'PLOSCEVINA' || (scale.directionSpreadDeg ?? 0) > TILT_ENOTNO_MERILO_MAX_DEG) {
+      out.push({ quantity: q, state: 'NEZADOSTNI_PODATKI', note: `nagib ${r1c(tilt)}° brez ločene Y reference — sistemska napaka ≈ ${r1c((1 / Math.cos((tilt * Math.PI) / 180) - 1) * 100)} %` })
+      continue
+    }
+    out.push({ quantity: q, state: 'PREDPOSTAVKA', note: `smer je blizu reference (razpršenost ${r1c(scale.directionSpreadDeg ?? 0)}°), popačenje nagiba ${r1c(tilt)}° je majhno` })
+  }
+  return out
+}
+
+export interface MeasureValidity {
+  status: 'VELJAVNA' | 'NEZADOSTNI_PODATKI' | 'NESKLADJE_GEOMETRIJE'
+  /** Ali sme rezultat sploh v poslovno/proizvodno mero (BOM, ponudba). */
+  businessMeasureAllowed: boolean
+  quantities: QuantityValidity[]
+  reasons: string[]
+}
+
+export function measureValidity (args: {
+  scale: ScaleModel
+  measured: QuantityKind[]
+  issues: ValidationIssue[]
+}): MeasureValidity {
+  const quantities = quantityValidity(args.scale, args.measured)
+  const reasons: string[] = []
+  const napake = args.issues.filter((i) => i.severity === 'NAPAKA')
+  const nezadostni = quantities.filter((q) => q.state === 'NEZADOSTNI_PODATKI')
+  if (napake.length > 0) reasons.push(...napake.map((i) => i.message))
+  if (nezadostni.length > 0) reasons.push(...nezadostni.map((q) => `${q.quantity}: ${q.note}`))
+  const status: MeasureValidity['status'] = !args.scale.known || nezadostni.length > 0
+    ? 'NEZADOSTNI_PODATKI'
+    : napake.length > 0 ? 'NESKLADJE_GEOMETRIJE' : 'VELJAVNA'
+  return {
+    status,
+    // Višina je NIKOLI poslovno veljavna iz planarnega overlay-a; vse ostalo
+    // sme naprej, ko ni neznano merilo in ni geometrijske napake.
+    businessMeasureAllowed: status === 'VELJAVNA' && !args.measured.includes('VISINA'),
+    quantities,
+    reasons,
+  }
+}
+
 // ── §8–§11: domenski paketi ──────────────────────────────────────────────────
 
 export interface Opening { wCm: number; hCm: number; count: number }
@@ -388,6 +609,9 @@ export interface StrehaDomain {
   mode: 'STREHA'
   footprintM2: number
   pitchDeg: number
+  /** issue #15 faza 1 (H6): ali je naklon VNESEN ali PRIVZET — privzetega
+   *  35° ne sme prikazati kot izmerjenega. */
+  pitchSource: 'VNOS' | 'PRIVZET'
   faceAreaM2: number
   perimeterCm: number
   ridgeCm: number
@@ -410,6 +634,10 @@ export interface StopniceDomain {
   mode: 'STOPNICE'
   slopeLengthCm: number
   heightDiffCm: number
+  /** issue #15 faza 1 (H7): višinska razlika iz navpičnice SLIKE je projekcija
+   *  v merjeno ravnino, ne izmerjena višina — iz planarnega overlay-a se 3D ne
+   *  trdi (glej `quantityValidity('VISINA')`). */
+  heightBasis: 'PROJEKCIJA_SLIKE'
   horizontalCm: number
   angleDeg: number
   steps: number
@@ -430,8 +658,8 @@ export interface SplosnoDomain { mode: 'SPLOSNO'; totalLengthCm: number; segment
 
 export type DomainResult = OgrajaDomain | KeramikaDomain | StrehaDomain | FasadaDomain | StopniceDomain | ProstorDomain | SplosnoDomain
 
-export function analyzeDomain (mode: MeasureMode, pts: EnginePoint[], calib: EngineCalib, opts: DomainOptions = {}): DomainResult {
-  const geo = computeGeometry(pts, calib)
+export function analyzeDomain (mode: MeasureMode, pts: EnginePoint[], calib: EngineCalib | null | undefined, opts: DomainOptions = {}, geoCtx: { tiltDeg?: number | null } = {}): DomainResult {
+  const geo = computeGeometry(pts, calib, { tiltDeg: geoCtx.tiltDeg ?? null })
   switch (mode) {
     case 'OGRAJA': {
       const maxSpan = opts.maxSpanCm != null && opts.maxSpanCm >= 40 && opts.maxSpanCm <= 300 ? opts.maxSpanCm : 120
@@ -450,7 +678,7 @@ export function analyzeDomain (mode: MeasureMode, pts: EnginePoint[], calib: Eng
       }
     }
     case 'KERAMIKA': {
-      const poly = polygonMetrics(pts, calib)
+      const poly = polygonMetrics(pts, calib, { tiltDeg: geoCtx.tiltDeg ?? null })
       const tileW = opts.tileWcm != null && opts.tileWcm > 0 ? opts.tileWcm : 60
       const tileH = opts.tileHcm != null && opts.tileHcm > 0 ? opts.tileHcm : 60
       const jointMm = opts.jointMm != null && opts.jointMm >= 0 && opts.jointMm <= 30 ? opts.jointMm : 3
@@ -477,8 +705,9 @@ export function analyzeDomain (mode: MeasureMode, pts: EnginePoint[], calib: Eng
       }
     }
     case 'STREHA': {
-      const poly = polygonMetrics(pts, calib)
-      const pitch = opts.pitchDeg != null && opts.pitchDeg >= 0 && opts.pitchDeg < 85 ? opts.pitchDeg : 35
+      const poly = polygonMetrics(pts, calib, { tiltDeg: geoCtx.tiltDeg ?? null })
+      const pitchVnos = opts.pitchDeg != null && opts.pitchDeg >= 0 && opts.pitchDeg < 85
+      const pitch = pitchVnos ? (opts.pitchDeg as number) : 35
       const material = opts.roofMaterial === 'KOVINSKA' ? 'KOVINSKA' : 'BETONNA'
       const faceArea = r2(poly.areaM2 / Math.cos((pitch * Math.PI) / 180))
       const sorted = [...poly.edges].sort((a, b) => b.lengthCm - a.lengthCm)
@@ -486,13 +715,13 @@ export function analyzeDomain (mode: MeasureMode, pts: EnginePoint[], calib: Eng
       const eave = r1(poly.perimeterCm - ridge)
       const wastePct = material === 'KOVINSKA' ? 7 : 10
       return {
-        mode: 'STREHA', footprintM2: poly.areaM2, pitchDeg: pitch, faceAreaM2: faceArea,
+        mode: 'STREHA', footprintM2: poly.areaM2, pitchDeg: pitch, pitchSource: pitchVnos ? 'VNOS' : 'PRIVZET', faceAreaM2: faceArea,
         perimeterCm: poly.perimeterCm, ridgeCm: ridge, eaveCm: eave, material, wastePct,
         materialM2: r2(faceArea * (1 + wastePct / 100)),
       }
     }
     case 'FASADA': {
-      const poly = polygonMetrics(pts, calib)
+      const poly = polygonMetrics(pts, calib, { tiltDeg: geoCtx.tiltDeg ?? null })
       const openings = (opts.openings ?? []).map((o) => ({ wCm: o.wCm, hCm: o.hCm, count: o.count, areaM2: r2((o.wCm * o.hCm * o.count) / 10000) }))
       const openingsM2 = r2(openings.reduce((s, o) => s + o.areaM2, 0))
       return {
@@ -508,6 +737,7 @@ export function analyzeDomain (mode: MeasureMode, pts: EnginePoint[], calib: Eng
         mode: 'STOPNICE',
         slopeLengthCm: s.lengthCm,
         heightDiffCm: r1(heightDiff),
+        heightBasis: 'PROJEKCIJA_SLIKE',
         horizontalCm: s.horizontalCm,
         angleDeg: Math.round((Math.atan2(heightDiff, s.horizontalCm || 1) * 180) / Math.PI * 10) / 10,
         steps,
@@ -516,8 +746,8 @@ export function analyzeDomain (mode: MeasureMode, pts: EnginePoint[], calib: Eng
       }
     }
     case 'PROSTOR': {
-      const poly = polygonMetrics(pts, calib)
-      const diags = diagonalMetrics(pts, calib)
+      const poly = polygonMetrics(pts, calib, { tiltDeg: geoCtx.tiltDeg ?? null })
+      const diags = diagonalMetrics(pts, calib, { tiltDeg: geoCtx.tiltDeg ?? null })
       const rectangleOk = diags.length === 2 && diags[1].lengthCm > 0
         ? Math.abs(diags[0].lengthCm - diags[1].lengthCm) / Math.max(diags[0].lengthCm, diags[1].lengthCm) <= 0.01
         : null
@@ -568,6 +798,9 @@ export function captureGuide (args: {
   tiltDeg?: number | null
   calibPresent: boolean
   viewCount: number
+  /** issue #15 faza 1: model merila (če je izračunan) — brez njega se
+   *  pravokotnost obravnava kot NI MERJENA, ne kot dokazana. */
+  scale?: ScaleModel | null
 }): { checks: CaptureCheck[]; status: CheckState } {
   const q = args.quality
   const checks: CaptureCheck[] = []
@@ -602,6 +835,27 @@ export function captureGuide (args: {
   checks.push(args.calibPresent
     ? { code: 'REF', label: 'Referenčna mera', state: 'DOBRO', detail: 'kalibracija je postavljena' }
     : { code: 'REF', label: 'Referenčna mera', state: 'NEZADOSTNO', detail: 'brez reference ni potrjene poslovne mere (§4)' })
+  // issue #15 faza 1: velja eno merilo za vse smeri ali ne?
+  {
+    const s = args.scale ?? null
+    const tg = s?.tiltDeg ?? args.tiltDeg ?? null
+    const spread = s?.directionSpreadDeg ?? null
+    let stanje: CheckState = 'DOBRO'
+    let podrobnost = 'eno merilo cm/px velja za vse smeri (pravokotnost ni merjena — predpostavka)'
+    if (!args.calibPresent) {
+      stanje = 'NEZADOSTNO'; podrobnost = 'merilo (cm/px) ni znano — iz slikovnih točk ni poslovne mere'
+    } else if (s?.isotropicProven) {
+      stanje = 'DOBRO'
+      podrobnost = s.basis === 'ANIZOTROPNO' ? 'ločeni merili za X in Y smer' : `pravokoten kader (nagib ${r1c(tg ?? 0)}°)`
+    } else if (tg != null && tg > TILT_ENOTNO_MERILO_MAX_DEG && (spread ?? 0) > TILT_ENOTNO_MERILO_MAX_DEG) {
+      stanje = 'NEZADOSTNO'
+      podrobnost = `nagib ${r1c(tg)}° in smeri do ${r1c(spread ?? 0)}° razpršene — eno merilo ne zvelja (bodisi Y referenca bodisi pravokoten kader)`
+    } else if (tg != null && tg > TILT_ENOTNO_MERILO_MAX_DEG) {
+      stanje = 'OPOZORILO'
+      podrobnost = `nagib ${r1c(tg)}° — merilo je zanesljivo samo vzdolž reference`
+    }
+    checks.push({ code: 'MERILO', label: 'Veljavnost merila', state: stanje, detail: podrobnost })
+  }
   checks.push(args.viewCount >= 2
     ? { code: 'COVERAGE', label: 'Pokritost (pogledi)', state: 'DOBRO', detail: `${args.viewCount} pogledi istega objekta` }
     : args.viewCount === 1
@@ -674,12 +928,29 @@ export interface AnalyzeInput {
   viewCount?: number | null
 }
 
+/** Kaj kateri način sploh meri (issue #15 faza 1 — veljavnost po quantities).
+ *  VISINA je vključena samo tam, kjer domenski paket številko višine dejansko
+ *  izpelje iz slike (STOPNICE), ne v OGRAJI, kjer je višina polnila vnos. */
+export const MODE_QUANTITIES: Record<MeasureMode, QuantityKind[]> = {
+  OGRAJA: ['DOLZINA', 'KOT'],
+  KERAMIKA: ['DOLZINA', 'PLOSCEVINA', 'KOT'],
+  STREHA: ['DOLZINA', 'PLOSCEVINA', 'KOT'],
+  FASADA: ['DOLZINA', 'PLOSCEVINA', 'KOT'],
+  STOPNICE: ['DOLZINA', 'KOT', 'VISINA'],
+  PROSTOR: ['DOLZINA', 'PLOSCEVINA', 'KOT'],
+  SPLOSNO: ['DOLZINA', 'KOT'],
+}
+
 export interface AnalyzeResult {
   mode: MeasureMode
   geometry: GeometryResult
+  /** issue #15 faza 1: model merila (enotno/anizotropno/neznano) + razlogi. */
+  scale: ScaleModel
   polygon: PolygonResult | null
   diagonals: Diagonal[]
   validation: ValidationIssue[]
+  /** issue #15 faza 1: ali rezultat sme v poslovno/proizvodno mero. */
+  validity: MeasureValidity
   confidence: ConfidenceResult
   captureGuide: { checks: CaptureCheck[]; status: CheckState }
   domain: DomainResult
@@ -688,14 +959,18 @@ export interface AnalyzeResult {
 
 export function runAnalysis (input: AnalyzeInput): AnalyzeResult {
   const rule = MODE_RULES[input.mode]
-  const geometry = computeGeometry(input.points, input.calibration)
-  const polygon = rule.polygon ? polygonMetrics(input.points, input.calibration) : null
-  const diagonals = diagonalMetrics(input.points, input.calibration)
+  const tilt = input.tiltDeg ?? null
+  const geometry = computeGeometry(input.points, input.calibration, { tiltDeg: tilt })
+  const scale = geometry.scale
+  const polygon = rule.polygon ? polygonMetrics(input.points, input.calibration, { tiltDeg: tilt }) : null
+  const diagonals = diagonalMetrics(input.points, input.calibration, { tiltDeg: tilt })
   const validation = validateGeometry(input.mode, input.points, input.calibration, {
     manualLengthCm: input.manualLengthCm ?? null,
     computedLengthCm: input.manualLengthCm != null ? geometry.totalLengthCm : null,
     steps: input.options?.steps ?? null,
+    tiltDeg: tilt,
   })
+  const validity = measureValidity({ scale, measured: MODE_QUANTITIES[input.mode], issues: validation })
   const confidence = computeConfidence({
     calibMethod: input.calibration.method ?? null,
     quality: input.quality ?? null,
@@ -705,18 +980,21 @@ export function runAnalysis (input: AnalyzeInput): AnalyzeResult {
   const guide = captureGuide({
     quality: input.quality ?? null,
     tiltDeg: input.tiltDeg ?? null,
-    calibPresent: input.calibration.px > 0 && input.calibration.cm > 0,
+    calibPresent: scale.known,
     viewCount: input.viewCount ?? 1,
+    scale,
   })
   return {
     mode: input.mode,
     geometry,
+    scale,
     polygon,
     diagonals,
     validation,
+    validity,
     confidence,
     captureGuide: guide,
-    domain: analyzeDomain(input.mode, input.points, input.calibration, input.options ?? {}),
+    domain: analyzeDomain(input.mode, input.points, input.calibration, input.options ?? {}, { tiltDeg: tilt }),
     generatedAt: new Date().toISOString(),
   }
 }
@@ -724,6 +1002,11 @@ export function runAnalysis (input: AnalyzeInput): AnalyzeResult {
 // ── §19: export ──────────────────────────────────────────────────────────────
 
 export interface ExportRow { skupina: string; polje: string; vrednost: string; enota: string }
+
+/** Izvoz in UI uporabita isto besedje za količine (issue #15 faza 1). */
+export const KOLICINA_LABEL: Record<QuantityKind, string> = {
+  DOLZINA: 'Dolžina', PLOSCEVINA: 'Površina', KOT: 'Koti', VISINA: 'Višina',
+}
 
 export interface ExportSource {
   id: string
@@ -752,7 +1035,7 @@ export interface ExportSource {
     photoId?: string
     /** R487 (issue #3): strežniško izračunana konsolidacija pogledov (confirm). */
     multiView?: { count?: number; values?: number[]; mean?: number; spreadPct?: number; conflict?: boolean; manualOverride?: boolean } | null
-    engine?: { domain?: DomainResult | null; validation?: ValidationIssue[] | null } | null
+    engine?: { domain?: DomainResult | null; validation?: ValidationIssue[] | null; scale?: ScaleModel | null; validity?: MeasureValidity | null } | null
   } | null
 }
 
@@ -785,6 +1068,23 @@ export function buildExportRows (m: ExportSource): ExportRow[] {
   if (cal?.method) push('Reference', 'Kalibracija', cal.method, '')
   if (cal?.refObject) push('Reference', 'Referenčni objekt', cal.refObject, '')
   if (cal?.px != null && cal?.cm != null) push('Reference', 'Referenčna mera', `${r1(cal.cm).toString().replace('.', ',')} / ${Math.round(cal.px)}`, 'cm / px')
+  // R500 (issue #15 faza 1): merilo in veljavnost po količinah morata biti
+  // vidna v izvozu — sicer bi PDF/CSV pustil vtis, da je številka brez vira.
+  const sc = m.params?.engine?.scale
+  if (sc) {
+    push('Merilo', 'Baza merila', sc.basis, '')
+    if (sc.cmPerPxX != null) push('Merilo', 'cm/px (smer X)', f2(sc.cmPerPxX), 'cm/px')
+    if (sc.cmPerPxY != null && sc.cmPerPxY !== sc.cmPerPxX) push('Merilo', 'cm/px (smer Y)', f2(sc.cmPerPxY), 'cm/px')
+    if (sc.tiltDeg != null) push('Merilo', 'Nagib naprave', f1(sc.tiltDeg), '°')
+    push('Merilo', 'Pravokotnost dokazana', sc.isotropicProven ? 'DA' : 'NE (predpostavka)', '')
+    sc.reasons.slice(0, 3).forEach((r, i) => push('Merilo', `Obrazložitev ${i + 1}`, r, ''))
+  }
+  const vl = m.params?.engine?.validity
+  if (vl) {
+    push('Veljavnost', 'Status meritve', vl.status, '')
+    push('Veljavnost', 'Poslovna mera dovoljena', vl.businessMeasureAllowed ? 'DA' : 'NE', '')
+    vl.quantities.forEach((q) => push('Veljavnost', KOLICINA_LABEL[q.quantity], `${q.state} — ${q.note}`, ''))
+  }
   const conf = m.params?.confidence
   if (conf != null) push('Zaupanje', 'Confidence', String(conf), '%')
   const q = m.params?.quality

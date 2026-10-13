@@ -233,6 +233,10 @@ export async function POST (req: NextRequest) {
     if (Array.isArray(e.validation)) picked.validation = e.validation.slice(0, 40)
     if (e.confidence && typeof e.confidence === 'object') picked.confidence = e.confidence
     if (e.captureGuide && typeof e.captureGuide === 'object') picked.captureGuide = e.captureGuide
+    // issue #15 faza 1: model merila in veljavnost po quantities morata preživeti
+    // v zapis (sicer bi revizija videla samo številke brez vira resnice).
+    if (e.scale && typeof e.scale === 'object') picked.scale = e.scale
+    if (e.validity && typeof e.validity === 'object') picked.validity = e.validity
     if (Object.keys(picked).length === 0) {
       return jsonError(400, 'engine je prazen.', 'Podajte vsaj enega od: domain, validation, confidence, captureGuide.')
     }
@@ -287,10 +291,15 @@ export async function POST (req: NextRequest) {
     const extra: Record<string, unknown> = { photoId, source: 'KAMERA' }
     if (Array.isArray(body.points)) extra.points = body.points.slice(0, 64)
     if (body.calibration && typeof body.calibration === 'object') {
-      const c = body.calibration as { px?: unknown; cm?: unknown; imgW?: unknown; imgH?: unknown; method?: unknown; refObject?: unknown }
+      const c = body.calibration as { px?: unknown; cm?: unknown; pxY?: unknown; cmY?: unknown; imgW?: unknown; imgH?: unknown; method?: unknown; refObject?: unknown }
       const cal: Record<string, unknown> = {}
       if (Number.isFinite(Number(c.px)) && Number(c.px) > 0) cal.px = Number(c.px)
       if (Number.isFinite(Number(c.cm)) && Number(c.cm) > 0) cal.cm = Number(c.cm)
+      // R500 (issue #15 faza 1): anizotropno merilo (smer Y) samo v paru
+      if (Number.isFinite(Number(c.pxY)) && Number(c.pxY) > 0 &&
+          Number.isFinite(Number(c.cmY)) && Number(c.cmY) > 0) {
+        cal.pxY = Number(c.pxY); cal.cmY = Number(c.cmY)
+      }
       if (Number.isFinite(Number(c.imgW)) && Number(c.imgW) > 0) cal.imgW = Math.round(Number(c.imgW))
       if (Number.isFinite(Number(c.imgH)) && Number(c.imgH) > 0) cal.imgH = Math.round(Number(c.imgH))
       // R457 (§4): metoda kalibracije + referenčni objekt (sledljivost reference)

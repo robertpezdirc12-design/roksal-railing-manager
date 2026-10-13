@@ -2010,3 +2010,84 @@ Stage Summary:
   fotogrametrijo, in potrditev tolerance s strani odgovorne osebe (Faza 7).
   Brez teh faz 6–7 NIKOLI ne morejo biti zaključene — ne zatičej tega z
   trditvijo »testi so zeleni«.
+
+---
+## R500 · Issue #15 Faza 1 — varna geometrija (merilo, ravnina, veljavnost)
+
+Work Log:
+- NAVODILO, KI GA TA FAZA IZPOLNJUJE (`docs/MEASUREMENT-BASELINE.md` §3 / issue #15):
+  (1) nagnjena slika NE SME dobiti enega globalnega razmerja cm/px za vse
+  smeri; (2) manjkajoča/neveljavna kalibracija SME javiti eksplicitno napako,
+  ne tiho uporabiti merila 1 cm/px; (3) geometrijske spremembe morajo biti
+  pokrite z numeričnimi testi znanih dimenzij.
+- ENA DEFINICIJA MERILA: `resolveScale()` (`src/lib/measure-engine.ts`) je
+  edini vir cm/px; vrne `known`, `isotropicProven`, `cmPerPxX/cmPerPxY`,
+  `basis` (ENOTNO_Z_DOKAZOM / ENOTNO_BREZ_DOKAZA / ANIZOTROPNO / NEZNANO),
+  `tiltDeg`, `directionSpreadDeg` in razloge. Trije tihi rezervi
+  `calib.px > 0 ? calib.cm / calib.px : 1` (baseline H1) so odstranjene;
+  brez merila `computeGeometry`/`polygonMetrics`/`diagonalMetrics` vrnejo 0
+  in `cmPerPx null`, NE številke, ki je videti kot mera.
+- ANIZOTROPIJA: kalibracija sprejme ločeno Y referenco (`pxY`/`cmY`);
+  dolžine, višinske razlike, vodoravne razdalje, površine (shoelace po
+  obroču) in diagonale se računajo PO SMERI (`hypot(dx·sx, dy·sy)`). Pri
+  `sx === sy` je vsota dokazljivo enaka prejšnji — zato številke kontraktov
+  ne smejo premakniti.
+- NAGIB: `TILT_ENOTNO_MERILO_MAX_DEG = 10`; nad pragom brez Y reference je
+  napaka ≈ `1/cos(tilt) − 1` (25° → 10,3 %). Ker smeri na sliki niso enake,
+  nova validacijska napaka `MERILO_NEZADOSTNO` (severity NAPAKA) sproži samo
+  ob POGOJU nagib > 10° IN razpršenost merjenih smeri > 10° — vodoravna pot
+  vzdolž reference ostane brez napake (obstoječa vrata se ne zaostrijo).
+- VELJAVNOST PO KOLIČINAH: `quantityValidity`/`measureValidity` →
+  DOLZINA/PLOSCEVINA/KOT/VISINA z stanji VELJAVNA / PREDPOSTAVKA /
+  NEZADOSTNI_PODATKI in `businessMeasureAllowed`. Poševni posnetek:
+  VIŠINA je vedno NEZADOSTNI_PODATKI (slikovni Δy je projekcija, ne mera);
+  PLOSCEVINA pada ob nagibu brez Y reference; brez merjenja nagiba je
+  vse PREDPOSTAVKA — pravokotnost je izrecno označena kot predpostavka,
+  ne kot dokaz.
+- LAŽNE TRDITVE, KI SO IZGINELE: `STREHA.pitchSource` (VNOS/PRIVZET) razkriva
+  35° privzetek, ki je bil doslej prikazan kot izmerjen (baseline H6);
+  `STOPNICE.heightBasis = PROJEKCIJA_SLIKE` (baseline H7).
+- POTRJEVALNI VODNIK (§3): nova kontrola `MERILO` — NEZADOSTNO brez
+  kalibracije ali ob nagibu + razpršenih smereh, OPOZORILO pri nagibu
+  vzdolž reference, DOBRO ob dokazu (pravokoten kader ali ločeni X/Y),
+  DOBRO s poštenim besedilom «pravokotnost ni merjena — predpostavka», ko
+  nagiba ni (r457 kontrakt ostane DOBRO).
+- IZVOS (§19): novi skupini `Merilo` (baza, cm/px X in Y, nagib, pravokotnost
+  DA/NE, razlogi) in `Veljavnost` (status, vrata poslovne mere, po
+  količinah). Stara meritev brez teh polj se izvozi NESPREMENJENO —
+  nobena funkcija ne izgine.
+- POTI, KI SO DOBELE NOVE POLJE (brez paralelnega jedra):
+  `POST /api/measure-engine/analyze` (pxY/cmY), `POST /api/measurement/confirm`
+  (`params.calibration` + dovoljena `engine.scale`/`engine.validity`, 8 KB
+  omejitev ostaja) in monterjev zaslon `meritve-kamera.tsx` (panel: merilo,
+  status, stanje po količinah, do 3 razloge; oba payloada pošljeta scale +
+  validity, tudi offline operacija).
+- NOVA SUITE `tests/r500.py` (70 trditev, A–J): A brez merila → NEZNANO;
+  B numerična REGRESIJA r457/r487 (700 cm, 300+400, vogal 90°, 12 m²/1400 cm,
+  diagonali 500, stebri 8 / ročnik 7 m / polnilo 7 m², KERAMIKA
+  5×7=35 ploščic, neto 27, odpad 30 %, lepak 39 kg, STOPNICE 14 × 17,9/28,6
+  pri 32°); C anizotropno (ista pot → 300+200 = 500 cm, 6 m², diagonali
+  427,2 cm); D prag 10° in razpršenost 90°; E količine; F PRIVZET/VNOS;
+  G vodnik; H izvoz; I determinizem; J vir (grep: tiha rezerva je zunaj,
+  ena `resolveScale`, confirm računa prek jedra). Registrirana v
+  `tests/ci-matrix.sh` (skupina `r500`, zdaj 23 skupin).
+- IZMERJENO PO TEM (vse na lokalni bazi :54329, dev :3000 — produkcijska
+  baza nedotaknjena): r454–r458 → 5/5 ✓ (R458 82 trditev); r459–r462 → 4/4 ✓
+  (91); r486 → ✓ 70; r487 → ✓ 71; r500 → ✓ 70 / ✗ 0; `tsc --noEmit` čist;
+  `eslint` 0 napak (18 obstoječih opozoril na nespremenjenih vrsticah).
+  Dve pomanjkljivosti, ki ju je ujela prva izvedba same suite:
+  obvestilo za KOT je trdilo «smer je blizu reference» pri razpršenosti 90°
+  (zdaj NEZADOSTNI_PODATKI) in razlogi so imeli decimalno piko namesto
+  vejice (zdaj `r1c`/`r2c`).
+- KAJ OSTAJA ODPRTO (nikoli se ne predstavlja kot opravljeno):
+  H1 zadnja instanca ostaja v `src/app/api/railing-layout/route.ts` (svoj
+  izračun merila) in v `calcView` (`meritve-kamera.tsx:196`) — ta je
+  trenutno skladen z jedrom, ker `View.calib` še nima `pxY`/`cmY`, kar
+  pomeni, da monter LOČENE Y reference še NE more vnesti (Faza 2).
+  `recommendMethod` še vedno priporoča metodo FOTOGRAMETRIJA (H4, Faza 3).
+  `Measurement.status` in vztrajna BOM vrata (H2/H3) še narejeni niso —
+  `validity.businessMeasureAllowed` je zdaj izračunan in shranjen, a ga
+  še ne preverja noben ustvarjalni endpoint (BOM/ponudba). Vzorčni primeri znanih
+  dimenzij za Fazo 7 (tolerance) manjkajo — brez njih faz 6–7 ni mogoče zaključiti.
+- CELI PAS (`bash tests/ci-local.sh`) je zagnan šele PO tem commitu;
+  dokler ni zelen, deploy ni predlagan.

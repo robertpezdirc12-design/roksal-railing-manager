@@ -141,6 +141,26 @@ RAL→hex, prelivi `:614–621`, steklo `rgba(170,196,214,.30)` :725). V
 `public/assets/roksal`. Maskiranje so 4 klikane točke; odstranitev stare ograje je
 `ctx.filter='blur(7px)'` in preliv (`:536–574`).
 
+### 5.1 Napredek — kaj je Faza 1 zaprla (mera: `tests/r500.py`, 70 trditev ✓)
+
+Ta pododdelek je dodan PO fazi 1; zgornji H seznam ostaja kot izmerjena
+baseline iz faze 0 in se ne prepisuje.
+
+| Nevarnost | Stanje po fazi 1 | Dokaz |
+|---|---|---|
+| H1 (b) tiha rezerva `1` | **ZAPRTO** | `resolveScale` vrne `known:false`/`NEZNANO`, geometrija vrne 0 in `cmPerPx null`; `r500` A, J |
+| H1 (a) eno merilo za vse smeri | **DELNO** | anizotropno `pxY/cmY` je podprto v jedru, `/analyze` in `/confirm`; `railing-layout/route.ts` ima še svoj izračun, `View.calib` v UI-ju Y reference še ne zna vnesti → fazi 2 |
+| H5 zaupanje ≠ točnost | **DELNO** | `validity` (status + `businessMeasureAllowed` + stanja po količinah) je ločen od `confidence`; `criticalGate` še vedno ničesar ne zadrži |
+| H6 35° privzet naklon | **ZAPRTO** (prikaz) | `STREHA.pitchSource = VNOS/PRIVZET`; `r500` F — številka 14,65 m² ostane enaka |
+| H7 višina iz Δy | **ZAPRTO** (trditev) | `VISINA` je vedno `NEZADOSTNI_PODATKI` («projekcija, ne izmerjena višina»), `STOPNICE.heightBasis = PROJEKCIJA_SLIKE`; `r500` E |
+| H2/H3 vrata in `status` | **ODPRTO** | `validity` se izračuna in shrani v `params.engine`, a ga noben ustvarjalni endpoint (BOM/ponudba) še ne preverja; stolpca `status` v `Measurement` ni → fazi 2 |
+| H8 EXIF orientacija | **ODPRTO** | faza 4–5 |
+| H9 teksture ↮ fotomontaža | **ODPRTO** | #14 |
+
+Regresija, izmerjena ob zaključku faze 1 (lokalna baza :54329): `r454-r458`
+5/5 ✓, `r459-r462` 4/4 ✓ (91 trditev), `r486` ✓ 70, `r487` ✓ 71,
+`r500` ✓ 70 / ✗ 0 — nobena številka obstoječih kontraktov se ni premaknila.
+
 ---
 
 ## 6. Kaj manjka za dokončanje (pošteno)

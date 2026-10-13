@@ -34,10 +34,14 @@ function numOrNull (v: unknown, min: number, max: number): number | null {
 /** §4: kalibracija z metapodatki (metoda/referenčni objekt). */
 function parseCalib (v: unknown): EngineCalib | null {
   if (!v || typeof v !== 'object') return null
-  const o = v as { px?: unknown; cm?: unknown; imgW?: unknown; imgH?: unknown; method?: unknown; refObject?: unknown }
+  const o = v as { px?: unknown; cm?: unknown; pxY?: unknown; cmY?: unknown; imgW?: unknown; imgH?: unknown; method?: unknown; refObject?: unknown }
   const px = Number(o.px); const cm = Number(o.cm)
   if (!Number.isFinite(px) || px <= 0 || !Number.isFinite(cm) || cm <= 0 || cm > 100000) return null
   const out: EngineCalib = { px, cm }
+  // issue #15 faza 1: ločena Y referenca (nagnjen kader) sme v merilo samo v
+  // paru in v območju — sicer ostane enotno, ne tiha polovična vrednost.
+  const pxY = Number(o.pxY); const cmY = Number(o.cmY)
+  if (Number.isFinite(pxY) && pxY > 0 && Number.isFinite(cmY) && cmY > 0 && cmY <= 100000) { out.pxY = pxY; out.cmY = cmY }
   const imgW = Number(o.imgW); const imgH = Number(o.imgH)
   if (Number.isFinite(imgW) && imgW > 0) out.imgW = Math.round(imgW)
   if (Number.isFinite(imgH) && imgH > 0) out.imgH = Math.round(imgH)

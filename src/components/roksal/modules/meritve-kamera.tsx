@@ -181,6 +181,15 @@ function parsePhoto (params: string | null): string | null {
 
 const fmt1 = (n: number) => (Math.round(n * 10) / 10).toString().replace('.', ',')
 
+/** R500 (issue #15 faza 1): kako monterju poveljemo, katera količina meritve je
+ *  dokazana in katera je predpostavka (veljavnost po količinah). */
+const KOLICINA_LABEL: Record<'DOLZINA' | 'PLOSCEVINA' | 'KOT' | 'VISINA', string> = {
+  DOLZINA: 'Dolžina', PLOSCEVINA: 'Površina', KOT: 'Koti', VISINA: 'Višina',
+}
+const KOLICINA_STATE_LABEL: Record<'VELJAVNA' | 'PREDPOSTAVKA' | 'NEZADOSTNI_PODATKI', string> = {
+  VELJAVNA: 'dokazano', PREDPOSTAVKA: 'predpostavka', NEZADOSTNI_PODATKI: 'manjka podatek',
+}
+
 /** R455: izračun dolžin segmentov za en pogled (točke + kalibracija). */
 function calcView (view: View) {
   const pts = view.points.filter((p) => p.src !== 'PREDLOG') // predlogi ne štejejo (§2)
@@ -939,6 +948,10 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
             domain: analysis.domain,
             validation: analysis.validation,
             confidence: analysis.confidence,
+            // R500 (issue #15 faza 1): model merila + veljavnost po quantities
+            // gresta v zapis, da revizija vidi, KAJ je bila dokazana mera.
+            scale: analysis.scale,
+            validity: analysis.validity,
           }
           : undefined,
       })
@@ -1020,7 +1033,7 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
           : null,
         mode,
         engine: analysis
-          ? { domain: analysis.domain, validation: analysis.validation, confidence: analysis.confidence }
+          ? { domain: analysis.domain, validation: analysis.validation, confidence: analysis.confidence, scale: analysis.scale, validity: analysis.validity }
           : null,
       })
       toast({
@@ -2093,6 +2106,28 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
                 <span>Fotografija: <strong className="text-foreground">{views[0].photoId ? `✓ (${rocnoCnt} točk)` : online ? 'ni shranjena' : 'shranila se bo ob sinhronizaciji'}</strong></span>
                 {multi.spreadPct !== null ? <span>Razpršenost: <strong className="text-foreground">{fmt1(multi.spreadPct)} %</strong></span> : null}
               </div>
+              {/* R500 (issue #15 faza 1): KAJ je dokazano — po posamezni količini.
+                  Brez te vrstice bi povzetek dajal vtis, da je vsaka številka na
+                  zaslonu enako zanesljiva poslovna mera. */}
+              {analysis ? (
+                <div className="rounded-md border border-border/60 bg-muted/30 p-2 text-[11px]">
+                  <p className="font-semibold text-foreground">
+                    {analysis.validity.status === 'VELJAVNA'
+                      ? `Merilo ${(analysis.scale.cmPerPxX ?? 0).toFixed(2).replace('.', ',')} cm/px: dokazano za merjene količine`
+                      : analysis.validity.status === 'NEZADOSTNI_PODATKI'
+                        ? '⚠ Podatki ne zadoščajo — številke so okvirne, ne potrjena poslovna mera'
+                        : '⚠ Geometrija v neskladju — popravite točke ali kalibracijo'}
+                  </p>
+                  <p className="text-muted-foreground">
+                    {analysis.validity.quantities.map((q) => `${KOLICINA_LABEL[q.quantity]}: ${KOLICINA_STATE_LABEL[q.state]}`).join(' · ')}
+                  </p>
+                  {analysis.validity.reasons.length > 0 ? (
+                    <ul className="mt-1 list-disc space-y-0.5 pl-4 text-muted-foreground">
+                      {analysis.validity.reasons.slice(0, 3).map((r) => <li key={r}>{r}</li>)}
+                    </ul>
+                  ) : null}
+                </div>
+              ) : null}
               {!views[0].photoId && online ? (
                 <Button size="sm" variant="outline" onClick={() => void uploadPhoto()} disabled={busy}>
                   {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null} Najprej naloži fotografijo
