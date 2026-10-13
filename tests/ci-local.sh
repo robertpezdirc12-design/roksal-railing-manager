@@ -28,6 +28,8 @@ SKIP_DB="${SKIP_DB:-0}"
 KEEP="${KEEP:-0}"
 DEV_PID=""
 Rdece=0
+Koraki=0
+Skupine=0
 
 need () {
   command -v "$1" >/dev/null 2>&1 || { echo "✗ manjka pogoj: $1 — namesti ga in ponovi."; exit 127; }
@@ -46,6 +48,7 @@ fi
 if command -v bunx >/dev/null 2>&1; then PRISMA=(bunx prisma); else PRISMA=(npx prisma); fi
 
 korak () { # korak <ime> <ukaz...>
+  Koraki=$((Koraki+1))
   echo "── $1"
   if "${@:2}" > "$LOGS/$(echo "$1" | tr ' /' '__').log" 2>&1; then
     echo "   ✓"
@@ -107,6 +110,9 @@ export AUTH_RATE_MAX="${AUTH_RATE_MAX:-100000}"
 echo "── AUTH_RATE_MAX=$AUTH_RATE_MAX (lokalno; v produkciji je privzeto 30/min/IP)"
 
 # ── 3. statična kakovost ─────────────────────────────────────────────────────
+# R498: avtorja commitov morata biti GitHub račun, ki ga Vercel prepozna. Sicer se
+# production deploy tiho zadrži (BLOCKED) — zelena koda potem NI enaka živi kodi.
+korak "avtorji commitov (Vercel)" bash tests/deploy-author-check.sh
 # R497: teste najprej razčleni — na interpreterju, ki ne pozna 3.12+ f-string
 # sintakse, bi bil vsak takšen suite v pasu neprepoznljivo rdeč.
 korak "razčlenitev Python suite-ov" "$PY" tests/py-parse-check.py
@@ -185,6 +191,7 @@ echo "── aplikacija pripravljena: $BASE_URL"
 # ── 6. celotna regresijska matrika ───────────────────────────────────────────
 PADLE=""
 for g in $(bash tests/ci-matrix.sh --list); do
+  Skupine=$((Skupine+1))
   # R497: Next 16 dovoli EN sam dev strežnik na projektno mapo (blokada
   # .next/dev/lock). Skupina r464-notifications si sama zažene dev strežnik na
   # vrata 3031 (faze A–D potrebujejo različen process.env), zato mora biti
@@ -231,9 +238,9 @@ done
 
 echo
 if [ "$Rdece" -eq 0 ]; then
-  echo "════ RELEJNI PAS: ✓ zeleno (vsi koraki in vse skupine) ════"
+  echo "════ RELEJNI PAS: ✓ zeleno ($Koraki statičnih korakov, $Skupine skupin) ════"
 else
-  echo "════ RELEJNI PAS: ✗ $Rdece rdečih korakov/skupin ════"
+  echo "════ RELEJNI PAS: ✗ $Rdece rdečih od $Koraki korakov in $Skupine skupin ════"
   [ -n "$PADLE" ] && echo "PADLE SKUPINE:$PADLE"
   echo "Ne predlagaj deploya, dokler pas ni zelen."
 fi
