@@ -1975,3 +1975,38 @@ Stage Summary:
   `/api/v4/user`, »Access denied« na `git ls-remote`); potrebujete nov žeton.
   V treh klepetih poslane živne vrednosti (Vercel `vcp_…`, Neon `napi_…`,
   GitLab `glpat-…`) je treba šteti kot razkrite in jih preklicati.
+
+## R500 · Issue #15 Faza 0 — merilna baseline (brez spremembe kode)
+
+- NAMENA FAZE: Ustaviti predelavo merilnika, dokler ni zabeleženo, kaj danes
+  dejansko deluje, kje se překriva z odprtimi issue-i in katera dejstva o
+  meritvah so napačna. Nobena datoteka v `src/` ali `prisma/` NI bila
+  spremenjena; edini novi datoteki sta `docs/MEASUREMENT-BASELINE.md` in ta
+  vnos.
+- DOKAZ IZ GITA: `git log --oneline -1` → `ff56f07`; `origin/main` =
+  `b8882a5` (prednik HEAD, hitra združitev); `git status --short` pred fazo 1 =
+  samo `?? docs/MEASUREMENT-BASELINE.md` in CRLF šum pri
+  `public/assets/roksal/src/MANIFEST.json` (`git diff --numstat` je prazen,
+  vsebine se ne razlikujejo → namenoma nepostreženo, tuje delo ni).
+- IZMERJENA BASELINE (pred katerokoli spremembo, `bash tests/ci-local.sh` in
+  posamezne suite-a): r454–r458 → 5/5 ✓; r459–r462 → 4/4 ✓ (91 trditev);
+  r465–r474 → 8/8 ✓; r487 ✓ (71 trditev). To je referenčna točka: vsaka
+  sprememba številk v fazah 1–8 mora obdržati te izpise ali pa utemeljiti in
+  posodobiti kontrakt.
+- PREPOZNAVANJE PREKRIVANJ: baseline §2 ima tabelo proti issue-om
+  #3, #4, #6, #7, #8, #9, #10, #14 in #15 — Faza 0 zavrne podvajanje
+  merilnega/cenovnega jedra; vse nadaljnje faze smejo spremeniti samo
+  OBSEG `measure-engine.ts` (baseline §7).
+- NEVARNOSTI, IZMERJENE IZ KODE (ne iz dokumentacije): H1 trije ločeni
+  `cmPerPx` izračuni (`measure-engine.ts:133/181/221`); H2 fotografska
+  meritev lahko pride v BOM in ponudbo brez preverjanja kalibracije;
+  H3 `Measurement` nima stolpca `status` (`schema.prisma:300`); H4 UI
+  obljublja FOTOGRAMETRIJA, ki je v kodi ni; H5 zaupanje ≠ točnost;
+  H6 strešni naklon se privzame 35° in prikaže kot izmerjen; H7 višinske
+  razlike iz slikovnega Δy; H8 EXIF orientacija ni preverjena; H9 ROKSAL
+  gradiva (`ProductAsset`) niso povezana s fotomontažo.
+  - POGOJI, KI MANJKAJO (baseline §6): vzorčni primeri znanih dimenzij za točnost
+  (Faza 7), merjene naprave (WebXR globina, LiDAR), licence tretjih knjižnic za
+  fotogrametrijo, in potrditev tolerance s strani odgovorne osebe (Faza 7).
+  Brez teh faz 6–7 NIKOLI ne morejo biti zaključene — ne zatičej tega z
+  trditvijo »testi so zeleni«.
