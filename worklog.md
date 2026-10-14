@@ -2014,3 +2014,31 @@ Work Log:
 Stage Summary:
 - Kvalitetna vrata zelena lokalno; CI ostaja blokiran do obnovitve kvote (zunanja omejitev, dokumentirano že v R495)
 - Popravki tsconfig/eslint so peskovniški higienski (v CI no-op) — ne spreminjajo obnašanja aplikacije
+
+---
+Task ID: R501
+Agent: main (Z.ai Code)
+Task: Issue #15 (P0/P1 MERILNA NATANČNOST) — Faza 0–2: perspektivna homografija, eksplicitno merilo, strežniški preračun + GitLab sinhronizacija po novem žetonu
+
+Work Log:
+- UPORABNIK: nov GitLab žeton (stari v worklogu neveljaven) + zahteva "ali je sinhronizirano preveri in nadaljuj z issueji"
+- SINHRONIZACIJA: GitHub ↔ lokalno OK (c88378c, baza 85 gradiv/5 uporabnikov/8 projektov — boot skripta R500 je dvignila stack po resetu samodejno); GitLab je bil PRAZEN (0 commitov) → nov remote (username robertpezdirc8, oauth2 je dal 403) + push main + 51 tagov + r462-worklog + varnostni-popravki-2026-10 + rekonstrukcija; GitLab.com je po velikem prenosu začasno blokiral IP (HTML "Blocked"), retry uspešen — vse veje + 52 tagov sinhronizirani (verificirano prek push odgovorov "Everything up-to-date")
+- IZHODIŠČE: r485 ✓63/0, r486 ✓70/0, r487 ✓71/0 pred spremembami; izbrana naslednja naloga = issue #15 (P0/P1, ustvarjen 13. 10., najvišja prioriteta med odprtimi)
+- FAZA 0: popolna revizija merilne verige (measure-engine 866 vrstic, confirm/analyze ruti, UI 2205 vrstic, vsi testni klicatelji confirm) → ugotovljeno: cmPerPx = calib.px > 0 ? cm/px : 1 (tihi privzek!), eno globalno merilo za vse smeri, strežnik je zaupal odjemalčevi lengthCm, brez homografije; docs/MEASUREMENT-BASELINE.md ustvarjen (tok mere z datoteko/funkcijo/testom, dokazano/približek/manjka, licence)
+- FAZA 1 JEDRO: resolveScale (UNIFORM px/cm ALI PLANE homografija) — edini vir merila za vse plasti; computeGeometry/polygonMetrics/diagonalMetrics prek njega → neveljavno = 0 cm + calibrated=false (KONEC tihega 1); planeHomography (DLT, 8×8 Gauss s pivotiranjem, čisti TS, brez odvisnosti) + applyHomography; degeneracija (kolinearnost) → valid=false z razlogom
+- NUMERIČNI DOKAZ: sintetična projektivna kamera Ht (očitno poševna): prava dolžina 111,80 cm → PLANE 111,80 cm (0,00 % napake), UNIFORM na isti sliki 137,1 cm (22,6 % napake) — točno nevarnost iz issueja
+- FAZA 1 RUTE: analyze sprejema plane (strukturra kontrola; globoka v engine → pošteno NEZADOSTNI_PODATKI namesto tihe zavrnitve); confirm — STREŽNIŠKI PRERAČUN JE AVTORITETA: kandidati (polilinija + obseg za poligonske načine + multiView povprečje), odstopanje > 2 % → 409 z razlogom, točke brez kalibracije → 400, manualOverride (z razlogom) ostaja veljavna pot; parseView/params persistirajo plane za revizijo
+- FAZA 2 ZAČETEK: measureStatus (MANUAL/CALIBRATED/MANUAL_OVERRIDE) v params + verzijo v1 + revizijo MEASUREMENT_CONFIRM + CSV izvoz (Status mere, Vrsta merila, Predpostavka frontalnosti, Ravnina pravokotnik); LIDAR selectable=false (brez dokazano delujočega senzorja); PREDPOSTAVKA_FRONTALNOST: tilt > 15° OPOZORILO, > 30° NAPAKA, neznan kot → scale.assumedFrontal izrecno
+- UI: faza 2 — nova metoda RAVNINA (4 vogali + širina/višina; zadnji 4 kliki = vogali — ujeta in popravljena UX napaka !== 4 → < 4); calcView: pri ravnini mere iz computeGeometry (isto jedro kot strežnik); prikaz "ravnina 200×100 (perspektivno rectificirano)" + "Izračun (perspektivna ravnina)"; LIDAR izpuščen iz izbire
+- TESTI: tests/r501.py NOV (51 preverjb: A RBAC, B numerični dokaz 0,00 %, C neveljavni vhodi + poštena poročila, D frontalnost, E vrata confirm + plane persistiran, F izvoz, G čiste funkcije + determinizem, H UI-grep, I čiščenje ×2); r487 posodobljen (B6 neusklajena 420 → 409 + usklajena → 201 + B6b/B6c vrata) 78/0; r455 posodobljen (klasična potrditev usklajena) 36/0; r457 105/0, r485 63/0, r486 70/0, r438.sh 84/0, r440.sh OK; ci-matrix += r501
+- VRATA: tsc 0 napak, eslint . exit 0
+- E2E BRKSALENIK: prijava → Meritve → kamera → nalaganje PNG → faza 2 (kakovost OPOZORILO mehka/temna — pravilna analiza) → metoda RAVNINA izbrana (LIDAR NI v seznamu) → 4 vogali + 200×100 → Postavi ravnino → faza 3 "Izračun (perspektivna ravnina)" "Skupaj: 5,5 m" + segmenti 50/200/100/200 cm točno po ravnini; dokaz ops/r501-kamera-ravnina.png
+- OMEJITEV ODKRITA: nalaganje JPEG 65 KB (720×540) v agent-browser/CDP povzroči CRK ráenderer procesa (swiftshader) — REPRODUCIRANO NA ČISTEMU HEAD c88378c (git stash test) 4× → peskovniška omejitev, NE regresija; PNG pot deluje; konzola brez napak
+- IZDAJA: v1.49.0 (6294f0b), push GitHub (main + tag) + GitLab (main + tag + vse veje) uspešen
+
+Stage Summary:
+- Issue #15 Faza 0 + Faza 1 + Faza 2 (začetek) DOKAZANO izvedeni: perspektivna rectifikacija z numeričnim dokazom 0,00 % (proti 22,6 % napake stare metode), eksplicitno merilo (konec tihega 1 cm/px), strežniški preračun kot avtoriteta (409/400 vrata), statusi mer v celotni verigi (params/verzija/revizija/izvoz), LIDAR umaknjen iz izbire
+- docs/MEASUREMENT-BASELINE.md = izhodišče za nadaljnje faze (3: fotogrametrija/SfM manjka — pošteno zapisano; 4: vodeni zajem delno; 7: referenčni nabor manjka)
+- Nova odvisnost: NIČ (homografija čisti TS) — issue pravila #8 izpolnjena
+- Celoten regresijski pas lokalno zelen (r438–r501); CI na GitHubu ostaja blokiran z minutno kvoto (obnova 1. 11. 2026)
+- Odprto za naslednji krog: #15 Faza 3 (COLMAP/SfM prototip — zahteva odločitev o izvajalnem okolju), #14 fotozamenjava, #7 monter camera-first (potrebna prava naprava)
