@@ -1,9 +1,12 @@
 // /api/photo-visualization/[id] — R459 (issue #14)
 // GET   (projects.read) — polna vizualizacija: originalna fotografija +
-//       izrisana sličica + verzije (meta) + opozorila. Obseg §13 (IDOR).
+//       izrisana sličica + verzije (meta) + opozorila + dokazna veriga (R510).
+//       Obseg §13 (IDOR).
 // PATCH (measurements.write) — sprememba: renderParams (→ NOVA VERZIJA §12,
 //       nikoli tiho prepisano), rendered, note, status (IZBRANA pomeni, da
-//       ostale variante projekta padejo nazaj na OSNUTEK — ena izbrana).
+//       ostale variante projekta padejo nazaj na OSNUTEK — ena izbrana),
+//       izvirnik fotografije in trditev o gradivu (R510, samo strežniško
+//       potrjeno).
 
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
@@ -12,8 +15,13 @@ import { writeAudit } from '@/lib/audit'
 import { ENGINE_VERSION, oceniKakovost } from '@/lib/photo-replace-core'
 import {
   MAX_PARAMS_JSON, MAX_RENDERED_BYTES, STATUSES,
-  preveriFoto, preveriIzdelek, preveriRenderParams, vizZaUporabnika,
+  preveriFoto, preveriIzdelek, preveriRenderParams, preveriSourceFoto,
+  preveriTrdnjenoGradivo, stanjeMere, vizZaUporabnika,
 } from '@/lib/photo-replace-engine'
+import {
+  dokazMere, preberiDokaz, smeVizualizacijo,
+  type RezultatGradiva, type VizDokaz,
+} from '@/lib/viz-provenance'
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -43,21 +51,40 @@ export async function GET (req: NextRequest, { params }: Params) {
   })
   if (!viz) return jsonError(404, 'Vizualizacija ne obstaja.')
 
-  // opozorila iz zadnje verzije (meta) — za prikaz ob ponovnem odpiranju
+  // opozorila in dokaz iz zadnje verzije (meta) — za prikaz ob ponovnem
+  // odpiranju (R510, issue #15 Faza 6)
   let opozorila: { koda: string; sporocilo: string }[] = []
-  const lastVersion = await db.photoVisualizationVersion.findFirst({
+  const zadnjaVerzija = await db.photoVisualizationVersion.findFirst({
     where: { visualizationId: id },
     orderBy: { version: 'desc' },
     select: { data: true },
   })
-  if (lastVersion) {
+  if (zadnjaVerzija) {
     try {
-      const parsed = JSON.parse(lastVersion.data) as { meta?: { opozorila?: { koda: string; sporocilo: string }[] } }
+      const parsed = JSON.parse(zadnjaVerzija.data) as { meta?: { opozorila?: { koda: string; sporocilo: string }[] } }
       if (Array.isArray(parsed.meta?.opozorila)) opozorila = parsed.meta.opozorila
     } catch { /* posnetek neberljiv → brez opozoril */ }
   }
+  const dokazVerzije = preberiDokaz(zadnjaVerzija?.data)
 
-  return NextResponse.json({ data: { ...viz, opozorila } })
+  // Meritev in izvirnik fotografije se pokažeta iz trenutnega stanja (raven mere
+  // se lahko spremeni tudi po shranjevanju), dokaz o gradivu pa iz posnetka —
+  // samo takrat ga je namreč potrdil strežnik.
+  const mera = await stanjeMere(viz.measurementId)
+  const meraRazveljavljena = viz.measurementId !== null && !smeVizualizacijo(mera?.status).sme
+  const dokaz: VizDokaz = {
+    meritev: viz.measurementId
+      ? dokazMere(mera?.status ?? null, mera?.verzija ?? viz.measurementVersion)
+      : null,
+    izvirnikFotografije: viz.sourcePhotoId,
+    gradivo: dokazVerzije?.gradivo ?? null,
+    gradivoRazlog: dokazVerzije?.gradivoRazlog ?? null,
+  }
+
+  // Zapis pred R510 dokaza nima: iz praznega polja se ne dela laž — bralec dobi
+  // samo tisto, kar je bilo zapisano ali je razvidno iz povezav danes.
+  const odgovor = { ...viz, opozorila, dokaz, meraRazveljavljena, izvirnikFotografije: viz.sourcePhotoId }
+  return NextResponse.json({ data: odgovor })
 }
 
 export async function PATCH (req: NextRequest, { params }: Params) {
@@ -75,33 +102,47 @@ export async function PATCH (req: NextRequest, { params }: Params) {
 
   const update: Record<string, unknown> = {}
 
+  // ── R510 (issue #15 Faza 6): podlaga mere — brana VEDNO, kadar mera obstaja ─
+  // Raven mere in njena zadnja verzija gresta v dokazno verigo. Kadar je bila
+  // mera MEDTEM razveljavljena, to zabeležimo kot opozorilo: urejanja
+  // obstoječe vizualizacije NE blokiramo (monter jo mora lahko popraviti), a
+  // bralec dokumenta mora videti, da podlaga ni več veljavna.
+  let meraDokaz: { status: string; verzija: number | null } | null = null
+  let meraRazveljavljena = false
+  let dolzinaMereCm: number | null = null
+  if (viz.measurementId) {
+    const mera = await stanjeMere(viz.measurementId)
+    meraDokaz = dokazMere(mera?.status ?? null, mera?.verzija ?? viz.measurementVersion)
+    dolzinaMereCm = mera?.lengthCm ?? null
+    meraRazveljavljena = !smeVizualizacijo(mera?.status).sme
+  }
+
   // ── renderParams → NOVA VERZIJA (§12: vsaka sprememba = nova verzija) ──────
   let novaVerzija = 0
   let opozorilaKodi: string[] = []
+  let dokazPrejsnje: VizDokaz | null = null
   if (body.renderParams !== undefined) {
     const params2 = preveriRenderParams(body.renderParams)
     if ('napaka' in params2) return jsonError(400, params2.napaka)
     const json = JSON.stringify(params2.params)
     if (json.length > MAX_PARAMS_JSON) return jsonError(400, 'Parametri izrisa presežejo dovoljeno velikost.')
 
-    // §6: če je vezana meritev, opozori na odstopanje prikazne dolžine
-    let potrjenaMeraCm: number | null = null
-    if (viz.measurementId) {
-      const m = await db.measurement.findUnique({ where: { id: viz.measurementId }, select: { lengthCm: true } })
-      potrjenaMeraCm = m?.lengthCm ?? null
-    }
-    const opozorila = oceniKakovost(params2.params, 1000, 750, potrjenaMeraCm)
-    opozorilaKodi = opozorila.map((o) => o.koda)
+    // §6: ce je vezana meritev, opozori na odstopanje prikazne dolzine
+    const opozorila = oceniKakovost(params2.params, 1000, 750, dolzinaMereCm)
+    opozorilaKodi = meraRazveljavljena
+      ? ['MERA_RAZVELJAVLJENA', ...opozorila.map((o) => o.koda)]
+      : opozorila.map((o) => o.koda)
 
     update.renderParams = json
     update.engineVersion = ENGINE_VERSION
 
-    const last = await db.photoVisualizationVersion.findFirst({
+    const zadnja = await db.photoVisualizationVersion.findFirst({
       where: { visualizationId: id },
       orderBy: { version: 'desc' },
-      select: { version: true },
+      select: { version: true, data: true },
     })
-    novaVerzija = (last?.version ?? 0) + 1
+    novaVerzija = (zadnja?.version ?? 0) + 1
+    dokazPrejsnje = preberiDokaz(zadnja?.data)
   }
 
   // ── rendered (izrisana sličica) ────────────────────────────────────────────
@@ -134,6 +175,45 @@ export async function PATCH (req: NextRequest, { params }: Params) {
     update.note = typeof body.note === 'string' && body.note.trim() ? body.note.trim().slice(0, 500) : null
   }
 
+  // ── R510 (issue #15 Faza 6): dokazna veriga IZVEDENE slike ─────────────────
+  // 1) IZVIRNIK fotografije: stare vizualizacije so nastale brez povezave, ker
+  //    jo je UI tiho pošiljal kot null. Tu jo je mogoče POPRAVITI — ali ob
+  //    shranjevanju nove verzije ali samostojno.
+  // 2) TRDITEV o gradivu: odjemalec natisne samo assetId, strežnik prebere
+  //    pot/SHA-256/status/dovoljenje iz baze in zapiše samo to, kar potrdi.
+  let izvirnikId: string | null = viz.sourcePhotoId
+  if (body.sourcePhotoId !== undefined) {
+    const srcFoto = await preveriSourceFoto(body.sourcePhotoId, viz.projectId)
+    if (srcFoto && typeof srcFoto === 'object' && 'napaka' in srcFoto) {
+      return jsonError(srcFoto.status, srcFoto.napaka)
+    }
+    izvirnikId = srcFoto ?? null
+    update.sourcePhotoId = izvirnikId
+  }
+
+  const veljavniProduktId = typeof body.productId === 'string' && body.productId ? body.productId : viz.productId
+  let rezultatGradiva: RezultatGradiva = { dokaz: null, razlog: null }
+  if (body.gradivo !== undefined) {
+    const g = await preveriTrdnjenoGradivo(body.gradivo, veljavniProduktId)
+    if ('napaka' in g) return jsonError(400, g.napaka)
+    rezultatGradiva = g.rezultat
+  } else if (novaVerzija > 0 && dokazPrejsnje?.gradivo) {
+    // Nova verzija (npr. zamaknjen kvad) NE sme izbrisati dokaza o gradivu, ki
+    // ga je strežnik potrdil prej. Zato isto trditev POTRDIMO ZNOVA iz baze —
+    // na sedanjem izdelku. Če potrditev tokrat spodleti, gre v dokument razlog,
+    // ne tiha izguba in ne prejšnji dokaz.
+    const g = await preveriTrdnjenoGradivo({ assetId: dokazPrejsnje.gradivo.assetId }, veljavniProduktId)
+    if ('napaka' in g) return jsonError(400, g.napaka)
+    rezultatGradiva = g.rezultat
+  }
+
+  const dokaz: VizDokaz = {
+    meritev: meraDokaz,
+    izvirnikFotografije: izvirnikId,
+    gradivo: rezultatGradiva.dokaz,
+    gradivoRazlog: rezultatGradiva.razlog,
+  }
+
   // ── status (IZBRANA — ena izbrana varianta na projekt, §7) ─────────────────
   let izbira = false
   if (body.status !== undefined) {
@@ -157,7 +237,7 @@ export async function PATCH (req: NextRequest, { params }: Params) {
         version: novaVerzija,
         data: JSON.stringify({
           renderParams: JSON.parse(renderParams) as unknown,
-          meta: { opozorila: opozorilaKodi, engineVersion: ENGINE_VERSION },
+          meta: { opozorila: opozorilaKodi, engineVersion: ENGINE_VERSION, dokaz },
         }),
         userId: user.id,
         note: typeof body.versionNote === 'string' && body.versionNote.trim() ? body.versionNote.trim().slice(0, 200) : 'Sprememba konfiguracije',
@@ -184,12 +264,18 @@ export async function PATCH (req: NextRequest, { params }: Params) {
       ...(novaVerzija > 0 ? { verzija: novaVerzija } : {}),
       ...(izbira ? { status: 'IZBRANA' } : {}),
       ...(opozorilaKodi.length > 0 ? { opozorila: opozorilaKodi } : {}),
+      // R510: veriga sodi v revizijski zapis — kaj je bilo potrjeno in zakaj kaj ne
+      meraStatus: dokaz.meritev?.status ?? null,
+      izvirnikFotografije: dokaz.izvirnikFotografije,
+      gradivoDokaz: dokaz.gradivo?.assetId ?? null,
+      gradivoRazlog: dokaz.gradivoRazlog,
     },
   })
 
   return NextResponse.json({
     data: {
       id: updated.id, status: updated.status, updatedAt: updated.updatedAt,
+      dokaz,
       ...(novaVerzija > 0 ? { verzija: novaVerzija } : {}),
     },
   })

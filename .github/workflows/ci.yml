@@ -164,6 +164,13 @@ jobs:
           # dokaz originalov (SHA-256 + velikost, skupen izvozu in PDF-ju) in
           # spomin na monterjeve nastavitve (zapis ≠ ukaz napravi).
           - grupa: r509
+          # R510 (issue #15 faza 6): dokazna veriga IZVEDENE slike — odjemalec
+          # sme trditi samo assetId, pot/SHA-256/dovoljenje/pripadnost izdelka
+          # potrdi strežnik iz baze; razveljavljena mera blokira SAMO nov
+          # nastanek (urejanje ostane z opozorilom); dokaz živi v JSON posnetku
+          # verzije — brez novih stolpcev, brez migracij, brez novega jedra.
+          # Nova skupina MORA biti tudi v tests/ci-matrix.sh.
+          - grupa: r510
     services:
       postgres:
         image: postgres:16

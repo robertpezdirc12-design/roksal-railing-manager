@@ -2792,3 +2792,96 @@ Stage Summary:
   `public/assets/roksal/src/MANIFEST.json` je v delovnem drevesu spremenjena in
   NAMENOMA ni v tem commitu; (6) prenos mere v paket je bil preizkušen s čistimi
   enotskimi trditvami in z branjem povezav, NE z end-to-end klikom v brskalniku.
+
+---
+Task ID: R510 (issue #15 Faza 6 — dokazna veriga IZVEDENE slike: potrjeno ROKSALovo
+gradivo, raven mere in izvorni posnetek zapisani v isto verzijo, brez novega jedra
+in brez migracije)
+Agent: Qoder (lokalno merjeno, 14. 10. 2026, Windows Git Bash + lokalni PG :54329)
+
+Task: Fotovizualizacija iz #14 je slikovno zadostovala, dokumentarno pa ne. Ob
+zapisu verzije ni bilo znano: (1) KATERO ROKSALovo gradivo (profil/barva) je bilo
+podlaga površine — ta vrednost je prišla samo iz odjemalčevega besedila in je
+lahko bila poljubna; (2) na KATERI ravni mere (ESTIMATED … CONFIRMED) in kateri
+verziji mere vizualizacija stoji; (3) KATERI izvorni posnetek je bil uporabljen,
+ker je UI vedno pošiljal `sourcePhotoId: null`. Posledica: izvedena slika ni imela
+razlikice do svojih referenc, kar zadnja točka Faze 6 izrecno zahteva. Omejitev
+celotne naloge: nobenega novega merilnega ali cenovnega jedra, nobena migracija,
+nobena nova odvisnost, noben AI/plačljiv klic; obstoječa funkcija (#14 zajem,
+prenos datoteke, stranke, nastale pred R510) sme SAMO ostati.
+
+Work Log:
+- NOVO `src/lib/viz-provenance.ts` (196 vrstic, namenoma ČIST — brez Prisma, brez
+  DOM-a, brez uvoza): `normalizirajTrdnjo()` (odjemalec sme poslati SAMO
+  `assetId`; tuji ključi so v zavrnitvi našteti SORTIRANO, da podtiskanje poti,
+  SHA-256 ali izdelka ni mogoče), `potrdiGradivo()` (fail-closed veriga: ni
+  katalogu / id se ne ujema / status ni `VERIFIED` / prazno dovoljenje / brez
+  `filePath` / SHA krajši od 16 znakov / gradivo tujega izdelka → brez dokaza, a
+  vedno z razlogom; vrnita se TOČNO štiri polja `{ assetId, kind, pot, sha256 }`),
+  `smeVizualizacijo()` (ZAVRNE samo `INVALIDATED` — z zožitvijo bi izgubili
+  obstoječo funkcijo), `dokazMere()` (neznana raven se zapiše kot `NEPOZNANO`, ne
+  kot izmišljena) in `preberiDokaz()` (pokvarjen JSON, ne-veriga in poškodovano
+  gradivo → `null`; star zapis, ki dokaza nikoli ni imel, ostane prazen in ne dobi
+  naknadno izmišljene verige).
+- `src/lib/photo-replace-engine.ts` (+74): `preveriTrdnjenoGradivo()` pot in
+  SHA-256 prebere IZ BAZE (`db.productAsset.findUnique`); `stanjeMere()` je skupen
+  bralnik ravni, zadnje verzije in `lengthCm` za GET in PATCH (model
+  `PhotoVisualization` NIMA relacije na `Measurement`, zato `include` ni bil
+  mogoč — dokaz se bere po `measurementId`); `preveriMeritev()` je zdaj bran z
+  `smeVizualizacijo()` (razveljavljena mera ne sme biti podlaga NOVE
+  vizualizacije, status 409); `vizZaUporabnika()` vrača tudi `measurementVersion`,
+  `sourcePhotoId`, `productId` in `variantId`.
+- `POST /api/photo-visualization` (+37): dokaz `{ meritev, izvirnikFotografije,
+  gradivo, gradivoRazlog }` gre v `meta` prve verzije, revizija
+  `PHOTO_VIZ_CREATE` zabeleži `meraStatus`, `gradivoDokaz` in `gradivoRazlog`,
+  odgovor vrne dokaz, da ga UI pokaže. Nepotrdljiva trditev POTEK NE zavrne
+  (ustvarjanja vizualizacije ne blokiramo), v dokument pa zapiše razlog — bralec
+  vidi, da dokaza NI, in ne da bi se dokaz izgubil.
+- `GET`/`PATCH /api/photo-visualization/[id]` (+126): GET izračuna dokaz in
+  `meraRazveljavljena`; PATCH raven mere bere NEPOGONNO (sicer bi dokaz lagal);
+  nova verzija `renderParams` PREJŠNJE trditve o gradivu ne zabriše, ampak jo
+  ponovno potrdi iz baze proti trenutnemu izdelku — sicer bi popravek osvetlitve
+  tiho izbrisal dokaz; `sourcePhotoId` je končno berljiv in zapisljiv; urejanje
+  obstoječe vizualizacije nad razveljavljeno mero NI blokirano (monter jo mora
+  lahko popraviti), zabeleži se opozorilo `MERA_RAZVELJAVLJENA`.
+- `src/components/roksal/modules/foto-replace.tsx` (+76): UI ne pošilja več
+  `sourcePhotoId: null` (pošilja dejanski vir), `assetId` gre samo ob preverjenem
+  gradivu, ob odpiranju se izvirnik in veriga vrneta iz baze, dodan je panel
+  »Dokazna veriga izvedene slike« (raven mere, izvirnik, potrjeno gradivo s potjo
+  in SHA ali razlog, zakaj dokaza ni, plus izrecna oznaka, da je vizualizacija
+  PREDSTAVITEV in ne meri in ne proizvaja količin).
+- NOVO `tests/r510.py` (316 vrstic, 97 trditev; brez strežnika, ne piše v bazo):
+  A normalizacija trditve, B fail-closed matrika potrditve + »točno štiri polja« +
+  ne razkriva dovoljenja/izdelka/statusa, C ravni mere, D `preberiDokaz` na
+  pokvarjenih posnetkih, E žičenje obeh poti in UI (source grep), F meje:
+  DOM-free, BREZ cen/marž/kosovnice, BREZ novih stolpcev (`PhotoVisualization`
+  ima samo znana polja), nespremenjen poslovni blok
+  `MEASUREMENT_BLOCKED_STATUSES`, brez uvozov iz paketov, brez `fetch(`, brez
+  novih odvisnosti (obstoječega `sharp` R510 ne uporablja). Registriran v
+  `tests/ci-matrix.sh` in `.github/workflows/ci.yml` — pariteto poganja sam pas.
+
+Verification:
+- `bash tests/ci-matrix.sh r510` → 97 ✓ / 0 ✗.
+- CELOTI lokalni relejni pas: ✓ zeleno, 8 statičnih korakov in 30 skupin,
+  4721 ✓ / 0 ✗ / 4 ⟿ (preskoki so isti okoljski kot prej: GitLab brez žetona).
+  Pas je upravljal LASTEN dev strežnik na :3000 (pred zagonom tam ni bilo nič);
+  zunanjega strežnika nisem uporabil in merilnega jedra zaradi harnessa nisem
+  spremenil. `tsc --noEmit` brez napak; eslint 0 napak (2 obstoječi opozorili v
+  UI).
+
+KAJ NI DOKAZANO / OSTANE POŠTENO:
+- GitHub Actions tega zagona ne morejo potrditi — minute so porabljene do
+  1. 11. 2026; dokaz je lokalni pas.
+- End-to-end klika v brskalniku (posnetek → potrjena mera → vizualizacija →
+  dokument z verigo) nisem naredil: dokazov na fizičnih napravah na tej mizi ni,
+  preverjeno je z enotskimi trditvami, branjem kode in lokalnim strežnikom.
+- Migracij ni nobene (dokaz živi v `PhotoVisualizationVersion.data.meta`);
+  `migrate deploy` in `db:seed` sta tekla SAMO na lokalnem PG :54329, Neon se ni
+  dotaknil ničesar.
+- Issue #15 OSTANE odprt: v Fazi 6 je še točka »iz istih potrjenih mer naj
+  nastanejo kosovnica in cenovni izračun iz ENEGA vira«, ki je brez lastnikove
+  potrditve cenovnega jedra ne smem narediti; Faza 7 (benchmark z tolerancami in
+  neodvisno fizično izmerjenim naborom, §6.1) je lastnikova.
+- Produkcijski gesli administracije/demo sta še javno znana in nerotirana,
+  migracija `20261019000000_r501_measurement_status` na Neonu še ni izvedena —
+  oboje je dejanje lastnika, zato deploya NE predlagam.

@@ -122,6 +122,8 @@ interface SlotState {
   vijaki: boolean
   note: string
   savedId: string | null
+  /** R510: meritev tipa FOTO, iz katere izvira trenutna fotografija (null = naložena datoteka). */
+  photoSourceId: string | null
 }
 
 const prazenSlot = (): SlotState => ({
@@ -130,7 +132,7 @@ const prazenSlot = (): SlotState => ({
   productId: '', variantId: '', tip: 'POKOCNA', pritrditev: 'TALNA',
   lengthCmS: '400', heightCmS: '110', postsS: '5', handrail: true,
   lamelaMmS: '70', rezaMmS: '20', deskaMmS: '120', vijaki: true,
-  note: '', savedId: null,
+  note: '', savedId: null, photoSourceId: null,
 })
 
 // ─── Pomočniki ───────────────────────────────────────────────────────────────
@@ -262,6 +264,14 @@ interface AssetRow {
   permission: string; sourceName: string
 }
 
+/** Dokazna veriga izvedene slike (R510) — kar je ob shranjevanju POTRDIL strežnik. */
+interface DokazVeriga {
+  meritev: { status: string; verzija: number | null } | null
+  izvirnikFotografije: string | null
+  gradivo: { assetId: string; kind: string; pot: string; sha256: string } | null
+  gradivoRazlog: string | null
+}
+
 // ─── Modul ───────────────────────────────────────────────────────────────────
 
 export default function FotoReplaceModule () {
@@ -280,6 +290,8 @@ export default function FotoReplaceModule () {
   const [photoImg, setPhotoImg] = useState<HTMLImageElement | null>(null)
   const [photoW, setPhotoW] = useState(0)
   const [photoH, setPhotoH] = useState(0)
+  // R510: dokaz, ki ga je vrnil strežnik ob zadnjem shranjevanju/odpiranju
+  const [dokaz, setDokaz] = useState<DokazVeriga | null>(null)
 
   const [active, setActive] = useState<VariantLabel>('A')
   const [slots, setSlots] = useState<Record<VariantLabel, SlotState>>({ A: prazenSlot(), B: prazenSlot(), C: prazenSlot() })
@@ -781,6 +793,7 @@ export default function FotoReplaceModule () {
     setProjectId(id)
     // ponastavi delovne variante ob novem projektu
     setSlots({ A: prazenSlot(), B: prazenSlot(), C: prazenSlot() })
+    setDokaz(null)
     setActive('A')
     setSavedVersion((v) => v + 1)
   }
@@ -892,33 +905,43 @@ export default function FotoReplaceModule () {
   async function shrani (): Promise<void> {
     if (!projectId || !photo || !params || !product) return
     setSaveBusy(true)
+    // R510: odjemalec sme TRDITI samo identifikator gradiva; pot in SHA-256
+    // potrdi strežnik. Brez preverjenega gradiva trditve ne pošiljamo.
+    const trdnja = izbiraGradiva?.smeUporabiti && izbiraGradiva.gradivo
+      ? { assetId: izbiraGradiva.gradivo.id }
+      : undefined
     try {
       const rendered = await renderJpeg(1280, true)
       if (slot.savedId) {
         // posodobitev → NOVA VERZIJA (§12: nikoli tiho prepisano)
-        await apiPatch(`/api/photo-visualization/${slot.savedId}`, {
+        const res = await apiPatch<{ data: { dokaz?: DokazVeriga | null } }>(`/api/photo-visualization/${slot.savedId}`, {
           renderParams: params,
           rendered,
           note: slot.note || null,
           productId: product.id,
           variantId: slot.variantId || null,
+          sourcePhotoId: slot.photoSourceId,
+          ...(trdnja ? { gradivo: trdnja } : {}),
           versionNote: 'Posodobitev iz zavihka Foto vizualizacija',
         })
+        setDokaz(res.data?.dokaz ?? null)
         toast({ title: `Varianta ${active} posodobljena — nova verzija posnetka.`, description: `${product.name}${variant ? ` · ${variant.name}` : ''}` })
       } else {
-        const res = await apiPost<{ data: { id: string; variantLabel: string } }>('/api/photo-visualization', {
+        const res = await apiPost<{ data: { id: string; variantLabel: string; dokaz?: DokazVeriga | null } }>('/api/photo-visualization', {
           projectId,
           variantLabel: active,
           sourcePhoto: photo,
           rendered,
-          sourcePhotoId: null,
+          sourcePhotoId: slot.photoSourceId,
           measurementId: slot.measurementId || null,
           productId: product.id,
           variantId: slot.variantId || null,
           renderParams: params,
           note: slot.note || null,
+          ...(trdnja ? { gradivo: trdnja } : {}),
         })
         updateSlot((s) => ({ ...s, savedId: res.data.id }))
+        setDokaz(res.data?.dokaz ?? null)
         toast({ title: `Varianta ${active} shranjena na projekt.`, description: `${product.name}${variant ? ` · ${variant.name}` : ''} — verzija v1.` })
       }
       setSavedVersion((v) => v + 1)
@@ -951,9 +974,11 @@ export default function FotoReplaceModule () {
         data: {
           id: string; variantLabel: string; status: string; sourcePhoto: string
           renderParams: string; measurementId: string | null; note: string | null
+          sourcePhotoId: string | null
           productId: string; variantId: string | null
           product: { id: string; sku: string; name: string; tech: string | null; family: { code: string } }
           opozorila: Opozorilo[]
+          dokaz: DokazVeriga | null
         }
       }>(`/api/photo-visualization/${id}`)
       const d = res.data
@@ -967,9 +992,13 @@ export default function FotoReplaceModule () {
       const label = (VARIANT_LABELS as readonly string[]).includes(d.variantLabel) ? (d.variantLabel as VariantLabel) : 'A'
       setPhoto(d.sourcePhoto)
       setPhotoName('shranjena fotografija')
+      // R510: izvirnik in dokaz se vrneta iz baze — sicer bi urejanje shranjene
+      // variante znova poslalo prazen izvirnik in zabrisalo verigo.
+      setDokaz(d.dokaz ?? null)
       const s0 = prazenSlot()
       const nov: SlotState = {
         ...s0,
+        photoSourceId: d.sourcePhotoId ?? null,
         quad: Array.isArray(rp.quad) && rp.quad.length === 4 ? rp.quad.map((t) => ({ x: t.x, y: t.y })) : [],
         maskaOgraja: oblike(rp.maska?.ograja),
         maskaIzpusti: oblike(rp.maska?.izpusti),
@@ -1027,7 +1056,9 @@ export default function FotoReplaceModule () {
       setPhoto(dataUrl)
       setPhotoName(file.name)
       // ponastavi točke in vezave shranjenih variant ob novi fotografiji
+      // (R510: zveza na izvirnik je null — datoteka zunaj projekta ga nima)
       setSlots(() => ({ A: prazenSlot(), B: prazenSlot(), C: prazenSlot() }))
+      setDokaz(null)
       toast({ title: 'Fotografija pripravljena.', description: 'Original se pretvori v JPEG (max 1600 px) — ostaja vir slike.' })
     } catch (e) {
       toast({ title: 'Priprava fotografije ni uspela.', description: e instanceof Error ? e.message : undefined, variant: 'destructive' })
@@ -1045,8 +1076,13 @@ export default function FotoReplaceModule () {
       const dataUrl = await dataUrlToJpeg(row.foto, 1600, 0.85)
       setPhoto(dataUrl)
       setPhotoName(`projektna fotografija ${row.m.location ? `— ${row.m.location}` : ''}`)
-      setSlots(() => ({ A: prazenSlot(), B: prazenSlot(), C: prazenSlot() }))
-      toast({ title: 'Projektna fotografija prevzeta.' })
+      // R510: projektna fotografija IMA izvirnik — povezavo nosi vsaka varianta
+      // (meritev, ki je bila umaknjena, na strežniku pomeni zavrnjeno ustvarjanje).
+      setSlots(() => {
+        const z = (): SlotState => ({ ...prazenSlot(), photoSourceId: mid })
+        return { A: z(), B: z(), C: z() }
+      })
+      toast({ title: 'Projektna fotografija prevzeta.', description: 'Izvirnik fotografije je povezan — dokaz gre ob shranjevanju v dokument.' })
     } catch (e) {
       toast({ title: 'Prevzem fotografije ni uspel.', description: e instanceof Error ? e.message : undefined, variant: 'destructive' })
     } finally {
@@ -1321,6 +1357,34 @@ export default function FotoReplaceModule () {
                       {izbiraGradiva.doklad ? (
                         <p className="mt-1 break-words text-[11px] text-muted-foreground">Vir: {izbiraGradiva.doklad}</p>
                       ) : null}
+                    </div>
+                  ) : null}
+                  {/* R510 (issue #15 Faza 6): kaj je ob zadnjem shranjevanju POTRDIL strežnik.
+                      Odjemalčeve trditve tu niso — prikazujemo samo zapisano verigo. */}
+                  {dokaz ? (
+                    <div className="rounded-lg border p-2.5 text-xs">
+                      <p className="font-semibold">Dokazna veriga izvedene slike</p>
+                      <p className="mt-1 text-muted-foreground">
+                        Podlaga mere: {dokaz.meritev
+                          ? `${dokaz.meritev.status}${dokaz.meritev.verzija ? ` · verzija ${dokaz.meritev.verzija}` : ''}`
+                          : 'brez povezane mere'}
+                        {dokaz.meritev?.status === 'INVALIDATED' ? ' — mera je bila razveljavljena; slika ostane predstavitev, ne podlaga za naročilo.' : ''}
+                      </p>
+                      <p className="mt-1 text-muted-foreground">
+                        Izvirnik fotografije: {dokaz.izvirnikFotografije
+                          ? `projektna fotografija (${dokaz.izvirnikFotografije.slice(0, 8)}…)`
+                          : 'naložena datoteka — projectskega izvirnika ni'}
+                      </p>
+                      {dokaz.gradivo ? (
+                        <p className="mt-1 break-words text-muted-foreground">
+                          Originalno gradivo potrjeno: {dokaz.gradivo.kind} · {dokaz.gradivo.pot} · SHA-256 {dokaz.gradivo.sha256.slice(0, 12)}…
+                        </p>
+                      ) : (
+                        <p className="mt-1 text-muted-foreground">
+                          {dokaz.gradivoRazlog ?? 'Dokaz o gradivu ni bil zapisan — veriga je bila vzpostavljena šele ob naslednjem shranjevanju.'}
+                        </p>
+                      )}
+                      <p className="mt-1 text-[11px] text-muted-foreground">Vizualizacija je PREDSTAVITEV: ne meri in ne proizvaja količin.</p>
                     </div>
                   ) : null}
                 </div>
