@@ -18,6 +18,22 @@
 # `postgresql`. Posledica: cevovod pade na `prisma db push` (prizadet je vsak MR,
 # torej tudi varnostni popravki). Zdaj ima job pravi PostgreSQL servis.
 #
+# R514 — DUAL-NI IZVAJALNIK (reakcija na blokadi CI minut):
+#   • GitHub Actions minute so porabljene do 1. 11. 2026 — dokaz do takrat
+#     ostaja lokalni pas (tests/ci-local.sh) + TA cevovod na GitLabu.
+#   • Skupni GitLab runnerji zahtevajo overitev identitete računa (API vrne
+#     403 "Identity verification is required in order to run CI jobs") — to je
+#     dejanje lastnika, ne kode.
+#   • Začasna rešitev: LASTNI projekt runner (id 57416017, tag "sandbox",
+#     run_untagged=true) v razvojnem peskovniku — SHELL izvajalnik brez dockerja.
+#     Zato job ne sme več trdno zahtevati apt-get/pg_isready/servisnega postgresa:
+#     detekcija teče prek node_modules/pg ( namesto pg_isready, ki ga peskovnik nima).
+#   • Baza: docker → servisni postgres (alias postgres); shell → LOKALNI embedded
+#     PG :54329, baza roksal_ci — NAMENNO LOČENA od razvojne baze roksal, da
+#     preverjanje ostane pošteno (prazna baza, ne razvojno stanje).
+#   • Ko lastnik overovi identiteto, skupni runnerji poberejo ISTI job brez
+#     spremembe konfiguracije (docker pot ostane prva izbira).
+#
 # Namensko NE gradimo produkcijskega paketa v CI (orta tipa + shema sta vratarja;
 # polna gradnja poteče pri deployu — glej docs/RECOVERY.md). Regression suite
 # (tests/ci-matrix.sh) tu NE teče — rabi živo aplikacijo s seedanimi podatki;
@@ -34,7 +50,9 @@ verify:
     - name: postgres:16-alpine
       alias: postgres
   variables:
-    # pri PostgreSQL servisu GitLab nastavi samo POSTGRES_*; gostitelj je alias
+    # pri PostgreSQL servisu GitLab nastavi samo POSTGRES_*; gostitelj je alias.
+    # Na shell runnerju spodnja detekcija (ci-db.mjs) to OVERRIDA z lokalnim
+    # embedded PG (roksal_ci) — services/image so tam ignorirani (opozorilo, ne napaka).
     POSTGRES_DB: roksal
     POSTGRES_USER: roksal
     POSTGRES_PASSWORD: roksal
@@ -46,15 +64,68 @@ verify:
     paths:
       - node_modules/
   script:
-    - apt-get update -qq && apt-get install -y -qq --no-install-recommends git ca-certificates postgresql-client >/dev/null
-    # servis vzpostavi TLS-neranen TCP prikladen — počakaj, dokler NE sprejme poizvedbe
+    # R514: apt-get je orodje DOCKER izvajalnika (slika oven/bun nima git-a).
+    # Na shell runnerju so git/ca-certificates/bun že na gostitelju — pogoj.
     - |
-      for i in $(seq 1 30); do
-        if pg_isready -h postgres -U roksal >/dev/null 2>&1; then break; fi
-        sleep 2
-      done
-      pg_isready -h postgres -U roksal || { echo "✗ postgres servis ne odgovori"; exit 1; }
+      if command -v apt-get >/dev/null 2>&1; then
+        apt-get update -qq && apt-get install -y -qq --no-install-recommends git ca-certificates postgresql-client >/dev/null
+      else
+        echo "── shell izvajalnik: apt-get ni na voljo (orodja že prisotna na gostitelju)"
+      fi
     - bun install --frozen-lockfile
+    # R514: izbira baze — deterministična detekcija (pg modul, ne pg_isready):
+    #   1. servisni postgres (alias "postgres", docker izvajalnik) — če gostitelj obstaja
+    #   2. sicer lokalni embedded PG :54329 (shell izvajalnik) — CI baza roksal_ci,
+    #      ustvarjena po potrebi, LOČENA od razvojne baze
+    - |
+      cat > /tmp/ci-db.mjs <<'DBEOF'
+      import dns from 'node:dns/promises'
+      import { Client } from 'pg'
+
+      const tryConn = async (url) => {
+        try {
+          const c = new Client({ connectionString: url, connectionTimeoutMillis: 3000 })
+          await c.connect(); await c.end(); return true
+        } catch { return false }
+      }
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+      const resolvable = async (host) => {
+        try { await dns.lookup(host); return true } catch { return false }
+      }
+
+      // 1) docker: servisni postgres — počakaj, dokler ne sprejme poizvedbe
+      if (await resolvable('postgres')) {
+        for (let i = 0; i < 30; i++) {
+          if (await tryConn('postgresql://roksal:roksal@postgres:5432/roksal')) {
+            console.log('postgresql://roksal:roksal@postgres:5432/roksal')
+            process.exit(0)
+          }
+          await sleep(2000)
+        }
+        console.error('opozorilo: servisni postgres ni odgovoril v 60 s — poskušam lokalnega')
+      }
+
+      // 2) shell: lokalni embedded PG — vzdrževalna baza roksal, CI gre v roksal_ci
+      for (let i = 0; i < 10; i++) {
+        if (await tryConn('postgresql://roksal:roksal@localhost:54329/roksal')) {
+          const c = new Client({ connectionString: 'postgresql://roksal:roksal@localhost:54329/roksal' })
+          await c.connect()
+          const r = await c.query("SELECT 1 FROM pg_database WHERE datname = 'roksal_ci'")
+          if (r.rowCount === 0) {
+            await c.query('CREATE DATABASE roksal_ci')
+            console.error('── ustvarjena sveža CI baza roksal_ci (ločena od razvojne)')
+          }
+          await c.end()
+          console.log('postgresql://roksal:roksal@localhost:54329/roksal_ci')
+          process.exit(0)
+        }
+        await sleep(1000)
+      }
+      console.error('✗ noben postgres ni dosegljiv (niti servisni niti localhost:54329)')
+      process.exit(1)
+      DBEOF
+      export DATABASE_URL="$(bun /tmp/ci-db.mjs)"
+      echo "── DATABASE_URL=$DATABASE_URL"
     - bun run lint
     - bunx tsc --noEmit -p tsconfig.ci.json
     - bunx prisma validate
