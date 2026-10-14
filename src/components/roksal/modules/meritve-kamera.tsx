@@ -69,7 +69,7 @@ import {
   captureProgress, computeGeometry, manjkajociVnosi,
   detectDeviceCaps, measurementStatusAllowsBusiness, recommendMethod, resolveScale,
   type AnalyzeResult, type CalibrationMethod, type CaptureStepState, type DeviceCaps, type DomainOptions,
-  type MeasureMode, type MeasurementStatus, type ScaleModel,
+  type EngineCalib, type MeasureMode, type MeasurementStatus, type ScaleModel,
 } from '@/lib/measure-engine'
 import {
   checkOrientationFromBytes, normalizedSize, orientationMatrix,
@@ -112,7 +112,7 @@ interface View {
    *  sliki. Kadar obstaja par, merilo ni enako v vseh smereh (nagnjen kader)
    *  in jedro računa anizotropno. Polovičen par (samo ena vrednost) jedro
    *  zavrže — zato ju UI vedno nastavi skupaj. */
-  calib: { px: number; cm: number; pxY?: number; cmY?: number } | null
+  calib: { px: number; cm: number; pxY?: number; cmY?: number; plane?: { points: { x: number; y: number }[]; widthCm: number; heightCm: number } } | null
   calibLocked: boolean
 }
 
@@ -304,7 +304,12 @@ function merilaPasus (scale: ScaleModel): string {
  *  `cmPerPx` ni eno samo razmerje — takrat UI ne sme izpisati
  *  »neveljavna referenca«, ker referenca JE veljavna, samo po smereh ločena. */
 function meriloOznaka (scale: ScaleModel): string | null {
-  if (!scale.known || scale.cmPerPxX === null) return null
+  if (!scale.known) return null
+  // R513: ravnina nima enotnega cm/px — merilo je homografija
+  if (scale.basis === 'RAVNINA' && scale.planeRect != null) {
+    return `ravnina ${fmt1(scale.planeRect.widthCm)} × ${fmt1(scale.planeRect.heightCm)} cm (perspektivno rectificirano)`
+  }
+  if (scale.cmPerPxX === null) return null
   if (scale.cmPerPxY !== null && scale.cmPerPxY !== scale.cmPerPxX) {
     return `X ${fmt1(scale.cmPerPxX)} cm/px · Y ${fmt1(scale.cmPerPxY)} cm/px (ločeno)`
   }
@@ -518,6 +523,9 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
 
   const [calibA, setCalibA] = useState<number | null>(null) // indeks prve točke kalibracije
   const [calibCm, setCalibCm] = useState('')
+  // R513 (issue #15 faza 1): dimenziji perspektivne ravnine (metoda RAVNINA)
+  const [planeW, setPlaneW] = useState('')
+  const [planeH, setPlaneH] = useState('')
   const [detecting, setDetecting] = useState(false)
   const [stairMode, setStairMode] = useState(false)
   const [serverLayout, setServerLayout] = useState<string | null>(null)
@@ -2029,7 +2037,7 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
                     ) : null}
                   </span>
                 ) : (
-                  <span className="text-xs text-muted-foreground">{view.calib ? 'neveljavna referenca — px in cm morata biti večja od 0' : 'izberite 2 točki + vnesite realno razdaljo'}</span>
+                  <span className="text-xs text-muted-foreground">{view.calib ? 'neveljavna referenca — px in cm morata biti večja od 0' : calibMethod === 'RAVNINA' ? 'označite 4 vogale pravokotnika na merjeni ravnini' : 'izberite 2 točki + vnesite realno razdaljo'}</span>
                 )}
               </div>
               {/* R457 (§4): metoda kalibracije + referenčni objekt */}
@@ -2048,7 +2056,46 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
                   <Input id="km-calib-ref" className="h-9" value={refObject} onChange={(e) => setRefObject(e.target.value)} placeholder="npr. vrata 110 cm / marker 20 cm" />
                 </div>
               </div>
-              {!view.calib ? (
+              {/* R513 (issue #15 faza 1): PERSPEKTIVNA RAVNINA — 4 vogali znanega
+                  pravokotnika NA merjeni ravnini → homografija. Merilo je DOKAZANO
+                  v vseh smereh na ravnini (brez predpostavke frontalnosti). */}
+              {!view.calib && calibMethod === 'RAVNINA' ? (
+                <div className="space-y-2 rounded-lg border border-emerald-300 bg-emerald-50/60 p-3 dark:border-emerald-900 dark:bg-emerald-950/30" data-testid="km-plane-calib">
+                  <p className="text-xs font-semibold">Perspektivna ravnina — 4 vogali znanega pravokotnika</p>
+                  <p className="text-[11px] text-muted-foreground">
+                    Označite 4 vogale pravokotnika NA merjeni ravnini (npr. vrata, plošča, fasadno polje) v zaporedju: zgornji levi → zgornji desni → spodnji desni → spodnji levi. Mere veljajo za točke na tej ravnini.
+                  </p>
+                  <div className="flex flex-wrap items-end gap-2">
+                    <div className="space-y-1">
+                      <Label htmlFor="km-plane-w" className="text-xs">Širina pravokotnika (cm)</Label>
+                      <Input id="km-plane-w" className="h-9 w-36" type="number" min="1" inputMode="decimal" value={planeW} onChange={(e) => setPlaneW(e.target.value)} placeholder="npr. 200" />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="km-plane-h" className="text-xs">Višina pravokotnika (cm)</Label>
+                      <Input id="km-plane-h" className="h-9 w-36" type="number" min="1" inputMode="decimal" value={planeH} onChange={(e) => setPlaneH(e.target.value)} placeholder="npr. 100" />
+                    </div>
+                    <Button
+                      size="sm" className="h-9"
+                      disabled={view.points.length < 4 || !(Number(planeW.replace(',', '.')) > 0) || !(Number(planeH.replace(',', '.')) > 0)}
+                      onClick={() => {
+                        const w = Number(planeW.replace(',', '.')); const h = Number(planeH.replace(',', '.'))
+                        const four = view.points.slice(-4) // zadnji 4 kliki = vogali (popravek točke = nov klik); NORMALIZIRANI 0..1 — isto pogodbo kot meritvene točke (jedro pretvori prek imgW/imgH)
+                        const test: EngineCalib = { px: 0, cm: 0, imgW: view.imgW, imgH: view.imgH, plane: { points: four, widthCm: w, heightCm: h } }
+                        if (resolveScale(test).H == null) {
+                          toast({ title: 'Vogali niso uporabni.', description: 'Točke morajo biti 4 razločni vogali (ne na premici) pravokotnika na merjeni ravnini.', variant: 'destructive' })
+                          return
+                        }
+                        snapshot()
+                        setViews((vs) => vs.map((v) => (v.key === view.key ? { ...v, calib: { px: 0, cm: 0, plane: { points: four, widthCm: w, heightCm: h } } } : v)))
+                      }}
+                    >
+                      <Ruler className="size-4" aria-hidden /> Postavi ravnino
+                    </Button>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">Označenih točk: {Math.min(view.points.length, 4)}/4 {view.points.length >= 4 ? '✓ (zadnji 4 kliki so vogali — popravek = nov klik)' : '— klikajte vogale na sliki zgoraj'}</p>
+                </div>
+              ) : null}
+              {!view.calib && calibMethod !== 'RAVNINA' ? (
                 <>
                   <p className="text-[11px] text-muted-foreground">
                     Najprej kliknite na sliko in označite 2 točki znane razdalje (npr. rob stopnice, širina vrat), nato ju izberite spodaj.
@@ -2087,7 +2134,8 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
                   </div>
                 </>
               ) : null}
-              {view.calib ? <YRefBlock key={`y1-${view.key}`} view={view} pxOf={px} onApply={applyYRef} idp="km1" /> : null}
+              {/* Y referenca nima pomena pri ravnini — homografija že dokazuje obe smeri */}
+              {view.calib && !view.calib.plane ? <YRefBlock key={`y1-${view.key}`} view={view} pxOf={px} onApply={applyYRef} idp="km1" /> : null}
             </CardContent>
           </Card>
 
@@ -2321,7 +2369,7 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
             <Card>
               <CardContent className="space-y-2 p-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="text-sm font-semibold">Izračun {calc.cmPerPx ? '' : '(px — brez kalibracije)'}</p>
+                  <p className="text-sm font-semibold">Izračun {calc.scale.basis === 'RAVNINA' ? '(perspektivna ravnina)' : calc.cmPerPx ? '' : '(px — brez kalibracije)'}</p>
                   <Button size="sm" variant={stairMode ? 'default' : 'outline'} className="h-8" onClick={() => setStairMode((s) => !s)} aria-pressed={stairMode}>
                     Stopnišče {stairMode ? 'vklop' : 'izklop'}
                   </Button>

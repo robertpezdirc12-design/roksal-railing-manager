@@ -55,7 +55,7 @@ import { jsonError, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
 import { emitEvent } from '@/lib/notify'
 import {
-  MEASURE_MODES, consolidateViews,
+  MEASURE_MODES, MODE_RULES, consolidateViews, viewLengthCm, polygonMetrics, parseEnginePoints,
   pointsForStorage, viewForStorage, calibrationForParams, parseCalibration,
   pickEngineExtras, deriveProvenance, provenanceForParams, type MeasureMode,
 } from '@/lib/measure-engine'
@@ -234,6 +234,34 @@ export async function POST (req: NextRequest) {
     // rešitev — vrata ostanejo odprta (zavestna odločitev uporabnika).
     return jsonError(409, 'Pogledi se preveč razlikujejo.',
       `Razpršenost ${multiView.spreadPct.toString().replace('.', ',')} % med ${multiView.count} pogledi presega ${MEASURE_CONFLICT_PCT} % — popravite točke ali kalibracijo na pogledih, ali podajte ročni popravek dolžine z razlogom (manualOverride).`)
+  }
+
+  // ── R513 (issue #15 faza 1, prenos iz vzporedne linije main): STREŽNIŠKI
+  // PRERAČUN JE AVTORITETA — in PO konfliktnih vratih (konflikt pogledov je
+  // natančnejši vzrok). Kandidati, s katerimi se lahko dolžina ujema (2 %):
+  // primarna geometrija (px/cm ALI ravnina) IN povprečje konsolidiranih pogledov
+  // — več strinjajočih pogledov je pravi vir, če se primarni ne ujema.
+  // Ročni popravek z razlogom ostaja veljavna pot (zavestna odločitev). ──
+  {
+    const primary = viewLengthCm(body.points, body.calibration)
+    const kandidati: number[] = []
+    if (primary !== null) kandidati.push(primary)
+    if (multiView != null && multiView.mean > 0) kandidati.push(multiView.mean)
+    // Poligonski načini (KERAMIKA, PROSTOR …): dolžina = OBSEG zaprtega
+    // poligona (r457 pogodba: polyline 4 točk = 3 segmenti, obseg pa vključi
+    // zaklepalko nazaj na prvo točko — odjemalec pošilja obseg).
+    const modeRule = mode != null ? MODE_RULES[mode as MeasureMode] : null
+    if (modeRule?.polygon) {
+      const poly = polygonMetrics(parseEnginePoints(body.points), parseCalibration(body.calibration))
+      if (poly.scale.known && poly.perimeterCm > 0) kandidati.push(poly.perimeterCm)
+    }
+    const usklajena = kandidati.some((k) => Math.abs(k - lengthCm) / k <= 0.02)
+    if (kandidati.length > 0 && !usklajena && manualOverride === null) {
+      const fmt = (n: number): string => (Math.round(n * 10) / 10).toString().replace('.', ',')
+      const odst = (Math.round((Math.min(...kandidati.map((k) => Math.abs(k - lengthCm) / k))) * 1000) / 10).toString().replace('.', ',')
+      return jsonError(409, 'Dolžina se ne ujema z izračunom.',
+        `Iz točk in kalibracije izhaja ${kandidati.map(fmt).join(' cm / ')} cm, potrjujete ${fmt(lengthCm)} cm (najmanjše odstopanje ${odst} % > 2 %) — popravite točke/kalibracijo ali podajte manualOverride z razlogom.`)
+    }
   }
 
   // ── R501 (issue #15 faza 2): PROVENIENCA ──────────────────────────────────

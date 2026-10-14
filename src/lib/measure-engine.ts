@@ -27,7 +27,17 @@
 export type MeasureMode = 'OGRAJA' | 'KERAMIKA' | 'STREHA' | 'FASADA' | 'STOPNICE' | 'PROSTOR' | 'SPLOSNO'
 export const MEASURE_MODES: MeasureMode[] = ['OGRAJA', 'KERAMIKA', 'STREHA', 'FASADA', 'STOPNICE', 'PROSTOR', 'SPLOSNO']
 
-export type CalibrationMethod = 'MARKER' | 'ZNANA_MERA' | 'ZUNANJA_NAPRAVA' | 'LIDAR' | 'ROCNO'
+export type CalibrationMethod = 'MARKER' | 'ZNANA_MERA' | 'ZUNANJA_NAPRAVA' | 'LIDAR' | 'ROCNO' | 'RAVNINA'
+
+/** R513 (issue #15 faza 1, prenos iz vzporedne linije main): perspektivna
+ *  ravnina — 4 vogali ZNANEGA pravokotnika na merjeni ravnini + njegovi dimenziji.
+ *  Homografija rectificira vse smeri NA ravnini (merilo je dokazano, ne
+ *  predpostavljeno) — za razliko od UNIFORM, kjer je frontalnost predpostavka. */
+export interface PlaneRef {
+  points: { x: number; y: number }[] // 4 vogali v pikslih slike
+  widthCm: number
+  heightCm: number
+}
 
 /**
  * ENA lestvica metod kalibracije za VSE plasti (issue #15 faza 2: »različne
@@ -42,6 +52,7 @@ export const CALIB_METHODS: { id: CalibrationMethod; label: string; desc: string
   { id: 'ZUNANJA_NAPRAVA', label: 'Zunanja naprava', desc: 'Leica DISTO / laser — referenčna razdalja', base: 88 },
   { id: 'LIDAR', label: 'LiDAR / depth skala', desc: 'Globinska senzorika naprave (kjer je podprta)', base: 92 },
   { id: 'ROCNO', label: 'Ročna referenca', desc: 'Ročno izmerjena referenca na objektu', base: 55 },
+  { id: 'RAVNINA', label: 'Perspektivna ravnina', desc: '4 vogali znanega pravokotnika na merjeni ravnini → homografija (rectifikacija brez predpostavke frontalnosti)', base: 90 },
 ]
 
 export interface EnginePoint { x: number; y: number; src?: 'ROCNO' | 'PREDLOG' }
@@ -57,6 +68,10 @@ export interface EngineCalib {
   imgH?: number
   method?: CalibrationMethod
   refObject?: string
+  /** R513: perspektivna ravnina — NEODVISNA od px/cm (veljavna tudi pri px=0).
+   *  Kadar je podana in veljavna, JE merilo (homografija), px/cm pa ostane za
+   *  primere brez ravnine. */
+  plane?: PlaneRef
 }
 
 export const CALIB_METHOD_IDS: CalibrationMethod[] = CALIB_METHODS.map((m) => m.id)
@@ -73,12 +88,40 @@ export const CALIB_METHOD_IDS: CalibrationMethod[] = CALIB_METHODS.map((m) => m.
  * Vrne `null` kadar merila NI (px/cm para ni) — klicatelj odloči, ali to pomeni
  * 400 (izračun) ali samo odsotno merilo (shranjevanje → status ESTIMATED).
  */
+function parsePlaneRef (v: unknown): PlaneRef | null {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return null
+  const o = v as { points?: unknown; widthCm?: unknown; heightCm?: unknown }
+  const w = Number(o.widthCm); const h = Number(o.heightCm)
+  if (!Number.isFinite(w) || w <= 0 || w > 100000 || !Number.isFinite(h) || h <= 0 || h > 100000) return null
+  if (!Array.isArray(o.points) || o.points.length !== 4) return null
+  const pts: { x: number; y: number }[] = []
+  for (const p of o.points) {
+    if (!p || typeof p !== 'object') return null
+    const q = p as { x?: unknown; y?: unknown }
+    const x = Number(q.x); const y = Number(q.y)
+    if (!Number.isFinite(x) || !Number.isFinite(y) || Math.abs(x) > 1e6 || Math.abs(y) > 1e6) return null
+    pts.push({ x, y })
+  }
+  return { points: pts, widthCm: w, heightCm: h }
+}
+
+/** Ali je kalibracija perspektivna ravnina in ali strukturno ustreza (4 točke,
+ *  pozitivni dimenziji). Globoko preverjanje (kolinearnost, homografija) je v
+ *  `planeHomography` — tako analiza POŠTENO poroča razlog, ne tiha zavrnitev. */
+function planeRefValid (c: EngineCalib | null | undefined): c is EngineCalib & { plane: PlaneRef } {
+  return c?.plane != null && c.plane.points.length === 4 && c.plane.widthCm > 0 && c.plane.heightCm > 0
+}
+
 export function parseCalibration (v: unknown): EngineCalib | null {
   if (!v || typeof v !== 'object' || Array.isArray(v)) return null
-  const o = v as { px?: unknown; cm?: unknown; pxY?: unknown; cmY?: unknown; imgW?: unknown; imgH?: unknown; method?: unknown; refObject?: unknown }
+  const o = v as { px?: unknown; cm?: unknown; pxY?: unknown; cmY?: unknown; imgW?: unknown; imgH?: unknown; method?: unknown; refObject?: unknown; plane?: unknown }
   const px = Number(o.px); const cm = Number(o.cm)
-  if (!Number.isFinite(px) || px <= 0 || !Number.isFinite(cm) || cm <= 0 || cm > 100000) return null
-  const out: EngineCalib = { px, cm }
+  const plane = parsePlaneRef(o.plane)
+  // R513: ravnina JE sama sebi merilo — px/cm nista več obvezen par
+  if (plane == null && (!Number.isFinite(px) || px <= 0 || !Number.isFinite(cm) || cm <= 0 || cm > 100000)) return null
+  const out: EngineCalib = plane != null
+    ? { px: Number.isFinite(px) && px > 0 ? px : 0, cm: Number.isFinite(cm) && cm > 0 ? cm : 0, plane }
+    : { px, cm }
   // Ločena Y referenca (nagnjen kader) sme v merilo SAMO v paru — sicer bi
   // polovičen podatek tiho spremenil smer merila iz dokazanega v nedokazanega.
   const pxY = Number(o.pxY); const cmY = Number(o.cmY)
@@ -91,6 +134,15 @@ export function parseCalibration (v: unknown): EngineCalib | null {
   }
   if (typeof o.refObject === 'string' && o.refObject.trim()) out.refObject = o.refObject.trim().slice(0, 80)
   return out
+}
+
+/** Ravnina za params zapis (JSON string — params nosi number|string). */
+function planeToParams (plane: PlaneRef): string {
+  return JSON.stringify({
+    points: plane.points.map((p) => ({ x: Math.round(p.x * 100) / 100, y: Math.round(p.y * 100) / 100 })),
+    widthCm: plane.widthCm,
+    heightCm: plane.heightCm,
+  })
 }
 
 /** Oblika točk, ki jo sprejmejo VSI vhodi (issue #15 faza 2): normalizirane
@@ -115,6 +167,9 @@ export function parseEnginePoints (v: unknown, max = 64): EnginePoint[] {
 /** Oblika za `params.calibration` — ključi ostanejo BITNO enaki dosedanjim. */
 export function calibrationToParams (c: EngineCalib): Record<string, number | string> {
   const out: Record<string, number | string> = { px: c.px, cm: c.cm }
+  // R513: ravnina mora preživeti shranjevanje — sicer bi strežniški preračun
+  // iz params padel na MANJKA_KALIBRACIJA čeprav je bila ravnina podana.
+  if (c.plane != null) out.plane = planeToParams(c.plane)
   if (c.pxY != null && c.cmY != null) { out.pxY = c.pxY; out.cmY = c.cmY }
   if (c.imgW != null) out.imgW = c.imgW
   if (c.imgH != null) out.imgH = c.imgH
@@ -151,6 +206,16 @@ export function calibrationForParams (v: unknown): Record<string, number | strin
   if (imgH !== null) out.imgH = Math.round(imgH)
   if (typeof o.method === 'string' && (CALIB_METHOD_IDS as string[]).includes(o.method)) out.method = o.method
   if (typeof o.refObject === 'string' && o.refObject.trim()) out.refObject = o.refObject.trim().slice(0, 80)
+  // R513: ravnina preživi shranjevanje — JSON string (že validiran pred zapisom)
+  if (typeof o.plane === 'string' && o.plane.trim() && o.plane.length <= 4000) {
+    try {
+      const parsed = parsePlaneRef(JSON.parse(o.plane) as unknown)
+      if (parsed != null) out.plane = o.plane
+    } catch { /* neveljaven JSON → izpust, ne tiho sprejem */ }
+  } else if (o.plane != null && typeof o.plane === 'object') {
+    const parsed = parsePlaneRef(o.plane)
+    if (parsed != null) out.plane = planeToParams(parsed)
+  }
   return Object.keys(out).length > 0 ? out : null
 }
 
@@ -374,7 +439,87 @@ const r2c = (n: number) => String(r2(n)).replace('.', ',')
  *  na sliki ni enaka smeri X — potrebuje ločeno referenco (pxY/cmY). */
 export const TILT_ENOTNO_MERILO_MAX_DEG = 10
 
-export type ScaleBasis = 'ENOTNO_Z_DOKAZOM' | 'ENOTNO_BREZ_DOKAZA' | 'ANIZOTROPNO' | 'NEZNANO'
+// ── R513 (issue #15 faza 1, prenos iz vzporedne linije main): perspektivna
+// homografija — čisti TS, brez odvisnosti. DLT s fiksirano h33=1, 8×8 Gauss z
+// parcialnim pivotiranjem. Deterministično (iste vhode → ista H). ────────────
+
+/** 2× ploščina trikotnika (a,b,c) — 0 pomeni kolinearne točke. */
+function triArea2 (a: { x: number; y: number }, b: { x: number; y: number }, c: { x: number; y: number }): number {
+  return Math.abs((b.x - a.x) * (c.y - a.y) - (c.x - a.x) * (b.y - a.y))
+}
+
+/** Rešitev 8×8 linearnega sistema (Gaussova eliminacija s parcialnim
+ *  pivotiranjem). Singularno → null (kolinearni vogali nimajo homografije). */
+function solveLinear8 (A: number[][], b: number[]): number[] | null {
+  const n = 8
+  const M = A.map((row, i) => [...row, b[i]]) // razširjena matrika
+  for (let col = 0; col < n; col++) {
+    let piv = col
+    for (let r = col + 1; r < n; r++) if (Math.abs(M[r][col]) > Math.abs(M[piv][col])) piv = r
+    if (Math.abs(M[piv][col]) < 1e-12) return null // singularno → ni rešitve
+    if (piv !== col) { const t = M[piv]; M[piv] = M[col]; M[col] = t }
+    for (let r = col + 1; r < n; r++) {
+      const f = M[r][col] / M[col][col]
+      if (f === 0) continue
+      for (let c = col; c <= n; c++) M[r][c] -= f * M[col][c]
+    }
+  }
+  const x = new Array<number>(n).fill(0)
+  for (let r = n - 1; r >= 0; r--) {
+    let s = M[r][n]
+    for (let c = r + 1; c < n; c++) s -= M[r][c] * x[c]
+    x[r] = s / M[r][r]
+  }
+  return x.every((v) => Number.isFinite(v)) ? x : null
+}
+
+/** Homografija enotskega kvadrata → 4 vogali v sliki (perspektivna DLT).
+ *  imgPts[0]→(0,0), [1]→(W,0), [2]→(W,H), [3]→(0,H). Vrne 9 elementov
+ *  vrstično (h0..h8, h33=1) ali null ob degeneraciji (kolinearnost vogalov —
+ *  tolerance: ploščina < 1 px² ali < 0,01 % kvadrata diagonale okvirja). */
+export function planeHomography (imgPts: { x: number; y: number }[], widthCm: number, heightCm: number): number[] | null {
+  if (imgPts.length !== 4 || !(widthCm > 0) || !(heightCm > 0)) return null
+  const bb = imgPts.reduce((a, p) => ({ minX: Math.min(a.minX, p.x), maxX: Math.max(a.maxX, p.x), minY: Math.min(a.minY, p.y), maxY: Math.max(a.maxY, p.y) }), { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity })
+  const diag2 = Math.max(1e-9, ((bb.maxX - bb.minX) ** 2 + (bb.maxY - bb.minY) ** 2))
+  const minArea = Math.max(1, diag2 * 1e-4)
+  for (let i = 0; i < 4; i++) {
+    const a = imgPts[i]; const b = imgPts[(i + 1) % 4]; const c = imgPts[(i + 2) % 4]
+    if (triArea2(a, b, c) < minArea) return null
+  }
+  const dst = [{ u: 0, v: 0 }, { u: widthCm, v: 0 }, { u: widthCm, v: heightCm }, { u: 0, v: heightCm }]
+  const A: number[][] = []
+  const b: number[] = []
+  for (let k = 0; k < 4; k++) {
+    const { x, y } = imgPts[k]; const { u, v } = dst[k]
+    // h33 = 1 → konstanti na desno stran
+    A.push([x, y, 1, 0, 0, 0, -u * x, -u * y]); b.push(u)
+    A.push([0, 0, 0, x, y, 1, -v * x, -v * y]); b.push(v)
+  }
+  const sol = solveLinear8(A, b)
+  if (!sol) return null
+  return [...sol.slice(0, 8), 1]
+}
+
+/** Preslikava točke skozi homografijo (px → cm na ravnini). */
+export function applyHomography (H: number[], x: number, y: number): { x: number; y: number } | null {
+  const w = H[6] * x + H[7] * y + H[8]
+  if (Math.abs(w) < 1e-9) return null
+  return { x: (H[0] * x + H[1] * y + H[2]) / w, y: (H[3] * x + H[4] * y + H[5]) / w }
+}
+
+/** Rectifikacija vseh točk na ravnino (px → cm). Vrne null, če katera točka
+ *  pade izven dosega preslikave (za horizontom) — takrat mera NI določena. */
+function rectifyToCm (pts: { x: number; y: number }[], H: number[]): { x: number; y: number }[] | null {
+  const out: { x: number; y: number }[] = []
+  for (const p of pts) {
+    const q = applyHomography(H, p.x, p.y)
+    if (!q) return null
+    out.push(q)
+  }
+  return out
+}
+
+export type ScaleBasis = 'ENOTNO_Z_DOKAZOM' | 'ENOTNO_BREZ_DOKAZA' | 'ANIZOTROPNO' | 'RAVNINA' | 'NEZNANO'
 
 export interface ScaleModel {
   /** Ali sploh obstaja številsko merilo. `false` = NIKAKIŠNJIH cm-številk ni
@@ -393,6 +538,12 @@ export interface ScaleModel {
   /** Merilo velja za smeri pod tem kotom; nad njim je izračun napačen. */
   validWithinDeg: number | null
   reasons: string[]
+  /** R513: homografija ravnine (9 elementov, vrstično) — SAMO kadar je basis
+   *  'RAVNINA'. Preslikava piksli → cm NA ravnini; cmPerPxX/Y sta tedaj null
+   *  (merilo ni konstantno po sliki — to je poanta perspektive). */
+  H?: number[] | null
+  /** Dimenziji referenčnega pravokotnika (cm) — za prikaz in revizijo. */
+  planeRect?: { widthCm: number; heightCm: number } | null
 }
 
 export interface ScaleContext { tiltDeg?: number | null; spreadDeg?: number | null }
@@ -406,6 +557,26 @@ export function resolveScale (calib: EngineCalib | null | undefined, ctx: ScaleC
   const base: ScaleModel = {
     known: false, isotropicProven: false, cmPerPxX: null, cmPerPxY: null,
     basis: 'NEZNANO', tiltDeg: tilt, directionSpreadDeg: spread, validWithinDeg: null, reasons: [],
+    H: null, planeRect: null,
+  }
+  // R513 (issue #15 faza 1): perspektivna ravnina — PRVA pot, ker je neodvisna
+  // od px/cm. Homografija rectificira VSE smeri na ravnini → isotropicProven.
+  // POGODBA KOORDINAT: plane.points so normalizirane 0..1 (kot vse točke) in
+  // se pretvorijo v piksle prek imgW/imgH (ISTO pravilo kot meritvene točke) —
+  // brez dimenzij so že piksli (zaledna združljivost).
+  if (planeRefValid(calib)) {
+    const ptsPx = toPx(calib.plane.points, calib)
+    const H = planeHomography(ptsPx, calib.plane.widthCm, calib.plane.heightCm)
+    if (H != null) {
+      return {
+        ...base,
+        known: true, isotropicProven: true, cmPerPxX: null, cmPerPxY: null,
+        basis: 'RAVNINA', H, planeRect: { widthCm: calib.plane.widthCm, heightCm: calib.plane.heightCm },
+        validWithinDeg: 180,
+        reasons: [`perspektivna ravnina ${r1(calib.plane.widthCm)} × ${r1(calib.plane.heightCm)} cm — homografija rectificira vse smeri na ravnini (dokazano merilo, brez predpostavke frontalnosti)`],
+      }
+    }
+    return { ...base, reasons: ['ravnina je degenerirana (kolinearni vogali ali nerešljiva homografija) — merilo NI določeno'] }
   }
   if (!(px > 0) || !(cm > 0)) {
     base.reasons.push('Merilo ni znano (kalibracija px/cm manjka ali je ≤ 0) — cm-vrednosti se NE izračunajo, tudi izpisa s predpostavljenim 1 cm/px ne.')
@@ -502,6 +673,45 @@ export function computeGeometry (ptsIn: EnginePoint[], calib: EngineCalib | null
   const px = toPx(pts, calib)
   const scale = resolveScale(calib, { tiltDeg: opts.tiltDeg ?? null, spreadDeg: razprsenostSmer(px) })
   const prazna: GeometryResult = { segments: [], corners: [], totalLengthCm: 0, cmPerPx: null, scale, bbox: { wCm: 0, hCm: 0 } }
+  // R513: perspektivna ravnina — točke se rectificirajo NA ravnino (px → cm),
+  // dolžine/koti/robovi so pravi (na ploskvi), ne projekcija z enim merilom.
+  if (scale.H != null) {
+    const cmc = rectifyToCm(px, scale.H)
+    if (cmc == null) return prazna // točka za horizontom — mera NI določena
+    const segments: Segment[] = []
+    let total = 0
+    for (let i = 0; i + 1 < cmc.length; i++) {
+      const dx = cmc[i + 1].x - cmc[i].x
+      const dy = cmc[i + 1].y - cmc[i].y
+      const lengthCm = Math.hypot(dx, dy)
+      segments.push({
+        from: i, to: i + 1,
+        lengthCm: r1(lengthCm),
+        angleDeg: Math.round((Math.atan2(dy, dx) * 180) / Math.PI * 10) / 10,
+        heightDiffCm: r1(dy),
+        horizontalCm: r1(Math.abs(dx)),
+      })
+      total += lengthCm
+    }
+    const corners: Corner[] = []
+    for (let i = 1; i + 1 < cmc.length; i++) {
+      const a1 = Math.atan2(cmc[i].y - cmc[i - 1].y, cmc[i].x - cmc[i - 1].x)
+      const a2 = Math.atan2(cmc[i + 1].y - cmc[i].y, cmc[i + 1].x - cmc[i].x)
+      let d = (((a2 - a1) * 180) / Math.PI % 360 + 360) % 360
+      if (d > 180) d = 360 - d
+      corners.push({ at: i, interiorDeg: Math.round(d * 10) / 10 })
+    }
+    const xs = cmc.map((p) => p.x); const ys = cmc.map((p) => p.y)
+    return {
+      segments, corners,
+      totalLengthCm: r1(total),
+      cmPerPx: null, // merilo NI konstantno po sliki — to je poanta perspektive
+      scale,
+      bbox: cmc.length > 0
+        ? { wCm: r1(Math.max(...xs) - Math.min(...xs)), hCm: r1(Math.max(...ys) - Math.min(...ys)) }
+        : { wCm: 0, hCm: 0 },
+    }
+  }
   if (!scale.known || scale.cmPerPxX === null || scale.cmPerPxY === null) return prazna
   const sx = scale.cmPerPxX; const sy = scale.cmPerPxY
   const segments: Segment[] = []
@@ -557,12 +767,14 @@ export function polygonMetrics (ptsIn: EnginePoint[], calib: EngineCalib | null 
   const px = toPx(pts, calib)
   const scale = resolveScale(calib, { tiltDeg: opts.tiltDeg ?? null, spreadDeg: razprsenostSmer(px) })
   const sx = scale.cmPerPxX; const sy = scale.cmPerPxY
-  if (!scale.known || sx === null || sy === null) {
+  // R513: pri ravnini so koordinate ŽE v cm (rectificirane na ploskvi);
+  // sicer anizotropna pretvorba po smereh (px → cm).
+  const ring = scale.H != null ? rectifyToCm(px, scale.H) : px.map((p) => ({ x: p.x * (sx as number), y: p.y * (sy as number) })) // v cm
+  if (!scale.known || ring == null) {
     return { closed: pts.length >= 3, closureCm: 0, closurePct: 100, areaM2: 0, perimeterCm: 0, edges: [], scale }
   }
   const closed = pts.length >= 3
-  const closureCm = pts.length >= 3 ? r1(Math.hypot((px[0].x - px[px.length - 1].x) * sx, (px[0].y - px[px.length - 1].y) * sy)) : 0
-  const ring = px.map((p) => ({ x: p.x * sx, y: p.y * sy })) // v cm (po smereh)
+  const closureCm = pts.length >= 3 ? r1(Math.hypot(ring[0].x - ring[ring.length - 1].x, ring[0].y - ring[ring.length - 1].y)) : 0
   // robovi: zaporedni + zaklepalka nazaj na prvo točko
   const edges: Segment[] = []
   let perimeter = 0
@@ -600,9 +812,16 @@ export function diagonalMetrics (ptsIn: EnginePoint[], calib: EngineCalib | null
   const pts = ptsIn.filter((p) => p.src !== 'PREDLOG')
   if (pts.length < 4) return []
   const scale = resolveScale(calib, { tiltDeg: opts.tiltDeg ?? null })
+  const px = toPx(pts, calib)
+  // R513: ravnina — diagonale med rectificiranimi točkami (prave na ploskvi)
+  if (scale.H != null) {
+    const cmc = rectifyToCm(px, scale.H)
+    if (cmc == null) return []
+    const pairsP: [number, number][] = pts.length === 4 ? [[0, 2], [1, 3]] : [[0, Math.floor(pts.length / 2)]]
+    return pairsP.map(([i, j]) => ({ i, j, lengthCm: r1(Math.hypot(cmc[j].x - cmc[i].x, cmc[j].y - cmc[i].y)) }))
+  }
   if (!scale.known || scale.cmPerPxX === null || scale.cmPerPxY === null) return []
   const sx = scale.cmPerPxX; const sy = scale.cmPerPxY
-  const px = toPx(pts, calib)
   const pairs: [number, number][] = pts.length === 4 ? [[0, 2], [1, 3]] : [[0, Math.floor(pts.length / 2)]]
   return pairs.map(([i, j]) => ({ i, j, lengthCm: r1(Math.hypot((px[j].x - px[i].x) * sx, (px[j].y - px[i].y) * sy)) }))
 }
@@ -648,7 +867,8 @@ export function validateGeometry (
     issues.push({ code: 'PREMAJHNO_TOCK', severity: 'NAPAKA', message: `Način ${rule.label} zahteva vsaj ${rule.minPoints} točk (označenih ${pts.length}).` })
     return issues
   }
-  if (!calib || !(calib.px > 0) || !(calib.cm > 0)) {
+  // R513: ravnina JE veljavna kalibracija (px/cm sta 0, merilo je homografija)
+  if (!calib || (!(calib.px > 0) || !(calib.cm > 0)) && !planeRefValid(calib)) {
     issues.push({ code: 'MANJKA_KALIBRACIJA', severity: 'NAPAKA', message: 'Brez eksplicitne referenčne kalibracije avtomatska dimenzija ni potrjena poslovna mera (§4).' })
     return issues
   }
@@ -664,6 +884,39 @@ export function validateGeometry (
       code: 'MERILO_NEZADOSTNO',
       severity: 'NAPAKA',
       message: `Slika ni pravokotna na merjeno ravnino (nagib ${r1c(geo.scale.tiltDeg)}°), merjene smeri pa se razhajajo do ${r1c(geo.scale.directionSpreadDeg ?? 0)}° — eno razmerje cm/piksel ne more veljati v vseh smereh. Dodajte ločeno Y referenco (pxY/cmY) ali posnemite pravokotno na ravnino.`,
+    })
+  }
+
+  // ── R513 (issue #15 faza 1, prenos iz vzporedne linije main) ────────────────
+  // Perspektivna ravnina: dve pošteni opozitili. (1) Veljavna ravnina izrecno
+  // pove, da mere veljajo NA ravnini (ne splošno v prostoru). (2) Strukturno
+  // podana, a nerešljiva ravnina je NAPAKA — ne tiha 1 cm/px.
+  if (planeRefValid(calib)) {
+    if (geo.scale.basis === 'RAVNINA') {
+      issues.push({
+        code: 'MERITEV_NA_RAVNINI',
+        severity: 'INFO',
+        message: `Mere veljajo za točke na referenčni ravnini ${r1(geo.scale.planeRect?.widthCm ?? 0)} × ${r1(geo.scale.planeRect?.heightCm ?? 0)} cm (perspektivno rectificirano). Točke izven te ravnine imajo drugačen merilih razpon.`,
+      })
+    } else {
+      issues.push({
+        code: 'RAVNINA_NERESENLJIVA',
+        severity: 'NAPAKA',
+        message: 'Vogali referenčnega pravokotnika so skoraj na premici ali sovpadajo — homografija ni določljiva. Premaknite točke na prave vogale pravokotnika na merjeni ravnini.',
+      })
+    }
+  }
+
+  // PREDPOSTAVKA_FRONTALNOST (main R501 pragovi): UNIFORM merilo brez dokaza
+  // pravokotnosti — nagib > 15° opozori, > 30° je napaka (ni potrjena mera).
+  if (geo.scale.basis === 'ENOTNO_BREZ_DOKAZA' && geo.scale.tiltDeg != null && geo.scale.tiltDeg > 15) {
+    const huda = geo.scale.tiltDeg > 30
+    issues.push({
+      code: 'PREDPOSTAVKA_FRONTALNOST',
+      severity: huda ? 'NAPAKA' : 'OPOZORILO',
+      message: huda
+        ? `Zelo poševen kader (${r1c(geo.scale.tiltDeg)}°) — eno merilo v tej smeri ZAVELJA sistemsko (do ${r1c((1 / Math.cos((geo.scale.tiltDeg * Math.PI) / 180) - 1) * 100)} %). Izmerite ločeno Y referenco, posnemite pravokotno ali uporabite perspektivno ravnino.`
+        : `Kader ni pravokoten na ravnino (nagib ${r1c(geo.scale.tiltDeg)}°) — enotno merilo je PREDPOSTAVKA, ne dokaz. Dodajte ločeno Y referenco ali uporabite perspektivno ravnino.`,
     })
   }
 
@@ -1888,7 +2141,7 @@ export interface ExportSource {
   statusNote?: string | null
   params?: {
     mode?: string
-    calibration?: { method?: string; refObject?: string; px?: number; cm?: number } | null
+    calibration?: { method?: string; refObject?: string; px?: number; cm?: number; plane?: string | { points?: unknown; widthCm?: number; heightCm?: number } } | null
     confidence?: number | null
     quality?: Record<string, unknown> | null
     photoId?: string
@@ -1935,11 +2188,25 @@ export function buildExportRows (m: ExportSource): ExportRow[] {
   if (cal?.method) push('Reference', 'Kalibracija', cal.method, '')
   if (cal?.refObject) push('Reference', 'Referenčni objekt', cal.refObject, '')
   if (cal?.px != null && cal?.cm != null) push('Reference', 'Referenčna mera', `${r1(cal.cm).toString().replace('.', ',')} / ${Math.round(cal.px)}`, 'cm / px')
+  // R513: perspektivna ravnina v izvozu — brez nje bi revizija videla bazo
+  // RAVNINA brez dimenzij referenčnega pravokotnika (params nosi plane kot JSON string).
+  if (cal?.plane) {
+    try {
+      const p = typeof cal.plane === 'string' ? JSON.parse(cal.plane) as { widthCm?: unknown; heightCm?: unknown } : cal.plane
+      const w = Number(p?.widthCm); const h = Number(p?.heightCm)
+      if (Number.isFinite(w) && w > 0 && Number.isFinite(h) && h > 0) {
+        push('Reference', 'Ravnina (pravokotnik)', `${r1(w).toString().replace('.', ',')} × ${r1(h).toString().replace('.', ',')}`, 'cm')
+      }
+    } catch { /* neveljaven zapis → brez vrstice, brez lažne dimenzije */ }
+  }
   // R500 (issue #15 faza 1): merilo in veljavnost po količinah morata biti
   // vidna v izvozu — sicer bi PDF/CSV pustil vtis, da je številka brez vira.
   const sc = m.params?.engine?.scale
   if (sc) {
     push('Merilo', 'Baza merila', sc.basis, '')
+    if (sc.basis === 'RAVNINA' && sc.planeRect != null) {
+      push('Merilo', 'Ravnina (pravokotnik)', `${r1(sc.planeRect.widthCm).toString().replace('.', ',')} × ${r1(sc.planeRect.heightCm).toString().replace('.', ',')}`, 'cm')
+    }
     if (sc.cmPerPxX != null) push('Merilo', 'cm/px (smer X)', f2(sc.cmPerPxX), 'cm/px')
     if (sc.cmPerPxY != null && sc.cmPerPxY !== sc.cmPerPxX) push('Merilo', 'cm/px (smer Y)', f2(sc.cmPerPxY), 'cm/px')
     if (sc.tiltDeg != null) push('Merilo', 'Nagib naprave', f1(sc.tiltDeg), '°')

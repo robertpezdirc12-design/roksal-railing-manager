@@ -82,7 +82,7 @@ export async function POST (req: NextRequest) {
   // sprejeti, drug pa tiho zavreči.
   const calibration = parseCalibration(body.calibration)
   if (!calibration) {
-    return jsonError(400, 'Manjka referenčna kalibracija.', 'calibration: { px, cm, method?, refObject? } — brez reference avtomatska dimenzija ni veljavna (§4).')
+    return jsonError(400, 'Manjka referenčna kalibracija.', 'calibration: { px, cm, method?, refObject? } ali { plane: { points, widthCm, heightCm } } — brez reference avtomatska dimenzija ni veljavna (§4).')
   }
 
   const options = parseOptions(body.options)

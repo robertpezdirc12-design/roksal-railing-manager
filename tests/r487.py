@@ -99,7 +99,7 @@ def src_has (relpath, needle):
 def meas_params (mid):
     out, _ = bun_ts(f"""
 const {{PrismaClient}}=require('@prisma/client');const p=new PrismaClient();
-p.measurement.findUnique({{where:{{id:'{mid}'}},select:{{params:true,lengthCm:true}}}}).then(r=>{{
+p.measurement.findUnique({{where:{{id:'{mid}'}},select:{{params:true,lengthCm:true,status:true,statusNote:true}}}}).then(r=>{{
 console.log(JSON.stringify(r));return p.$disconnect()}})""")
     try: return json.loads(out)
     except Exception: return {}
@@ -228,13 +228,26 @@ chk('multiView' not in pr5, f'brez izračunljivih ≥ 2 dolžin NI multiView ({s
 chk(isinstance(pr5.get('views'), list), 'views kljub temu persistirani (revizija)')
 
 # B6: brez views → params BITNO enak staremu (legacy, r439/r455)
+# R513 (konsolidacija, prenos main R501): STREŽNIŠKI PRERAČUN JE AVTORITETA —
+# lengthCm se mora ujemati s computeGeometry iz točk+kalibracije (0,1→0,9 ×
+# imgW 1000 = 800 px × 200/400 = 400,0 cm); napačna številka → 409 (odjemalec
+# ne more poslati poljubne dolžine kot poslovne mere).
 s, d = callj('POST', '/api/measurement/confirm', monter, {
     'photoId': photo_id, 'type': 'OGRAJA', 'lengthCm': 420,
     'location': f'{TAG} klasika', 'projectId': PROJ_ID,
     'points': [{'x': 0.1, 'y': 0.5}, {'x': 0.9, 'y': 0.5}],
-    'calibration': {'px': 400, 'cm': 200},
-    'note': f'{TAG} klasična'})
-chk(s == 201, f'klasična potrditev brez views 201 ({s})')
+    'calibration': {'px': 400, 'cm': 200, 'imgW': 1000, 'imgH': 800},
+    'note': f'{TAG} klasicna-neusklajena'})
+chk(s == 409, f'neusklajena lengthCm (420 vs preračun 400) → 409 ({s})')
+chk('ujema' in json.dumps(d, ensure_ascii=False).lower(), f'409 razloži vzrok ({d.get("error")})')
+
+s, d = callj('POST', '/api/measurement/confirm', monter, {
+    'photoId': photo_id, 'type': 'OGRAJA', 'lengthCm': 400,
+    'location': f'{TAG} klasika', 'projectId': PROJ_ID,
+    'points': [{'x': 0.1, 'y': 0.5}, {'x': 0.9, 'y': 0.5}],
+    'calibration': {'px': 400, 'cm': 200, 'imgW': 1000, 'imgH': 800},
+    'note': f'{TAG} klasicna-usklajena'})
+chk(s == 201, f'klasična potrditev brez views 201 — usklajena dolžina ({s})')
 M6 = d.get('data', {}).get('id')
 pr6 = json.loads(meas_params(M6).get('params') or '{}') if M6 else {}
 # R501 (issue #15 faza 2): h grelu dodan `provenance` (strežniški izračun, kako
@@ -242,6 +255,30 @@ pr6 = json.loads(meas_params(M6).get('params') or '{}') if M6 else {}
 # ostanejo enaki, noben nov ključ se ne doda mimo jedra.
 chk(set(pr6.keys()) == {'photoId', 'source', 'points', 'calibration', 'provenance'},
     f'legacy params točno {{photoId, source, points, calibration, provenance}} ({sorted(pr6.keys())})')
+chk(meas_params(M6).get('status') == 'CALIBRATED', f'status mere CALIBRATED ({meas_params(M6).get("status")})')
+
+# B6b (R513, spojita pogodbe veje): točke BREZ kalibracije → 201 + ESTIMATED
+# (main je zavrgel z 400; veja shrani kot pošteno označeno OCENO — poslovna
+# vrata so v statusu, ne v zavrnitvi — izvedba issue #15 H2)
+s, d = callj('POST', '/api/measurement/confirm', monter, {
+    'photoId': photo_id, 'type': 'OGRAJA', 'lengthCm': 400,
+    'location': f'{TAG} brez kalibracije', 'projectId': PROJ_ID,
+    'points': [{'x': 0.1, 'y': 0.5}, {'x': 0.9, 'y': 0.5}],
+    'note': f'{TAG} brez-reference'})
+chk(s == 201, f'točke brez kalibracije → 201 z oceno ({s})')
+if s == 201:
+    M6b = d.get('data', {}).get('id')
+    chk(meas_params(M6b).get('status') == 'ESTIMATED', f'brez kalibracije → status ESTIMATED, ne poslovna mera ({meas_params(M6b).get("status")})')
+
+# B6c (R513): brez točk = legacy ročni vnos → 201 + status MANUAL (izrecen, ne tih)
+s, d = callj('POST', '/api/measurement/confirm', monter, {
+    'photoId': photo_id, 'type': 'OGRAJA', 'lengthCm': 350,
+    'location': f'{TAG} rocni vnos', 'projectId': PROJ_ID,
+    'note': f'{TAG} rocni-vnos'})
+chk(s == 201, f'ročni vnos brez točk 201 — veljavna legacy pot ({s})')
+if s == 201:
+    M6c = d.get('data', {}).get('id')
+    chk(meas_params(M6c).get('status') == 'MANUAL', f'brez točk → status MANUAL ({meas_params(M6c).get("status")})')
 
 # B7: ponovljivost — enaki vhodi → enak multiView (determinizem §6)
 s, d = callj('POST', '/api/measurement/confirm', monter, {

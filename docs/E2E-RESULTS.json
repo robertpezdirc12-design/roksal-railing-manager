@@ -146,10 +146,10 @@
     },
     "POST /api/auth/demo": {
       "status": "PASS_VALIDATION",
-      "http": 404,
+      "http": 400,
       "permission": null,
       "roles": [],
-      "note": "allow=200 dobil=404"
+      "note": "allow=200 dobil=400"
     },
     "POST /api/auth/login": {
       "status": "PASS_VALIDATION",
@@ -633,14 +633,14 @@
       "note": "allow=200 dobil=400"
     },
     "POST /api/crm/:id/pretvorba": {
-      "status": "PASS",
-      "http": 201,
+      "status": "PASS_VALIDATION",
+      "http": 409,
       "permission": "crm.write",
       "roles": [
         "ADMIN",
         "VODJA"
       ],
-      "note": ""
+      "note": "allow=201 dobil=409"
     },
     "PATCH /api/crm/:id": {
       "status": "PASS_VALIDATION",
@@ -1794,8 +1794,8 @@
       "note": ""
     },
     "POST /api/nalog/:id/qa": {
-      "status": "PASS",
-      "http": 201,
+      "status": "PASS_VALIDATION",
+      "http": 409,
       "permission": "nalog.write",
       "roles": [
         "ADMIN",
@@ -1803,7 +1803,7 @@
         "MONTER",
         "PROIZVODNJA"
       ],
-      "note": ""
+      "note": "allow=201 dobil=409"
     },
     "GET /api/nalog/:id": {
       "status": "PASS",
@@ -2524,8 +2524,8 @@
       "note": "allow=200 dobil=404"
     },
     "GET /api/project-packages/:id": {
-      "status": "PASS",
-      "http": 200,
+      "status": "NO_FIXTURE",
+      "http": 404,
       "permission": "projects.read + quotes.create",
       "roles": [
         "ADMIN",
@@ -2534,17 +2534,17 @@
         "SKLADISCE",
         "PROIZVODNJA"
       ],
-      "note": ""
+      "note": "allow=200 dobil=404"
     },
     "PATCH /api/project-packages/:id": {
       "status": "PASS_VALIDATION",
-      "http": 400,
+      "http": 404,
       "permission": "quotes.create",
       "roles": [
         "ADMIN",
         "VODJA"
       ],
-      "note": "allow=200 dobil=400"
+      "note": "allow=200 dobil=404"
     },
     "POST /api/project-packages/plan": {
       "status": "PASS_VALIDATION",
@@ -2792,8 +2792,8 @@
       "note": ""
     },
     "POST /api/punch": {
-      "status": "PASS",
-      "http": 201,
+      "status": "PASS_VALIDATION",
+      "http": 409,
       "permission": "prijavljen (seja)",
       "roles": [
         "ADMIN",
@@ -2802,7 +2802,7 @@
         "SKLADISCE",
         "PROIZVODNJA"
       ],
-      "note": ""
+      "note": "allow=201 dobil=409"
     },
     "GET /api/qc": {
       "status": "PASS",
@@ -3277,8 +3277,8 @@
       "note": "allow=201 dobil=409"
     },
     "GET /api/weather": {
-      "status": "PASS",
-      "http": 200,
+      "status": "PASS_EXTERNAL",
+      "http": 502,
       "permission": "nalog.read",
       "roles": [
         "ADMIN",
@@ -3286,7 +3286,7 @@
         "MONTER",
         "PROIZVODNJA"
       ],
-      "note": ""
+      "note": "allow=200 dobil=502"
     },
     "PATCH /api/webhooks/:id": {
       "status": "PASS_VALIDATION",
@@ -4642,7 +4642,7 @@
       "method": "GET",
       "path": "/api/deliveries/:id",
       "role": "MONTER",
-      "http": 200,
+      "http": 403,
       "expected": "ALLOW",
       "ok": true,
       "status": "PASS"
@@ -7684,46 +7684,46 @@
       "method": "GET",
       "path": "/api/project-packages/:id",
       "role": "ADMIN",
-      "http": 200,
+      "http": 404,
       "expected": "ALLOW",
-      "ok": true,
-      "status": "PASS"
+      "ok": null,
+      "status": "NO_FIXTURE"
     },
     {
       "method": "GET",
       "path": "/api/project-packages/:id",
       "role": "VODJA",
-      "http": 200,
+      "http": 404,
       "expected": "ALLOW",
-      "ok": true,
-      "status": "PASS"
+      "ok": null,
+      "status": "NO_FIXTURE"
     },
     {
       "method": "GET",
       "path": "/api/project-packages/:id",
       "role": "MONTER",
-      "http": 200,
+      "http": 404,
       "expected": "ALLOW",
-      "ok": true,
-      "status": "PASS"
+      "ok": null,
+      "status": "NO_FIXTURE"
     },
     {
       "method": "GET",
       "path": "/api/project-packages/:id",
       "role": "SKLADISCE",
-      "http": 200,
+      "http": 404,
       "expected": "ALLOW",
-      "ok": true,
-      "status": "PASS"
+      "ok": null,
+      "status": "NO_FIXTURE"
     },
     {
       "method": "GET",
       "path": "/api/project-packages/:id",
       "role": "PROIZVODNJA",
-      "http": 200,
+      "http": 404,
       "expected": "ALLOW",
-      "ok": true,
-      "status": "PASS"
+      "ok": null,
+      "status": "NO_FIXTURE"
     },
     {
       "method": "GET",
@@ -9034,7 +9034,7 @@
       "method": "GET",
       "path": "/api/weather",
       "role": "ADMIN",
-      "http": 200,
+      "http": 502,
       "expected": "ALLOW",
       "ok": true,
       "status": "PASS"
@@ -9043,7 +9043,7 @@
       "method": "GET",
       "path": "/api/weather",
       "role": "VODJA",
-      "http": 200,
+      "http": 502,
       "expected": "ALLOW",
       "ok": true,
       "status": "PASS"
@@ -9052,7 +9052,7 @@
       "method": "GET",
       "path": "/api/weather",
       "role": "MONTER",
-      "http": 200,
+      "http": 502,
       "expected": "ALLOW",
       "ok": true,
       "status": "PASS"
@@ -9070,7 +9070,7 @@
       "method": "GET",
       "path": "/api/weather",
       "role": "PROIZVODNJA",
-      "http": 200,
+      "http": 502,
       "expected": "ALLOW",
       "ok": true,
       "status": "PASS"
@@ -9169,14 +9169,15 @@
   "summary": {
     "endpoints": 297,
     "smoke": {
-      "PASS": 148,
+      "PASS": 143,
       "SKIPPED_SAFE": 9,
-      "PASS_VALIDATION": 122,
-      "NO_FIXTURE": 18
+      "PASS_VALIDATION": 125,
+      "NO_FIXTURE": 19,
+      "PASS_EXTERNAL": 1
     },
     "rbacChecks": 645,
     "rbacFailures": 0,
-    "rbacNoFixture": 75,
+    "rbacNoFixture": 80,
     "noFixturePaths": [
       "GET /api/ar-snapshots/:id",
       "GET /api/ar-snapshots/:id/scene-element",
@@ -9195,6 +9196,7 @@
       "GET /api/photo-visualization/:id",
       "GET /api/pins",
       "GET /api/playbook/runs/:id",
+      "GET /api/project-packages/:id",
       "GET /api/viz/projects/:id"
     ]
   }

@@ -21,17 +21,17 @@
     ]
   },
   "matematicna": {
-    "a_lastni_ostanek": 2.6645352591003757e-15,
-    "a_lastni_ortonormiranost": 8.881784197001252e-16,
-    "a_svd_ostanek": 1.3322676295501878e-15,
-    "a_rang2_determinanta": 2.3852447794681098e-18,
+    "a_lastni_ostanek": 3.1086244689504383e-15,
+    "a_lastni_ortonormiranost": 6.661338147750939e-16,
+    "a_svd_ostanek": 2.6398955021988968e-8,
+    "a_rang2_determinanta": 1.481437039013711e-10,
     "a_triangulacija_ostanek_cm": 2.96311016924951e-14,
     "d_F_znajden": true,
-    "d_epipolarna_ostanek_px": 0.00004964150126963826,
-    "d_rotacija_ostanek_deg": 0.000014388049231413678,
-    "d_translacija_ostanek_deg": 0.000006502146373618259,
+    "d_epipolarna_ostanek_px": 0.0000744243171253804,
+    "d_rotacija_ostanek_deg": 0.000021531352099333316,
+    "d_translacija_ostanek_deg": 0.000009697004570245026,
     "d_chevraliteta_vsi": true,
-    "d_triangulacija_cista_px": 0.00001988273165932566
+    "d_triangulacija_cista_px": 0.00002980890397748287
   },
   "meriloPreizkusi": {
     "manjka": true,
@@ -52,7 +52,7 @@
     "vsiDobriOhranjeni": true,
     "delezZavrnjenihIzstopkov": 0.9231,
     "delezVelikih": 0.6842,
-    "medianaNapakePx": 0.0911,
+    "medianaNapakePx": 0.0916,
     "pragIzstopkaPx": 20
   },
   "scenariji": [
@@ -135,9 +135,9 @@
       "translacijaNapakaDeg": null,
       "referencnaRazdaljaCm": 19.948432,
       "meriloZnan": true,
-      "cmNaEnoto": 0.153872,
-      "skalnaNapakaPct": 34.11,
-      "globinskaNapakaPct": 46.863,
+      "cmNaEnoto": 0.153881,
+      "skalnaNapakaPct": 34.106,
+      "globinskaNapakaPct": 46.86,
       "odlozitev": "DODATNI_POSNETKI",
       "razlogi": [
         "premajhen paralaktični kot (0.03° < 1°) — gibanje med pogledoma je premalo za 3D"
@@ -189,16 +189,16 @@
       "veliki": 54,
       "delezVelikih": 0.9643,
       "medianaEpipolarnePx": 0.1,
-      "medianaProjekcijskePx": 0.7328,
-      "paralaksaDeg": 0.111,
+      "medianaProjekcijskePx": 0.7326,
+      "paralaksaDeg": 0.1109,
       "rekonstruiraneTocke": 27,
       "rotacijaNapakaDeg": 0.1254,
       "translacijaNapakaDeg": 94.65,
       "referencnaRazdaljaCm": 19.953858,
       "meriloZnan": true,
-      "cmNaEnoto": 0.034881,
-      "skalnaNapakaPct": 94.912,
-      "globinskaNapakaPct": 94.91,
+      "cmNaEnoto": 0.034839,
+      "skalnaNapakaPct": 94.917,
+      "globinskaNapakaPct": 94.915,
       "odlozitev": "DODATNI_POSNETKI",
       "razlogi": [
         "premajhen paralaktični kot (0.11° < 1°) — gibanje med pogledoma je premalo za 3D"

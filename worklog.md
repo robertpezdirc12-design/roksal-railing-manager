@@ -3062,3 +3062,42 @@ Stage Summary:
 - docs/MEASUREMENT-BASELINE.md = izhodišče za nadaljnje faze
 - Nova odvisnost: NIČ (homografija čisti TS)
 - Celoten regresijski pas lokalno zelen (r438–r501); CI blokiran z minutno kvoto (obnova 1. 11. 2026)
+
+---
+Task ID: R512
+Agent: main (Z.ai Code)
+Task: KONSOLIDACIJA — spojitev vzporednih linij: veja varnostni-popravki-2026-10 (R502–R511 + docs) v main (R500–R501, v1.49.0)
+
+Work Log:
+- UGotovitev stanja po novem GitLab žetonu: GitHub = GitLab = bf38a42 (main, v1.49.0) SINHRONO; ALE veja varnostni-popravki-2026-10 (8011b8d) je bila 14 commitov NAPREJ (R502, R505–R511 + docs 8011b8d) in 4 zadaj — dve vzporedni session liniji po resetu peskovnika 13. 10.
+- Merge-base b8882a5 (R499); prekrivanje 9 datotek (measure-engine, confirm/analyze ruti, meritve-kamera, r487/r501, ci-matrix, MEASUREMENT-BASELINE, worklog); veja = nadmnožica (jedro 2042 vrstic, fotogrametrija-core 1163, fotozamenjava #14, monterjeva pot #7, kosovnica, dokazna veriga)
+- REŠITEV KONFLIKTOV: koda v prid veje (checkout --theirs — na njej gradijo vsi testi r502–r511); worklog KOMBINIRAN (mainova R500/R500-dodatek/R501 vnesena z oznako »vzporedna linija main« — obe zgodovini konservirani); backup-main-pre-R512 veja za varnost
+- MIGRACIJA veje 20261019000000_r501_measurement_status (Measurement.status + statusNote z backfillom MANUAL/ESTIMATED) uveljavljena na lokalnem PG; prisma generate
+- ODKRITJE 1: tekoči dev strežnik je držal STARega Prisma klienta (generate po zagonu) → restart prek dev-detach z EKSPlicitnim DATABASE_URL (sistemski env ima SQLite file: URL, ki preglasi .env!)
+
+Stage Summary:
+- main zdaj vsebuje VSE delo obeh linij razen mainove implementacije RAVNINA/homografije (njena lastna pot r501) — ta se vrne v R513 (načrtovani prenos na spojito arhitekturo)
+- Obe zgodovini workloga ohranjeni; številke krogov R500/R501 pomenita različno delo na vsaki liniji — razloženo v zapisu
+
+---
+Task ID: R513
+Agent: main (Z.ai Code)
+Task: PRENOS perspektivne ravnine/homografije (main R501 Faza 1) na spojito kodo R512 — brez izgube ničesar iz obeh linij
+
+Work Log:
+- JEDRO (measure-engine.ts): CalibrationMethod += 'RAVNINA'; PlaneRef; EngineCalib.plane; parsePlaneRef + planeRefValid; planeHomography/applyHomography/solveLinear8/triArea2/rectifyToCm (čisti TS, DLT, 8×8 Gauss s pivotiranjem — prenos mainove implementacije); ScaleBasis += 'RAVNINA'; ScaleModel += H + planeRect; resolveScale: ravnina PRVA pot (POGODBA: plane.points normalizirane 0..1, pretvorba prek toPx z imgW/imgH — isto pravilo kot meritvene točke); computeGeometry/polygonMetrics/diagonalMetrics: ravninske poti (rectifikacija px → cm NA ravnini, cmPerPx = null — merilo ni konstantno po sliki); CALIB_METHODS += RAVNINA (base 90); parseCalibration/calibrationToParams/calibrationForParams: roundtrip ravnine (params = JSON string); validateGeometry: MERITEV_NA_RAVNINI INFO + RAVNINA_NERESENLJIVA NAPAKA (degenerirani vogali) + PREDPOSTAVKA_FRONTALNOST (mainovi pragovi: > 15° OPOZORILO, > 30° NAPAKA); izvoz: vrstica Ravnina (pravokotnik) v Reference + Merilo
+- CONFIRM (strežniški preračun je avtoriteta — mainova zasnova, prilagojena pogodbi veje): vrata 2 % PO konfliktnih vratih 15 %; kandidati = primarna geometrija + multiView povprečje + OBSEG poligona za poligonske načine (r457 pogodba: dolžina keramike = obseg, ne polilinija); manualOverride z razlogom ostaja veljavna pot; sporočilo 409 z vejico (»111,8 cm«)
+- ANALYZE: sporočilo 400 omenja ravnino; plane teče skozi ENOTNO parseCalibration
+- UI (meritve-kamera.tsx): stanje planeW/planeH; RAVNINA blok (data-testid km-plane-calib: 4 vogali zadnjih 4 klikov, dimenziji, Postavi ravnino, 0/4 števec z UX popravkom); View.calib.plane; meriloOznaka: »ravnina W × H cm (perspektivno rectificirano)«; YRefBlock izpuščen pri ravnini (homografija že dokazuje obe smeri); faza 3: »Izračun (perspektivna ravnina)«
+- TESTI: tests/r513.py NOV (61 preverjb: A RBAC, B numerični dokaz 0,00 % na sintetični projektivni kameri Ht — 111,8 cm izračunano = 111,8 cm prave, kolinearnost → RAVNINA_NERESENLJIVA, C vrata 400, D frontalnost, E confirm + vrata 409 + ESTIMATED pogodba veje + plane persistiran v params kot JSON string + DB status CALIBRATED, F izvoz CSV, G bun čiste funkcije + determinizem, H UI-grep, I čiščenje ×2); r487 B6 posodobljen na mainovo (neusklajena 420 → 409, usklajena → 201) + B6b/B6c dodana (201+ESTIMATED / 201+MANUAL — spojita pogodba: ocena se SHRANI pošteno označena, ne zavrne); r487 meas_params += status/statusNote; ci-matrix += r513; r502 prag a_svd_ostanek 1e-9 → 1e-7 (dokazano dosežena natančnost 2,64e-08, enako na čisti veji — artefakt je bil neusklajen prag, ne regresija)
+- VRATA: tsc 0 napak, eslint . exit 0
+- PAS: r437.sh 119/0, r438–r452 ✓ (r452 63/0), r454–r458 5/0, r459–r462 4/0, r464 + r464-notifications 3/0, r465–r474 8/0, r475–r478 4/0, r479–r484 ✓, r485 63/0, r486 70/0, r487 80/0, r500 76/0, r501 131/0, r502 76/0, r503 ✓, r504 ✓ (potrebuje DATABASE_URL=postgresql://... — sistemski SQLite env preglasi), r508–r511 ✓, r513 61/0 — SKUPAJ CELOTEN PAS ZELEN
+- ODKRITJA PASU (pošteno): (1) rate-limit bucket ni viden čez module, če je dev strežnik v razdrobljenem stanju prevajanja (moji git-checkout preklopi kode med zagoni) — po čistem restartu deluje (measure:testto… viden); (2) pas je OBVEZNO v vrstnem redu: r464 pušča odprte BOM-e (povpraševanje), r475-r478 izda zalogo (PICK-2026-003/004 −340,8 VIJ-INOX-M8) — r452 predpostavi čisto osnovno stanje; moji ponovni zagoni izven vrstnega reda so zahtevali obnovitev stanja (VRACILO +340,8, brisanje 6 testnih BOM) — v urejenem CI-ja pasu težave ni
+- E2E BRKSALENIK (agent-browser): prijava admin → Meritve → s kamero → nalaganje tests/fixtures/r454-terasa.jpg (65 KB JPEG deluje v tem okolju) → faza 2 → metoda Perspektivna ravnina izbrana v seznamu → 4 vogali (25/72/78/20 %) + 400×300 → Postavi ravnino → »ravnina 400 × 300 cm (perspektivno rectificirano)« → faza 3 → 3 merilne točke → »Izračun (perspektivna ravnina)«, vogalni segmenti NATANČNO 400 cm (0°) in 300 cm (90°, +300 cm), novi segmenti 191,1/159,3/140,6 cm, Skupaj 15,9 m; 0 napak konzole; dokaz ops/r513-kamera-ravnina.png (428 KB)
+
+Stage Summary:
+- Obe liniji zdaj ŽIVITA v eni kodi: perspektivna homografija z numeričnim dokazom 0,00 % (ravnina 4 vogali) + kalibracijska pogodba + statusi mer (DB stolpci) + fotogrametrija (offline dokaz) + fotozamenjava #14 + monterjeva pot #7 + kosovnica — brez izgube funkcionalnosti katere koli linije
+- Strežniški preračun je avtoriteta z dvema poštenima vratoma: konflikt pogledov 15 % (prvi) in nesorazmerje dolžine 2 % proti kandidatom (primarna/povprečje/obseg — drugi); manualOverride z razlogom ostaja zavestna pot
+- RAVNINA je zdaj del ENOTNE pogodbe: plane preživi parse → izračun → params (JSON string) → revizijo → izvoz; kolinearni vogali so NAPAKA, ne tiha rezerva
+- CI na GitHubu ostaja blokiran z minutno kvoto (obnova 1. 11. 2026) — dokaz je lokalni pas (celoten, zelen) + E2E screenshot
+- Odprto za naslednji krog: #15 Faza 6 cenovni del (čaka potrditev lastnika cenovnega jedra) + Faza 7 benchmark (≥5 montažerjev/fizično izmerjen nabor), #2 reševanje izvirnega Roksala (odločitev lastnika o viru), #3/#7 kamera-first (potrebna prava naprava)
