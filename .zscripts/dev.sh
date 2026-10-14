@@ -1,154 +1,124 @@
 #!/bin/bash
 
-set -euo pipefail
+# R500 — zagon roksal-railing-manager v peskovniku (boot prek /start.sh)
+#
+# Razliko od predloge (bun install → db:push → dev) ta skripta:
+#   1. zažene embedded PostgreSQL :54329 (podatki v .pgdata, preživijo reset),
+#      z avtomatskim padcem na svežo inicializacijo, če je .pgdata poškodovana;
+#   2. pognа prisma migrate deploy (produkcijska pot, nikoli db:push);
+#   3. seje seja SEED SAMO ČE je baza prazna (števci user == 0) — lokalno delo
+#      uporabnika se s tem NE pobriše ob vsakem zagonu (R497: seed sicer pobriše
+#      vseh 58 tabel);
+#   4. zažene next dev na :3000 (dev.log v korenu projekta).
+#
+# Pomembno: /start.sh po obnovitvi iz repo.tar PREPIŠE .env na SQLite pot —
+# ta skripta .env povrani na PostgreSQL URL (export ima prednost pred .env tudi
+# v vseh nadaljnjih procesih).
 
-# 获取脚本所在目录（.zscripts）
-# 使用 $0 获取脚本路径（与 build.sh 保持一致）
+set -uo pipefail
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-
-log_step_start() {
-	local step_name="$1"
-	echo "=========================================="
-	echo "[$(date '+%Y-%m-%d %H:%M:%S')] Starting: $step_name"
-	echo "=========================================="
-	export STEP_START_TIME
-	STEP_START_TIME=$(date +%s)
-}
-
-log_step_end() {
-	local step_name="${1:-Unknown step}"
-	local end_time
-	end_time=$(date +%s)
-	local duration=$((end_time - STEP_START_TIME))
-	echo "=========================================="
-	echo "[$(date '+%Y-%m-%d %H:%M:%S')] Completed: $step_name"
-	echo "[LOG] Step: $step_name | Duration: ${duration}s"
-	echo "=========================================="
-	echo ""
-}
-
-start_mini_services() {
-	local mini_services_dir="$PROJECT_DIR/mini-services"
-	local started_count=0
-
-	log_step_start "Starting mini-services"
-	if [ ! -d "$mini_services_dir" ]; then
-		echo "Mini-services directory not found, skipping..."
-		log_step_end "Starting mini-services"
-		return 0
-	fi
-
-	echo "Found mini-services directory, scanning for sub-services..."
-
-	for service_dir in "$mini_services_dir"/*; do
-		if [ ! -d "$service_dir" ]; then
-			continue
-		fi
-
-		local service_name
-		service_name=$(basename "$service_dir")
-		echo "Checking service: $service_name"
-
-		if [ ! -f "$service_dir/package.json" ]; then
-			echo "[$service_name] No package.json found, skipping..."
-			continue
-		fi
-
-		if ! grep -q '"dev"' "$service_dir/package.json"; then
-			echo "[$service_name] No dev script found, skipping..."
-			continue
-		fi
-
-		echo "Starting $service_name in background..."
-		(
-			cd "$service_dir"
-			echo "[$service_name] Installing dependencies..."
-			bun install
-			echo "[$service_name] Running bun run dev..."
-			exec bun run dev
-		) >"$PROJECT_DIR/.zscripts/mini-service-${service_name}.log" 2>&1 &
-
-		local service_pid=$!
-		echo "[$service_name] Started in background (PID: $service_pid)"
-		echo "[$service_name] Log: $PROJECT_DIR/.zscripts/mini-service-${service_name}.log"
-		disown "$service_pid" 2>/dev/null || true
-		started_count=$((started_count + 1))
-	done
-
-	echo "Mini-services startup completed. Started $started_count service(s)."
-	log_step_end "Starting mini-services"
-}
-
-wait_for_service() {
-	local host="$1"
-	local port="$2"
-	local service_name="$3"
-	local max_attempts="${4:-60}"
-	local attempt=1
-
-	echo "Waiting for $service_name to be ready on $host:$port..."
-
-	while [ "$attempt" -le "$max_attempts" ]; do
-		if curl -s --connect-timeout 2 --max-time 5 "http://$host:$port" >/dev/null 2>&1; then
-			echo "$service_name is ready!"
-			return 0
-		fi
-
-		echo "Attempt $attempt/$max_attempts: $service_name not ready yet, waiting..."
-		sleep 1
-		attempt=$((attempt + 1))
-	done
-
-	echo "ERROR: $service_name failed to start within $max_attempts seconds"
-	return 1
-}
-
-cleanup() {
-	if [ -n "${DEV_PID:-}" ] && kill -0 "$DEV_PID" >/dev/null 2>&1; then
-		echo "Stopping Next.js dev server (PID: $DEV_PID)..."
-		kill "$DEV_PID" >/dev/null 2>&1 || true
-	fi
-}
-
-trap cleanup EXIT INT TERM
-
 cd "$PROJECT_DIR"
 
-if ! command -v bun >/dev/null 2>&1; then
-	echo "ERROR: bun is not installed or not in PATH"
-	exit 1
+export DATABASE_URL="postgresql://roksal:roksal@localhost:54329/roksal"
+export DEMO_ACCESS="${DEMO_ACCESS:-on}"
+export AUTH_RATE_MAX="${AUTH_RATE_MAX:-100000}"
+export SESSION_SECRET="${SESSION_SECRET:-dev-session-secret-roksal-local}"
+export API_KEY_PEPPER="${API_KEY_PEPPER:-dev-pepper-roksal-local}"
+export ROKSAL_PROJECT_ROOT="$PROJECT_DIR"
+
+# .env prepišejo start.sh (SQLite) in prazni demozagoni — vedno povrni na PG
+cat > "$PROJECT_DIR/.env" <<EOF
+DATABASE_URL=$DATABASE_URL
+DEMO_ACCESS=$DEMO_ACCESS
+AUTH_RATE_MAX=$AUTH_RATE_MAX
+SESSION_SECRET=$SESSION_SECRET
+API_KEY_PEPPER=$API_KEY_PEPPER
+EOF
+
+log() { echo "[$(date '+%H:%M:%S')] [roksal-dev] $*"; }
+
+wait_port() { # port ime poskusi
+        local port="$1" name="$2" tries="${3:-90}" i
+        for ((i = 1; i <= tries; i++)); do
+                ss -tln 2>/dev/null | grep -q ":${port} " && return 0
+                sleep 1
+        done
+        log "TIMEOUT: $name (port $port) se ni odprl v ${tries}s"
+        return 1
+}
+
+wait_http() { # url ime poskusi
+        local url="$1" name="$2" tries="${3:-120}" i
+        for ((i = 1; i <= tries; i++)); do
+                if curl -s -o /dev/null --connect-timeout 2 --max-time 5 "$url"; then
+                        return 0
+                fi
+                sleep 1
+        done
+        log "TIMEOUT: $name ($url) se ni odzval v ${tries}s"
+        return 1
+}
+
+# ── 0. odvisnosti ──────────────────────────────────────────────────────────
+if [ ! -d "$PROJECT_DIR/node_modules" ]; then
+        log "bun install (node_modules manjka)"
+        bun install
+else
+        log "node_tools že prisotne — bun install (incremental)"
+        bun install
 fi
 
-log_step_start "bun install"
-echo "[BUN] Installing dependencies..."
-bun install
-log_step_end "bun install"
+# ── 1. embedded PostgreSQL ─────────────────────────────────────────────────
+log "zagon embedded PostgreSQL :54329"
+# Dvojna vilica (dev-detach.py): daemon se odpne na PID 1 — preživi konec
+# klica tudi ob ročnem zagonu iz agentove lupine (moravec peskovnika ubija
+# potomce klica po drevesu; pravnuk s staršem PID 1 ni več v drevesu).
+python3 "$SCRIPT_DIR/dev-detach.py" "$PROJECT_DIR" bash -c 'bun run db:up > .zscripts/db-up.log 2>&1'
+if ! wait_port 54329 "PostgreSQL" 90; then
+        log "PG se ni zagnal — .pgdata najverjetneje poškodovana; REINICIJALIZACIJA (podatki baze bodo obnovljeni iz migracij+seed)"
+        pkill -f "dev-db.mjs" 2>/dev/null || true
+        pkill -f "postgres" 2>/dev/null || true
+        sleep 2
+        rm -rf "$PROJECT_DIR/.pgdata"
+        python3 "$SCRIPT_DIR/dev-detach.py" "$PROJECT_DIR" bash -c 'bun run db:up > .zscripts/db-up.log 2>&1'
+        wait_port 54329 "PostgreSQL (svež)" 120 || exit 1
+fi
+log "PostgreSQL teče"
 
-log_step_start "bun run db:push"
-echo "[BUN] Setting up database..."
-bun run db:push
-log_step_end "bun run db:push"
+# ── 2. migracije (produkcijska pot) ────────────────────────────────────────
+log "prisma generate + migrate deploy"
+bunx prisma generate
+bunx prisma migrate deploy || { log "migracije so PADLE — prekinjam zagon"; exit 1; }
 
-log_step_start "Starting Next.js dev server"
-echo "[BUN] Starting development server..."
-bun run dev &
-DEV_PID=$!
-log_step_end "Starting Next.js dev server"
+# ── 3. seed samo, če je baza prazna ────────────────────────────────────────
+USERS=$(node -e "const{PrismaClient}=require('@prisma/client');const p=new PrismaClient();p.user.count().then(c=>{console.log(c);return p.\$disconnect()}).catch(()=>{console.log(-1);process.exit(0)})")
+if ! echo "$USERS" | grep -qE '^[0-9]+$'; then
+        log "števca uporabnikov ni bilo mogoče prebrati ($USERS) — prekinjam zagon"
+        exit 1
+fi
+log "število uporabnikov v bazi: $USERS"
+if [ "$USERS" = "0" ]; then
+        log "prazna baza — poganjam celotno seed verigo (seed + r437…r495)"
+        bun run db:seed || { log "seed je PADel — prekinjam zagon"; exit 1; }
+else
+        log "baza ima podatke — seed PRESKOČEN (ohranjanje lokalnega dela)"
+fi
 
-log_step_start "Waiting for Next.js dev server"
-wait_for_service "localhost" "3000" "Next.js dev server"
-log_step_end "Waiting for Next.js dev server"
+# ── 4. Next.js dev :3000 ───────────────────────────────────────────────────
+log "zagon next dev na :3000"
+python3 "$SCRIPT_DIR/dev-detach.py" "$PROJECT_DIR" bash -c 'exec bun run dev'
 
-log_step_start "Health check"
-echo "[BUN] Performing health check..."
-curl -fsS localhost:3000 >/dev/null
-echo "[BUN] Health check passed"
-log_step_end "Health check"
+if ! wait_http "http://localhost:3000/api/public/health" "Next.js dev" 180; then
+        log "next dev se ni odzval — zadnjih 30 vrstic dev.log:"
+        tail -30 "$PROJECT_DIR/dev.log" 2>/dev/null || true
+        exit 1
+fi
 
-start_mini_services
+log "health: $(curl -s http://localhost:3000/api/public/health)"
+log "roksal-railing-manager teče na :3000"
 
-echo "Next.js dev server is running in background (PID: $DEV_PID)."
-echo "Use 'kill $DEV_PID' to stop it."
-disown "$DEV_PID" 2>/dev/null || true
-unset DEV_PID
+# Mini-services: mapa obstaja a je prazna (roksal ne potrebuje stranskih servisov)
+log "konec zagona — procesi tečejo v ozadju"
+exit 0
