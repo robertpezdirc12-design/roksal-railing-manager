@@ -37,19 +37,76 @@
 //     je VELJAVNA rešitev → 201;
 //   • BREZ views ostane params BITNO enak staremu (r439/r455 legacy).
 
+// R501 (issue #15 Faza 1) — STREŽNIŠKI PRERAČUN JE AVTORITETA:
+//   • točke BREZ veljavne kalibracije (UNIFORM ali perspektivna ravnina) → 400;
+//   • lengthCm se PRERAČUNA iz točk + kalibracije (computeGeometry/
+//     polygonMetrics — isto jedro kot analiza in UI): odstopanje > 2 % brez
+//     manualOverride → 409 (odjemalec ne more poslati poljubne številke);
+//   • params.measureStatus: MANUAL (ročni vnos brez reference) |
+//     CALIBRATED (točke + veljavna referenca, usklajeno) | MANUAL_OVERRIDE
+//     (ročno rešeno z razlogom — npr. laserska izmera) — razločno v izvozu.
+
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { jsonError, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
 import { emitEvent } from '@/lib/notify'
-import { MEASURE_MODES, computeGeometry, multiViewStats, type EngineCalib, type EnginePoint } from '@/lib/measure-engine'
+import { MEASURE_MODES, MODE_RULES, computeGeometry, multiViewStats, polygonMetrics, resolveScale, type EngineCalib, type EnginePoint, type MeasureMode } from '@/lib/measure-engine'
 import { MEASURE_CONFLICT_PCT } from '@/lib/scene-understanding-core'
 
 const TYPES = ['OGRAJA', 'BALUSTRADA', 'NAGIB', 'OSTANEO']
 
 const MAX_VIEWS = 4
 
-/** R455: normalizira en pogled (točke + kalibracija) — enaka pravila kot glavni. */
+/** R501: prikaz števila z decimalno vejico (slovensko). */
+const r1 = (n: number) => Math.round(n * 10) / 10
+
+/** R501: strukturno razčleni kalibracijo (UNIFORM px/cm ALI perspektivna
+ *  ravnina plane) — globoka validacija (kolinearnost/homografija) je v
+ *  resolveScale. Vrne null, če ni nobene uporabne reference. */
+function parseEngineCalib (v: unknown): EngineCalib | null {
+  if (!v || typeof v !== 'object') return null
+  const o = v as { px?: unknown; cm?: unknown; imgW?: unknown; imgH?: unknown; plane?: unknown }
+  const out: EngineCalib = { px: 0, cm: 0 }
+  const px = Number(o.px); const cm = Number(o.cm)
+  if (Number.isFinite(px) && px > 0) out.px = px
+  if (Number.isFinite(cm) && cm > 0) out.cm = cm
+  const imgW = Number(o.imgW); const imgH = Number(o.imgH)
+  if (Number.isFinite(imgW) && imgW > 0) out.imgW = Math.round(imgW)
+  if (Number.isFinite(imgH) && imgH > 0) out.imgH = Math.round(imgH)
+  if (o.plane && typeof o.plane === 'object') {
+    const p = o.plane as { points?: unknown; widthCm?: unknown; heightCm?: unknown }
+    const w = Number(p.widthCm); const h = Number(p.heightCm)
+    if (Array.isArray(p.points) && p.points.length === 4 && Number.isFinite(w) && w > 0 && Number.isFinite(h) && h > 0) {
+      const pts: EnginePoint[] = []
+      for (const q of p.points) {
+        if (!q || typeof q !== 'object') continue
+        const x = Number((q as { x?: unknown }).x); const y = Number((q as { y?: unknown }).y)
+        if (Number.isFinite(x) && Number.isFinite(y)) pts.push({ x, y })
+      }
+      if (pts.length === 4) out.plane = { points: pts, widthCm: w, heightCm: h }
+    }
+  }
+  return out.px > 0 && out.cm > 0 ? out : out.plane ? out : null
+}
+
+/** R501: točke telesa/pogleda v EnginePoint[] (brez predlogov — ti ne štejejo). */
+function parseEnginePoints (v: unknown): EnginePoint[] | null {
+  if (!Array.isArray(v)) return null
+  const pts: EnginePoint[] = []
+  for (const p of v.slice(0, 64)) {
+    if (!p || typeof p !== 'object') continue
+    const q = p as { x?: unknown; y?: unknown; src?: unknown }
+    const x = Number(q.x)
+    const y = Number(q.y)
+    if (!Number.isFinite(x) || !Number.isFinite(y)) continue
+    pts.push({ x, y, ...(q.src === 'ROCNO' || q.src === 'PREDLOG' ? { src: q.src } : {}) })
+  }
+  return pts.length >= 2 ? pts : null
+}
+
+/** R455: normalizira en pogled (točke + kalibracija) — enaka pravila kot glavni.
+ *  R501: kalibracija pogleda ohrani tudi perspektivno ravnino (plane). */
 function parseView (v: unknown): Record<string, unknown> | null {
   if (!v || typeof v !== 'object') return null
   const o = v as { photoId?: unknown; points?: unknown; calibration?: unknown }
@@ -64,13 +121,23 @@ function parseView (v: unknown): Record<string, unknown> | null {
     if (pts.length > 0) out.points = pts
   }
   if (o.calibration && typeof o.calibration === 'object') {
-    const c = o.calibration as { px?: unknown; cm?: unknown; imgW?: unknown; imgH?: unknown }
-    const cal: Record<string, number> = {}
-    if (Number.isFinite(Number(c.px)) && Number(c.px) > 0) cal.px = Number(c.px)
-    if (Number.isFinite(Number(c.cm)) && Number(c.cm) > 0) cal.cm = Number(c.cm)
-    if (Number.isFinite(Number(c.imgW)) && Number(c.imgW) > 0) cal.imgW = Math.round(Number(c.imgW))
-    if (Number.isFinite(Number(c.imgH)) && Number(c.imgH) > 0) cal.imgH = Math.round(Number(c.imgH))
-    if (Object.keys(cal).length > 0) out.calibration = cal
+    const cal = o.calibration as Record<string, unknown>
+    const keep: Record<string, unknown> = {}
+    const px = Number(cal.px); const cm = Number(cal.cm)
+    if (Number.isFinite(px) && px > 0) keep.px = px
+    if (Number.isFinite(cm) && cm > 0) keep.cm = cm
+    const imgW = Number(cal.imgW); const imgH = Number(cal.imgH)
+    if (Number.isFinite(imgW) && imgW > 0) keep.imgW = Math.round(imgW)
+    if (Number.isFinite(imgH) && imgH > 0) keep.imgH = Math.round(imgH)
+    // R501: perspektivna ravnina pogleda (4 vogali + dimenziji)
+    if (cal.plane && typeof cal.plane === 'object') {
+      const p = cal.plane as { points?: unknown; widthCm?: unknown; heightCm?: unknown }
+      const w = Number(p.widthCm); const h = Number(p.heightCm)
+      if (Array.isArray(p.points) && p.points.length === 4 && Number.isFinite(w) && w > 0 && Number.isFinite(h) && h > 0) {
+        keep.plane = { points: p.points, widthCm: w, heightCm: h }
+      }
+    }
+    if (Object.keys(keep).length > 0) out.calibration = keep
   }
   return Object.keys(out).length > 0 ? out : null
 }
@@ -82,31 +149,15 @@ function num (v: unknown): number | null {
 /** R487: dolžina enega pogleda iz točk + kalibracije — čisto tanek sloj nad
  *  obstoječim determinističnim computeGeometry (merilno jedro NE podvajamo,
  *  issue §2). Točke so normalizirane 0..1 z imgW/imgH (kot v kameri) ali že v
- *  pikslih (kompatibilno z railing-layout). Predlogi (PREDLOG) ne štejejo. */
+ *  pikslih (kompatibilno z railing-layout). Predlogi (PREDLOG) ne štejejo.
+ *  R501: kalibracija je lahko tudi perspektivna ravnina (plane) — razreši jo
+ *  resolveScale; neveljavno merilo → null (ta pogled se ne more šteti). */
 function viewLengthCm (points: unknown, calibration: unknown): number | null {
-  if (!Array.isArray(points) || points.length < 2) return null
-  if (!calibration || typeof calibration !== 'object') return null
-  const c = calibration as { px?: unknown; cm?: unknown; imgW?: unknown; imgH?: unknown }
-  const px = Number(c.px)
-  const cm = Number(c.cm)
-  if (!Number.isFinite(px) || px <= 0 || !Number.isFinite(cm) || cm <= 0) return null
-  const imgW = Number(c.imgW)
-  const imgH = Number(c.imgH)
-  const calib: EngineCalib = {
-    px, cm,
-    ...(Number.isFinite(imgW) && imgW > 0 ? { imgW: Math.round(imgW) } : {}),
-    ...(Number.isFinite(imgH) && imgH > 0 ? { imgH: Math.round(imgH) } : {}),
-  }
-  const pts: EnginePoint[] = []
-  for (const p of points.slice(0, 64)) {
-    if (!p || typeof p !== 'object') continue
-    const q = p as { x?: unknown; y?: unknown; src?: unknown }
-    const x = Number(q.x)
-    const y = Number(q.y)
-    if (!Number.isFinite(x) || !Number.isFinite(y)) continue
-    pts.push({ x, y, ...(q.src === 'ROCNO' || q.src === 'PREDLOG' ? { src: q.src } : {}) })
-  }
-  if (pts.length < 2) return null
+  const pts = parseEnginePoints(points)
+  if (!pts) return null
+  const calib = parseEngineCalib(calibration)
+  if (!calib) return null
+  if (!resolveScale(calib).valid) return null
   const total = computeGeometry(pts, calib).totalLengthCm
   return total > 0 ? total : null
 }
@@ -233,6 +284,17 @@ export async function POST (req: NextRequest) {
     if (Array.isArray(e.validation)) picked.validation = e.validation.slice(0, 40)
     if (e.confidence && typeof e.confidence === 'object') picked.confidence = e.confidence
     if (e.captureGuide && typeof e.captureGuide === 'object') picked.captureGuide = e.captureGuide
+    // R501 (issue #15 Faza 1): razrešeno merilo (vrsta + predpostavke) v reviziji
+    if (e.scale && typeof e.scale === 'object') {
+      const sc = e.scale as { valid?: unknown; mode?: unknown; cmPerPx?: unknown; assumedFrontal?: unknown; reason?: unknown }
+      const pickedScale: Record<string, unknown> = {}
+      if (typeof sc.valid === 'boolean') pickedScale.valid = sc.valid
+      if (sc.mode === 'UNIFORM' || sc.mode === 'PLANE') pickedScale.mode = sc.mode
+      if (typeof sc.cmPerPx === 'number' && Number.isFinite(sc.cmPerPx)) pickedScale.cmPerPx = sc.cmPerPx
+      if (typeof sc.assumedFrontal === 'boolean') pickedScale.assumedFrontal = sc.assumedFrontal
+      if (typeof sc.reason === 'string' && sc.reason.trim()) pickedScale.reason = sc.reason.slice(0, 160)
+      if (Object.keys(pickedScale).length > 0) picked.scale = pickedScale
+    }
     if (Object.keys(picked).length === 0) {
       return jsonError(400, 'engine je prazen.', 'Podajte vsaj enega od: domain, validation, confidence, captureGuide.')
     }
@@ -279,6 +341,54 @@ export async function POST (req: NextRequest) {
     }
   }
 
+  // ── R501 (issue #15 Faza 1): STREŽNIŠKI PRERAČUN JE AVTORITETA ──────────
+  // Poslana lengthCm se PRERAČUNA iz istega jedra kot analiza/UI. Brez
+  // veljavne reference (UNIFORM ali perspektivna ravnina) točkna meritev NE
+  // more biti potrjena (400). Odstopanje > 2 % brez manualOverride → 409
+  // (odjemalec ne more poslati poljubne številke kot poslovno mero).
+  // RAZLOG v monterjevem jeziku + meriloStatus v params (revizija/izvoz).
+  const RECOMPUTE_TOL_PCT = 2
+  let measureStatus: 'MANUAL' | 'CALIBRATED' | 'MANUAL_OVERRIDE' = 'MANUAL'
+  if (manualOverride) {
+    measureStatus = 'MANUAL_OVERRIDE' // veljavna rešitev Z razlogom (r455)
+  } else {
+    const bodyPts = parseEnginePoints(body.points)
+    const bodyCal = parseEngineCalib(body.calibration)
+    // točke BREZ veljavne reference → EKSPlicitna napaka (ne tiha MANUEL)
+    if (bodyPts && !bodyCal) {
+      return jsonError(400, 'Manjka veljavna referenčna kalibracija.',
+        'Točke so označene, a kalibracija manjka ali je neveljavna — označite 2 točki znane razdalje ali 4 vogale znanega pravokotnika na merjeni ravnini. Brez reference točka meritev ne more biti potrjena poslovna mera.')
+    }
+    const candidates: number[] = []
+    if (bodyPts && bodyCal) {
+      const scale = resolveScale(bodyCal)
+      if (scale.valid) {
+        const geo = computeGeometry(bodyPts, bodyCal)
+        if (geo.calibrated && geo.totalLengthCm > 0) {
+          candidates.push(geo.totalLengthCm)
+          // poligonski načini: »skupna dolžina« = obseg zaprtega poligona je
+          // enakovredna semantika (r457 KERAMIKA pošilja obseg) — sprejmemo oba
+          if (mode && (MODE_RULES[mode as MeasureMode]?.polygon)) {
+            const poly = polygonMetrics(bodyPts, bodyCal)
+            if (poly.perimeterCm > 0) candidates.push(poly.perimeterCm)
+          }
+        }
+      }
+    }
+    if (multiView && multiView.mean > 0 && !multiView.conflict) candidates.push(multiView.mean)
+    if (candidates.length > 0) {
+      const okMatch = candidates.some((c) => Math.abs(c - (lengthCm as number)) / c * 100 <= RECOMPUTE_TOL_PCT)
+      if (!okMatch) {
+        const prikaz = (n: number) => r1(n).toString().replace('.', ',')
+        return jsonError(409, 'Poslana dolžina se ne ujema s preračunom.',
+          `Strežnik iz točk in kalibracije izračuna ${candidates.length === 1 ? prikaz(candidates[0]) : candidates.map(prikaz).join(' / ')} cm, poslano pa je ${prikaz(lengthCm as number)} cm (toleranca ${RECOMPUTE_TOL_PCT} %). Popravite točke/kalibracijo ali vnesite ročni popravek dolžine z razlogom (manualOverride).`)
+      }
+      measureStatus = 'CALIBRATED'
+    }
+    // brez točk + brez views → legacy ročni vnos: measureStatus ostane MANUAL
+    // (izrecno zabeležen v params — ni tiho »potrjena kalibrirana« mera)
+  }
+
   // points + calibration shranimo v params (zapis postopka za revizijo/ponovno izdelavo)
   // points: normalizirane koordinate 0..1; calibration dodatno nosi imgW/imgH za
   // pretvorbo v piksle pri ponovnem izračunu (GET /api/railing-layout?measurementId)
@@ -287,21 +397,27 @@ export async function POST (req: NextRequest) {
     const extra: Record<string, unknown> = { photoId, source: 'KAMERA' }
     if (Array.isArray(body.points)) extra.points = body.points.slice(0, 64)
     if (body.calibration && typeof body.calibration === 'object') {
-      const c = body.calibration as { px?: unknown; cm?: unknown; imgW?: unknown; imgH?: unknown; method?: unknown; refObject?: unknown }
+      const c = body.calibration as { px?: unknown; cm?: unknown; imgW?: unknown; imgH?: unknown; method?: unknown; refObject?: unknown; plane?: unknown }
       const cal: Record<string, unknown> = {}
       if (Number.isFinite(Number(c.px)) && Number(c.px) > 0) cal.px = Number(c.px)
       if (Number.isFinite(Number(c.cm)) && Number(c.cm) > 0) cal.cm = Number(c.cm)
       if (Number.isFinite(Number(c.imgW)) && Number(c.imgW) > 0) cal.imgW = Math.round(Number(c.imgW))
       if (Number.isFinite(Number(c.imgH)) && Number(c.imgH) > 0) cal.imgH = Math.round(Number(c.imgH))
       // R457 (§4): metoda kalibracije + referenčni objekt (sledljivost reference)
-      if (typeof c.method === 'string' && ['MARKER', 'ZNANA_MERA', 'ZUNANJA_NAPRAVA', 'LIDAR', 'ROCNO'].includes(c.method)) cal.method = c.method
+      if (typeof c.method === 'string' && ['MARKER', 'ZNANA_MERA', 'ZUNANJA_NAPRAVA', 'LIDAR', 'ROCNO', 'RAVNINA'].includes(c.method)) cal.method = c.method
       if (typeof c.refObject === 'string' && c.refObject.trim()) cal.refObject = c.refObject.trim().slice(0, 80)
+      // R501 (issue #15 Faza 1): perspektivna ravnina — 4 vogali + dimenziji
+      // (revizija/ponovna izdelava iz params potrebuje CELO referenco)
+      const pl = parseEngineCalib(body.calibration)?.plane
+      if (pl) cal.plane = { points: pl.points, widthCm: pl.widthCm, heightCm: pl.heightCm }
       if (Object.keys(cal).length > 0) extra.calibration = cal
     }
     // R455: več pogledov, kakovost, zaupanje, ročni popravek — vse v params (revizija)
     if (views) extra.views = views
     // R487: strežniško izračunana konsolidacija pogledov (revizija/izvoz)
     if (multiView) extra.multiView = multiView
+    // R501 (issue #15 Faza 2): status mere — vedno zabeležen, nikoli tih
+    extra.measureStatus = measureStatus
     if (quality) extra.quality = quality
     if (confidence !== null) extra.confidence = confidence
     if (manualOverride) extra.manualOverride = manualOverride
@@ -342,6 +458,7 @@ export async function POST (req: NextRequest) {
   if (multiView) versionBits.push(`razpršenost ${multiView.spreadPct.toString().replace('.', ',')} %${multiView.conflict ? ' ⚠ konflikt' : ''}`)
   if (manualOverride) versionBits.push('ročni popravek dolžine')
   if (mode) versionBits.push(`način ${mode}`)
+  versionBits.push(`status mere ${measureStatus}`)
   await db.measurementVersion.create({
     data: {
       measurementId: measurement.id,
@@ -373,6 +490,8 @@ export async function POST (req: NextRequest) {
       // R457: način izmere + prisotnost engine rezultata (issue #12)
       ...(mode ? { mode } : {}),
       ...(engine ? { engine: Object.keys(engine) } : {}),
+      // R501 (issue #15 Faza 2): status mere v reviziji (MANUAL/CALIBRATED/MANUAL_OVERRIDE)
+      measureStatus,
     },
   })
 

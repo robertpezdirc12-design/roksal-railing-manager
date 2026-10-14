@@ -214,10 +214,12 @@ s, b = call('POST', '/api/measurement/confirm', monter, {
 chk(s == 400, f'computedLengthCm 0 → 400 (dejansko {s})')
 
 # ── povratna združljivost: klasična potrditev brez novih polj ──
+# R501 (issue #15 Faza 1): strežniški preračun je avtoriteta — lengthCm se
+# ujema s computeGeometry (0,1→0,9 × imgW 1000 = 800 px × 200/400 = 400 cm).
 s, b = call('POST', '/api/measurement/confirm', monter, {
-    'photoId': photo_id, 'type': 'OGRAJA', 'lengthCm': 420,
+    'photoId': photo_id, 'type': 'OGRAJA', 'lengthCm': 400,
     'points': [{'x': 0.1, 'y': 0.5}, {'x': 0.9, 'y': 0.5}],
-    'calibration': {'px': 400, 'cm': 200},
+    'calibration': {'px': 400, 'cm': 200, 'imgW': 1000, 'imgH': 800},
     'note': f'{TAG} klasična',
 })
 chk(s == 201, f'klasična potrditev (brez novih polj) 201 (dejansko {s})')

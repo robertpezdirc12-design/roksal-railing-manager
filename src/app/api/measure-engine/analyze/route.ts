@@ -6,13 +6,16 @@
 // §13 confidence, §3 capture guide, §8–§11 domenski paket.
 // Brez AI, brez pisanja v bazo (čist izračun — potrjevanje ostane na
 // /api/measurement/confirm, ki zapiše rezultat engine-a v params + revizijo).
+// R501 (issue #15 Faza 1): kalibracija je lahko UNIFORM (px/cm — predpostavka
+// frontalnosti) ALI perspektivna ravnina (plane: 4 vogali znanega pravokotnika
+// na merjeni ravnini → homografija).
 
 import { NextRequest, NextResponse } from 'next/server'
 import { jsonError, requirePermission } from '@/lib/auth'
 import {
   MEASURE_MODES, runAnalysis,
   type AnalyzeInput, type DomainOptions, type EngineCalib, type EnginePoint,
-  type MeasureMode, type Opening,
+  type MeasureMode, type Opening, type PlaneRef,
 } from '@/lib/measure-engine'
 
 const MAX_POINTS = 64
@@ -31,20 +34,43 @@ function numOrNull (v: unknown, min: number, max: number): number | null {
   return Number.isFinite(n) && n >= min && n <= max ? n : null
 }
 
-/** §4: kalibracija z metapodatki (metoda/referenčni objekt). */
+/** R501: perspektivna ravnina — 4 vogali znanega pravokotnika + dimenziji.
+ *  Strukturna kontrola tukaj (število točk, pozitivne dimenzije); globoka
+ *  validacija (kolinearnost, homografija) je v engine resolveScale — tako
+ *  analiza POŠTENO poroča NEZADOSTNI_PODATKI namesto tihe zavrnitve. */
+function parsePlane (v: unknown): PlaneRef | undefined {
+  if (v == null || !v || typeof v !== 'object') return undefined
+  const o = v as { points?: unknown; widthCm?: unknown; heightCm?: unknown }
+  const widthCm = Number(o.widthCm)
+  const heightCm = Number(o.heightCm)
+  if (!Array.isArray(o.points) || o.points.length !== 4) return undefined
+  if (!Number.isFinite(widthCm) || widthCm <= 0 || widthCm > 100000) return undefined
+  if (!Number.isFinite(heightCm) || heightCm <= 0 || heightCm > 100000) return undefined
+  const pts = o.points.map(parsePoint).filter((p): p is EnginePoint => p !== null)
+  if (pts.length !== 4) return undefined
+  return { points: pts, widthCm, heightCm }
+}
+
+/** §4: kalibracija z metapodatki (metoda/referenčni objekt).
+ *  R501: veljavna je UNIFORM (px/cm > 0) ALI perspektivna ravnina (plane). */
 function parseCalib (v: unknown): EngineCalib | null {
   if (!v || typeof v !== 'object') return null
-  const o = v as { px?: unknown; cm?: unknown; imgW?: unknown; imgH?: unknown; method?: unknown; refObject?: unknown }
+  const o = v as { px?: unknown; cm?: unknown; imgW?: unknown; imgH?: unknown; method?: unknown; refObject?: unknown; frontalDeg?: unknown; plane?: unknown }
+  const plane = parsePlane(o.plane)
   const px = Number(o.px); const cm = Number(o.cm)
-  if (!Number.isFinite(px) || px <= 0 || !Number.isFinite(cm) || cm <= 0 || cm > 100000) return null
-  const out: EngineCalib = { px, cm }
+  const uniformValid = Number.isFinite(px) && px > 0 && Number.isFinite(cm) && cm > 0 && cm <= 100000
+  if (!uniformValid && !plane) return null
+  const out: EngineCalib = { px: uniformValid ? px : 0, cm: uniformValid ? cm : 0 }
+  if (plane) out.plane = plane
   const imgW = Number(o.imgW); const imgH = Number(o.imgH)
   if (Number.isFinite(imgW) && imgW > 0) out.imgW = Math.round(imgW)
   if (Number.isFinite(imgH) && imgH > 0) out.imgH = Math.round(imgH)
-  if (typeof o.method === 'string' && ['MARKER', 'ZNANA_MERA', 'ZUNANJA_NAPRAVA', 'LIDAR', 'ROCNO'].includes(o.method)) {
+  if (typeof o.method === 'string' && ['MARKER', 'ZNANA_MERA', 'ZUNANJA_NAPRAVA', 'LIDAR', 'ROCNO', 'RAVNINA'].includes(o.method)) {
     out.method = o.method as EngineCalib['method']
   }
   if (typeof o.refObject === 'string' && o.refObject.trim()) out.refObject = o.refObject.trim().slice(0, 80)
+  const frontal = Number(o.frontalDeg)
+  if (Number.isFinite(frontal) && frontal >= 0 && frontal <= 180) out.frontalDeg = frontal
   return out
 }
 
@@ -106,7 +132,7 @@ export async function POST (req: NextRequest) {
   // §4: brez eksplicitne reference ni avtomatske potrditve — kalibracija je OBVEZNA
   const calibration = parseCalib(body.calibration)
   if (!calibration) {
-    return jsonError(400, 'Manjka referenčna kalibracija.', 'calibration: { px, cm, method?, refObject? } — brez reference avtomatska dimenzija ni veljavna (§4).')
+    return jsonError(400, 'Manjka referenčna kalibracija.', 'calibration: { px, cm, method?, refObject? } za frontalni posnetek ali calibration: { plane: { points: [4 vogali], widthCm, heightCm } } za perspektivno ravnino — brez reference avtomatska dimenzija ni veljavna (§4).')
   }
 
   const options = parseOptions(body.options)
