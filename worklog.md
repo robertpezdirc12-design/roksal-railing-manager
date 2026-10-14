@@ -2526,3 +2526,136 @@ Stage Summary:
   samodejnega segmentiranja ni in ga ta issue ne sme uvajati; (7)
   `public/assets/roksal/src/MANIFEST.json` je v delovnem drevesu spremenjen zaradi
   uvoženih sredstev in NAMENOMA ni v tem commitu.
+
+
+---
+Task ID: R508 (issue #7 — monterjeva pot: sejski osnutki brez tihe prepis,
+poštene zmogljivosti kamere v treh stanjih in vidno stanje shranjevanja)
+Agent: Qoder (lokalno merjeno, 14. 10. 2026, Windows Git Bash + lokalni PG :54329)
+
+Task: issue #7 zahteva, da monter na terenu zajame, izmeri, shrani in odda tudi
+brez signala. Trije mehanizmi so bili doslej narejeni na pol: (1) `measure-draft`
+je shranil SAMO en osnutek na uporabnika, zato je druga nedokončana mera tiho
+PREPISALA prvo — monter je izgubil zajem brez kakršnega koli opozorila; (2)
+kamera je trdila, da podpira svetilko in preklop, tudi ko `getCapabilities()`
+odgovora ni dal (nezavarjen kontekst ali naprava brez izpostavljenih zmožnosti)
+— pomanjkanje dokaza je bilo predstavljeno kot dokaz; (3) stanje shranjevanja
+(osnutek samo v telefonu · čaka na oddajo · poslano · razhajanje) vmesnik ni
+nikoli pokazal, zato monter ni vedel, ali mora zajem ponoviti. Nobena od treh
+napak ni bila odpravljena z novim merilnim ali cenovnim jedrom.
+
+Work Log:
+- NOVO `src/lib/camera-capabilities.ts` (162 vrstice, brez DOM-a, testable):
+  tri stanja `PODPRTO / NI_PODPRE / NI_DOKAZA` — NEPOZNAVANJE VEČ NI TRDITEV.
+  `zmogljivostiKamere(track, vidniVhodi)` svetilko oceni SAMO iz
+  `getCapabilities()` (`torch === true` ali neprazen seznam); `vidniVhodi === null`
+  (nezavarjen kontekst, `enumerateDevices` ni na voljo) vrne `NI_DOKAZA` z
+  razlogom `nezavarjen-kontekst`, ne »0 kamer« in ne »ena kamera«.
+  `nastaviTorch` v stanju `NI_PODPRE` ali brez tracka `applyConstraints`
+  NIKOLI ne pokliče (test šteje klice in dokaže 4, ne 5 ali 6);
+  `VKLOPLJEN/IZKLOPLJEN` vrne samo, kadar `getContext().torch` vrne boolean,
+  sicer `SPREJETO_BREZ_POTRDITVE` — uporabniku se izriše »naprava stanja ne
+  potrjuje — preveri v kadru, ali sveti.«, ne zmagoslavni »svetilka prižgana«.
+  `prestejVideoVhode` upošteva `isSecureContext`; `naslednjaSmer`/`napisSmeri`
+  držita smer (`environment`/`user`) brez DOM referenc.
+- `src/lib/measure-draft.ts` (+143 vrstic, BREAKING CHANGE združljivo branje):
+  osnutki so zdaj SEJE po ključu `projekt/nalog` (`sejaKljuc`), `MAX_SEJE = 6`.
+  `MeasureDraftRecord { userId, savedAt, seje: DraftSeja[] }`; `keyPath: 'userId'`
+  in `DB_VERSION = 2` OSTAJATA, zato noben osnutek, ki je že na telefonu, ni
+  izgubljen, in MIGRACIJE NI. `normalizirajZapis` sprejme novo obliko in staro
+  R486 (razprosto) obliko; `razvrstiSeje` razvršča po `savedAt` od najnovejše;
+  `splosciSejo` vrne snapshot, kakršnega UI že pozna. `saveDraft` vrne
+  `{ izpadle }` in UI ob izpadu najstarejše seje izpiše toast (prostor je za 6 —
+  7. se izrine namenoma, ne tiho). `loadDraft(userId, key?)` brez ključa vrne
+  najnovejšo sejo. `clearDraft(userId, key)` pobriše SAMO to sejo (poprej je
+  `clearDraft` pobrisal VSE osnutke uporabnika); zapis je izbrisan šele, ko je
+  brez sej. Prevelik osnutek (> 8 MB) je zavrnjen z uporabniku razumljivim
+  sporočilom, OB STOJEČI matriki sej.
+- `src/lib/offline.ts` (+89): `stanjeShranjevanja(v)` je ČIST preslikavalec
+  obstoječega stanja vrste v ENO vrstico vmesnika. Prioriteta je
+  `NESKLADJE > NAPAKA > ČAKA_NA_SINHRONIZACIJO > SINHRONIZIRANO >
+  SHRANJENO_V_TELEFONU` in je namenoma TAKŠNA: razhajanje med monterjevo in
+  pisarniško različico NE SME ostati skrito za ponovljivo napako pošiljanja.
+  Kombinirano stanje (razhajanje + spodletelo pošiljanje) v `opis`/`dejanje`
+  imenuje OBOJE.
+- `src/components/roksal/modules/meritve-kamera.tsx` (+239, vezava):
+  pod korake faze zajema je dodana vrstica `role="status"` z
+  `aria-label="Shranjevanje: …"`, ki jo napajata `getOfflineState()` in
+  `useOnline()` (resnična IndexedDB vrsta, ne ugibanje); gumboma za svetilko in
+  preklop kamer sta omogočena SAMO ob dokazu, uspešna toasta se izpišeta samo ob
+  dejanskem `true`, gumb za preklop se ob skopem seznamu vhodov sploh ne prikaže;
+  `zajemiZmogljivosti(stream)` pokliče `enumerateDevices` ob `isSecureContext`;
+  iskanje in nadgradnja osnutka tečeta po `osnutekKljuc()`; vsi `clearDraft`
+  klici nosijo ključ seje (test to preverja z branjem izvora); `saveOffline`
+  si ključ shrani PRED `resetAll()`; obstoječi R455/R457 (način izmere,
+  zmogljivostni profil naprave, pravila načinov) so nepoškodovani.
+- NOVO `tests/r508.py` (304 vrstice, 67 trditev, brez strežnika, brez AI in
+  brez novih paketov): A) tri stanja zmogljivosti; B) stanja `nastaviTorch` +
+  števec, ki dokaže, da `NI_PODPRE` nikoli ne pokliče `applyConstraints`;
+  C) `prestejVideoVhode` (nezavarjen kontekst → null, vhodi brez `deviceId` se
+  ne štejejo); D) sejski osnutki čez IDB mock: dve seji SOOBSTAJATA hkrati,
+  nadgradnja istega ključa ostane ENA, najnovejša brez ključa, IDOR (drugi
+  uporabnik ne vidi ničesar), izbris po ključu, meja `MAX_SEJE` vrne izpadla
+  ključa, star R486 zapis je še vedno berljiv, prevelik osnutek ne pokvari
+  obstoječe seje, prazen `userId`; E) tabela prednostne razvrstitve stanja
+  shranjevanja; F) pregled izvora, da UI vse tri stvari RES veže (in da
+  »Shranjeno v telefonu« ni podvojeno v komponenti) ter da noben nov uvoz
+  (TensorFlow/ONNX/OpenCV/HuggingFace) ni pristal v `package.json`.
+- REGISTRACIJA v pasu: `tests/ci-matrix.sh` (`GRUPE` + `CLANI[r508]`) in
+  `.github/workflows/ci.yml` (`- grupa: r508` s slovensko opombo o pariteti).
+
+Verification:
+- `npx tsc --noEmit` CLEAN; `npx eslint` na treh spremenjenih datotekah: 0 napak.
+  V `meritve-kamera.tsx` je bilo 18 opozoril že PRED tem zagonom (primerjalno
+  preverjeno na kopiji iz `git show HEAD:`) in jih je sedaj še vedno 18, torej
+  BREZ REGRESIJE.
+- `python -X utf8 tests/r508.py` → `R508: 67✓ / 0✗`.
+- CELOTI relejni pas (`TEST_DB_URL=…:54329 KEEP=1 TIMEOUT_NOTIFY=900 bash
+  tests/ci-local.sh`), ki ga je vodil pasov LASTEN strežnik:
+  **8 statičnih korakov ✓ · 28 skupin ✓ · 59 suite-ov ✓ · 0 napak ·
+  4559 potrjenih trditev v dnevnikih · 4 preskoki ⟿ · 1 začasni ⏸**.
+  Kaj ti številki pomenita, konkretno: (1) vseh 4 preskokov so IZKLJUČNO
+  off-site GitLab preverbe (API brez veljavnega žetona; repozitorij je prešel
+  na GitHub) — to ni nevtraliziran rizik, ampak tuje okolje, ki ga s tem žetonom
+  preveriti ni mogoče; (2) en `⏸` je bila blokada Next razvojnega strežnika pred
+  skupino `r464-notifications`, nato je skupina zares ZELENA (`1 ✓ / 0 ✗`);
+  (3) `r486` (stari osnutki) je zelen tudi PO prehodu na seje, zato trditev o
+  združljivem branju ni samo branje kode.
+- KONFLIK RAZVOJNEGA STREŽNIKA, RAZREŠEN PO NAVODILU: pred pasom je na vratih
+  3000 stal moj ostanek ROČNO zagnanega strežnika, ki mu je manjkal
+  `DATABASE_URL` (`/api/health` je vrnil `503 degraded` in
+  »Environment variable not found: DATABASE_URL —> schema.prisma:12«). Ta zagon
+  NI bil uporabljen kot dokaz; ustavljen je bil z `ops/dev-serve.sh stop` (ta
+  ukaz ubije samo poslušalca na svojih vratih in potrdi, da so prosta), nato je
+  pas poganjal LASTEN strežnik. `EXTERNAL_SERVER=1` NI bil sprejet, ker testni
+  potek ne more potrditi lastnosti tujega strežnika. Merilnega jedra zaradi tega
+  konflikta NIJE bilo spremenjeno.
+
+Stage Summary:
+- Tri resnične napake monterjeve poti so zaprte z dokazi, ne z obljubami: tiha
+  prepis osnutka (sedaj seje), lažna trditev o zmogljivosti (sedaj tri stanja in
+  pogojeno omogočeni gumbi) in nevidno stanje shranjevanja (sedaj vrstica, izračunana
+  iz resnične vrste).
+- Issue #7 NI zaprt. Zelena gradnja in zelen pas nista dokaz, da je naloga
+  končana. Manjka pisarniška veriga iz §8: ob potrditvi se še NE sestavi paket
+  samodejno (`paketer`/auto-package ne obstaja), ni sestave monterskega paketa,
+  originalov v izvozu in bloka avtorjev/zgodovine sprememb v PDF-ju;
+  `MAX_VIEWS = 4` ostaja (razdelitev rekonstrukcija/detajl ni narejena);
+  razhajanje je vidno in uporabniku pove, kaj naj stori, izbira med različicama
+  pa še ni implementirana (v shemi ni razpredelnice razhajanj — stanje se šteje
+  iz `status = 'conflict'` v lokalni vrsti); spomin na zadnjo smer kamere ali
+  svetilke ni shranjen.
+- KAJ NI DOKAZANO / OSTANJA TVEGANJA (pošteno): (1) fizične naprave (pravi
+  telefon s svetilko, več kamerami, GPS) na tej mizi NI, zato so dokazi za
+  `PODPRTO` sintetični — na napravi odloča obseg, ki ga vrne `getCapabilities()`;
+  (2) tolerance meril in referenčni nabor z neodvisno fizično izmerjenimi
+  dimenzijami (#15 §6.1) še ne obstajata; (3) migracija
+  `20261019000000_r501_measurement_status` na Neonu ŠE NI izvedena in
+  produkcijski gesli administracije/demo sta javno znana in nerotirana — oboje
+  je dejanje lastnika; (4) GitHub Actions minute so porabljene do 1. 11. 2026,
+  zato GitHub preverba tega zagona NI dokaz — dokaz je lokalni pas; (5) GitLab
+  sinhronizacija ni preverjena (žeton iz pogovora je neveljaven — `400` na
+  `/api/v4/user`) in jo štejem kot PRESKOČENO, ne kot uspešno; (6) dve a11y
+  opozorili v konzoli nista locirani; (7)
+  `public/assets/roksal/src/MANIFEST.json` je v delovnem drevesu spremenjen
+  zaradi uvoženih sredstev in NAMENOMA ni v tem commitu.

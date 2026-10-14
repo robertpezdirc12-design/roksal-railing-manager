@@ -41,8 +41,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import {
-  Camera, Check, CloudUpload, Cpu, Crosshair, Eraser, FileJson, FileSpreadsheet, Grid3x3, Image as ImageIcon, Loader2, Lock, LockOpen, ArrowDownToLine,
-  Redo2, Ruler, Sparkles, SquarePlus, Trash2, Undo2, WifiOff,
+  Camera, Check, CloudUpload, Cpu, Crosshair, Eraser, FileJson, FileSpreadsheet, Flashlight, FlashlightOff, Grid3x3, Image as ImageIcon, Loader2, Lock, LockOpen, ArrowDownToLine,
+  Redo2, Ruler, Sparkles, SquarePlus, SwitchCamera, Trash2, Undo2, WifiOff,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -53,8 +53,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useToast } from '@/hooks/use-toast'
 import { apiPost, fmtDate, useApi } from '@/lib/api-client'
-import { getCachedNalogi, queuePhoto, useOnline } from '@/lib/offline'
-import { clearDraft, loadDraft, saveDraft, type MeasureDraft, type MeasureDraftSnapshot } from '@/lib/measure-draft'
+import { getCachedNalogi, getOfflineState, queuePhoto, stanjeShranjevanja, useOnline, type VrsticaShranjevanja } from '@/lib/offline'
+import { clearDraft, loadSeje, saveDraft, sejaKljuc, splosciSejo, type MeasureDraft, type MeasureDraftSnapshot } from '@/lib/measure-draft'
+import {
+  nastaviTorch, naslednjaSmer, napisSmeri, napisZmogljivosti, prestejVideoVhode, zmogljivostiKamere,
+  type SmerKamere, type ZmogljivostiKamere,
+} from '@/lib/camera-capabilities'
 import { useAppStore } from '@/lib/store'
 import {
   CALIB_METHODS, INPUT_SOURCE_LABELS, MEASURE_MODES, MEASUREMENT_STATUS_LABELS, MODE_RULES, captureGuide,
@@ -519,6 +523,13 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
   const [calibMethod, setCalibMethod] = useState<CalibrationMethod>('MARKER')
   const [refObject, setRefObject] = useState('')
   const [caps, setCaps] = useState<DeviceCaps | null>(null)
+  // R508 (issue #7 §4A/§6): zmožnosti IZBRANE kamere (bliskavica, preklop) in
+  // statusna vrstica shranjevanja — obe sta povzeti iz naprave/strežnika, nikoli
+  // predpostavljene.
+  const [zmoKamere, setZmoKamere] = useState<ZmogljivostiKamere | null>(null)
+  const [smerKamere, setSmerKamere] = useState<SmerKamere>('environment')
+  const [torchNa, setTorchNa] = useState(false)
+  const [vrsticaShranjevanja, setVrsticaShranjevanja] = useState<VrsticaShranjevanja | null>(null)
   const [maxTilt, setMaxTilt] = useState<number | null>(null)
   const [analysis, setAnalysis] = useState<AnalyzeResult | null>(null)
   const [analyzing, setAnalyzing] = useState(false)
@@ -573,6 +584,32 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
     void getCachedNalogi<CachedWoRow>().then((c) => { if (c) setCachedOrders(c.list) }).catch(() => {})
   }, [open])
 
+  // ── R508 (issue #7 §6): statusna vrstica KORAK-NA-KORAK ────────────────────
+  // Monter mora SRED meritve vedeti, kje je njegova fotografija in mera —
+  // v telefonu, v vrsti, na strežniku ali v napaki. Stanje se izračuna iz
+  // PRAVIH podatkov (IndexedDB vrsta + signal + potrjeni id) prek čiste
+  // funkcije stanjeShranjevanja, nikoli iz predpostavke «verjetno je shranjeno».
+  const [shranjevanjeTick, setShranjevanjeTick] = useState(0)
+  const osveziShranjevanje = useCallback((): void => { setShranjevanjeTick((n) => n + 1) }, [])
+  useEffect(() => {
+    if (!open) return
+    let odpovedano = false
+    void getOfflineState()
+      .then((s) => {
+        if (odpovedano) return
+        setVrsticaShranjevanja(stanjeShranjevanja({
+          online: s.online,
+          caka: s.pending,
+          napake: s.errors,
+          konflikti: s.conflicts,
+          lokalno: s.photos,
+          potrjeno: savedId !== null,
+        }))
+      })
+      .catch(() => { if (!odpovedano) setVrsticaShranjevanja(null) })
+    return () => { odpovedano = true }
+  }, [open, online, savedId, shranjevanjeTick, views.length])
+
   // ── R486 (issue #7 §3): predpolnjen kontekst iz naloga (ZAČNI MERITEV v DANES) ──
   useEffect(() => {
     if (!open) return
@@ -583,16 +620,34 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
   // ── R486 (issue #7 §3/§6): nedokončana meritev — pasica NADALJUJ / ZAČNI NOVO ──
   // osvežitev/zaprtje/klic sred merjenja NE izgubi točk/kalibracije/pogledov
   const [pendingDraft, setPendingDraft] = useState<MeasureDraft | null>(null)
+  /** R508 (§6): koliko nedokončanih meritev (sej) je na napravi. */
+  const [sejeNedokoncanih, setSejeNedokoncanih] = useState(0)
+
+  /** R508 (§6): identiteta trenutne meritve — projekt/nalog (brez tihe prepisi). */
+  function osnutekKljuc (): string {
+    return sejaKljuc({
+      projectId: projectId !== 'none' ? projectId : null,
+      workOrderId: workOrderId !== 'none' ? workOrderId : null,
+    })
+  }
+
   useEffect(() => {
     if (!open) return
     setPendingDraft(null)
+    setSejeNedokoncanih(0)
     const uid = useAppStore.getState().user?.id
     if (!uid) return
-    void loadDraft(uid).then((d) => {
-      if (!d) return
-      if (!Array.isArray(d.views) || d.views.length === 0) { void clearDraft(uid); return }
-      if (autoResumeDraft) { resumeDraft(d); return }
-      setPendingDraft(d)
+    void loadSeje(uid).then((seje) => {
+      // R508: na napravi je lahko VEČ nedokončanih meritev (po projekt/nalog).
+      // Prikaze se NAJNOVEJŠA, številka v pasici pa pove, da jih je več — Monter
+      // ve, da nadalednje mere ne izginejo.
+      const uporabne = seje.filter((s) => Array.isArray(s.snapshot.views) && s.snapshot.views.length > 0)
+      for (const prazna of seje.filter((s) => !uporabne.includes(s))) void clearDraft(uid, prazna.key)
+      if (uporabne.length === 0) return
+      const najnovejsa = splosciSejo(uid, uporabne[0])
+      setSejeNedokoncanih(uporabne.length)
+      if (autoResumeDraft) { resumeDraft(najnovejsa); return }
+      setPendingDraft(najnovejsa)
     }).catch(() => {})
   }, [open, autoResumeDraft])
 
@@ -643,8 +698,10 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
     }
   }
 
-  // R486 (issue #7 §6): samodejni osnutek — debounce 500 ms; nov dogodek (foto,
-  // točke, kalibracija, faza) vedno prepíše starejši osnutek istega uporabnika.
+  // R486 (issue #7 §6): samodejni osnutek — debounce 500 ms.
+  // R508: osnutek se shrani POD KLJUČEM projekt/nalog, zato začetek druge
+  // meritve NE prepisuje prve. Če zaradi meje sej katera izpade, to poveomo
+  // monterju (ne tiho brisanje nedokončane meritve).
   const draftTimer = useRef<number | null>(null)
   useEffect(() => {
     if (!open) return
@@ -653,11 +710,30 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
     if (draftTimer.current !== null) window.clearTimeout(draftTimer.current)
     draftTimer.current = window.setTimeout(() => {
       void saveDraft(uid, draftSnapshot())
-        .then(() => setPendingDraft(null))
-        .catch(() => { /* osnutek ne sme blokirati merjenja */ })
+        .then(({ izpadle }) => {
+          setPendingDraft(null)
+          osveziShranjevanje()
+          if (izpadle.length > 0) {
+            toast({
+              title: izpadle.length === 1 ? 'Najstarejši osnutek je izpadel' : 'Najstarejši osnutki so izpadli',
+              description: 'V telefonu je prostor za največ 6 nedokončanih meritev. Potrdi ali zavrži starejše meritve, da trenutna ne ostane brez varnosti.',
+            })
+          }
+        })
+        .catch((e: unknown) => {
+          // Osnutek ne sme blokirati merjenja, a prevelik osnutek mora biti
+          // NAPAKA — drugače bi monter verjel, da je nedokončana mera varna.
+          toast({
+            title: 'Osnutek te meritve ni shranjen v telefonu',
+            description: e instanceof Error
+              ? `${e.message} Meritev lahko še vedno pošlješ v vrsto ali jo potrdiš, ko je signal nazaj.`
+              : 'Prostor v telefonu je poln. Odstrani najmanj uporaben pogled ali potrdi meritev.',
+            variant: 'destructive',
+          })
+        })
     }, 500)
     return () => { if (draftTimer.current !== null) { window.clearTimeout(draftTimer.current); draftTimer.current = null } }
-  }, [open, phase, views, activeView, projectId, workOrderId, mode, location, calibMethod, type, heightS, note, maxTilt])
+  }, [open, phase, views, activeView, projectId, workOrderId, mode, location, calibMethod, type, heightS, note, maxTilt, toast, osveziShranjevanje])
 
   // R457 (§16): zmogljivosti naprave ob odprtju pogovornega okna
   useEffect(() => {
@@ -728,26 +804,76 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
   void histTick
 
   // priprava kamere
-  const startCamera = useCallback(async () => {
+  /**
+   * R508 (issue #7 §4A/§4D): kaj naprava ZARES zmore. Številka vidnih kamer se
+   * v nezavarjenem kontekstu ne dobi (brskalnik skrije deviceId-e) — takrat je
+   * odgovor NI_DOKAZA in UI preklopa NE pokaže, namesto da bi trdil »ena kamera«.
+   */
+  const zajemiZmogljivosti = useCallback(async (stream: MediaStream): Promise<void> => {
+    const track = stream.getVideoTracks()[0] ?? null
+    let vhodi: number | null = null
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+      const devices = await navigator.mediaDevices.enumerateDevices()
+      vhodi = prestejVideoVhode(devices, window.isSecureContext === true)
+    } catch { vhodi = null }
+    setZmoKamere(zmogljivostiKamere(track, vhodi))
+  }, [])
+
+  /**
+   * R508: zagon kamere vrne `true` SAMO, če je zagon uspel — preklop sicer ne
+   * sme trditi »aktivna je zadnja kamera«, ko kamera ni dosegljiva (§7).
+   */
+  const startCamera = useCallback(async (smer: SmerKamere = smerKamere): Promise<boolean> => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: smer } } })
       streamRef.current = stream
+      setSmerKamere(smer)
+      setTorchNa(false)
       setCamActive(true)
       requestAnimationFrame(() => { if (videoRef.current) videoRef.current.srcObject = stream })
+      await zajemiZmogljivosti(stream)
+      return true
     } catch {
+      setZmoKamere(zmogljivostiKamere(null, null))
       toast({
         title: 'Kamera ni dosegljiva.',
         description: 'Uporabite nalaganje fotografije ali izberite obstoječo.',
       })
       fileRef.current?.click()
+      return false
     }
-  }, [toast])
+  }, [toast, smerKamere, zajemiZmogljivosti])
 
   const stopCamera = useCallback(() => {
     streamRef.current?.getTracks().forEach((t) => t.stop())
     streamRef.current = null
     setCamActive(false)
+    setTorchNa(false)
   }, [])
+
+  /** Preklop spredaj/zadaj — ponovni zagon z izbrano smerjo (brez domneve o napravi). */
+  const preklopiSmer = useCallback(async (): Promise<void> => {
+    const naslednja = naslednjaSmer(smerKamere)
+    stopCamera()
+    const uspelo = await startCamera(naslednja)
+    if (uspelo) toast({ title: 'Preklop kamere', description: `Aktivna je ${napisSmeri(naslednja)}.` })
+  }, [smerKamere, startCamera, stopCamera, toast])
+
+  /**
+   * Bliskavica: ukaz se posreduje samo, če ga je naprava potrdila, rezultat pa
+   * je lahko SPREJETO_BREZ_POTRDITVE — monter to dobi kot »poskus«, ne kot dokaz.
+   */
+  const preklopiTorch = useCallback(async (): Promise<void> => {
+    const track = streamRef.current?.getVideoTracks()[0] ?? null
+    const izid = await nastaviTorch(track, !torchNa)
+    if (izid.stanje === 'VKLOPLJEN' || (izid.stanje === 'SPREJETO_BREZ_POTRDITVE' && !torchNa)) setTorchNa(true)
+    if (izid.stanje === 'IZKLOPLJEN' || (izid.stanje === 'SPREJETO_BREZ_POTRDITVE' && torchNa)) setTorchNa(false)
+    toast({
+      title: 'Bliskavica',
+      description: izid.sporocilo,
+      variant: izid.stanje === 'NAPAKA' || izid.stanje === 'NI_PODPRE' ? 'destructive' : undefined,
+    })
+  }, [torchNa, toast])
 
   useEffect(() => () => stopCamera(), [stopCamera])
 
@@ -1193,7 +1319,7 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
       toast({
         title: 'Meritev potrjena in shranjena.',
         description: stanje
-          ? `${fmt1(finalLengthCm / 100)} m · stanje: ${stanje}${measurementStatusAllowsBusiness(res.data.status) ? ' — uporabljena bo v konfiguratorju in BOM-u.' : ' — v BOM JE NE sme (korak: dokazano merilo ali pisarniška potrditev).'}`
+          ? `${fmt1(finalLengthCm / 100)} m · stanje: ${stanje}${measurementStatusAllowsBusiness(res.data.status) ? ' — uporabljena bo v konfiguratorju in BOM-u.' : ' — v BOM ne sme (korak: dokazano merilo ali pisarniška potrditev).'}`
           : `${fmt1(finalLengthCm / 100)} m · zaupanje ${multi.conf} % — uporabljena bo v konfiguratorju in BOM-u.`,
       })
       if (again) {
@@ -1208,13 +1334,25 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
         // onSaved sproži reload podatkov, ob katerem se lahko dialog zapre in DANES
         // ponovno naloži osnutek; če izbris IndexedDB še ni rezultiran, bi se pokazala
         // LAŽNA pasika »Nadaljuj nedokončano« (issue #7 §7 brez lažnih stanj).
+        // R508: zbriše SAMO to sejo (projekt/nalog) — druge nedokončane meritve
+        // istega monterja na napravi ostanejo.
         const uid = useAppStore.getState().user?.id
-        if (uid) await clearDraft(uid).catch(() => { /* osnutek ni kritičen */ })
+        const kljuc = osnutekKljuc()
+        if (uid) await clearDraft(uid, kljuc).catch(() => { /* osnutek ni kritičen */ })
+        osveziShranjevanje() // R508: vrstica mora takoj povedati resnico (strežnik)
         await onSaved()
         resetAll()
       }
     } catch (e) {
-      toast({ title: 'Napaka pri shranjevanju meritve', description: e instanceof Error ? e.message : undefined, variant: 'destructive' })
+      // R508 (issue #7 §6): napaka mora povedati, KAJ naj monter stori — ne le
+      // surove besede strežnika ali brskalnika.
+      toast({
+        title: 'Meritev ni shranjena',
+        description: e instanceof Error
+          ? `${e.message} Nič ni izgubljenega: točke in kalibracija ostanejo v telefonu — poskusi znova ali izberi »Shrani lokalno«.`
+          : 'Strežnik meritve ni dosegel. Poskusi znova ali shrani lokalno in sinhroniziraj, ko se signal vrne.',
+        variant: 'destructive',
+      })
     } finally { setBusy(false) }
   }
 
@@ -1276,16 +1414,23 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
         title: 'Shranjeno lokalno — sinhroniziralo se bo samodejno',
         description: `${finalLengthCm ? `Meritev ${fmt1(finalLengthCm / 100)} m in fotografija` : 'Fotografija'} bosta poslani, ko se signal vrne. Ali bo številka poslovna mera ali ocena, na sinhronizaciji odloči strežnik (merilo px/cm).`,
       })
+      // R508: ključ se izračuna PRED resetAll() — resetAll počisti projekt/nalog.
+      const uid = useAppStore.getState().user?.id
+      const kljuc = osnutekKljuc()
+      osveziShranjevanje() // vrstica takoj pove »Čaka na sinhronizacijo«, ne zmolči
       resetAll()
       // R486 (issue #7 §6): offline shranjeno v vrsto → osnutek ni več potreben
       // (await — isti razlog kot v confirm: brez lažnega NADALJUJ gumba po shranjevanju)
-      const uid = useAppStore.getState().user?.id
-      if (uid) await clearDraft(uid).catch(() => { /* osnutek ni kritičen */ })
+      // R508: zbriše SAMO ta seja, druge nedokončane meritve ostanejo.
+      if (uid) await clearDraft(uid, kljuc).catch(() => { /* osnutek ni kritičen */ })
       onClose()
     } catch (e) {
+      // R508 (issue #7 §6): napaka pove, KAJ narediti — surov message ni napotek.
       toast({
-        title: 'Offline shranjevanje ni uspelo',
-        description: e instanceof Error ? e.message : undefined,
+        title: 'Meritev ni v vrsti za sinhronizacijo',
+        description: e instanceof Error
+          ? `${e.message} Nič ni izgubljenega — poskusi znova ali počakaj, da je signal nazaj, in potrdi meritev.`
+          : 'V telefonu ni bilo prostora za zapis. Počisti zaključene zapise in poskusi znova.',
         variant: 'destructive',
       })
     } finally {
@@ -1461,6 +1606,27 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
         })}
       </ol>
 
+      {/* R508 (issue #7 §6): status shranjevanja korak-na-korak — monter vidi,
+          KJE so njegovi podatki (telefon / vrsta / strežnik / napaka), ne le
+          da je »nekaj obkljukano«. Stanje je izračunano iz vrste in signala. */}
+      {vrsticaShranjevanja ? (() => {
+        const v = vrsticaShranjevanja
+        const barva = v.stanje === 'NAPAKA' || v.stanje === 'NESKLADJE'
+          ? 'border-red-300 bg-red-50 text-red-900 dark:border-red-900 dark:bg-red-950/40 dark:text-red-200'
+          : v.stanje === 'SINHRONIZIRANO'
+            ? 'border-emerald-300 bg-emerald-50 text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-200'
+            : v.stanje === 'CAKA_NA_SINHRONIZACIJO'
+              ? 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200'
+              : 'border-border bg-muted/40 text-muted-foreground'
+        return (
+          <p className={`flex flex-wrap items-center gap-x-2 gap-y-0.5 rounded-lg border px-3 py-1.5 text-[11px] font-medium ${barva}`} role="status" aria-label={`Shranjevanje: ${v.oznaka}`}>
+            <span className="font-semibold">{v.oznaka}</span>
+            <span>{v.opis}</span>
+            {v.dejanje ? <span className="opacity-80">{v.dejanje}</span> : null}
+          </p>
+        )
+      })() : null}
+
       {/* R486 (issue #7 §3/§6): nedokončana meritev — pasica nadaljevanja */}
       {pendingDraft && views.length === 0 ? (() => {
         const pts = pendingDraft.views.reduce((s, v) => s + (Array.isArray(v.points) ? v.points.length : 0), 0)
@@ -1476,6 +1642,7 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
           >
             <p className="text-sm font-medium text-amber-900 dark:text-amber-200">
               Imaš nedokončano meritev{hm ? ` (shranjeno ${hm})` : ''} — {pendingDraft.views.length} {pendingDraft.views.length === 1 ? 'pogled' : 'pogleda/pogledi'}, {pts} točk.
+              {sejeNedokoncanih > 1 ? ` Skupno jih imaš ${sejeNedokoncanih}; tu je najnovejša.` : ''}
             </p>
             <div className="mt-2 flex flex-wrap gap-2">
               <Button size="sm" className="h-9" onClick={() => resumeDraft(pendingDraft)}>
@@ -1485,8 +1652,11 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
                 size="sm" variant="outline" className="h-9"
                 onClick={() => {
                   const uid = useAppStore.getState().user?.id
-                  if (uid) void clearDraft(uid)
+                  // R508 (§6): ZAČNI NOVO pobriše SAMO to sejo. Druge nedokončane
+                  // meritve istega monterja na napravi ostanejo (brez tihe izgube).
+                  if (uid) void clearDraft(uid, sejaKljuc(pendingDraft))
                   setPendingDraft(null)
+                  setSejeNedokoncanih((n) => Math.max(0, n - 1))
                 }}
               >
                 <Trash2 className="size-4" aria-hidden /> ZAČNI NOVO
@@ -1582,11 +1752,30 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
               </div>
               <div className="flex flex-wrap gap-2 p-2">
                 <Button className="flex-1" onClick={capture}><Camera className="size-4" aria-hidden /> Zajemi</Button>
+                {/* R508 (issue #7 §4A): bliskavica in preklop kamer — gumb je viden
+                    SAMO, če naprava zmožnost POTRDI; sicer je napis pošten
+                    (»ni podprto / ni dokaza«), ne pa lažno aktiven gumb. */}
+                {zmoKamere?.torch === 'PODPRTO' ? (
+                  <Button variant={torchNa ? 'default' : 'outline'} onClick={() => void preklopiTorch()} aria-pressed={torchNa}>
+                    {torchNa ? <FlashlightOff className="size-4" aria-hidden /> : <Flashlight className="size-4" aria-hidden />}
+                    Bliskavica {torchNa ? 'izklop' : 'vklop'}
+                  </Button>
+                ) : null}
+                {zmoKamere?.preklop === 'PODPRTO' ? (
+                  <Button variant="outline" onClick={() => void preklopiSmer()}>
+                    <SwitchCamera className="size-4" aria-hidden /> Preklopi kamero
+                  </Button>
+                ) : null}
                 <Button variant="outline" onClick={() => setGuides((g) => !g)} aria-pressed={guides}>
                   <Grid3x3 className="size-4" aria-hidden /> Vodila {guides ? 'vklop' : 'izklop'}
                 </Button>
                 <Button variant="outline" onClick={stopCamera}>Prekliči</Button>
               </div>
+              {zmoKamere ? (
+                <p className="px-2 pb-2 text-[11px] text-muted-foreground">
+                  Naprava: {napisZmogljivosti(zmoKamere)}
+                </p>
+              ) : null}
             </div>
           ) : null}
 

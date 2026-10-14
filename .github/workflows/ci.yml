@@ -154,6 +154,10 @@ jobs:
           # izbira preverjenih gradiv iz kataloga — nova skupina MORA biti tudi
           # v tests/ci-matrix.sh.
           - grupa: r504
+          # R508 (issue #7): zmožnosti kamere (PODPRTO/NI_PODPRE/NI_DOKAZA),
+          # osnutek meritve PO SEJI (brez tihe prepisi) in status shranjevanja
+          # korak-na-korak — nova skupina MORA biti tudi v tests/ci-matrix.sh.
+          - grupa: r508
     services:
       postgres:
         image: postgres:16
