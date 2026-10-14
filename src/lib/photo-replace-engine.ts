@@ -10,6 +10,7 @@ import {
   ENGINE_VERSION, preveriConfig, preveriQuad,
   type RenderParams, type VizReference,
 } from '@/lib/photo-replace-core'
+import { jePraznaMaska, preveriMasko } from '@/lib/photo-replace-mask'
 
 // ─── Omejitve vhoda ──────────────────────────────────────────────────────────
 
@@ -56,7 +57,15 @@ export function preveriRenderParams (v: unknown): { napaka: string } | { params:
   }
   const c = preveriConfig(o.config)
   if (!c.config) return { napaka: c.napake[0]?.sporocilo ?? 'Neveljavna konfiguracija.' }
-  return { params: { quad: q.quad, reference, config: c.config }, opozorila: [] }
+  // R507 (issue #14 §1): ročna maska je NEOBVEZNA — brez nje ima renderParams
+  // enako obliko kot doslej, zato obstoječe vizualizacije ostanejo veljavne.
+  const mk = preveriMasko(o.maska)
+  if (mk.napake.length > 0) return { napaka: mk.napake[0].sporocilo }
+  const maska = jePraznaMaska(mk.maska) ? null : mk.maska
+  return {
+    params: maska ? { quad: q.quad, reference, config: c.config, maska } : { quad: q.quad, reference, config: c.config },
+    opozorila: [],
+  }
 }
 
 // ─── Obseg dostopa (§13: brez IDOR do fotografij drugih strank/projektov) ────

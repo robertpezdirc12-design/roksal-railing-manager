@@ -21,7 +21,7 @@ Preverja:
   I) Regresija: measurements/products/projects še delujejo; quote PDF 404.
   J) Idempotentno čiščenje vseh testnih zapisov.
 """
-import json, os, subprocess, sys, urllib.request, urllib.error
+import json, os, re, subprocess, sys, urllib.request, urllib.error
 
 BASE = os.environ.get('BASE_URL', 'http://localhost:3000')
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -57,6 +57,11 @@ def login (email, pw):
 def ok (msg):  global PASS; PASS += 1; print(f'  ✓ {msg}')
 def bad (msg): global FAIL; FAIL += 1; print(f'  ✗ {msg}')
 def chk (cond, msg): ok(msg) if cond else bad(msg)
+
+# ENGINE_VERSION se ne sme hardkodirati — test sicer ne opazi dviga verzije
+# (issue #14 §12: različica pogona je dokaz, kdaj je zapis nastal).
+with open(os.path.join(REPO, 'src', 'lib', 'photo-replace-core.ts'), encoding='utf-8') as _f:
+    ENGINE_VERSION = re.search(r"export const ENGINE_VERSION = '([^']+)'", _f.read()).group(1)
 
 def bun (script):
     r = subprocess.run(['bun', '-e', script], capture_output=True, text=True,
@@ -336,7 +341,7 @@ chk(row['variant']['ral'] == 'RAL 7016', 'seznam nosi RAL variante')
 chk(row['_count']['versions'] == 2, 'števec verzij = 2')
 s, d = callj('GET', f'/api/photo-visualization/{VIZ_A}', admin)
 chk(d['data']['measurementVersion'] is None or isinstance(d['data']['measurementVersion'], int), 'measurementVersion prisoten')
-chk(d['data']['engineVersion'] == '1.0.0', 'engineVersion zapisan')
+chk(d['data']['engineVersion'] == ENGINE_VERSION, f'engineVersion zapisan ({ENGINE_VERSION})')
 
 # ══ I. Regresija ═══════════════════════════════════════════════════════════
 print('── I. regresija ──')

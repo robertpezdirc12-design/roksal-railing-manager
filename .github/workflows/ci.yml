@@ -150,6 +150,10 @@ jobs:
           # PRAVILO), zajemski načrt po tipu objekta in nemogoče geometrije —
           # nova skupina MORA biti tudi v tests/ci-matrix.sh.
           - grupa: r503
+          # R504 (issue #14 faza fotozamenjave): maska + obnova ozadja brez AI +
+          # izbira preverjenih gradiv iz kataloga — nova skupina MORA biti tudi
+          # v tests/ci-matrix.sh.
+          - grupa: r504
     services:
       postgres:
         image: postgres:16

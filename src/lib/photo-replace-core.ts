@@ -17,9 +17,17 @@
 // Čist client-safe TS (brez 'use client', brez strežniških uvozov) — enaka
 // logika na odjemalcu (živi predogled) in v testih.
 
+import {
+  PRAG_ROCNEGA_POSEG, maskaIzQuada, ploscina, ploscinaSkupine,
+  type Maska, type Oblika,
+} from './photo-replace-mask'
+import {
+  celiceZaElement, projekcijaIzRavnine, vzorciTeksturo, type VirTeksture,
+} from './photo-replace-texture'
+
 // ─── Verzija engine-a (§13 revizija: katera verzija je izrisala sliko) ──────
 
-export const ENGINE_VERSION = '1.0.0'
+export const ENGINE_VERSION = '1.1.0'
 
 /** §15: obvezni žig na vsaki POTEM sliki in zaslonu. */
 export const VIZ_ZIG = 'VIZUALIZACIJA ZA PREDSTAVITEV'
@@ -143,6 +151,17 @@ export interface RenderParams {
   quad: [Tocka, Tocka, Tocka, Tocka]
   reference: VizReference
   config: VizConfig
+  /**
+   * R507 (issue #14 §1): ročno popravljiva maska — območja STARE ograje,
+   * izpusti in PREDNJI plan. Odsotna = samo quad (stare vizualizacije ostanejo
+   * veljavne in se izrišejo enako kot prej).
+   */
+  maska?: Maska
+}
+
+/** Maska za izris: ročna, ali pa kvad kot doslej (en vir resnice za UI in test). */
+export function maskaZaIzris (params: RenderParams): Maska {
+  return params.maska ?? maskaIzQuada(params.quad)
 }
 
 // ─── Homografija: enotski kvadrat → quad (perspektivna projekcija) ───────────
@@ -317,6 +336,24 @@ export function oceniKakovost (params: RenderParams, sirinaPx: number, visinaPx:
   if (params.reference.tip === 'ROCNO' && !params.reference.opis) {
     op.push({ koda: 'REFERENCA_BREZ_OPISA', sporocilo: 'Ročna referenca brez opisa — zapišite, kateri znani objekt določa merilo (npr. „vrata 200 cm").' })
   }
+  // ── R507 §1: ročna maska mora KRITI označeno območje, sicer deli ostanejo ──
+  const maska = params.maska
+  if (maska && maska.ograja.length > 0) {
+    const aMaska = ploscinaSkupine(maska.ograja) - ploscinaSkupine(maska.izpusti)
+    const aQuad = ploscina(params.quad as unknown as Oblika)
+    if (aQuad > 0 && aMaska < aQuad * 0.55) {
+      op.push({
+        koda: 'MASKA_NEKRITA',
+        sporocilo: `Ročno označena maska pokriva samo ${Math.round(Math.max(0, aMaska / aQuad) * 100)} % označenega območja — deli stare ograje morda ostanejo na sliki. Dodaj oblike za preostale deske, letve in pritrdila.`,
+      })
+    }
+    if (aMaska <= 0) {
+      op.push({ koda: 'MASKA_IZPUST', sporocilo: 'Izpusti so razveljavili celotno masko stare ograje — ni območja za obnovo ozadja. Preveri izpuste ali dodaj območja ograje.' })
+    }
+    if (maska.prednji.length === 0 && aQuad > 0.02) {
+      op.push({ koda: 'PREDNJI_BREZ', sporocilo: 'Prednji plan ni označen — če pred ograjo stoji rob balkona, rastlina ali steno, ga nova ograja prekriva. Označi ga z obliko prednjega plana.' })
+    }
+  }
   return op
 }
 
@@ -477,6 +514,21 @@ export function generirajRazpored (cfg: VizConfig): Razpored {
 
 // ─── Izris (canvas 2D — perspektivna projekcija z materialnim senčenjem) ─────
 
+/**
+ * R507 (issue #14 §2): rezultat KLASIČNE obnove ozadja (photo-replace-mask),
+ * že zložen v RGBA sloj z mehkim robom. `sloj` se nariše namesto barvnega
+ * preliva; `nedokončano` pove, kolikšen delež območja nima dokazanega vira.
+ */
+export interface OzadjeSloj {
+  sloj: CanvasImageSource
+  /** delež pikslov maske brez verodostojne obnove (0..1) */
+  nedokončano: number
+  /** imena pasov, kjer manjka dokaz (npr. »sredina 34 %«) */
+  pasovi: string[]
+  /** pošteno besedilo, ki ga UI pokaže monterju */
+  sporocilo: string
+}
+
 export interface IzrisOpcije {
   /** prosojnost nove ograje 0..1 (ghost pogled, §7) */
   ghost?: number
@@ -488,6 +540,12 @@ export interface IzrisOpcije {
   zig?: boolean
   /** seme za deterministično zrno (npr. hash id-ja) */
   seme?: number
+  /** R507 §3: preverjeno originalno gradivo za strukturo površine */
+  gradivo?: VirTeksture | null
+  /** R507 §2: obnovljeno ozadje namesto barvnega preliva */
+  ozadje?: OzadjeSloj | null
+  /** R507 §1: sloj PREDNJEGA plana iz originala — riše se zadnji */
+  prednji?: { sloj: CanvasImageSource } | null
 }
 
 /** Kvadrilateralna pot za 4 točke. */
@@ -535,42 +593,61 @@ export function izrisiOgrajo (
 
   // ── 1. ODSTRANITEV stare ograje (§1: samo območje ograje se spremeni) ──────
   if (opcije.prekrijStaro !== false) {
-    const pasZg = Math.max(6, Math.round(H * 0.03))
-    const pasSp = Math.max(6, Math.round(H * 0.03))
-    // zgornji podaljšek (nebo) in spodnji (tla) — preliv čez staro ograjo
-    const qTop = quadPx.map((t) => ({ ...t })) as [Tocka, Tocka, Tocka, Tocka]
-    const qBot = quadPx.map((t) => ({ ...t })) as [Tocka, Tocka, Tocka, Tocka]
-    qTop[0] = { x: quadPx[3].x, y: quadPx[3].y - pasZg * 0.4 }
-    qTop[1] = { x: quadPx[2].x, y: quadPx[2].y - pasZg * 0.4 }
-    qTop[2] = { x: quadPx[2].x + (quadPx[2].x - quadPx[1].x) * 0.06, y: quadPx[2].y - pasZg }
-    qTop[3] = { x: quadPx[3].x + (quadPx[3].x - quadPx[0].x) * 0.06, y: quadPx[3].y - pasZg }
-    qBot[2] = { x: quadPx[1].x, y: quadPx[1].y + pasSp * 0.4 }
-    qBot[3] = { x: quadPx[0].x, y: quadPx[0].y + pasSp * 0.4 }
-    qBot[0] = { x: quadPx[0].x + (quadPx[0].x - quadPx[3].x) * 0.06, y: quadPx[0].y + pasSp }
-    qBot[1] = { x: quadPx[1].x + (quadPx[1].x - quadPx[2].x) * 0.06, y: quadPx[1].y + pasSp }
-    ctx.save()
-    try { ctx.filter = 'blur(7px)' } catch { /* starejši brskalniki */ }
-    const g1 = ctx.createLinearGradient(0, quadPx[3].y, 0, quadPx[0].y)
-    g1.addColorStop(0, svetloba.zgoraj)
-    g1.addColorStop(0.5, zamesaj(svetloba.zgoraj, svetloba.spodaj, 0.45))
-    g1.addColorStop(1, svetloba.spodaj)
-    ctx.fillStyle = g1
-    potQuad(ctx, quadPx[0], quadPx[1], quadPx[2], quadPx[3])
-    ctx.fill()
-    // pas neba nad in tal pod — mehak prehod nazaj v okolico
-    const gz = ctx.createLinearGradient(0, qTop[3].y, 0, quadPx[3].y)
-    gz.addColorStop(0, rgba(svetloba.zgoraj, 0.95))
-    gz.addColorStop(1, rgba(svetloba.zgoraj, 0))
-    ctx.fillStyle = gz
-    potQuad(ctx, qTop[3], qTop[2], qTop[1], qTop[0])
-    ctx.fill()
-    const gs = ctx.createLinearGradient(0, quadPx[0].y, 0, qBot[0].y)
-    gs.addColorStop(0, rgba(svetloba.spodaj, 0))
-    gs.addColorStop(1, rgba(svetloba.spodaj, 0.95))
-    ctx.fillStyle = gs
-    potQuad(ctx, qBot[3], qBot[2], qBot[1], qBot[0])
-    ctx.fill()
-    ctx.restore()
+    if (opcije.ozadje?.sloj) {
+      // R507 §2: klasična obnova iz robov fotografije (photo-replace-mask) —
+      // vsak piksel ima dokazan sosednji izvir ali pa je označen kot nedokončan.
+      ctx.drawImage(opcije.ozadje.sloj, 0, 0, W, H)
+      if (opcije.ozadje.nedokončano > PRAG_ROCNEGA_POSEG) {
+        opozorila.push({
+          koda: 'OZADJE_NEDOKONCANO',
+          sporocilo: opcije.ozadje.sporocilo + (opcije.ozadje.pasovi.length ? ` Manjka dokaz: ${opcije.ozadje.pasovi.join(', ')}.` : ''),
+        })
+      } else {
+        opozorila.push({ koda: 'OZADJE_IZ_ROBOV', sporocilo: opcije.ozadje.sporocilo })
+      }
+    } else {
+      const pasZg = Math.max(6, Math.round(H * 0.03))
+      const pasSp = Math.max(6, Math.round(H * 0.03))
+      // zgornji podaljšek (nebo) in spodnji (tla) — preliv čez staro ograjo
+      const qTop = quadPx.map((t) => ({ ...t })) as [Tocka, Tocka, Tocka, Tocka]
+      const qBot = quadPx.map((t) => ({ ...t })) as [Tocka, Tocka, Tocka, Tocka]
+      qTop[0] = { x: quadPx[3].x, y: quadPx[3].y - pasZg * 0.4 }
+      qTop[1] = { x: quadPx[2].x, y: quadPx[2].y - pasZg * 0.4 }
+      qTop[2] = { x: quadPx[2].x + (quadPx[2].x - quadPx[1].x) * 0.06, y: quadPx[2].y - pasZg }
+      qTop[3] = { x: quadPx[3].x + (quadPx[3].x - quadPx[0].x) * 0.06, y: quadPx[3].y - pasZg }
+      qBot[2] = { x: quadPx[1].x, y: quadPx[1].y + pasSp * 0.4 }
+      qBot[3] = { x: quadPx[0].x, y: quadPx[0].y + pasSp * 0.4 }
+      qBot[0] = { x: quadPx[0].x + (quadPx[0].x - quadPx[3].x) * 0.06, y: quadPx[0].y + pasSp }
+      qBot[1] = { x: quadPx[1].x + (quadPx[1].x - quadPx[2].x) * 0.06, y: quadPx[1].y + pasSp }
+      ctx.save()
+      try { ctx.filter = 'blur(7px)' } catch { /* starejši brskalniki */ }
+      const g1 = ctx.createLinearGradient(0, quadPx[3].y, 0, quadPx[0].y)
+      g1.addColorStop(0, svetloba.zgoraj)
+      g1.addColorStop(0.5, zamesaj(svetloba.zgoraj, svetloba.spodaj, 0.45))
+      g1.addColorStop(1, svetloba.spodaj)
+      ctx.fillStyle = g1
+      potQuad(ctx, quadPx[0], quadPx[1], quadPx[2], quadPx[3])
+      ctx.fill()
+      // pas neba nad in tal pod — mehak prehod nazaj v okolico
+      const gz = ctx.createLinearGradient(0, qTop[3].y, 0, quadPx[3].y)
+      gz.addColorStop(0, rgba(svetloba.zgoraj, 0.95))
+      gz.addColorStop(1, rgba(svetloba.zgoraj, 0))
+      ctx.fillStyle = gz
+      potQuad(ctx, qTop[3], qTop[2], qTop[1], qTop[0])
+      ctx.fill()
+      const gs = ctx.createLinearGradient(0, quadPx[0].y, 0, qBot[0].y)
+      gs.addColorStop(0, rgba(svetloba.spodaj, 0))
+      gs.addColorStop(1, rgba(svetloba.spodaj, 0.95))
+      ctx.fillStyle = gs
+      potQuad(ctx, qBot[3], qBot[2], qBot[1], qBot[0])
+      ctx.fill()
+      ctx.restore()
+      // §2: preliva NE sme trditi, da je ograja odstranjena — to pove in pokaže pot
+      opozorila.push({
+        koda: 'PREKRIVANJE_NI_ODSTRANITEV',
+        sporocilo: 'Ozadje za staro ograjo je samo preliv barv iz okolice — to NI verodostojno odstranjeno ograjo. Označi masko in obnovi ozadje (ali popravi ročno), sicer rezultat predstavlja približek.',
+      })
+    }
   }
 
   // ── 2. SENCA (kontakt s tlemi + vržeča senca v smeri svetlobe) ─────────────
@@ -620,6 +697,22 @@ export function izrisiOgrajo (
     return g
   }
 
+  /**
+   * R507 §3: originalna površina PREVERJENEGA gradiva čez element (cm pravokotnik
+   * v ravnini ograje). Moč strukture je odvisna od materiala — WPC/les imata izrazito
+   * letnico, ALU/INOX samo brušenje. Brez gradiva se ne riše NICAČ (obarvni preliv
+   * ostane, a izrisiOgrajo to sporoči prek opozorila UI-ja).
+   */
+  const gradivoMoc = 0.28 + material.struktura * 0.42
+  const struktura = (x0: number, y0: number, x1: number, y1: number): void => {
+    const vir = opcije.gradivo
+    if (!vir) return
+    const dolzinaPx = razdalja(P(x0, y0), P(x1, y0))
+    const visinaPx = razdalja(P(x0, y0), P(x0, y1))
+    const gostota = celiceZaElement(dolzinaPx, visinaPx)
+    vzorciTeksturo(ctx, projekcijaIzRavnine(P, x0, y0, x1, y1), vir, { ...gostota, moc: gradivoMoc })
+  }
+
   // ── 3. STEBRI (§6: število/pozicije iz konfiguracije) ──────────────────────
   for (const [i, post] of razpored.posts.entries()) {
     const xLevo = post.xCm - post.sirinaCm / 2
@@ -659,6 +752,8 @@ export function izrisiOgrajo (
         ctx.stroke()
       }
     }
+    // R507 §3: dejanska površina izdelka čez steber
+    struktura(xLevo, 0, xDesno, cfg.heightCm)
     // kapa stebra (zgornji zaključek)
     if (cfg.handrail) {
       ctx.fillStyle = rgba(svetla, 0.85)
@@ -694,6 +789,7 @@ export function izrisiOgrajo (
         ctx.lineTo(d.x + (c.x - d.x) * 0.32, d.y)
         ctx.stroke()
       }
+      struktura(palica.xCm, 0, palica.xCm + palica.sirinaCm, cfg.heightCm - 4)
     }
   } else if (cfg.tip === 'PRECNA') {
     for (const deska of razpored.deske) {
@@ -715,6 +811,8 @@ export function izrisiOgrajo (
       ctx.moveTo(d.x, d.y)
       ctx.lineTo(c.x, c.y)
       ctx.stroke()
+      // R507 §3: deska je vedno iz DEJANSKEGA posnetka površine
+      struktura(0.6, deska.yCm, cfg.lengthCm - 0.6, deska.yCm + deska.visinaCm)
     }
   } else if (cfg.tip === 'STEKLO') {
     // stekleno polnilo: prosojna plošča z odbojem
@@ -755,6 +853,8 @@ export function izrisiOgrajo (
     ctx.fillStyle = g
     potQuad(ctx, a, b, c, d)
     ctx.fill()
+    // R507 §3: ročnik nosi isto preverjeno površino kot polnilo
+    struktura(0, cfg.heightCm - rh, cfg.lengthCm, cfg.heightCm)
     ctx.strokeStyle = rgba(zamesaj(svetla, '#ffffff', 0.3), 0.65)
     ctx.lineWidth = 1
     const t = d.y + (a.y - d.y) * 0.22
@@ -803,6 +903,15 @@ export function izrisiOgrajo (
   ctx.restore()
 
   ctx.restore() // globalAlpha
+
+  // ── 7b. PREDNJI PLAN (§1: nova ograja NE prekrije robov balkona, rastlin, sten)
+  // Nariše se ZADNJI iz slikovnih plasti in samo iz originalnih pikslov,
+  // zato okolica zunaj označenih območij ostane nespremenjena (§4).
+  if (opcije.prednji?.sloj) {
+    ctx.save()
+    ctx.drawImage(opcije.prednji.sloj, 0, 0, W, H)
+    ctx.restore()
+  }
 
   // ── 8. ŽIG §15 (na izvozu; na zaslonu ga nosi UI pasika) ──────────────────
   if (opcije.zig) dodajZig(ctx, W, H)
@@ -865,10 +974,10 @@ export function izrisiPrimerjavo (
   svetloba: Svetloba,
   meja: number,
   opcije: IzrisOpcije = {}
-): void {
+): Opozorilo[] {
   // POTEM čez celo sliko
   ctx.drawImage(original, 0, 0, W, H)
-  izrisiOgrajo(ctx, W, H, params, barvaHex, material, svetloba, opcije)
+  const opozorila = izrisiOgrajo(ctx, W, H, params, barvaHex, material, svetloba, opcije)
   // PREJ čez levi del
   const mx = Math.round(W * Math.max(0, Math.min(1, meja)))
   if (mx > 0) {
@@ -885,4 +994,5 @@ export function izrisiPrimerjavo (
     ctx.fillRect(mx - 6, 0, 12, 26)
     ctx.fillRect(mx - 6, H - 26, 12, 26)
   }
+  return opozorila
 }

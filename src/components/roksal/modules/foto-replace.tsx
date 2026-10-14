@@ -38,9 +38,18 @@ import { hasPerm } from '@/lib/permissions-core'
 import { VizLinksPanel } from '@/components/roksal/modules/foto-replace-links'
 import {
   VIZ_ZIG, generirajRazpored, izrisiOgrajo, izrisiPrimerjavo, lameleIzTecha,
-  materialIzTecha, oceniKakovost, oceniSvetlobo, ralHex, visinaIzTecha,
-  type NacinPritrditve, type Opozorilo, type RenderParams, type Tocka, type TipPolnila,
+  materialIzTecha, maskaZaIzris, oceniKakovost, oceniSvetlobo, ralHex, visinaIzTecha,
+  type NacinPritrditve, type Opozorilo, type OzadjeSloj, type RenderParams, type Tocka, type TipPolnila,
 } from '@/lib/photo-replace-core'
+// R507 (issue #14 §1–§4): lastna maska + obnova ozadja iz robov + originalna gradiva
+import {
+  deležPokritja, jePraznaMaska, maskaIzQuada, obnoviOzadje, pokrij, preveriMasko,
+  slojObnove, slojPrednjega, MAX_OBLIK, MAX_TOCK, type Maska, type Oblika,
+} from '@/lib/photo-replace-mask'
+import {
+  celiceZaElement, izberiGradivo, projekcijaIzRavnine, vzorciTeksturo,
+  type GradivoDTO, type IzbiraGradiva, type VirTeksture,
+} from '@/lib/photo-replace-texture'
 import { cn } from '@/lib/utils'
 
 // ─── Koraki ──────────────────────────────────────────────────────────────────
@@ -91,6 +100,10 @@ interface SavedVizRow {
 /** Stanje ene variante (zavihek A/B/C) — delovno + savedId po shranjevanju. */
 interface SlotState {
   quad: Tocka[]
+  /** R507 §1: lastna maska — oblike namesto kvada, izpusti in prednji plan. */
+  maskaOgraja: Oblika[]
+  maskaIzpusti: Oblika[]
+  maskaPrednji: Oblika[]
   refTip: 'MERITEV' | 'ROCNO'
   measurementId: string
   refCmS: string
@@ -112,7 +125,8 @@ interface SlotState {
 }
 
 const prazenSlot = (): SlotState => ({
-  quad: [], refTip: 'ROCNO', measurementId: '', refCmS: '', refOpis: '',
+  quad: [], maskaOgraja: [], maskaIzpusti: [], maskaPrednji: [],
+  refTip: 'ROCNO', measurementId: '', refCmS: '', refOpis: '',
   productId: '', variantId: '', tip: 'POKOCNA', pritrditev: 'TALNA',
   lengthCmS: '400', heightCmS: '110', postsS: '5', handrail: true,
   lamelaMmS: '70', rezaMmS: '20', deskaMmS: '120', vijaki: true,
@@ -204,6 +218,50 @@ function semeIzId (id: string): number {
   return h >>> 0
 }
 
+/** Katero vrsto oblike maska-trenutno rišemo (3. korak). */
+type MaskaVrsta = 'ograja' | 'izpust' | 'prednji'
+
+/** SlotState ključ za vrsto oblike (branje). */
+const maskaKljuc = (v: MaskaVrsta): 'maskaOgraja' | 'maskaIzpusti' | 'maskaPrednji' =>
+  v === 'ograja' ? 'maskaOgraja' : v === 'izpust' ? 'maskaIzpusti' : 'maskaPrednji'
+
+/** Piksli originalne fotografije na dani velikosti (DOM — samo na odjemalcu). */
+function piksliIzSlike (img: HTMLImageElement, W: number, H: number): Uint8ClampedArray | null {
+  const c = document.createElement('canvas')
+  c.width = W; c.height = H
+  const ctx = c.getContext('2d', { willReadFrequently: true })
+  if (!ctx) return null
+  ctx.drawImage(img, 0, 0, W, H)
+  try {
+    return ctx.getImageData(0, 0, W, H).data
+  } catch {
+    // slika z drugega izvora ne sme prekriti plašča branjenja — brez pikslov
+    return null
+  }
+}
+
+/** Piksli → platno, ki ga poganjalnik riše kot sloj (drawImage skalira po needah). */
+function slojNaPlatno (piksli: Uint8ClampedArray, W: number, H: number): HTMLCanvasElement | null {
+  const c = document.createElement('canvas')
+  c.width = W; c.height = H
+  const ctx = c.getContext('2d')
+  if (!ctx) return null
+  try {
+    ctx.putImageData(new ImageData(new Uint8ClampedArray(piksli), W, H), 0, 0)
+  } catch {
+    return null
+  }
+  return c
+}
+
+/** ProductAsset vrstica iz /api/product-assets (samo polja, ki jih potrebuje izbira gradiva). */
+interface AssetRow {
+  id: string; kind: string; orientation: string | null; view: string | null
+  colorName: string | null; variantSku: string | null; productId: string | null
+  filePath: string | null; sha256: string | null; status: string
+  permission: string; sourceName: string
+}
+
 // ─── Modul ───────────────────────────────────────────────────────────────────
 
 export default function FotoReplaceModule () {
@@ -236,6 +294,8 @@ export default function FotoReplaceModule () {
   const [prekrij, setPrekrij] = useState(true)
 
   const [busy, setBusy] = useState(false)
+  /** Opozorila, ki jih je vrnil POGANJALNIK pri zadnjem izrisu (renitveni dokaz). */
+  const [renderWarnings, setRenderWarnings] = useState<Opozorilo[]>([])
   const [saveBusy, setSaveBusy] = useState(false)
   const [exportBusy, setExportBusy] = useState<'png' | 'primerjava' | 'pdf' | null>(null)
   const [rowBusy, setRowBusy] = useState<string | null>(null)
@@ -244,6 +304,7 @@ export default function FotoReplaceModule () {
   const previewRef = useRef<HTMLCanvasElement | null>(null)
   const compareRef = useRef<HTMLCanvasElement | null>(null)
   const dragIdx = useRef<number | null>(null)
+  const dragMask = useRef<{ vrsta: MaskaVrsta; oblika: number; tocka: number } | null>(null)
 
   // ── podatki ──
   const projects = useApi<{ data: ProjectRow[] }>('/api/projects', [])
@@ -294,8 +355,26 @@ export default function FotoReplaceModule () {
     vijaki: slot.vijaki,
   }), [slot.tip, slot.lengthCmS, slot.heightCmS, slot.postsS, slot.handrail, slot.lamelaMmS, slot.rezaMmS, slot.deskaMmS, slot.pritrditev, slot.vijaki])
 
+  // ── R507 §1: lastna maska (ograža sme biti natančnejša od kvada, izpusti in
+  //    PREDNJI plan ostanejo originalni piksli) ──
+  const [maskaUreja, setMaskaUreja] = useState<MaskaVrsta>('izpust')
+
+  const maskaStanje = useMemo(() => {
+    if (slot.quad.length !== 4) return { maska: null as Maska | null, napake: [] as string[] }
+    const kvad = maskaIzQuada(slot.quad as [Tocka, Tocka, Tocka, Tocka])
+    const poizkus: Maska = {
+      ograja: slot.maskaOgraja.length > 0 ? slot.maskaOgraja : kvad.ograja,
+      izpusti: slot.maskaIzpusti,
+      prednji: slot.maskaPrednji,
+    }
+    const prever = preveriMasko(poizkus)
+    if (prever.napake.length === 0) return { maska: poizkus, napake: [] as string[] }
+    return { maska: kvad, napake: prever.napake.map((n) => n.sporocilo) }
+  }, [slot.quad, slot.maskaOgraja, slot.maskaIzpusti, slot.maskaPrednji])
+
   const params: RenderParams | null = useMemo(() => {
     if (slot.quad.length !== 4 || refCm < 20) return null
+    const m = maskaStanje.maska
     return {
       quad: slot.quad as [Tocka, Tocka, Tocka, Tocka],
       reference: {
@@ -304,8 +383,10 @@ export default function FotoReplaceModule () {
         ...(slot.refTip === 'ROCNO' && slot.refOpis.trim() ? { opis: slot.refOpis.trim() } : {}),
       },
       config: cfg,
+      // prazna maska se NE shrani kot ključ → stari zapis ostane bit-enak (§: nazaj združljivo)
+      ...(m && !jePraznaMaska(m) ? { maska: m } : {}),
     }
-  }, [slot.quad, slot.refTip, slot.refOpis, refCm, cfg])
+  }, [slot.quad, slot.refTip, slot.refOpis, refCm, cfg, maskaStanje])
 
   const barva = variant?.ral ? ralHex(variant.ral) : '#383e42'
   const material = useMemo(() => materialIzTecha(product?.tech ?? null), [product?.tech])
@@ -315,6 +396,83 @@ export default function FotoReplaceModule () {
     if (!params || photoW <= 0) return []
     return oceniKakovost(params, photoW, photoH, linkedMeasurement?.lengthCm ?? null)
   }, [params, photoW, photoH, linkedMeasurement?.lengthCm])
+
+  /** Prikaz: ocena iz parametrov + opozorila, ki jih je poganjalnik vrnil ob IZRISU. */
+  const vsaOpozorila = useMemo(() => {
+    const videne = new Set<string>()
+    return [...warnings, ...renderWarnings].filter((w) => {
+      if (videne.has(w.koda)) return false
+      videne.add(w.koda)
+      return true
+    })
+  }, [warnings, renderWarnings])
+
+  // ── R507 §2: OBNOVA OZADJA iz robov fotografije (brez AI) + §1 prednji plan ──
+  // Platna gradimo na ENI velikosti; poganjalnik ju drawImage skalira po needah,
+  // zato poročilo na zaslonu in izris vedno govorita o isti obnovi.
+  const sloji = useMemo(() => {
+    const m = maskaStanje.maska
+    if (!photoImg || photoW <= 0 || !m || jePraznaMaska(m)) return null
+    const W = Math.min(1100, photoW)
+    const H = Math.max(1, Math.round(W * (photoH / photoW)))
+    const izvirnik = piksliIzSlike(photoImg, W, H)
+    if (!izvirnik) return null
+    const pk = pokrij(m, W, H)
+    const obnova = obnoviOzadje(izvirnik, W, H, pk.ograja)
+    const ozadjePlatno = slojNaPlatno(slojObnove(obnova, pk.ograja, W, H), W, H)
+    const prednjiPlatno = deležPokritja(pk.prednji) > 0
+      ? slojNaPlatno(slojPrednjega(izvirnik, W, H, pk.prednji), W, H)
+      : null
+    const pasovi = obnova.pasovi
+      .filter((p) => p.pokritihPikslov > 0 && p.razmerje > 0)
+      .map((p) => `${p.ime} ${Math.round(p.razmerje * 100)} %`)
+    const ozadje: OzadjeSloj | null = ozadjePlatno
+      ? { sloj: ozadjePlatno, nedokončano: obnova.razmerjeNedokončanega, pasovi, sporocilo: obnova.sporocilo }
+      : null
+    return {
+      obnova,
+      ozadje,
+      prednji: prednjiPlatno ? { sloj: prednjiPlatno as CanvasImageSource } : null,
+    }
+  }, [photoImg, photoW, photoH, maskaStanje])
+
+  // ── R507 §3/§4: originalno ROKSALOVO gradivo SAMO iz preverjenih sredstev ──
+  const gradiva = useApi<{ data: AssetRow[] }>(
+    slot.productId ? `/api/product-assets?productId=${slot.productId}` : null,
+    [slot.productId]
+  )
+
+  const izbiraGradiva: IzbiraGradiva | null = useMemo(() => {
+    const vrstice = gradiva.data?.data
+    if (!vrstice || !product) return null
+    const dto: GradivoDTO[] = vrstice.map((a) => ({
+      id: a.id, kind: a.kind, orientation: a.orientation, view: a.view,
+      colorName: a.colorName, variantSku: a.variantSku, productId: a.productId,
+      filePath: a.filePath, sha256: a.sha256, status: a.status,
+      permission: a.permission, sourceName: a.sourceName,
+    }))
+    const orientacija = slot.tip === 'PRECNA' ? 'PRECNA' : slot.tip === 'POKOCNA' ? 'POKOCNA' : 'SPLOSNO'
+    return izberiGradivo(dto, { productId: product.id, variantSku: variant?.sku ?? null, orientation: orientacija })
+  }, [gradiva.data, product, variant, slot.tip])
+
+  const [tekstura, setTekstura] = useState<VirTeksture | null>(null)
+  useEffect(() => {
+    const g = izbiraGradiva?.smeUporabiti ? izbiraGradiva.gradivo : null
+    if (!g?.filePath) { setTekstura(null); return }
+    let alive = true
+    const img = new Image()
+    img.onload = () => {
+      if (!alive) return
+      setTekstura({
+        slika: img, sirinaPx: img.naturalWidth, visinaPx: img.naturalHeight,
+        doklad: izbiraGradiva?.doklad ?? g.filePath ?? '',
+        oznaka: g.variantSku ?? g.id,
+      })
+    }
+    img.onerror = () => { if (alive) setTekstura(null) }
+    img.src = g.filePath.replace(/^public/, '')
+    return () => { alive = false }
+  }, [izbiraGradiva])
 
   // ── nalaganje fotografije ──
   useEffect(() => {
@@ -329,26 +487,42 @@ export default function FotoReplaceModule () {
     return () => { alive = false }
   }, [photo, toast])
 
-  /** Skupni izris POTEM na podan ctx (fotografija + svetloba + ograja). */
+  /** Skupni izris POTEM na podan ctx (fotografija + svetloba + ograja).
+   *  Vrni opozorila, ki jih je poganjalnik izdal PRI tem izrisu (dokaz z izrisa). */
   const drawPotem = useCallback((
     ctx: CanvasRenderingContext2D,
     W: number,
     H: number,
     p: RenderParams,
     opts: { meja?: number; zig?: boolean; ghostAlpha?: number; seme: number }
-  ): void => {
-    if (!photoImg) return
+  ): Opozorilo[] => {
+    if (!photoImg) return []
     // svetloba ocenimo IZ FOTOGRAFIJE (pred izrisom ograje)
     ctx.drawImage(photoImg, 0, 0, W, H)
     const svet = oceniSvetlobo(ctx, W, H, p.quad.map((t) => ({ x: t.x * W, y: t.y * H })) as [Tocka, Tocka, Tocka, Tocka])
-    if (opts.meja !== undefined) {
-      izrisiPrimerjavo(ctx, photoImg, W, H, p, barva, material, svet, opts.meja,
-        { ghost: opts.ghostAlpha ?? 1, zig: opts.zig, seme: opts.seme, prekrijStaro: prekrij })
-    } else {
-      izrisiOgrajo(ctx, W, H, p, barva, material, svet,
-        { ghost: opts.ghostAlpha ?? 1, zig: opts.zig, seme: opts.seme, prekrijStaro: prekrij })
+    // R507: obnovljeno ozadje + prednji plan + preverjena tekstura (samo kadar
+    // je bila izbira preverjena — sicer poganjalnik riše barvni preliv in to tudi pove)
+    const plast = {
+      gradivo: tekstura,
+      ozadje: prekrij ? sloji?.ozadje ?? null : null,
+      prednji: sloji?.prednji ?? null,
     }
-  }, [photoImg, barva, material, prekrij])
+    if (opts.meja !== undefined) {
+      return izrisiPrimerjavo(ctx, photoImg, W, H, p, barva, material, svet, opts.meja,
+        { ghost: opts.ghostAlpha ?? 1, zig: opts.zig, seme: opts.seme, prekrijStaro: prekrij, ...plast })
+    }
+    return izrisiOgrajo(ctx, W, H, p, barva, material, svet,
+      { ghost: opts.ghostAlpha ?? 1, zig: opts.zig, seme: opts.seme, prekrijStaro: prekrij, ...plast })
+  }, [photoImg, barva, material, prekrij, sloji, tekstura])
+
+  /** Opozorila SHRANIJO se ob dejanskem izrisu — ne napovedano iz parametrov. */
+  const zapisiOpozorila = useCallback((w: Opozorilo[]): void => {
+    setRenderWarnings((prev) => (
+      prev.length === w.length && prev.every((p, i) => p.koda === w[i].koda && p.sporocilo === w[i].sporocilo)
+        ? prev
+        : w
+    ))
+  }, [])
 
   // ── 3. korak: označevanje (canvas s točkami) ──
   useEffect(() => {
@@ -425,7 +599,50 @@ export default function FotoReplaceModule () {
       ctx.fillStyle = '#fafafa'
       ctx.fillText(label, lx, ly + 1)
     })
-  }, [photoImg, photoW, photoH, slot.quad, step, refCm])
+
+    // ── R507 §1: oblike mask (ograža / izpusti / prednji plan) ──
+    const BARVE: Record<MaskaVrsta, { rob: string; polnilo: string }> = {
+      ograja: { rob: 'rgba(56, 189, 248, 0.95)', polnilo: 'rgba(56, 189, 248, 0.14)' },
+      izpust: { rob: 'rgba(248, 113, 113, 0.95)', polnilo: 'rgba(248, 113, 113, 0.20)' },
+      prednji: { rob: 'rgba(74, 222, 128, 0.95)', polnilo: 'rgba(74, 222, 128, 0.16)' },
+    }
+    const SKUPINE: [MaskaVrsta, Oblika[]][] = [
+      ['ograja', slot.maskaOgraja], ['izpust', slot.maskaIzpusti], ['prednji', slot.maskaPrednji],
+    ]
+    for (const [vrsta, oblike] of SKUPINE) {
+      const barve = BARVE[vrsta]
+      oblike.forEach((oblika, oi) => {
+        if (oblika.length === 0) return
+        ctx.save()
+        ctx.strokeStyle = barve.rob
+        ctx.lineWidth = 2
+        ctx.setLineDash(oblika.length >= 3 ? [] : [6, 4])
+        ctx.beginPath()
+        oblika.forEach((t, i) => {
+          const x = t.x * W, y = t.y * H
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y)
+        })
+        if (oblika.length >= 3) {
+          ctx.closePath()
+          ctx.fillStyle = barve.polnilo
+          ctx.fill()
+        }
+        ctx.stroke()
+        oblika.forEach((t, i) => {
+          const x = t.x * W, y = t.y * H
+          const aktivna = vrsta === maskaUreja && oi === oblike.length - 1
+          ctx.beginPath()
+          ctx.arc(x, y, aktivna ? 7 : 5, 0, Math.PI * 2)
+          ctx.fillStyle = barve.rob
+          ctx.fill()
+          ctx.lineWidth = 1.5
+          ctx.strokeStyle = '#1c1917'
+          ctx.stroke()
+        })
+        ctx.restore()
+      })
+    }
+  }, [photoImg, photoW, photoH, slot.quad, slot.maskaOgraja, slot.maskaIzpusti, slot.maskaPrednji, maskaUreja, step, refCm])
 
   /** Kazalec na točko ali prazno mesto. */
   function editPointer (e: React.PointerEvent<HTMLCanvasElement>): Tocka {
@@ -435,6 +652,25 @@ export default function FotoReplaceModule () {
       y: Math.max(0, Math.min(1, (e.clientY - rect.top) / rect.height)),
     }
   }
+
+  /** Zapis oblike po vrsti (branje/pisanje ločeno, da TS drži ključ). */
+  const nastaviOblike = useCallback((v: MaskaVrsta, fn: (o: Oblika[]) => Oblika[]): void => {
+    updateSlot((s) => v === 'ograja'
+      ? { ...s, maskaOgraja: fn(s.maskaOgraja) }
+      : v === 'izpust'
+        ? { ...s, maskaIzpusti: fn(s.maskaIzpusti) }
+        : { ...s, maskaPrednji: fn(s.maskaPrednji) })
+  }, [updateSlot])
+
+  /** Razveljavi zadnjo točko aktivne vrste (prazna oblika pade ven). */
+  const razveljaviTocko = useCallback((): void => {
+    nastaviOblike(maskaUreja, (o) => {
+      if (o.length === 0) return o
+      const zadnja = o[o.length - 1]
+      if (zadnja.length <= 1) return o.slice(0, -1)
+      return o.slice(0, -1).concat([zadnja.slice(0, -1)])
+    })
+  }, [nastaviOblike, maskaUreja])
 
   function editDown (e: React.PointerEvent<HTMLCanvasElement>): void {
     if (step !== 2) return
@@ -451,20 +687,61 @@ export default function FotoReplaceModule () {
     if (best >= 0) {
       dragIdx.current = best
       e.currentTarget.setPointerCapture(e.pointerId)
-    } else if (slot.quad.length < 4) {
+      return
+    }
+    // kvad je pogoj za izris — maska se ureja, ko so štirje vogali označeni
+    if (slot.quad.length < 4) {
       updateSlot((s) => ({ ...s, quad: [...s.quad, p] }))
+      return
+    }
+    const kljuc = maskaKljuc(maskaUreja)
+    const oblike = slot[kljuc]
+    const zadnja = oblike.length > 0 ? oblike[oblike.length - 1] : null
+    // točka obstoječe oblike → premik
+    if (zadnja) {
+      let bi = -1
+      let bd = 16
+      zadnja.forEach((t, i) => {
+        const d = Math.hypot((t.x - p.x) * W, (t.y - p.y) * H)
+        if (d < bd) { bd = d; bi = i }
+      })
+      if (bi >= 0) {
+        dragMask.current = { vrsta: maskaUreja, oblika: oblike.length - 1, tocka: bi }
+        e.currentTarget.setPointerCapture(e.pointerId)
+        return
+      }
+    }
+    // nova točka aktivne vrste (meji MAX_OBLIK / MAX_TOCK vodita UI)
+    if (zadnja && zadnja.length < MAX_TOCK) {
+      nastaviOblike(maskaUreja, (o) => o.map((oblika, i) => (i === o.length - 1 ? [...oblika, p] : oblika)))
+      return
+    }
+    if (oblike.length < MAX_OBLIK) {
+      nastaviOblike(maskaUreja, (o) => [...o, [p]])
+    } else {
+      toast({ title: `Največ ${MAX_OBLIK} oblik na vrsto mask.`, description: 'Zmanjšajte območje ali počistite obliko.', variant: 'destructive' })
     }
   }
 
   function editMove (e: React.PointerEvent<HTMLCanvasElement>): void {
-    if (dragIdx.current === null || step !== 2) return
+    if (step !== 2) return
     const p = editPointer(e)
-    const i = dragIdx.current
-    updateSlot((s) => ({ ...s, quad: s.quad.map((t, k) => (k === i ? p : t)) }))
+    if (dragIdx.current !== null) {
+      const i = dragIdx.current
+      updateSlot((s) => ({ ...s, quad: s.quad.map((t, k) => (k === i ? p : t)) }))
+      return
+    }
+    const dm = dragMask.current
+    if (dm) {
+      nastaviOblike(dm.vrsta, (o) => o.map((oblika, i) => (i === dm.oblika
+        ? oblika.map((t, k) => (k === dm.tocka ? p : t))
+        : oblika)))
+    }
   }
 
   function editUp (): void {
     dragIdx.current = null
+    dragMask.current = null
   }
 
   // ── 4. korak: predogled POTEM (debounce) ──
@@ -478,10 +755,10 @@ export default function FotoReplaceModule () {
       canvas.width = W; canvas.height = H
       const ctx = canvas.getContext('2d')
       if (!ctx) return
-      drawPotem(ctx, W, H, params, { ghostAlpha: ghost ? ghostOpacity / 100 : 1, seme: semeIzId(slot.savedId ?? `slot-${active}`) })
+      zapisiOpozorila(drawPotem(ctx, W, H, params, { ghostAlpha: ghost ? ghostOpacity / 100 : 1, seme: semeIzId(slot.savedId ?? `slot-${active}`) }))
     }, 120)
     return () => clearTimeout(t)
-  }, [step, params, photoImg, photoW, photoH, drawPotem, ghost, ghostOpacity, slot.savedId, active])
+  }, [step, params, photoImg, photoW, photoH, drawPotem, zapisiOpozorila, ghost, ghostOpacity, slot.savedId, active])
 
   // ── 5. korak: PREJ/POTEM primerjava ──
   useEffect(() => {
@@ -494,10 +771,10 @@ export default function FotoReplaceModule () {
       canvas.width = W; canvas.height = H
       const ctx = canvas.getContext('2d')
       if (!ctx) return
-      drawPotem(ctx, W, H, params, { meja: comparePos / 100, ghostAlpha: ghost ? ghostOpacity / 100 : 1, seme: semeIzId(slot.savedId ?? `slot-${active}`) })
+      zapisiOpozorila(drawPotem(ctx, W, H, params, { meja: comparePos / 100, ghostAlpha: ghost ? ghostOpacity / 100 : 1, seme: semeIzId(slot.savedId ?? `slot-${active}`) }))
     }, 60)
     return () => clearTimeout(t)
-  }, [step, params, photoImg, photoW, photoH, drawPotem, comparePos, ghost, ghostOpacity, slot.savedId, active])
+  }, [step, params, photoImg, photoW, photoH, drawPotem, zapisiOpozorila, comparePos, ghost, ghostOpacity, slot.savedId, active])
 
   // ── izbira projekta ──
   function izberiProjekt (id: string): void {
@@ -680,8 +957,13 @@ export default function FotoReplaceModule () {
         }
       }>(`/api/photo-visualization/${id}`)
       const d = res.data
-      let rp: { quad?: Tocka[]; reference?: { tip?: string; cm?: number; opis?: string }; config?: Record<string, unknown> } = {}
+      let rp: {
+        quad?: Tocka[]; reference?: { tip?: string; cm?: number; opis?: string }; config?: Record<string, unknown>
+        maska?: { ograja?: Tocka[][]; izpusti?: Tocka[][]; prednji?: Tocka[][] }
+      } = {}
       try { rp = JSON.parse(d.renderParams) as typeof rp } catch { /* prazno */ }
+      const oblike = (v: unknown): Oblika[] =>
+        Array.isArray(v) ? v.filter((o) => Array.isArray(o) && o.length >= 3).map((o) => o.map((t) => ({ x: Number(t.x), y: Number(t.y) }))) : []
       const label = (VARIANT_LABELS as readonly string[]).includes(d.variantLabel) ? (d.variantLabel as VariantLabel) : 'A'
       setPhoto(d.sourcePhoto)
       setPhotoName('shranjena fotografija')
@@ -689,6 +971,9 @@ export default function FotoReplaceModule () {
       const nov: SlotState = {
         ...s0,
         quad: Array.isArray(rp.quad) && rp.quad.length === 4 ? rp.quad.map((t) => ({ x: t.x, y: t.y })) : [],
+        maskaOgraja: oblike(rp.maska?.ograja),
+        maskaIzpusti: oblike(rp.maska?.izpusti),
+        maskaPrednji: oblike(rp.maska?.prednji),
         refTip: rp.reference?.tip === 'MERITEV' ? 'MERITEV' : 'ROCNO',
         measurementId: d.measurementId ?? '',
         refCmS: String(Math.round(rp.reference?.cm ?? 400)),
@@ -957,6 +1242,89 @@ export default function FotoReplaceModule () {
                   </span>
                 ) : null}
               </div>
+
+              {/* R507 (issue #14 §1/§2): maska — kaj je STARO (ograža), kaj ostane (izpusti), kaj je SPREDAJ */}
+              {slot.quad.length === 4 ? (
+                <div className="space-y-2 rounded-lg border p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-sm font-semibold">Maska obstoječe ograje</p>
+                    <div className="flex items-center gap-1" role="group" aria-label="Vrsta oblike, ki jo rišete">
+                      {([
+                        ['ograja', 'ograža'],
+                        ['izpust', 'izpusti (ostane original)'],
+                        ['prednji', 'prednji plan'],
+                      ] as [MaskaVrsta, string][]).map(([v, label]) => (
+                        <Button
+                          key={v} type="button" size="sm" variant={maskaUreja === v ? 'default' : 'outline'}
+                          className="h-9 text-xs" onClick={() => setMaskaUreja(v)}
+                        >
+                          {label}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {maskaUreja === 'ograja'
+                      ? 'Rišite točno obliko stare ograje (največ 4 oblike × 20 točk). Prazno = uporabi se 4 vogalna kota.'
+                      : maskaUreja === 'izpust'
+                        ? 'Izpust = del znotraj ograje, ki ostane ORIGINAL (npr. daska, leseni stebel, cvetje).'
+                        : 'Prednji plan = roba balkona, stebriček, rastlina ali stopnica, ki mora ostati PRED novo ograjo.'}
+                  </p>
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    <span className="rounded-md bg-sky-500/15 px-2 py-1 font-medium text-sky-700 dark:text-sky-400">
+                      ograja: {slot.maskaOgraja.reduce((s, o) => s + o.length, 0)} točk / {slot.maskaOgraja.length} oblik
+                    </span>
+                    <span className="rounded-md bg-red-500/15 px-2 py-1 font-medium text-red-700 dark:text-red-400">
+                      izpusti: {slot.maskaIzpusti.reduce((s, o) => s + o.length, 0)} točk / {slot.maskaIzpusti.length} oblik
+                    </span>
+                    <span className="rounded-md bg-emerald-500/15 px-2 py-1 font-medium text-emerald-700 dark:text-emerald-400">
+                      prednji: {slot.maskaPrednji.reduce((s, o) => s + o.length, 0)} točk / {slot.maskaPrednji.length} oblik
+                    </span>
+                    <Button type="button" variant="outline" size="sm" className="h-9" onClick={razveljaviTocko}>
+                      <ArrowLeft className="size-4" aria-hidden /> Razveljavi točko
+                    </Button>
+                    <Button type="button" variant="outline" size="sm" className="h-9"
+                      onClick={() => updateSlot((s) => ({ ...s, maskaOgraja: [], maskaIzpusti: [], maskaPrednji: [] }))}>
+                      <Trash2 className="size-4" aria-hidden /> Počisti masko
+                    </Button>
+                  </div>
+                  {maskaStanje.napake.length > 0 ? (
+                    <p className="text-xs font-medium text-destructive">
+                      Masko ste merili po nepričakovano: {maskaStanje.napake[0]} — za izris se uporabi samo kvad.
+                    </p>
+                  ) : null}
+                  {sloji?.obnova.zahtevaRočniPoseg ? (
+                    <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-2.5 text-xs">
+                      <p className="font-semibold text-amber-800 dark:text-amber-300">
+                        Obnova ozadja ni dokončana — {Math.round((sloji?.obnova.razmerjeNedokončanega ?? 0) * 100)} % označenega
+                        območja nima dokaza iz znanih sosedov.
+                      </p>
+                      <p className="mt-1 text-muted-foreground">
+                        {sloji?.obnova.sporocilo}
+                        {sloji && sloji.obnova.pasovi.some((p) => p.razmerje > 0)
+                          ? ` Manjka dokaz: ${sloji.obnova.pasovi.filter((p) => p.razmerje > 0).map((p) => `${p.ime} ${Math.round(p.razmerje * 100)} %`).join(', ')}.`
+                          : ''}
+                      </p>
+                      <p className="mt-1 text-muted-foreground">
+                        Rezultat je na takih mestih označen s šrafuro — ni rekonstruirane strukture, samo iz robov izpeljana podlaga.
+                      </p>
+                    </div>
+                  ) : null}
+                  {izbiraGradiva ? (
+                    <div className="rounded-lg border p-2.5 text-xs">
+                      <p className={cn('font-semibold', izbiraGradiva.smeUporabiti ? 'text-foreground' : 'text-muted-foreground')}>
+                        Gradivo površine: {izbiraGradiva.napis}
+                      </p>
+                      {izbiraGradiva.manjkajo.length > 0 ? (
+                        <p className="mt-1 text-muted-foreground">Manjka: {izbiraGradiva.manjkajo.join(', ')}.</p>
+                      ) : null}
+                      {izbiraGradiva.doklad ? (
+                        <p className="mt-1 break-words text-[11px] text-muted-foreground">Vir: {izbiraGradiva.doklad}</p>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
 
               {/* referenca */}
               <div className="grid gap-3 sm:grid-cols-2">
@@ -1273,9 +1641,9 @@ export default function FotoReplaceModule () {
           ) : null}
 
           {/* opozorila kakovosti (§1) */}
-          {warnings.length > 0 && step >= 2 ? (
+          {vsaOpozorila.length > 0 && step >= 2 ? (
             <ul className="mt-4 space-y-1.5" aria-label="Opozorila kakovosti vizualizacije">
-              {warnings.map((w) => (
+              {vsaOpozorila.map((w) => (
                 <li key={w.koda} className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-2.5 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
                   <TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />
                   <span>{w.sporocilo}</span>

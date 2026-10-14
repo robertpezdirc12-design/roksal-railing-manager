@@ -2401,3 +2401,128 @@ Work Log:
   odločitev. `public/assets/roksal/src/MANIFEST.json` je v delovnem drevesu sprememnjen
   s strani uvoženih sredstev in NAMENOMA ni v tem commitu.
 
+
+---
+Task ID: R507 (issue #14 — fotozamenjava brez AI dokončana: maska, obnova ozadja
+iz sosednjih pik, preverjena gradiva iz kataloga, opozorila ob IZRISU in sprejemni
+nabor na štirih resničnih fotografijah)
+Agent: Qoder (lokalno merjeno, 14. 10. 2026, Windows Git Bash + lokalni PG :54329)
+
+Task: issue #14 zahteva zamenjavo ROKSALOVE ograje v fotografiji BREZ
+generativnega modela, tako da je rezultat fotorealističen tam, kjer to dopuščajo
+podatki, in pošteno označen tam, kjer jih ni. Pred tem zagonom je bila napisana
+večina matematike, a tri stvari so manjkale: (1) maska in obnova ozadja nista bili
+izločeni iz React komponente v čiste module, (2) opozorila kakovosti so bila
+NAPOVEDANA iz parametrov in ne ZAPISANA ob dejanskem izrisu, (3) ni bilo
+sprejemnega testa na resničnih fotografijah niti poročila, ki ga
+zahteva zadnji DoD pogoj te naloge.
+
+Work Log:
+- NOVA MODULA (čista, brez DOM-a, varna za klientno stran):
+  `src/lib/photo-replace-mask.ts` (503 vrstice) — večkotniška maska polygon
+  (even-odd pravilo + shoelace ploščina), `preveriMasko` (MAX_OBLIK 4,
+  MAX_TOCK 20, MEHKA_ROB 3), `pokrij` (raster na pikslo), `ploscina`,
+  `ploscinaSkupine`, `maskaZaIzris`, `jePraznaMaska` in `slojPrednjega` — ta
+  funkcija je namenoma prevzela pikselno aritmetiko, da React ne šteje
+  alfa vrednosti.
+  `src/lib/photo-replace-texture.ts` (294 vrstic) — projektivno preslikavo
+  teksture po celicah (homografija iz štiri-točkovnega kvada, mešanje z
+  `multiply`) in fail-closed izbiro gradiva (`UPORABLJENO`, `SAMO_DRUZINA`,
+  `NI_DATOTEKE`, `NI_PREVERJENO`, `NI_DOVOLJENJA`, `BREZ_IZDELKA`).
+- `src/lib/photo-replace-core.ts` (+188/−…): `ENGINE_VERSION` je zdaj `1.1.0`,
+  `RenderParams.maska?`, `IzrisOpcije {ghost, senca, prekrijStaro, zig, seme,
+  gradivo, ozadje, prednji}`, poštene oznake `OZADJE_NEDOKONCANO`,
+  `OZADJE_IZ_ROBOV`, `PREKRIVANJE_NI_ODSTRANITEV`, opozorila `MASKA_NEKRITA`,
+  `MASKA_IZPUST`, `PREDNJI_BREZ`; `izrisiPrimerjavo` zdaj VRNE `Opozorilo[]`
+  (additivno — obstoječi klicatelji vrnitve niso uporabljali, `r459` to
+  preverja). Obnova ozadja gre po širjenju robov, globina obroča (ring) je
+  hkrati dokaz zanesljivosti; onesnažen (tainted) platno → obnova se IZKLOPI z
+  opozorilom, ne z izjemo.
+- `src/lib/photo-replace-engine.ts` (+11): strežniška validacija maske,
+  NAVZAJDOLJ skoraj nevidna — prazna maska se SHRANI BREZ ključa, zato obstoječi
+  kvad-samo zapisi ostanejo veljavni in berljivi (`r504` blok K to dokazuje).
+- `src/components/roksal/modules/foto-replace.tsx` (+418): panel za ročno masko,
+  prikaz nedokončanih območij (jantarna šrafura `(244,180,60)`), pasov in
+  `zahtevaRočniPoseg`, ter najpomembnejša sprememba: opozorila se zapisujejo ob
+  IZRISU (`zapisiOpozorila` v korakih 4 in 5), prikaz pa je unija napovedanih in
+  izrisanih (`vsaOpozorila`, dedup po `koda`).
+- RESNIČNI DEFECTI, KI JIH JE NAŠLA TA Faza (in kako so razrešeni):
+  1. UI je lahko kazal opozorila, ki jih poganjalnik morda nikoli ni izdal —
+     napovedovanje iz parametrov je zamenjal zapis ob dejanskem izrisu.
+  2. Napaka V TESTU, ne v kodi: `tests/r504.py` je kot identiteto gradiva
+     pričakoval Prisma `id` (cuid). Vsak `bun run db:seed` tiste ID-je znova
+     USTVARI, zato je bil pas po ponovnem seed-u rdeč (191 ✓ / 5 ✗). Merilo je
+     zdaj POT DO DATOTEKE (`assetDatoteka`); manifest je dobil ključ
+     `_identiteta`, ki to pojasni prihodnjim vzdrževalcem.
+  3. Napaka V TESTU: RGBA sloj se indeksira z `(y*W+x)*4+3`, ločeno alfa polje
+     pa z `y*W+x` — prva verzija trditve E je mešala oba pomnika. Modula je bila
+     pravilna.
+- MERITVE (končni rezultati, ne ocena): `tests/r504.py` ✓ 196 / ✗ 0 (bloki A–K:
+  sintaksa in robovi mask, ploščine/pokritost na štirih RESNIČNIH fotografijah,
+  izrisani sloji, determinizem, izbira iz KATALOGA, velikost `renderParams` pod
+  12 KB, zdoljnost starih zapisov); `npx tsc --noEmit` EXIT 0; `eslint` 0 napak /
+  2 opozorila; `r459-r462` ✓ 91 / ✗ 0 (`ENGINE_VERSION` se zdaj bere iz vira, ne
+  iz hardkodirane `1.0.0`).
+- REGISTRACIJA V PAS: `tests/ci-matrix.sh` (`GRUPE` + `CLANI[r504]="r504.py"`) in
+  `.github/workflows/ci.yml` (`- grupa: r504`) — `ci-local.sh` primerja oba
+  seznama in razhajanje javi; ta zagon je javil »CI matrika usklajena z
+  .github/workflows/ci.yml«.
+- ŽIVI BRSKALNIK (podagent, lastni razvojni strežnik + seeded dev račun): celoten
+  petkorakni potek od nalaganja do PREJ/POTEM drsnika — vsi koraki PASS,
+  0 napak v konzoli. Dve omejitvi tega dokaza: (a) `upload_file` in shranjevanje
+  posnetka na disk je zavrnil file-root guard instance brskalnika, zato je
+  podagent naložil bajte fotografije prek HTTP-ja z razvojnega strežnika in
+  sprožil pravi `change` dogodek; (b) dve a11y opozorili (`form field should have
+  an id or name`, `Incorrect use of <label for=FORM_ELEMENT>`) nista bili
+  locirani — VSI `<Label htmlFor>` v novem panelu imajo svoj par (`foto-upload`,
+  `ref-meritev`, `ref-cm`, `pv-*`), v modulu ni surovih `<input>`/`<select>`,
+  zato njun vir NI nova maska.
+- CELI RELEJNI PAS (`bash tests/ci-local.sh`, LASTNI strežnik, dnevnik
+  `gate-r507.log`): ✓ ZELEN, izhod 0, 8 statičnih korakov in **27 skupin**,
+  **0 napak**. Potrjene trditve, seštete iz `✓` vrstic vseh dnevnikov skupin:
+  **4490** (metoda reproducira znani števili posameznih suitov: r503 = 155 in
+  r504 = 196). Preskoki: **4**, vsi v `r437-r445` in z istim vzrokom — GitLab
+  off-site preverbe (API, zaščita, pipelines, MR) brez `GITLAB_TOKEN`; to je
+  odvisnost okolja, ne dokaz o kodi (repozitorij je prešel na GitHub). En
+  `⏸` (`r464-notifications`: Next dev blokada `.next/dev/lock`) je bil ZAČASNA
+  ustavitev lastnega strežnika, nato je skupina uspešno pognala 53 ✓ / 0 ✗ — ni
+  neto preskok. Tokrat ni preskokov zaradi manjkajočih orodij.
+- KONFLIK RAZVOJNEGA STREŽNIKA, RAZREŠEN PO NAVODILU: pred pasom je na vratih
+  3000 stal moj ostanek prejšnjega zagona (PID 25008); ustavljen je bil z
+  `ops/dev-serve.sh stop` (ta ukaz ubije IZKLJUČNO poslušalca na svojih vratih in
+  potrdi, da so prosta), nato je pas poganjal LASTEN strežnik. Zunanji strežnik
+  NI bil sprejet z `EXTERNAL_SERVER=1`, ker testni potek ne more potrditi njegove
+  lastnosti. Merilnega jedra zaradi tega konflikta NIJE bilo spremenjeno.
+- DOKAZNA POŠTENOST: `docs/FOTOZAMENJAVA-POROCILO-14.md` (88 vrstic) je poročilo,
+  ki ga zahteva zadnji DoD pogoj — kaj JE dejansko fotorealistično (preverjena pot
+  datoteke `filePath`, deljeni robovi celic, katalogske dimenzije in RAL,
+  svetlost OCENJENA iz fotografije, deterministično seme, prednji plan risan
+  zadnji iz originalnih pikslov), kje je potreben ROČNI poseg, tabela pokritosti
+  kataloga, kaj je še treba PRIDOBITI (PROFIL_PRESEK za POLNA 128/100/57 in
+  DESKA 150, DETAJL za vseh pet tipov, BARVNA_LESTVICA z `colorName` po
+  variantah, manjkajoča FOTO za `ROK-OGP-POLNA-57-ROAK` in `-RWA`, sredstva ali
+  eksplicitna oznaka »generic product« za OGR-K-001/002 in OGR-P-001/002) in meje
+  dokaza.
+
+Stage Summary:
+- Issue #14 je funkcionalno zaključen in registriran v pasu: maska + obnova
+  ozadja brez AI + fail-closed izbira preverjenih ROKSALOVIH gradiv + opozorila,
+  ki jih izris resnično vrne, na štirih resničnih fotografijah z ročno označenimi
+  maskami. Nobena obstoječa funkcija ni izginila: stari kvad-samo zapisi se
+  berejo naprej, `r459` in `r464` sta bila samo dopolnjena, ne osiromašena.
+- To NI trditev o odstotkih točnosti in ne obljuba »videti je kot prava
+  gradnja«: tam, kjer manjkajo katalogske fotografije, aplikacija samega sebe ne
+  more imeti za fotorealističnega — prav zato ima oznake in opozorila.
+- KAJ NI DOKAZANO / OSTANJA TVEGANJA (pošteno): (1) tolerance meril in
+  referenčni nabor fotografij z NEODVISNO fizično izmerjenimi dimenzijami
+  (issues #15 §6.1) še ne obstajata — fazi 6–7 brez njiju ne moreta trditi
+  nobenega odstotka; (2) migracija `20261019000000_r501_measurement_status` na
+  Neonu ŠE NI izvedena in produkcijski gesli administracije/demo sta javno znana
+  in nerotirana — oboje je dejanje lastnika; (3) GitHub Actions minute so
+  porabljene do 1. 11. 2026, zato GitHub preverba tega zagona NI dokaz — dokaz
+  je lokalni pas; (4) brskalnikov dokaz nima posnetka na disku in ni uporabil
+  nativnega `upload_file` (varnostna omejitev instance); (5) dve a11y opozorili v
+  konzoli nista locirani; (6) maska je pri novih fotografijah vedno ROČNO delo —
+  samodejnega segmentiranja ni in ga ta issue ne sme uvajati; (7)
+  `public/assets/roksal/src/MANIFEST.json` je v delovnem drevesu spremenjen zaradi
+  uvoženih sredstev in NAMENOMA ni v tem commitu.
