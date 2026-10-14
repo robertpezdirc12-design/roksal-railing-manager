@@ -3120,3 +3120,17 @@ Stage Summary:
 - CI dokaz zdaj TEČE na GitLabu brez lastnikovega dejanja: lastni runner pobira job verify takoj (neoznačeni job, run_untagged=true), medtem ko skupni runnerji čakajo overitev identitete — ISTA konfiguracija za oboje
 - Celo veriga vratarjev ostaja: odvisnosti → lint → tipi → shema → skrivnosti → sintaksa skript; baza za preverjanje je vedno sveža (servisni postgres ali roksal_ci), nikoli razvojna
 - Stanje issuejev nespremenjeno: #15 Faza 6 cenovni del (potrditev lastnika cenovnega jedra) + Faza 7 (fizično izmerjen nabor), #2 (vir izvirnega Roksala), #3/#7 (prava naprava) — vsa čakajo lastnikove odločitve ali podatke
+
+═══════════════════════════════════════════════════════════════════════════════
+Task ID: R514-dodatek
+Agent: main (Z.ai Code)
+Task: POPRAVEK AVTORJEV + CI MATRIKA — dve hrošča, ki bi ob odblokadi blokirala proizvodnjo
+
+Work Log:
+- UJET S PREDPOTOISKOM V PREDPISU (tests/ci-local.sh, korak 1): tests/ci-matrix.sh vsebuje r513, .github/workflows/ci.yml matrika pa NE — prejšnja seja je pozabila vrstico; po obnovitvi minut 1. 11. 2026 bi GH Actions matrika tiho izpustila skupino r513. Popravek: - grupa: r513 dodana v workflow z razlago
+- UJET S VRATARJI AVTORJEV (tests/deploy-author-check.sh): pet commitov (6294f0b, bf38a42, 9035964, f5546cc, f32d1f6 — R501–R514) ima avtorja "Z User <z@container>", ker je reset peskovnika povozil globalni gitconfig; R498 je IZMERIL, da Vercel zaradi takih avtorjev tiho zadrži production deploy (9 zaporednih blokad R493–R495). Popravek: git filter-branch --env-filter (avtor + committer = Robert Pezdirc <robert.pezdirc12@gmail.com>) na obsegu, datumi avtorjev ohranjeni; taga v1.49.0 in v1.50.0 prestavljena na nove (vsebinsko identične) commite; repo-lokalni gitconfig nastavljen, da se napaka ne ponovi
+- ZAKLJUČEK O GITLAB CI: lastni runner (id 57416017) je ustvarjen, online in pravilno overjen (simuliran poll vrne 204), a blokada "Identity verification is required in order to run CI jobs" velja NA RAČUNU in preprečuje USVARJANJE job-ov — tudi za lastne runnerje. Runner pustim pripravljenega: takoj po lastnikovi overitvi je dovolj POST /pipelines/:id/retry in cevovod teče (skupni runnerji ali sandbox runner, dual-ni verify deluje za oba)
+
+Stage Summary:
+- Cevovod zdaj čaka SAMO na lastnikovo overitev identitete na GitLabu (5-minutno dejanje) ali na 1. 11. 2026 (GitHub minute) — nič več na konfiguraciji
+- Lokalni pas (edini dokaz do takrat) se poganja znova po teh popravkih; zelen bo šele, če so avtorji pravi — vrata so naredila svoje

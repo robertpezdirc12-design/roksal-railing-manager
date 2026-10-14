@@ -179,6 +179,11 @@ jobs:
           # opombi kosovnice ter viden pisarni v dialogu.
           # Nova skupina MORA biti tudi v tests/ci-matrix.sh.
           - grupa: r511
+          # R513: perspektivna ravnina/homografija — konsolidacija R512 (prejšnja
+          # seja je posodobila tests/ci-matrix.sh, Workflow matrike pa NE —
+          # razhajanje je ujel lokalni pas (tests/ci-local.sh, 1. korak).
+          # Nova skupina MORA biti tudi v tests/ci-matrix.sh.
+          - grupa: r513
     services:
       postgres:
         image: postgres:16
