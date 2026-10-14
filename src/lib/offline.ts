@@ -398,6 +398,95 @@ export async function listUnsynced (): Promise<QueueOp[]> {
 }
 
 /**
+ * R508 (issue #7 §6): statusna vrstica KORAK-NA-KORAK. Issue zahteva štiri
+ * jasna stanja (»Shranjeno v telefonu / Čaka na sinhronizacijo / Sinhronizirano
+ * / Napaka«); doslej jih je pokazal samo globalni badge v glavi, monter pa
+ * sred meritve ni vedel, ali je njegov kadr že varno na strežniku.
+ *
+ * Čista funkcija (brez IndexedDB, brez DOM-a) — zato je merljiva v testih in
+ * ima ENO samo resnico, ki jo lahko uporabijo tudi drugi modulski tokovi.
+ * Vrstni red prioritet je namenoma: napaka in neskladje se ne smeta kriti za
+ * »čaka na sinhronizacijo«.
+ */
+export type StanjeZapisovanja =
+  | 'NAPAKA'
+  | 'NESKLADJE'
+  | 'CAKA_NA_SINHRONIZACIJO'
+  | 'SINHRONIZIRANO'
+  | 'SHRANJENO_V_TELEFONU'
+
+export interface VrsticaShranjevanja {
+  stanje: StanjeZapisovanja
+  /** Kratka oznaka za zaslon (Slovenian, berljiva na soncu). */
+  oznaka: string
+  /** Kaj stanje pomeni za monterjevo meritev — brez tehničnega žargona. */
+  opis: string
+  /** Naslednje dejanje, ali `null`, kadar monter ni kaj početi. */
+  dejanje: string | null
+}
+
+export interface VhodShranjevanja {
+  /** `navigator.onLine` (ali `getOfflineState().online`). */
+  online: boolean
+  /** Števil operacij, ki še čakajo na pošiljanje. */
+  caka: number
+  /** Števil operacij, ki so spodletele. */
+  napake: number
+  /** Števil operacij, kjer se je med offline in strežnikom pokazalo razhajanje. */
+  konflikti: number
+  /** Fotografije, ki so samo še v telefonu. */
+  lokalno?: number
+  /** Ali je bila ta meritev potrjena (confirm) in je na strežniku. */
+  potrjeno?: boolean
+}
+
+export function stanjeShranjevanja (v: VhodShranjevanja): VrsticaShranjevanja {
+  const lokalno = v.lokalno ?? 0
+  if (v.konflikti > 0) {
+    return {
+      stanje: 'NESKLADJE',
+      oznaka: 'Neskladje',
+      opis: 'Tvoja različica in različica pisarne se razhajata — nobena ne sme biti prepisana sama od sebe.',
+      dejanje: v.napake > 0
+        ? `Odloči o razhajanju; hkrati je ${v.napake === 1 ? '1 zapis spodletel' : `${v.napake} zapisov spodletelo`} (gumb Sinhroniziraj zdaj).`
+        : 'Odpri vrsto in izberi, katera različica velja.',
+    }
+  }
+  if (v.napake > 0) {
+    return {
+      stanje: 'NAPAKA',
+      oznaka: 'Napaka',
+      opis: `Pošiljanje ${v.napake === 1 ? 'zapisa ni uspelo' : 'zapisov ni uspelo'}; vsebina je varno v telefonu.`,
+      dejanje: 'Pošlji znova (gumb Sinhroniziraj zdaj).',
+    }
+  }
+  if (v.caka > 0 || lokalno > 0) {
+    return {
+      stanje: 'CAKA_NA_SINHRONIZACIJO',
+      oznaka: 'Čaka na sinhronizacijo',
+      opis: v.online
+        ? 'Podatki so shranjeni v telefonu in bodo poslani samodejno.'
+        : 'Brez signala — podatki so shranjeni v telefonu in se pošljejo, ko se signal vrne.',
+      dejanje: v.online ? null : 'Zajem lahko nadaljuješ; ni ga treba ponoviti.',
+    }
+  }
+  if (v.potrjeno) {
+    return {
+      stanje: 'SINHRONIZIRANO',
+      oznaka: 'Sinhronizirano',
+      opis: 'Meritev je na strežniku in jo pisarna vidi enako.',
+      dejanje: null,
+    }
+  }
+  return {
+    stanje: 'SHRANJENO_V_TELEFONU',
+    oznaka: 'Shranjeno v telefonu',
+    opis: 'Osnutek je v telefonu; na strežniku še ni ničesar.',
+    dejanje: 'Potrdi meritev, ko je dokončna.',
+  }
+}
+
+/**
  * R439 (issue #6 — »konflikti so rešljivo prikazani«): uporabnik odstrani
  * posamezen konflikt/napako iz vrste (sprejme stanje strežnika). Pripadajoča
  * fotografija (če gre za foto op) se izbriše tudi iz photos shrambe.

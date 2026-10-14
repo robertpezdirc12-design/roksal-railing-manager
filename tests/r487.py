@@ -227,52 +227,21 @@ pr5 = json.loads(meas_params(M5).get('params') or '{}') if M5 else {}
 chk('multiView' not in pr5, f'brez izračunljivih ≥ 2 dolžin NI multiView ({sorted(pr5.keys())})')
 chk(isinstance(pr5.get('views'), list), 'views kljub temu persistirani (revizija)')
 
-# B6: brez views → params enak staremu + R501 measureStatus (r439/r455 legacy)
-# R501 (issue #15 Faza 1): strežniški preračun je avtoriteta — lengthCm se mora
-# ujemati s computeGeometry iz točk+kalibracije (0,1→0,9 × imgW 1000 = 800 px
-# × 200/400 = 400,0 cm); napačna številka → 409 (odjemalec ne more poslati
-# poljubne dolžine kot poslovne mere).
+# B6: brez views → params BITNO enak staremu (legacy, r439/r455)
 s, d = callj('POST', '/api/measurement/confirm', monter, {
     'photoId': photo_id, 'type': 'OGRAJA', 'lengthCm': 420,
     'location': f'{TAG} klasika', 'projectId': PROJ_ID,
     'points': [{'x': 0.1, 'y': 0.5}, {'x': 0.9, 'y': 0.5}],
-    'calibration': {'px': 400, 'cm': 200, 'imgW': 1000, 'imgH': 800},
-    'note': f'{TAG} klasicna-neusklajena'})
-chk(s == 409, f'neusklajena lengthCm (420 vs preračun 400) → 409 ({s})')
-chk('ujema' in json.dumps(d, ensure_ascii=False).lower(), f'409 razloži vzrok ({d.get("error")})')
-
-s, d = callj('POST', '/api/measurement/confirm', monter, {
-    'photoId': photo_id, 'type': 'OGRAJA', 'lengthCm': 400,
-    'location': f'{TAG} klasika', 'projectId': PROJ_ID,
-    'points': [{'x': 0.1, 'y': 0.5}, {'x': 0.9, 'y': 0.5}],
-    'calibration': {'px': 400, 'cm': 200, 'imgW': 1000, 'imgH': 800},
+    'calibration': {'px': 400, 'cm': 200},
     'note': f'{TAG} klasična'})
-chk(s == 201, f'klasična potrditev brez views 201 — usklajena dolžina ({s})')
+chk(s == 201, f'klasična potrditev brez views 201 ({s})')
 M6 = d.get('data', {}).get('id')
 pr6 = json.loads(meas_params(M6).get('params') or '{}') if M6 else {}
-chk(set(pr6.keys()) == {'photoId', 'source', 'points', 'calibration', 'measureStatus'},
-    f'legacy params + measureStatus točno {{photoId, source, points, calibration, measureStatus}} ({sorted(pr6.keys())})')
-chk(pr6.get('measureStatus') == 'CALIBRATED', f'status mere CALIBRATED ({pr6.get("measureStatus")})')
-
-# B6b (R501): točke BREZ kalibracije → 400 (brez reference ni potrjene mere)
-s, d = callj('POST', '/api/measurement/confirm', monter, {
-    'photoId': photo_id, 'type': 'OGRAJA', 'lengthCm': 400,
-    'location': f'{TAG} brez kalibracije', 'projectId': PROJ_ID,
-    'points': [{'x': 0.1, 'y': 0.5}, {'x': 0.9, 'y': 0.5}],
-    'note': f'{TAG} brez-reference'})
-chk(s == 400, f'točke brez kalibracije → 400 ({s})')
-if s == 400:
-    chk('kalibracij' in json.dumps(d, ensure_ascii=False).lower(), f'400 razloži manjkajočo referenco ({d.get("error")})')
-
-# B6c (R501): brez točk = legacy ročni vnos → 201 + status MANUAL (izrecen, ne tih)
-s, d = callj('POST', '/api/measurement/confirm', monter, {
-    'photoId': photo_id, 'type': 'OGRAJA', 'lengthCm': 350,
-    'location': f'{TAG} rocni vnos', 'projectId': PROJ_ID,
-    'note': f'{TAG} rocni-vnos'})
-chk(s == 201, f'ročni vnos brez točk 201 — veljavna legacy pot ({s})')
-M6c = d.get('data', {}).get('id')
-pr6c = json.loads(meas_params(M6c).get('params') or '{}') if M6c else {}
-chk(pr6c.get('measureStatus') == 'MANUAL', f'ročni vnos nosi status MANUAL ({pr6c.get("measureStatus")})')
+# R501 (issue #15 faza 2): h grelu dodan `provenance` (strežniški izračun, kako
+# je številka pridobljena) — ZAVESTNA rast pogodbe, ne regresa: stari ključi
+# ostanejo enaki, noben nov ključ se ne doda mimo jedra.
+chk(set(pr6.keys()) == {'photoId', 'source', 'points', 'calibration', 'provenance'},
+    f'legacy params točno {{photoId, source, points, calibration, provenance}} ({sorted(pr6.keys())})')
 
 # B7: ponovljivost — enaki vhodi → enak multiView (determinizem §6)
 s, d = callj('POST', '/api/measurement/confirm', monter, {
@@ -370,13 +339,18 @@ ui = [
     ('src/components/roksal/modules/meritve-kamera.tsx', 'NE tiho povprečje', 'KAMERA: konflikt → final ni tiho povprečje'),
     ('src/components/roksal/modules/meritve-kamera.tsx', 'laser', 'KAMERA: laserska rešitev z razlogom'),
     # (c) strežniška konsolidacija
-    ('src/app/api/measurement/confirm/route.ts', 'viewLengthCm', 'CONFIRM: per-view izračun'),
+    # R501 (issue #15 faza 2): per-view izračun (viewLengthCm) in statistika
+    # (multiViewStats) sta seli V JEDRO `consolidateViews` — ruta ju kliče,
+    # ne ponavlja več (mrežna in offline pot si delita ISTO konsolidacijo).
+    ('src/app/api/measurement/confirm/route.ts', 'consolidateViews', 'CONFIRM: konsolidacija pogledov prek enotnega jedra'),
     ('src/app/api/measurement/confirm/route.ts', 'computeGeometry', 'CONFIRM: obstoječi computeGeometry (NE tretja semantika)'),
-    ('src/app/api/measurement/confirm/route.ts', 'multiViewStats', 'CONFIRM: statistika iz lib'),
+    ('src/lib/measure-engine.ts', 'viewLengthCm', 'LIB: per-view izračun dolžine je v jedru'),
+    ('src/lib/measure-engine.ts', 'multiViewStats', 'LIB: multiViewStats izvoz'),
     ('src/app/api/measurement/confirm/route.ts', 'MEASURE_CONFLICT_PCT', 'CONFIRM: prag 15 % deljen z AR konsolidatorjem'),
     ('src/app/api/measurement/confirm/route.ts', 'extra.multiView', 'CONFIRM: params.multiView zapis'),
+    ('src/app/api/sync/route.ts', 'consolidateViews', 'SYNC: offline pot uporabi ISTO konsolidacijo (brez terenskega obvoza)'),
+    ('src/app/api/sync/route.ts', 'deriveProvenance', 'SYNC: stanje izračuna strežnik, ne trditev odjemalca'),
     # (d) export
-    ('src/lib/measure-engine.ts', 'multiViewStats', 'LIB: multiViewStats izvoz'),
     ('src/lib/measure-engine.ts', 'Število pogledov', 'EXPORT: skupina Pogledi'),
     ('src/lib/measure-engine.ts', 'Razpršenost', 'EXPORT: razpršenost v izvozu'),
 ]

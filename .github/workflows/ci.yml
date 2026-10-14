@@ -5,7 +5,7 @@ name: CI
 #   quality     — tsc --noEmit + eslint (isti standard kot build)
 #   build       — next build (BREZ ignoreBuildErrors — TS napaka pade build)
 #   migrations  — SVEŽA PostgreSQL baza izključno iz repozitorija + migracij
-#   regression  — celoten poslovni testni suite (r437–r495) proti migrirani bazi
+#   regression  — celoten poslovni testni suite (r437–r500) proti migrirani bazi
 
 on:
   push:
@@ -18,6 +18,39 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # R499: production deploy Vercel TIHO zadrži (BLOCKED), če e-pošta avtorja vrha
+  # ni povezana z GitHub računom. Brez tega joba je CI lahko zelen, produkcija pa
+  # zastarela — izmerjeno za devet deployev R493 … R495.
+  avtorji:
+    name: Avtorji commitov (Vercel)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Range base..head potrebuje zgodovino; privzeti plitek klon je ne da.
+          fetch-depth: 0
+      - name: pregled avtorjev
+        env:
+          # Vrednosti iz githubovega konteksta grejo v ENV, ne v shell-izraz —
+          # interpolation neposredno v `run:` je injekcijski tveganje.
+          ROKSAL_BEFORE: ${{ github.event.before }}
+          ROKSAL_BASE: ${{ github.event.pull_request.base.sha }}
+          ROKSAL_EVENT: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          if [ "$ROKSAL_EVENT" = pull_request ] && [ -n "${ROKSAL_BASE:-}" ]; then
+            obseg="${ROKSAL_BASE}..${GITHUB_SHA}"
+          elif [ -n "${ROKSAL_BEFORE:-}" ] && ! printf '%s' "$ROKSAL_BEFORE" | grep -q '^0\+$'; then
+            obseg="${ROKSAL_BEFORE}..${GITHUB_SHA}"
+          else
+            # Nov branch ali force-push: `before` je nič, primerjati ni kaj. Vercel
+            # gradi VRH, zato je vrh tudi edino, kar je treba pregledati.
+            echo "opomba: brez predhodnega commita (nov branch/force-push) — pregledan samo vrh"
+            obseg="-n 1 HEAD"
+          fi
+          echo "pregled: $obseg"
+          bash tests/deploy-author-check.sh $obseg
+
   quality:
     name: Kvaliteta (tsc + lint)
     runs-on: ubuntu-latest
@@ -105,6 +138,47 @@ jobs:
           - grupa: r493
           - grupa: r494
           - grupa: r495
+          - grupa: r500
+          # R501 (issue #15 faza 2): enotna kalibracijska pogodba + strežniški
+          # statusi meritev — nova skupina MORA biti tudi v tests/ci-matrix.sh
+          # (sicer pas javi razhajanje matrike).
+          - grupa: r501
+          # R502 (issue #15 faza 3): dokazni protokol fotogrametrije brez AI —
+          # rekonstrukcija iz sintetičnega para slik proti znani istini.
+          - grupa: r502
+          # R503 (issue #15 faza 4+5): izvor domenskih vhodov (VNOS/PRIVZET/
+          # PRAVILO), zajemski načrt po tipu objekta in nemogoče geometrije —
+          # nova skupina MORA biti tudi v tests/ci-matrix.sh.
+          - grupa: r503
+          # R504 (issue #14 faza fotozamenjave): maska + obnova ozadja brez AI +
+          # izbira preverjenih gradiv iz kataloga — nova skupina MORA biti tudi
+          # v tests/ci-matrix.sh.
+          - grupa: r504
+          # R508 (issue #7): zmožnosti kamere (PODPRTO/NI_PODPRE/NI_DOKAZA),
+          # osnutek meritve PO SEJI (brez tihe prepisi) in status shranjevanja
+          # korak-na-korak — nova skupina MORA biti tudi v tests/ci-matrix.sh.
+          - grupa: r508
+          # R509 (issue #7 §8/§9): pisarniška veriga — prenos mere v paket samo
+          # ob izrecnem izdelku in pravici quotes.create (brez novega cenovnega
+          # jedra), količina se izpelje samo tam, kjer je aritmetika nedvoumna,
+          # dokaz originalov (SHA-256 + velikost, skupen izvozu in PDF-ju) in
+          # spomin na monterjeve nastavitve (zapis ≠ ukaz napravi).
+          - grupa: r509
+          # R510 (issue #15 faza 6): dokazna veriga IZVEDENE slike — odjemalec
+          # sme trditi samo assetId, pot/SHA-256/dovoljenje/pripadnost izdelka
+          # potrdi strežnik iz baze; razveljavljena mera blokira SAMO nov
+          # nastanek (urejanje ostane z opozorilom); dokaz živi v JSON posnetku
+          # verzije — brez novih stolpcev, brez migracij, brez novega jedra.
+          - grupa: r510
+          # R511 (issue #7 §8/§10): kosovnica iz POTRJENEGA ograjnega tekača —
+          # obseg sme priti iz mere samo, kadar je na meritev vezan en sam
+          # potrjen tekač istega projekta z zaprto verigo poslovno uporabnih
+          # segmentov; vse drugo pošteno pade na predlogo Z razlogom. Pretvorba
+          # gre skozi obstoječa normalizeSegments → planBom (eno samo merilno/
+          # cenovno jedro), odlok pa je zapisan v kalkulaciji, reviziji in
+          # opombi kosovnice ter viden pisarni v dialogu.
+          # Nova skupina MORA biti tudi v tests/ci-matrix.sh.
+          - grupa: r511
     services:
       postgres:
         image: postgres:16

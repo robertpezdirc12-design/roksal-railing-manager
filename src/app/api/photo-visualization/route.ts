@@ -13,8 +13,9 @@ import { ENGINE_VERSION, oceniKakovost } from '@/lib/photo-replace-core'
 import {
   MAX_PARAMS_JSON, MAX_PHOTO_BYTES, MAX_RENDERED_BYTES, VARIANT_LABELS,
   bereVseProjekte, naslednjaOznaka, preveriFoto, preveriIzdelek, preveriMeritev,
-  preveriRenderParams, preveriSourceFoto, projektZaUporabnika,
+  preveriRenderParams, preveriSourceFoto, preveriTrdnjenoGradivo, projektZaUporabnika,
 } from '@/lib/photo-replace-engine'
+import { dokazMere } from '@/lib/viz-provenance'
 
 const LIST_SELECT = {
   id: true, projectId: true, variantLabel: true, status: true,
@@ -87,16 +88,18 @@ export async function POST (req: NextRequest) {
   const izdelek = await preveriIzdelek(body.productId, body.variantId)
   if ('napaka' in izdelek) return jsonError(izdelek.status, izdelek.napaka)
 
-  // meritev + snapshot verzije (§6/§12/§13)
+  // meritev + snapshot verzije (§6/§12/§13) + RAVEN mere (R510, Faza 6)
   let measurementId: string | null = null
   let measurementVersion: number | null = null
   let potrjenaMeraCm: number | null = null
+  let meraDokaz: { status: string; verzija: number | null } | null = null
   if (body.measurementId != null) {
     const m = await preveriMeritev(body.measurementId, projekt.id)
     if ('napaka' in m) return jsonError(m.status, m.napaka)
     measurementId = m.meritev.id
     measurementVersion = m.verzija
     potrjenaMeraCm = m.meritev.lengthCm
+    meraDokaz = dokazMere(m.meritev.status, m.verzija)
   }
 
   // izvorna fotografija (sledljivost §13)
@@ -132,6 +135,20 @@ export async function POST (req: NextRequest) {
   // opozorila kakovosti (§1) — shranijo se v verzijo (meta)
   const opozorila = oceniKakovost(params.params, 1000, 750, potrjenaMeraCm)
 
+  // ── R510 (issue #15 Faza 6): dokazna veriga IZVEDENE slike ─────────────────
+  // Odjemalec sme NATISNITI samo assetId; pot, SHA-256, status in pripadnost
+  // izdelku prebere strežnik iz baze. Nepotrdljive trditve NE blokirajo
+  // shranjevanja (vizualizacija je sicer pripravljena), a v dokumentu dobjo
+  // razlog — bralec tako vidi, da dokaza ni, ne da bi se zapis izgubil.
+  const gradivo = await preveriTrdnjenoGradivo(body.gradivo, izdelek.produkt.id)
+  if ('napaka' in gradivo) return jsonError(400, gradivo.napaka)
+  const dokaz = {
+    meritev: meraDokaz,
+    izvirnikFotografije: srcFoto ?? null,
+    gradivo: gradivo.rezultat.dokaz,
+    gradivoRazlog: gradivo.rezultat.razlog,
+  }
+
   const viz = await db.photoVisualization.create({
     data: {
       projectId: projekt.id,
@@ -156,7 +173,15 @@ export async function POST (req: NextRequest) {
     data: {
       visualizationId: viz.id,
       version: 1,
-      data: JSON.stringify({ renderParams: params.params, meta: { opozorila, engineVersion: ENGINE_VERSION } }),
+      data: JSON.stringify({
+        renderParams: params.params,
+        meta: {
+          opozorila,
+          engineVersion: ENGINE_VERSION,
+          // R510: dokaz, NA KATERI MERI in KATEREM IZVIRNIKU gradiva slika stoji.
+          dokaz,
+        },
+      }),
       userId: user.id,
       note: 'Ustvarjena varianta',
     },
@@ -172,13 +197,17 @@ export async function POST (req: NextRequest) {
       variantLabel: oznaka, productId: izdelek.produkt.id, sku: izdelek.produkt.sku,
       measurementId, measurementVersion, sourcePhotoId: srcFoto ?? null,
       engineVersion: ENGINE_VERSION, opozorila: opozorila.map((o) => o.koda),
+      // R510: dokaz je del revizijskega zapisa — kaj je bilo potrjeno in kaj ne
+      meraStatus: dokaz.meritev?.status ?? null,
+      gradivoDokaz: dokaz.gradivo?.assetId ?? null,
+      gradivoRazlog: dokaz.gradivoRazlog,
     },
   })
 
   return NextResponse.json({
     data: {
       id: viz.id, variantLabel: oznaka, status: viz.status,
-      version: 1, engineVersion: ENGINE_VERSION, opozorila,
+      version: 1, engineVersion: ENGINE_VERSION, opozorila, dokaz,
     },
   }, { status: 201 })
 }

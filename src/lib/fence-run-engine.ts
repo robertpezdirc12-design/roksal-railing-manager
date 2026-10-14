@@ -18,6 +18,12 @@
 
 // ─── Vrste vozlišč (§1: stebri, vogali, vrata, stopniški prehodi) ───────────
 
+import { CALIB_METHODS, MEASUREMENT_STATUS_ORDER, MEASUREMENT_STATUS_SHORT, type CalibrationMethod, type MeasurementStatus } from './measure-engine'
+
+// Skupna lestvica metod kalibracije — izpeljana iz merilnega jedra, ne tukaj
+// napisana ponova (issue #15 faza 2).
+export { CALIB_METHODS, type CalibrationMethod }
+
 export type NodeKind = 'ZACETEK' | 'STEBER' | 'VOGAL' | 'VRATA' | 'STOPNISCE' | 'KONEC'
 
 export const NODE_KINDS: { id: NodeKind; label: string; desc: string }[] = [
@@ -79,16 +85,11 @@ export function terrainMaxGap (terrain: TerrainPoint[] | null): number {
 }
 
 // ─── Kalibracija (§4: metoda + referenca + zaupanje) ────────────────────────
-
-export type CalibrationMethod = 'MARKER' | 'ZNANA_MERA' | 'ZUNANJA_NAPRAVA' | 'LIDAR' | 'ROCNO'
-
-export const CALIB_METHODS: { id: CalibrationMethod; label: string; base: number }[] = [
-  { id: 'LIDAR', label: 'LiDAR / depth', base: 92 },
-  { id: 'ZUNANJA_NAPRAVA', label: 'Zunanji merilnik (laser)', base: 88 },
-  { id: 'MARKER', label: 'Fizični marker', base: 80 },
-  { id: 'ZNANA_MERA', label: 'Znana fizična dimenzija', base: 70 },
-  { id: 'ROCNO', label: 'Ročno vnesena referenca', base: 55 },
-]
+//
+// Issue #15 faza 2: LESTVICA metod NE SME biti dvojna. `CalibrationMethod` in
+// `CALIB_METHODS` (id, label, base) se uvozita iz merilnega jedra, da tekač in
+// kamera isto referenco razumeta enako — tu ostanejo samo tekačeve LASTNOSTI
+// (fizična vrednost reference v cm, naprava, algorit).
 
 export interface RunCalibration {
   method: CalibrationMethod
@@ -143,15 +144,20 @@ export function productRulesFromTech (techJson: string | null | undefined): Part
 
 // ─── Segmenti (izpeljani iz vozlišč + terena) ───────────────────────────────
 
-export type SegmentStatus = 'ESTIMATED' | 'AUTO_SUGGESTED' | 'MANUAL' | 'CALIBRATED' | 'VERIFIED' | 'CONFIRMED'
+/**
+ * ENA lestvica zaupanja (issue #15 faza 2): imena in kratke oznake so iz
+ * merilnega jedra (`MEASUREMENT_STATUS_SHORT`); tekač ima samo svoj `order`
+ * (brez RAZVELJAVLJENEGOna ravni segmenta) in barvne razrede.
+ */
+export type SegmentStatus = Exclude<MeasurementStatus, 'INVALIDATED'>
 
 export const SEGMENT_STATUSES: Record<SegmentStatus, { label: string; order: number; cls: string }> = {
-  ESTIMATED: { label: 'Ocena', order: 0, cls: 'bg-muted text-muted-foreground' },
-  AUTO_SUGGESTED: { label: 'Predlog', order: 1, cls: 'bg-violet-100 text-violet-800 dark:bg-violet-950 dark:text-violet-300' },
-  MANUAL: { label: 'Ročno', order: 2, cls: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300' },
-  CALIBRATED: { label: 'Kalibrirano', order: 3, cls: 'bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-300' },
-  VERIFIED: { label: 'Preverjeno', order: 4, cls: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' },
-  CONFIRMED: { label: 'Potrjeno', order: 5, cls: 'bg-secondary text-secondary-foreground' },
+  ESTIMATED: { label: MEASUREMENT_STATUS_SHORT.ESTIMATED, order: MEASUREMENT_STATUS_ORDER.ESTIMATED, cls: 'bg-muted text-muted-foreground' },
+  AUTO_SUGGESTED: { label: MEASUREMENT_STATUS_SHORT.AUTO_SUGGESTED, order: MEASUREMENT_STATUS_ORDER.AUTO_SUGGESTED, cls: 'bg-violet-100 text-violet-800 dark:bg-violet-950 dark:text-violet-300' },
+  MANUAL: { label: MEASUREMENT_STATUS_SHORT.MANUAL, order: MEASUREMENT_STATUS_ORDER.MANUAL, cls: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300' },
+  CALIBRATED: { label: MEASUREMENT_STATUS_SHORT.CALIBRATED, order: MEASUREMENT_STATUS_ORDER.CALIBRATED, cls: 'bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-300' },
+  VERIFIED: { label: MEASUREMENT_STATUS_SHORT.VERIFIED, order: MEASUREMENT_STATUS_ORDER.VERIFIED, cls: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' },
+  CONFIRMED: { label: MEASUREMENT_STATUS_SHORT.CONFIRMED, order: MEASUREMENT_STATUS_ORDER.CONFIRMED, cls: 'bg-secondary text-secondary-foreground' },
 }
 
 export interface SegmentCalc {

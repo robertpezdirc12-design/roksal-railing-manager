@@ -10,6 +10,11 @@ import {
   ENGINE_VERSION, preveriConfig, preveriQuad,
   type RenderParams, type VizReference,
 } from '@/lib/photo-replace-core'
+import { jePraznaMaska, preveriMasko } from '@/lib/photo-replace-mask'
+import {
+  normalizirajTrdnjo, potrdiGradivo, smeVizualizacijo,
+  type GradivoIzBaze, type RezultatGradiva,
+} from '@/lib/viz-provenance'
 
 // ─── Omejitve vhoda ──────────────────────────────────────────────────────────
 
@@ -56,7 +61,15 @@ export function preveriRenderParams (v: unknown): { napaka: string } | { params:
   }
   const c = preveriConfig(o.config)
   if (!c.config) return { napaka: c.napake[0]?.sporocilo ?? 'Neveljavna konfiguracija.' }
-  return { params: { quad: q.quad, reference, config: c.config }, opozorila: [] }
+  // R507 (issue #14 §1): ročna maska je NEOBVEZNA — brez nje ima renderParams
+  // enako obliko kot doslej, zato obstoječe vizualizacije ostanejo veljavne.
+  const mk = preveriMasko(o.maska)
+  if (mk.napake.length > 0) return { napaka: mk.napake[0].sporocilo }
+  const maska = jePraznaMaska(mk.maska) ? null : mk.maska
+  return {
+    params: maska ? { quad: q.quad, reference, config: c.config, maska } : { quad: q.quad, reference, config: c.config },
+    opozorila: [],
+  }
 }
 
 // ─── Obseg dostopa (§13: brez IDOR do fotografij drugih strank/projektov) ────
@@ -97,7 +110,9 @@ export async function vizZaUporabnika (
 ): Promise<{ viz: {
   id: string; projectId: string; variantLabel: string; status: string
   authorId: string | null; engineVersion: string; renderParams: string
-  measurementId: string | null; productId: string; variantId: string | null
+  measurementId: string | null; measurementVersion: number | null
+  sourcePhotoId: string | null
+  productId: string; variantId: string | null
 } } | NextResponse> {
   const viz = await db.photoVisualization.findUnique({ where: { id } })
   if (!viz) return jsonError(404, 'Vizualizacija ne obstaja.')
@@ -110,7 +125,9 @@ export async function vizZaUporabnika (
   return { viz: viz as unknown as {
     id: string; projectId: string; variantLabel: string; status: string
     authorId: string | null; engineVersion: string; renderParams: string
-    measurementId: string | null; productId: string; variantId: string | null
+    measurementId: string | null; measurementVersion: number | null
+    sourcePhotoId: string | null
+    productId: string; variantId: string | null
   } }
 }
 
@@ -140,22 +157,76 @@ export async function preveriIzdelek (
   }
 }
 
-/** Preveri meritev (pripada projektu) + vrne zadnjo verzijo (snapshot §12). */
+/**
+ * R510 (Faza 6): TRENUTNO stanje povezane mere — raven, zadnja verzija in
+ * dolžina. Povezava že obstaja v bazi, tu se samo prebere; meritev, ki je več
+ * ni, vrne `NEPOZNANO` in ne izmišljene ravni. Skupno za GET in PATCH, da
+ * dokazne verige ne more brati drugače kot urejevalnik.
+ */
+export async function stanjeMere (
+  measurementId: string | null
+): Promise<{ status: string; verzija: number | null; lengthCm: number | null } | null> {
+  if (!measurementId) return null
+  const m = await db.measurement.findUnique({
+    where: { id: measurementId },
+    select: {
+      status: true, lengthCm: true,
+      versions: { orderBy: { version: 'desc' }, take: 1, select: { version: true } },
+    },
+  })
+  if (!m) return { status: 'NEPOZNANO', verzija: null, lengthCm: null }
+  return { status: m.status ?? 'NEPOZNANO', verzija: m.versions[0]?.version ?? null, lengthCm: m.lengthCm }
+}
+
+/**
+ * Preveri meritev (pripada projektu) + vrne zadnjo verzijo (snapshot §12) in
+ * RAVEN mere (R510, Faza 6): vizualizacija mora v dokumentu pokazati, na kateri
+ * meri in kateri njeni ravni stoji. Razveljavljene mere (INVALIDATED — pisarna
+ * jo je umaknila PO uporabi) ne smejo biti podlaga nove vizualizacije; ostale
+ * ravni so dovoljene, ker je vizualizacija predstavitev, ne proizvodni izračun.
+ */
 export async function preveriMeritev (
   measurementId: unknown,
   projectId: string
-): Promise<{ meritev: { id: string; lengthCm: number | null; heightCm: number | null; posts: number | null } ; verzija: number } | { napaka: string; status: number }> {
+): Promise<{ meritev: { id: string; lengthCm: number | null; heightCm: number | null; posts: number | null; status: string | null }; verzija: number } | { napaka: string; status: number }> {
   if (typeof measurementId !== 'string' || !measurementId) return { napaka: 'Neveljaven measurementId.', status: 400 }
   const m = await db.measurement.findUnique({
     where: { id: measurementId },
-    include: { versions: { orderBy: { version: 'desc' }, take: 1, select: { version: true } } },
+    select: {
+      id: true, projectId: true, lengthCm: true, heightCm: true, posts: true, status: true,
+      versions: { orderBy: { version: 'desc' }, take: 1, select: { version: true } },
+    },
   })
   if (!m) return { napaka: 'Meritev ne obstaja.', status: 404 }
   if (m.projectId !== projectId) return { napaka: 'Meritev ne pripada temu projektu.', status: 400 }
+  const odlok = smeVizualizacijo(m.status)
+  if (!odlok.sme) return { napaka: odlok.razlog ?? 'Meritev ni uporabna za vizualizacijo.', status: 409 }
   return {
-    meritev: { id: m.id, lengthCm: m.lengthCm, heightCm: m.heightCm, posts: m.posts },
+    meritev: { id: m.id, lengthCm: m.lengthCm, heightCm: m.heightCm, posts: m.posts, status: m.status },
     verzija: m.versions[0]?.version ?? 1,
   }
+}
+
+/**
+ * R510 (Faza 6): strežniška POTRDITEV trditve odjemalca o uporabljenem ROKSALOVU
+ * gradivu. Odjemalec sme navesti SAMO assetId — pot in SHA-256 preberemo iz
+ * baze, da trditev ne more podtiskati tujega identifikatorja. Nepotrdljive
+ * trditve POTEK ne zavrne (ustvarjanja vizualizacije ne blokiramo), ampak v
+ * dokument zapišejo razlog: bralec tako vidi, da dokaza NI, in ne da bi se
+ * zapis dokaza izgubil.
+ */
+export async function preveriTrdnjenoGradivo (
+  bodyTrdnja: unknown,
+  productId: string | null
+): Promise<{ napaka: string } | { rezultat: RezultatGradiva }> {
+  const n = normalizirajTrdnjo(bodyTrdnja)
+  if ('napaka' in n) return { napaka: n.napaka }
+  if (n.trdnja === null) return { rezultat: { dokaz: null, razlog: null } }
+  const vrstica = await db.productAsset.findUnique({
+    where: { id: n.trdnja.assetId },
+    select: { id: true, productId: true, kind: true, status: true, permission: true, filePath: true, sha256: true },
+  })
+  return { rezultat: potrdiGradivo(n.trdnja, vrstica as GradivoIzBaze | null, productId) }
 }
 
 /** Preveri sourcePhotoId (meritev tip FOTO istega projekta — sledljivost §13). */

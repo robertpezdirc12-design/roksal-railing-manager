@@ -129,7 +129,7 @@ fi
 
 log "3/6 strojno berljiv JSON export vseh tabel ($DB_PROVIDER)…"
 mkdir -p "$STAGE/export"
-EXPORT_SUMMARY="$(DATABASE_URL="$DB_URL" bun "$OPS_DIR/export-db.mjs" "$STAGE/export")"
+EXPORT_SUMMARY="$(DATABASE_URL="$DB_URL" zagon_js "$OPS_DIR/export-db.mjs" "$STAGE/export")"
 [ -f "$STAGE/export/_meta.json" ] || die "export-db.mjs ni ustvaril _meta.json"
 log "   $(printf '%s' "$EXPORT_SUMMARY" | python3 -c "
 import json, sys
@@ -140,11 +140,20 @@ log "4/6 manifest s kontrolnimi vsotami…"
 SCHEMA_SHA="$(sha256_of "$ROOT_DIR/prisma/schema.prisma")"
 # agregat exporta: sha256sum vrstic, sortiranih po C kolaciji (deterministično
 # ne glede na locale lupine) — isto formulo preverja restore.sh
-EXPORT_SHA="$( (cd "$STAGE/export" && sha256sum -- * | LC_ALL=C sort) | sha256sum | cut -d' ' -f1)"
+# R505: pred sortom normaliziramo LOČNIK. GNU coreutils na Linuxu izpiše
+# "<sha>␣␣<ime>", Git Bash (MSYS) pa binarni označevalnik "<sha>␣*<ime>".
+# Merjeno 13.10.2026: istih 93 datotek je na Windows dalo agregat 40fbc9f8…,
+# pythonova formula v restore.sh (dva presledka) pa 759cc88e… — zato je
+# restore --verify nad Windows-kopijo javil "kontrolne vsote SE NE UJEMAJO".
+# Na Linuxu je ta normalizacija brez učinka (tam je že tako), formula pa je
+# zdaj na obeh straneh enaka in ostane združljiva s starejšimi kopijami.
+EXPORT_SHA="$( (cd "$STAGE/export" && sha256sum -- * \
+  | sed 's/^\([0-9a-f]\{64\}\)[* ]*/\1  /' \
+  | LC_ALL=C sort) | sha256sum | cut -d' ' -f1)"
 cat > "$STAGE/manifest.json" << EOF
 {
   "created": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-  "host": "$(hostname -s)",
+  "host": "$(ime_gosta)",
   "app": { "name": "Roksal Railing Manager", "version": "0.2.1" },
   "git": { "sha": "$GIT_SHA", "branch": "$GIT_BRANCH", "bundleSha256": "$BUNDLE_SHA" },
   "db": $DB_BLOCK, "schemaPrismaSha256": "$SCHEMA_SHA" },
@@ -273,17 +282,23 @@ cat > "$BACKUP_DIR/last-backup.json" << EOF
 }
 EOF
 
-python3 -c "
-import json
-m = json.load(open('$STAGE/manifest.json'))
-s = json.load(open('$BACKUP_DIR/last-backup.json'))
+# R505: poti pythonu posredujemo kot ARGUMENTE, ne znotraj `-c` niza. Git Bash
+# (MSYS) samodejno pretvori `/tmp/…` v `C:\…` samo za argumente; v kodiranem
+# `-c` nizu se pot prenese golo, zato jo native python dojeti ne more in je
+# korak 6/6 javil FileNotFoundError (merjeno 13.10.2026) — zadnji, kljub
+# uspešno napisanemu manifestu.
+python3 - "$STAGE/manifest.json" "$BACKUP_DIR/last-backup.json" << 'PYEOF'
+import json, sys
+pot_manifesta, pot_statusa = sys.argv[1], sys.argv[2]
+m = json.load(open(pot_manifesta, encoding='utf-8'))
+s = json.load(open(pot_statusa, encoding='utf-8'))
 db = m['db']
 man = { 'provider': db.get('provider', 'sqlite'), 'tableCount': db['tableCount'],
         'totalRows': sum(db['rowCounts'].values()) }
 if 'bytes' in db: man['dbBytes'] = db['bytes']  # le SQLite (RAW posnetek)
 s['manifest'] = man
 # povzetek shranimo TUDI v datoteko (status za operativne preverbe/teste)
-with open('$BACKUP_DIR/last-backup.json', 'w', encoding='utf-8') as fh:
+with open(pot_statusa, 'w', encoding='utf-8') as fh:
     json.dump(s, fh, ensure_ascii=False, indent=2)
 print(json.dumps(s, ensure_ascii=False))
-"
+PYEOF

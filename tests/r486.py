@@ -268,7 +268,10 @@ LEG_ID = d.get('data', {}).get('results', [{}])[0].get('data', {}).get('measurem
 lp = meas_params(LEG_ID)
 try: lpr = json.loads(lp.get('params') or '{}')
 except Exception: lpr = {}
-chk(set(lpr.keys()) == {'photoId', 'synced'}, f'legacy params = {{photoId, synced}} (r439 združljivost) ({sorted(lpr.keys())})')
+# R501 (issue #15 faza 2): offline pot dobi ISTI provenance izračun kot mrežna
+# (deriveProvenance v jedru) — zato je v params dodan `provenance`; stari ključi
+# (r439) ostanejo. Združljivost je v vrednostih, ne v odsotnosti dokaza.
+chk(set(lpr.keys()) == {'photoId', 'synced', 'provenance'}, f'legacy params = {{photoId, synced, provenance}} ({sorted(lpr.keys())})')
 
 # neveljavni kosi se tiho izpustijo (vrsta NE sme pasti)
 OP3 = 'r486-op-bad-1'

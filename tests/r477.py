@@ -84,13 +84,36 @@ def audit_has (token, action, entity_id, project_id):
     )
 
 def pdftotext (bytes_pdf):
-    """PDF → besedilo (pdftotext iz popplerja); napaka → ''."""
+    """PDF → besedilo (pdftotext); napaka → ''.
+    R505 (merjeno 13.10.2026, Xpdf 4.06 na Windows):
+      • `- -` (stdin→stdout) Xpdf SPLOH NE pozna — izpiše uporabo in vrne 99,
+        zato je ta pomožnik doslej vrnil PRAZNO besedilo in je vseh 9
+        PDF-preverb padlo, čeprav je bil PDF povsem pravilen;
+      • `-enc UTF-8` je izrecen, ne privzet: Xpdf ima na Windows privzeto
+        lokalno kodno stran in pri tem Č/Š/Ž izgubi (MONTAŽNA → MONTAZNA),
+        poppler na Linuxu pa privzeto UTF-8. Brez pinanja isti PDF na dveh
+        sistemih da različen tekst, meritev ne bi bila prenosljiva.
+    Z UTF-8 in datotečnim vhodom/izhodom se MONTAŽNA SKICA, VOZLIŠČ in
+    'ni sličic zajema' izkopljejo pravilno (obe varianti, default in -layout)."""
+    import tempfile
+    rpot = wpot = None
     try:
-        p = subprocess.run(['pdftotext', '-', '-'], input=bytes_pdf,
+        with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as f:
+            f.write(bytes_pdf)
+            rpot = f.name
+        wpot = rpot[:-4] + '.txt'
+        p = subprocess.run(['pdftotext', '-enc', 'UTF-8', rpot, wpot],
                            capture_output=True, timeout=30)
-        return p.stdout.decode('utf-8', 'replace')
+        if p.returncode != 0 or not os.path.isfile(wpot):
+            return ''
+        with open(wpot, 'rb') as fh:
+            return fh.read().decode('utf-8', 'replace')
     except Exception:
         return ''
+    finally:
+        for pot in (rpot, wpot):
+            if pot and os.path.isfile(pot):
+                os.unlink(pot)
 
 # ── priprava ────────────────────────────────────────────────────────────────
 admin = login('admin@roksal.si', 'Admin123!')

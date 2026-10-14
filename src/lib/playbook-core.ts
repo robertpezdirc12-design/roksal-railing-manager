@@ -132,7 +132,7 @@ export const NAPRAVA_TEHNIKA: Record<NapravaTier, { naziv: string; meritev: stri
   },
   KAMERA: {
     naziv: 'Kamera brez AR',
-    meritev: 'foto + referenčni objekt + ročna meritev (po možnosti fotogrametrija)',
+    meritev: 'foto + referenčni objekt + ročna meritev (več pogledov, vsak s svojo referenco — 3D-rekonstrukcije ni)',
     foto: 'foto + kontrola kakovosti',
   },
   OGRANICENO: {

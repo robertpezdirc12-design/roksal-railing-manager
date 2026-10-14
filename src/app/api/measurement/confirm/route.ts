@@ -36,130 +36,47 @@
 //     mer z nerešenim kritičnim konfliktom«); manualOverride z razlogom (r455)
 //     je VELJAVNA rešitev → 201;
 //   • BREZ views ostane params BITNO enak staremu (r439/r455 legacy).
-
-// R501 (issue #15 Faza 1) — STREŽNIŠKI PRERAČUN JE AVTORITETA:
-//   • točke BREZ veljavne kalibracije (UNIFORM ali perspektivna ravnina) → 400;
-//   • lengthCm se PRERAČUNA iz točk + kalibracije (computeGeometry/
-//     polygonMetrics — isto jedro kot analiza in UI): odstopanje > 2 % brez
-//     manualOverride → 409 (odjemalec ne more poslati poljubne številke);
-//   • params.measureStatus: MANUAL (ročni vnos brez reference) |
-//     CALIBRATED (točke + veljavna referenca, usklajeno) | MANUAL_OVERRIDE
-//     (ročno rešeno z razlogom — npr. laserska izmera) — razločno v izvozu.
+//
+// R509 (issue #7 §8 — pisarniška veriga) — aditivno:
+//   • handoffProductId (+ handoffVariantId) — IZREČNA zahteva po prenosu
+//     potrjene meritve v paket projekta (status IZMERA). Brez njega se paket
+//     NE ustvari (nobena tiha domišljija izdelka/cenovnega razreda);
+//   • prenos potrebuje pravico `quotes.create` (ista kot /api/project-packages);
+//   • količina je izpeljiva SAMO nedvoumno (m ← dolžina; m2 ← dolžina × višina;
+//     'kos' in neznane enote → ZAVRNJENO z razlogom);
+//   • cene/marže/kosovnice TU NE NASTAJEJO (calcJson je samo dokaz izvora) —
+//     en vir cenovnega resnice ostaja `/api/project-packages/[id]/bom`;
+//   • idempotentno: meritev s paketom → OBSTAJA (noben dvojni paket);
+//   • odgovor: `{ data, paket? }` — obstoječi klicatelji berejo samo `data`.
 
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { jsonError, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
 import { emitEvent } from '@/lib/notify'
-import { MEASURE_MODES, MODE_RULES, computeGeometry, multiViewStats, polygonMetrics, resolveScale, type EngineCalib, type EnginePoint, type MeasureMode } from '@/lib/measure-engine'
+import {
+  MEASURE_MODES, consolidateViews,
+  pointsForStorage, viewForStorage, calibrationForParams, parseCalibration,
+  pickEngineExtras, deriveProvenance, provenanceForParams, type MeasureMode,
+} from '@/lib/measure-engine'
 import { MEASURE_CONFLICT_PCT } from '@/lib/scene-understanding-core'
+import { odlociPaket, HANDOFF_VERSION } from '@/lib/measurement-handoff'
+import { nextPackageCode } from '@/lib/product-core'
 
 const TYPES = ['OGRAJA', 'BALUSTRADA', 'NAGIB', 'OSTANEO']
 
 const MAX_VIEWS = 4
 
-/** R501: prikaz števila z decimalno vejico (slovensko). */
-const r1 = (n: number) => Math.round(n * 10) / 10
-
-/** R501: strukturno razčleni kalibracijo (UNIFORM px/cm ALI perspektivna
- *  ravnina plane) — globoka validacija (kolinearnost/homografija) je v
- *  resolveScale. Vrne null, če ni nobene uporabne reference. */
-function parseEngineCalib (v: unknown): EngineCalib | null {
-  if (!v || typeof v !== 'object') return null
-  const o = v as { px?: unknown; cm?: unknown; imgW?: unknown; imgH?: unknown; plane?: unknown }
-  const out: EngineCalib = { px: 0, cm: 0 }
-  const px = Number(o.px); const cm = Number(o.cm)
-  if (Number.isFinite(px) && px > 0) out.px = px
-  if (Number.isFinite(cm) && cm > 0) out.cm = cm
-  const imgW = Number(o.imgW); const imgH = Number(o.imgH)
-  if (Number.isFinite(imgW) && imgW > 0) out.imgW = Math.round(imgW)
-  if (Number.isFinite(imgH) && imgH > 0) out.imgH = Math.round(imgH)
-  if (o.plane && typeof o.plane === 'object') {
-    const p = o.plane as { points?: unknown; widthCm?: unknown; heightCm?: unknown }
-    const w = Number(p.widthCm); const h = Number(p.heightCm)
-    if (Array.isArray(p.points) && p.points.length === 4 && Number.isFinite(w) && w > 0 && Number.isFinite(h) && h > 0) {
-      const pts: EnginePoint[] = []
-      for (const q of p.points) {
-        if (!q || typeof q !== 'object') continue
-        const x = Number((q as { x?: unknown }).x); const y = Number((q as { y?: unknown }).y)
-        if (Number.isFinite(x) && Number.isFinite(y)) pts.push({ x, y })
-      }
-      if (pts.length === 4) out.plane = { points: pts, widthCm: w, heightCm: h }
-    }
-  }
-  return out.px > 0 && out.cm > 0 ? out : out.plane ? out : null
-}
-
-/** R501: točke telesa/pogleda v EnginePoint[] (brez predlogov — ti ne štejejo). */
-function parseEnginePoints (v: unknown): EnginePoint[] | null {
-  if (!Array.isArray(v)) return null
-  const pts: EnginePoint[] = []
-  for (const p of v.slice(0, 64)) {
-    if (!p || typeof p !== 'object') continue
-    const q = p as { x?: unknown; y?: unknown; src?: unknown }
-    const x = Number(q.x)
-    const y = Number(q.y)
-    if (!Number.isFinite(x) || !Number.isFinite(y)) continue
-    pts.push({ x, y, ...(q.src === 'ROCNO' || q.src === 'PREDLOG' ? { src: q.src } : {}) })
-  }
-  return pts.length >= 2 ? pts : null
-}
-
 /** R455: normalizira en pogled (točke + kalibracija) — enaka pravila kot glavni.
- *  R501: kalibracija pogleda ohrani tudi perspektivno ravnino (plane). */
+ *  R501 (issue #15 faza 2): celotna pogodba je v jedru (`viewForStorage`), da se
+ *  pravila dodatnih pogledov ne morejo več razhajati od pravil glavne meritve
+ *  ali offline sinhronizacije. */
 function parseView (v: unknown): Record<string, unknown> | null {
-  if (!v || typeof v !== 'object') return null
-  const o = v as { photoId?: unknown; points?: unknown; calibration?: unknown }
-  const out: Record<string, unknown> = {}
-  if (typeof o.photoId === 'string' && o.photoId) out.photoId = o.photoId
-  if (Array.isArray(o.points)) {
-    const pts = o.points.slice(0, 64).filter((p) => {
-      if (!p || typeof p !== 'object') return false
-      const q = p as { x?: unknown; y?: unknown }
-      return Number.isFinite(Number(q.x)) && Number.isFinite(Number(q.y))
-    })
-    if (pts.length > 0) out.points = pts
-  }
-  if (o.calibration && typeof o.calibration === 'object') {
-    const cal = o.calibration as Record<string, unknown>
-    const keep: Record<string, unknown> = {}
-    const px = Number(cal.px); const cm = Number(cal.cm)
-    if (Number.isFinite(px) && px > 0) keep.px = px
-    if (Number.isFinite(cm) && cm > 0) keep.cm = cm
-    const imgW = Number(cal.imgW); const imgH = Number(cal.imgH)
-    if (Number.isFinite(imgW) && imgW > 0) keep.imgW = Math.round(imgW)
-    if (Number.isFinite(imgH) && imgH > 0) keep.imgH = Math.round(imgH)
-    // R501: perspektivna ravnina pogleda (4 vogali + dimenziji)
-    if (cal.plane && typeof cal.plane === 'object') {
-      const p = cal.plane as { points?: unknown; widthCm?: unknown; heightCm?: unknown }
-      const w = Number(p.widthCm); const h = Number(p.heightCm)
-      if (Array.isArray(p.points) && p.points.length === 4 && Number.isFinite(w) && w > 0 && Number.isFinite(h) && h > 0) {
-        keep.plane = { points: p.points, widthCm: w, heightCm: h }
-      }
-    }
-    if (Object.keys(keep).length > 0) out.calibration = keep
-  }
-  return Object.keys(out).length > 0 ? out : null
+  return viewForStorage(v)
 }
 
 function num (v: unknown): number | null {
   return typeof v === 'number' && Number.isFinite(v) ? v : null
-}
-
-/** R487: dolžina enega pogleda iz točk + kalibracije — čisto tanek sloj nad
- *  obstoječim determinističnim computeGeometry (merilno jedro NE podvajamo,
- *  issue §2). Točke so normalizirane 0..1 z imgW/imgH (kot v kameri) ali že v
- *  pikslih (kompatibilno z railing-layout). Predlogi (PREDLOG) ne štejejo.
- *  R501: kalibracija je lahko tudi perspektivna ravnina (plane) — razreši jo
- *  resolveScale; neveljavno merilo → null (ta pogled se ne more šteti). */
-function viewLengthCm (points: unknown, calibration: unknown): number | null {
-  const pts = parseEnginePoints(points)
-  if (!pts) return null
-  const calib = parseEngineCalib(calibration)
-  if (!calib) return null
-  if (!resolveScale(calib).valid) return null
-  const total = computeGeometry(pts, calib).totalLengthCm
-  return total > 0 ? total : null
 }
 
 function int (v: unknown): number | null {
@@ -170,7 +87,7 @@ function int (v: unknown): number | null {
 export async function POST (req: NextRequest) {
   const auth = await requirePermission(req, 'measurements.write')
   if (auth instanceof NextResponse) return auth
-  const { user } = auth
+  const { user, perms } = auth
 
   const body = await req.json().catch(() => null)
   if (!body || typeof body !== 'object') return jsonError(400, 'Neveljavno telo zahteve.')
@@ -279,115 +196,58 @@ export async function POST (req: NextRequest) {
       return jsonError(400, 'engine mora biti objekt.', 'Rezultat analize /api/measure-engine/analyze.')
     }
     const e = body.engine as Record<string, unknown>
-    const picked: Record<string, unknown> = {}
-    if (e.domain && typeof e.domain === 'object') picked.domain = e.domain
-    if (Array.isArray(e.validation)) picked.validation = e.validation.slice(0, 40)
-    if (e.confidence && typeof e.confidence === 'object') picked.confidence = e.confidence
-    if (e.captureGuide && typeof e.captureGuide === 'object') picked.captureGuide = e.captureGuide
-    // R501 (issue #15 Faza 1): razrešeno merilo (vrsta + predpostavke) v reviziji
-    if (e.scale && typeof e.scale === 'object') {
-      const sc = e.scale as { valid?: unknown; mode?: unknown; cmPerPx?: unknown; assumedFrontal?: unknown; reason?: unknown }
-      const pickedScale: Record<string, unknown> = {}
-      if (typeof sc.valid === 'boolean') pickedScale.valid = sc.valid
-      if (sc.mode === 'UNIFORM' || sc.mode === 'PLANE') pickedScale.mode = sc.mode
-      if (typeof sc.cmPerPx === 'number' && Number.isFinite(sc.cmPerPx)) pickedScale.cmPerPx = sc.cmPerPx
-      if (typeof sc.assumedFrontal === 'boolean') pickedScale.assumedFrontal = sc.assumedFrontal
-      if (typeof sc.reason === 'string' && sc.reason.trim()) pickedScale.reason = sc.reason.slice(0, 160)
-      if (Object.keys(pickedScale).length > 0) picked.scale = pickedScale
+    // R501 (issue #15 faza 2): ENOTNI nabor dovoljenih ključev rezultata engine-a
+    // (jedro `pickEngineExtras`) — isti seznam uporablja offline sinhronizacija,
+    // zato se `scale`/`validity` tam več ne moreta tiho izgubiti.
+    const picked = pickEngineExtras(e)
+    if (!picked) {
+      return Object.keys(e).length === 0
+        ? jsonError(400, 'engine je prazen.', 'Podajte vsaj enega od: domain, validation, confidence, captureGuide.')
+        : jsonError(400, 'engine nima nobene dovoljene vsebine ali je prevelik (max 8 KB).')
     }
-    if (Object.keys(picked).length === 0) {
-      return jsonError(400, 'engine je prazen.', 'Podajte vsaj enega od: domain, validation, confidence, captureGuide.')
-    }
-    const size = JSON.stringify(picked).length
-    if (size > 8000) return jsonError(400, 'Rezultat engine-a je prevelik (max 8 KB).')
     engine = picked
   }
 
   // ── R487 (issue #3): strežniška konsolidacija več pogledov (ADITIVNO) ──
   // Dolžine vseh pogledov (primarni iz body.points+calibration, dodatni iz
-  // views[].points+calibration) se preračunajo z obstoječim computeGeometry,
-  // statistika (povprečje/razpršenost) pa z multiViewStats (lib) — NE iz
-  // odjemalčeve izjave. SAMO kadar so dodatni pogledi prisotni in je mogoče
-  // izračunati ≥ 2 dolžini (§4C »samo kadar podatki to omogočajo«).
-  let multiView: { count: number; values: number[]; mean: number; spreadPct: number; conflict: boolean; manualOverride?: boolean } | null = null
-  if (views) {
-    const lengths: number[] = []
-    const primary = viewLengthCm(body.points, body.calibration)
-    if (primary !== null) lengths.push(primary)
-    for (const v of views) {
-      const l = viewLengthCm(v.points, v.calibration)
-      if (l !== null) lengths.push(l)
-    }
-    const stats = multiViewStats(lengths)
-    if (stats) {
-      const conflict = stats.spreadPct > MEASURE_CONFLICT_PCT
-      multiView = {
-        count: stats.count,
-        values: stats.values,
-        mean: stats.mean,
-        spreadPct: stats.spreadPct,
-        conflict,
-        ...(manualOverride ? { manualOverride: true } : {}),
-      }
-      // §4C »konflikte prikaži uporabniku; ne popravljaj geometrije tiho« +
-      // KPI »0 potrjenih proizvodnih mer z nerešenim kritičnim konfliktom«:
-      // nerešeno razhajanje > 15 % BREZ ročnega popravka z razlogom →
-      // potrditev ZAVRNJENA. Ročni popravek z razlogom (r455) je veljavna
-      // rešitev — vrata ostanejo odprta (zavestna odločitev uporabnika).
-      if (conflict && !manualOverride) {
-        return jsonError(409, 'Pogledi se preveč razlikujejo.',
-          `Razpršenost ${multiView.spreadPct.toString().replace('.', ',')} % med ${multiView.count} pogledi presega ${MEASURE_CONFLICT_PCT} % — popravite točke ali kalibracijo na pogledih, ali podajte ročni popravek dolžine z razlogom (manualOverride).`)
-      }
-    }
+  // views[].points+calibration) se PRERAČUNAJO z determinističnim computeGeometry
+  // v jedru (`consolidateViews`), NE iz odjemalčeve izjave. Isti izračun uporablja
+  // offline sinhronizacija (R501) — razhajanja med mrežno in terensko potjo ni.
+  const consolidation = views
+    ? consolidateViews({
+      primaryPoints: body.points,
+      primaryCalibration: body.calibration,
+      views,
+      manualOverride: manualOverride !== null,
+      conflictPct: MEASURE_CONFLICT_PCT,
+    })
+    : { multiView: null, conflict: false, blocked: false }
+  const multiView = consolidation.multiView
+  // R501: vrata (409) so zaprta samo za NEREŠEN konflikt. `conflict` je viden podatek
+  // o razpršenosti, `blocked` pa odloča — ročni popravek z razlogom (r455) reši
+  // konflikt, zato mrežna pot ni strožja od terenske (sync uporablja isti `blocked`).
+  if (multiView && consolidation.blocked) {
+    // §4C »konflikte prikaži uporabniku; ne popravljaj geometrije tiho« +
+    // KPI »0 potrjenih proizvodnih mer z nerešenim kritičnim konfliktom«:
+    // nerešeno razhajanje > 15 % BREZ ročnega popravka z razlogom →
+    // potrditev ZAVRNJENA. Ročni popravek z razlogom (r455) je veljavna
+    // rešitev — vrata ostanejo odprta (zavestna odločitev uporabnika).
+    return jsonError(409, 'Pogledi se preveč razlikujejo.',
+      `Razpršenost ${multiView.spreadPct.toString().replace('.', ',')} % med ${multiView.count} pogledi presega ${MEASURE_CONFLICT_PCT} % — popravite točke ali kalibracijo na pogledih, ali podajte ročni popravek dolžine z razlogom (manualOverride).`)
   }
 
-  // ── R501 (issue #15 Faza 1): STREŽNIŠKI PRERAČUN JE AVTORITETA ──────────
-  // Poslana lengthCm se PRERAČUNA iz istega jedra kot analiza/UI. Brez
-  // veljavne reference (UNIFORM ali perspektivna ravnina) točkna meritev NE
-  // more biti potrjena (400). Odstopanje > 2 % brez manualOverride → 409
-  // (odjemalec ne more poslati poljubne številke kot poslovno mero).
-  // RAZLOG v monterjevem jeziku + meriloStatus v params (revizija/izvoz).
-  const RECOMPUTE_TOL_PCT = 2
-  let measureStatus: 'MANUAL' | 'CALIBRATED' | 'MANUAL_OVERRIDE' = 'MANUAL'
-  if (manualOverride) {
-    measureStatus = 'MANUAL_OVERRIDE' // veljavna rešitev Z razlogom (r455)
-  } else {
-    const bodyPts = parseEnginePoints(body.points)
-    const bodyCal = parseEngineCalib(body.calibration)
-    // točke BREZ veljavne reference → EKSPlicitna napaka (ne tiha MANUEL)
-    if (bodyPts && !bodyCal) {
-      return jsonError(400, 'Manjka veljavna referenčna kalibracija.',
-        'Točke so označene, a kalibracija manjka ali je neveljavna — označite 2 točki znane razdalje ali 4 vogale znanega pravokotnika na merjeni ravnini. Brez reference točka meritev ne more biti potrjena poslovna mera.')
-    }
-    const candidates: number[] = []
-    if (bodyPts && bodyCal) {
-      const scale = resolveScale(bodyCal)
-      if (scale.valid) {
-        const geo = computeGeometry(bodyPts, bodyCal)
-        if (geo.calibrated && geo.totalLengthCm > 0) {
-          candidates.push(geo.totalLengthCm)
-          // poligonski načini: »skupna dolžina« = obseg zaprtega poligona je
-          // enakovredna semantika (r457 KERAMIKA pošilja obseg) — sprejmemo oba
-          if (mode && (MODE_RULES[mode as MeasureMode]?.polygon)) {
-            const poly = polygonMetrics(bodyPts, bodyCal)
-            if (poly.perimeterCm > 0) candidates.push(poly.perimeterCm)
-          }
-        }
-      }
-    }
-    if (multiView && multiView.mean > 0 && !multiView.conflict) candidates.push(multiView.mean)
-    if (candidates.length > 0) {
-      const okMatch = candidates.some((c) => Math.abs(c - (lengthCm as number)) / c * 100 <= RECOMPUTE_TOL_PCT)
-      if (!okMatch) {
-        const prikaz = (n: number) => r1(n).toString().replace('.', ',')
-        return jsonError(409, 'Poslana dolžina se ne ujema s preračunom.',
-          `Strežnik iz točk in kalibracije izračuna ${candidates.length === 1 ? prikaz(candidates[0]) : candidates.map(prikaz).join(' / ')} cm, poslano pa je ${prikaz(lengthCm as number)} cm (toleranca ${RECOMPUTE_TOL_PCT} %). Popravite točke/kalibracijo ali vnesite ročni popravek dolžine z razlogom (manualOverride).`)
-      }
-      measureStatus = 'CALIBRATED'
-    }
-    // brez točk + brez views → legacy ročni vnos: measureStatus ostane MANUAL
-    // (izrecno zabeležen v params — ni tiho »potrjena kalibrirana« mera)
-  }
+  // ── R501 (issue #15 faza 2): PROVENIENCA ──────────────────────────────────
+  // Stanje zaupanja izračuna STREŽNIK iz ponovno preračunane geometrije —
+  // odjemalčeva trditev (body.engine) zanj NI vir. Brez dokazanega merila je
+  // rezultat ocena (ESTIMATED) in kot taka ne sme v BOM (issue #15 H2).
+  const provenance = deriveProvenance({
+    points: body.points,
+    calibration: body.calibration,
+    mode: mode as MeasureMode | null,
+    legacyType: type,
+    manualOverride: manualOverride !== null,
+    viewsAgreeing: multiView !== null && multiView.count >= 2 && !multiView.conflict,
+  })
 
   // points + calibration shranimo v params (zapis postopka za revizijo/ponovno izdelavo)
   // points: normalizirane koordinate 0..1; calibration dodatno nosi imgW/imgH za
@@ -395,35 +255,38 @@ export async function POST (req: NextRequest) {
   let params: string | null = null
   try {
     const extra: Record<string, unknown> = { photoId, source: 'KAMERA' }
-    if (Array.isArray(body.points)) extra.points = body.points.slice(0, 64)
+    // R501 (issue #15 faza 2): točke grejo skozi ENOTNO normalizacijo (`pointsForStorage`)
+    // kot offline sinhronizacija — neveljavna točka se ne more več vstaviti v zapis
+    // in nato tiho spremeniti dolžine pri ponovnem izračunu.
+    const pts = pointsForStorage(body.points)
+    if (pts) extra.points = pts
     if (body.calibration && typeof body.calibration === 'object') {
-      const c = body.calibration as { px?: unknown; cm?: unknown; imgW?: unknown; imgH?: unknown; method?: unknown; refObject?: unknown; plane?: unknown }
-      const cal: Record<string, unknown> = {}
-      if (Number.isFinite(Number(c.px)) && Number(c.px) > 0) cal.px = Number(c.px)
-      if (Number.isFinite(Number(c.cm)) && Number(c.cm) > 0) cal.cm = Number(c.cm)
-      if (Number.isFinite(Number(c.imgW)) && Number(c.imgW) > 0) cal.imgW = Math.round(Number(c.imgW))
-      if (Number.isFinite(Number(c.imgH)) && Number(c.imgH) > 0) cal.imgH = Math.round(Number(c.imgH))
-      // R457 (§4): metoda kalibracije + referenčni objekt (sledljivost reference)
-      if (typeof c.method === 'string' && ['MARKER', 'ZNANA_MERA', 'ZUNANJA_NAPRAVA', 'LIDAR', 'ROCNO', 'RAVNINA'].includes(c.method)) cal.method = c.method
-      if (typeof c.refObject === 'string' && c.refObject.trim()) cal.refObject = c.refObject.trim().slice(0, 80)
-      // R501 (issue #15 Faza 1): perspektivna ravnina — 4 vogali + dimenziji
-      // (revizija/ponovna izdelava iz params potrebuje CELO referenco)
-      const pl = parseEngineCalib(body.calibration)?.plane
-      if (pl) cal.plane = { points: pl.points, widthCm: pl.widthCm, heightCm: pl.heightCm }
-      if (Object.keys(cal).length > 0) extra.calibration = cal
+      // R501 (issue #15 faza 2): ENOTNA kalibracijska pogodba — pravila so v
+      // jedru (measure-engine), ne več v tej ruti. Dokumentarne vrednosti
+      // (metoda, referenca, dimenzije slike) ostanejo, tudi če px/cm par
+      // manjka; tak zapis je merilo NEZNANO in nikoli poslovna mera.
+      const cal = calibrationForParams(body.calibration)
+      if (cal) extra.calibration = cal
     }
     // R455: več pogledov, kakovost, zaupanje, ročni popravek — vse v params (revizija)
     if (views) extra.views = views
     // R487: strežniško izračunana konsolidacija pogledov (revizija/izvoz)
     if (multiView) extra.multiView = multiView
-    // R501 (issue #15 Faza 2): status mere — vedno zabeležen, nikoli tih
-    extra.measureStatus = measureStatus
     if (quality) extra.quality = quality
     if (confidence !== null) extra.confidence = confidence
     if (manualOverride) extra.manualOverride = manualOverride
     // R457: način izmere + rezultat engine-a (§7 — ena meritev, en vir resnice)
     if (mode) extra.mode = mode
     if (engine) extra.engine = engine
+    // R501 (issue #15 faza 2): KAKO je bila številka pridobljena (verzija
+    // pogodbe, model merila/transformacija, metoda, referenca) — strežniški
+    // izračun, ne trditev odjemalca.
+    extra.provenance = provenanceForParams({
+      status: provenance.status,
+      reason: provenance.reason,
+      scale: provenance.scale,
+      calibration: parseCalibration(body.calibration),
+    })
     params = JSON.stringify(extra)
   } catch { params = JSON.stringify({ photoId, source: 'KAMERA' }) }
 
@@ -431,6 +294,8 @@ export async function POST (req: NextRequest) {
     data: {
       type,
       source: 'KAMERA',
+      status: provenance.status,
+      statusNote: provenance.reason,
       projectId,
       workOrderId,
       authorId: user.id,
@@ -458,7 +323,6 @@ export async function POST (req: NextRequest) {
   if (multiView) versionBits.push(`razpršenost ${multiView.spreadPct.toString().replace('.', ',')} %${multiView.conflict ? ' ⚠ konflikt' : ''}`)
   if (manualOverride) versionBits.push('ročni popravek dolžine')
   if (mode) versionBits.push(`način ${mode}`)
-  versionBits.push(`status mere ${measureStatus}`)
   await db.measurementVersion.create({
     data: {
       measurementId: measurement.id,
@@ -467,6 +331,7 @@ export async function POST (req: NextRequest) {
       data: JSON.stringify({
         type, lengthCm, heightCm, posts, segments, handrail, slopeDeg,
         location: measurement.location, note: measurement.note, params,
+        status: provenance.status, statusNote: provenance.reason,
       }),
       note: versionBits.length > 0 ? `${versionBits.join(' · ')} — potrjeno s kamero` : 'Potrjeno s kamero (iz fotografije)',
     },
@@ -480,6 +345,9 @@ export async function POST (req: NextRequest) {
     projectId,
     detail: {
       photoId, type, lengthCm, heightCm, slopeDeg, workOrderId: workOrderId ?? null, location: measurement.location,
+      // R501 (issue #15 faza 2): provenienca v reviziji — pisarna vidi, KAKO je
+      // bila številka pridobljena, ne samo da je bila »potrjena«.
+      status: provenance.status, statusReason: provenance.reason,
       // R455: razširjeni podatki o potrditvi (issue #10)
       ...(confidence !== null ? { confidence } : {}),
       ...(views ? { views: views.length } : {}),
@@ -490,8 +358,6 @@ export async function POST (req: NextRequest) {
       // R457: način izmere + prisotnost engine rezultata (issue #12)
       ...(mode ? { mode } : {}),
       ...(engine ? { engine: Object.keys(engine) } : {}),
-      // R501 (issue #15 Faza 2): status mere v reviziji (MANUAL/CALIBRATED/MANUAL_OVERRIDE)
-      measureStatus,
     },
   })
 
@@ -513,5 +379,87 @@ export async function POST (req: NextRequest) {
       })
     }
   }
-  return NextResponse.json({ data: measurement }, { status: 201 })
+  // ── R509 (issue #7 §8): prenos potrjene meritve V PAKET ────────────────────
+  // Ročna odločitev, NE tiha domišljija: paket ustvarimo samo, če izvajalec
+  // zahteve izrecno podaja izdelek (`handoffProductId`) in ima pravico `quotes.create`
+  // (isto dovoljenje kot `/api/project-packages`). Količino izpeljemo samo tam,
+  // kjer je aritmetika nedvoumna (`odlociPaket`); cene, marže in kosovnice tu
+  // NE nastajajo — ostanejo obstoječi poti `/api/project-packages/[id]/bom`, da
+  // ta issue ne ustvari drugega cenovnega jedra. Idempotentno: meritev, ki že
+  // ima paket, DOBI obstoječi kode, drugega paketa ne.
+  const handoffProductId = typeof body.handoffProductId === 'string' && body.handoffProductId ? body.handoffProductId : null
+  const handoffVariantId = typeof body.handoffVariantId === 'string' && body.handoffVariantId ? body.handoffVariantId : null
+  let paket: Record<string, unknown> | null = null
+  if (handoffProductId !== null) {
+    const postojeci = await db.projectPackage.findFirst({
+      where: { measurementId: measurement.id },
+      select: { id: true, code: true },
+    })
+    const produkt = await db.product.findUnique({
+      where: { id: handoffProductId },
+      select: { id: true, name: true, unit: true, active: true, family: { select: { code: true, name: true } } },
+    })
+    const varianta = handoffVariantId
+      ? await db.productVariant.findUnique({ where: { id: handoffVariantId }, select: { id: true, productId: true, name: true } })
+      : null
+    let odlok = odlociPaket({
+      projectId,
+      productId: produkt?.active === true ? produkt.id : null,
+      unit: produkt?.unit ?? null,
+      lengthCm,
+      heightCm,
+      postojeciPaketId: postojeci?.id ?? null,
+    })
+    if (produkt === null) odlok = { odlok: 'ZAVRNJENO', razlog: 'Izbrani izdelek ne obstaja — paketa nismo ustvarili.', qty: null, unit: null }
+    else if (!produkt.active) odlok = { odlok: 'ZAVRNJENO', razlog: `Izdelek ${produkt.name} ni aktiven — paketa ne ustvarjamo za arhiviran izdelek.`, qty: null, unit: produkt.unit }
+    else if (!perms.includes('quotes.create')) odlok = { odlok: 'ZAVRNJENO', razlog: 'Meritev je potrjena; paketov monterjev profil ne ustvarja — prenos stori pisarna.', qty: null, unit: produkt.unit }
+    else if (handoffVariantId !== null && varianta?.productId !== produkt.id) odlok = { odlok: 'ZAVRNJENO', razlog: 'Izbrana varianta ne spada k izbranemu izdelku — paketa nismo ustvarili.', qty: null, unit: produkt.unit }
+
+    if (odlok.odlok === 'OBSTAJA' && postojeci) {
+      paket = { id: postojeci.id, code: postojeci.code, odlok: odlok.odlok, qty: null, unit: null, status: null, razlog: odlok.razlog }
+    } else if (odlok.odlok === 'USTVORI' && produkt && odlok.qty !== null) {
+      const code = await nextPackageCode(measurement.project?.code ?? 'P')
+      const ustvarjen = await db.projectPackage.create({
+        data: {
+          code,
+          projectId: projectId as string,
+          productId: produkt.id,
+          variantId: varianta?.id ?? null,
+          measurementId: measurement.id,
+          name: `${produkt.name} — izmera${measurement.location ? ` (${measurement.location})` : ''}`,
+          qty: odlok.qty,
+          unit: odlok.unit as string,
+          status: 'IZMERA',
+          // NOBENA cena/marža/načrt tu ne nastane (R488 isti pogoj): calcJson je
+          // samo dokaz izvora in prenosa, ki ga pisarna nadaljuje s kosovnico.
+          calcJson: JSON.stringify({
+            prenos: {
+              verzia: HANDOFF_VERSION,
+              izvor: 'KAMERA',
+              meritevId: measurement.id,
+              dolzinaCm: lengthCm,
+              visinaCm: heightCm,
+              enota: odlok.unit,
+              razlog: odlok.razlog,
+            },
+          }),
+          note: `§8 prenos iz meritve s kamero (${produkt.family.code})`,
+        },
+        select: { id: true, code: true },
+      })
+      paket = { id: ustvarjen.id, code: ustvarjen.code, odlok: odlok.odlok, qty: odlok.qty, unit: odlok.unit, status: 'IZMERA', razlog: odlok.razlog }
+      await writeAudit({
+        userId: user.id,
+        action: 'MEASUREMENT_HANDOFF',
+        entity: 'projectPackage',
+        entityId: ustvarjen.id,
+        projectId,
+        detail: { measurementId: measurement.id, code: ustvarjen.code, qty: odlok.qty, unit: odlok.unit, verzia: HANDOFF_VERSION },
+      })
+    } else {
+      paket = { id: null, code: null, odlok: odlok.odlok, qty: null, unit: odlok.unit, status: null, razlog: odlok.razlog }
+    }
+  }
+
+  return NextResponse.json({ data: measurement, ...(paket !== null ? { paket } : {}) }, { status: 201 })
 }

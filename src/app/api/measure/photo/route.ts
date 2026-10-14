@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { jsonError, requirePermission } from '@/lib/auth'
+import { photoRecordProvenance } from '@/lib/measure-engine'
 import { writeAudit } from '@/lib/audit'
 
 const MAX_BYTES = 8 * 1024 * 1024 // 8 MB dataURL-a (~6 MB slike)
@@ -41,10 +42,13 @@ export async function POST (req: NextRequest) {
     if (!workOrder) return jsonError(400, 'Nalog ne obstaja.', 'Podan workOrderId ni veljaven.')
   }
 
+  const zapis = photoRecordProvenance()
   const photo = await db.measurement.create({
     data: {
       type: 'FOTO',
       source: 'KAMERA',
+      status: zapis.status,
+      statusNote: zapis.reason,
       projectId: projectId ?? workOrder?.projectId ?? null,
       workOrderId,
       authorId: user.id,

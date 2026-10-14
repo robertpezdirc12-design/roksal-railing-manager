@@ -134,7 +134,7 @@ for f in sorted(fs, key=lambda x: x["file_name"]):
     local dir; dir="$(dirname "$dst")"
     api_get "/projects/$GITLAB_PROJECT_ID/packages/generic/$BACKUP_PACKAGE/$ver/manifest.json" -o "$dir/manifest.json"
     local base
-    base="$(python3 -c "import json; print(json.load(open('$dir/manifest.json'))['file'])")"
+    base="$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["file"])' "$dir/manifest.json")"
     : > "$dst"
     local total_bytes=0
     while IFS= read -r fname; do
@@ -253,7 +253,7 @@ PYEOF
 
 # ── 3. git obnova v izolacijo ───────────────────────────────────────────────
 log "3/4 git obnova (clone iz bundle) + fsck…"
-GIT_HEAD_SHA="$(python3 -c "import json; print(json.load(open('$WORK/vsebina/manifest.json'))['git']['sha'])")"
+GIT_HEAD_SHA="$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["git"]["sha"])' "$WORK/vsebina/manifest.json")"
 git clone -q --mirror "$WORK/vsebina/git/git.bundle" "$WORK/obnovljeni-repo.git" 2>/dev/null \
   || git clone -q "$WORK/vsebina/git/git.bundle" "$WORK/obnovljeni-repo"
 if [ -d "$WORK/obnovljeni-repo.git" ]; then

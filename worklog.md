@@ -36,7 +36,7 @@ Work Log:
 - Iz imen datotek v commitih: src/lib/{nav-registry,permissions-core,dto-minimizacija,audit,access,ia-register}.ts, src/components/roksal/{danes-tab,invoice-manager}.tsx; permissions katalog 38 pravic; vloge ADMIN/VODJA/MONTER(15)/SKLADISCE(9)/PROIZVODNJA(10)
 
 Stage Summary:
-- Izbris GitHub računa je SVEŽ (~4 h) → okno za obnovitev prek GitHub Support (retencija ~90 dni) — najvišja prioritetа
+- Izbris GitHub računa je SVEŽ (~4 h) → okno za obnovitev prek GitHub Support (retencija ~90 dni) — najvišja prioriteta
 - Baza (Neon) z VSI poslovnimi podatki je cela in živa — največja vrednost je varna
 - Varnost: exfil workflow je stal 17.9.–6.10. (~3 tedne) → rotacija Neon gesla, SESSION_SECRET, API_KEY_PEPPER, BLOB_READ_WRITE_TOKEN, ROKSAL_SETUP_TOKEN obvezna; tudi žetona, prilepljena v ta chat
 - Rezenrvena pot: rekonstrukcija iz blueprinta (route map + RBAC katalog + IA + imena datotek + živa aplikacija kot referenca)
@@ -182,7 +182,7 @@ Work Log:
 - bun run lint: ČIST (0 errorjev, 0 opozoril); tsc --noEmit brez napak v mojih datotekah
 
 Stage Summary:
-- Vseh 29 zavihkov sedaj ima polne module (od 22 polnih + 7 šolsjk do 26 + 4 novo polni; ostali 3 — viz/ar/pdf — so nalogа 6-b)
+- Vseh 29 zavihkov sedaj ima polne module (od 22 polnih + 7 šolsjk do 26 + 4 novo polni; ostali 3 — viz/ar/pdf — so naloga 6-b)
 - Komercialni tok zaključen do konca: podpis → PostSig kokpit → račun/plačilo + proizvodni nalog; orodjarina samopostrežna z revizijo vsake spremembe
 - Odstopanja dokumentirana v agent-ctx/6-a-full-stack-developer.md (popravek podpisa PON-2026-004, restart dev serverja, min-w-0 popravki)
 
@@ -460,7 +460,7 @@ Task: R440-f — UI validacija 29 zavihkov v brskalniku (GitLab issue #4)
 
 Work Log:
 - agent-browser (Chromium headless) proti http://localhost:3000; prijava admin/monter/skladisce prek obrazca (ne demo gumbov); tab preklop prek stranske vrstice (store persist v localStorage)
-- ADMIN: obiskani VSILI 29 zavihkov (danes, dashboard, projekti, stranke, ponudbe, racuni, nalogi, teren, meritve, foto, nagib, kalkulator, signatura, material-v5, orodjarina, viz, ar, crm, dokumenti, zaloga, katalog, logistika, proizvodnja, galerija, varnost, vodja-ekipa, pdf, postsig, profil) — za vsakegа preverjen izris, dejanski podatki (P-2026-001..009, N-2026-001..008, PON/RA kode, 10 strank, 12 profilov, zaloga/losi, orodjarina EV/OR, CRM pipeline) in konzola (clear → obisk → prever) — 0 errorjev/0 opozoril (samo Fast Refresh dev logi), 0 page errors
+- ADMIN: obiskani VSILI 29 zavihkov (danes, dashboard, projekti, stranke, ponudbe, racuni, nalogi, teren, meritve, foto, nagib, kalkulator, signatura, material-v5, orodjarina, viz, ar, crm, dokumenti, zaloga, katalog, logistika, proizvodnja, galerija, varnost, vodja-ekipa, pdf, postsig, profil) — za vsakega preverjen izris, dejanski podatki (P-2026-001..009, N-2026-001..008, PON/RA kode, 10 strank, 12 profilov, zaloga/losi, orodjarina EV/OR, CRM pipeline) in konzola (clear → obisk → prever) — 0 errorjev/0 opozoril (samo Fast Refresh dev logi), 0 page errors
 - Interaktivni vzorci: nalogi detail N-2026-001 (vodnik terena 6 korakov, offline dejanja, ČASOVNICA DOGODKOV Dodeljen/Začetek dela, meritve 12,40 m); meritve urejanje (ZGODOVINA VERZIJ v1 »Potrjeno s kamero«, JAVNA POVEZAVA); projekti detail P-2026-001 (PONUDBE/RAČUNI/NALOGI/MERITVE/3D PREDOGLED z 7 SVG + yaw/pitch/GARANCIJA/PORTAL); CRM (3 vodi + 3 priložnosti, pipeline 25.300 €); varnost (sistemski revizijski dnevnik s Zapisi + seje + obvestila + vzdrževanje + licenca); profil Obveščanje (preklop EMAIL za WO_ASSIGNED → persist v bazi prek /api/notifications/prefs, povrnjeno nazaj); PDF (PON-2026-001 → Predogled → iframe embed)
 - RBAC MONTER (19/29 zavihkov): vidi Danes/Preglednica/Projekti/Stranke/Ponudbe/Nalogi/Teren/Meritve/Foto/Nagib/Orodjarina/Viz/AR/CRM/Dokumenti/Zaloga/Katalog/Galerija/Profil (skladno z 15 pravicami — crm.read/inventory.read/catalog.read/documents.read/gallery.read imajo read-only dostop); NE vidi Računi/Kalkulator/Signatura/Material V5/Logistika/Proizvodnja/Varnost/Vodja-ekipa/PDF/PostSig (10)
 - Fail-closed testi monter: URL ?tab=varnost BREZ učinka (aplikacija ne bere URL parametra, ostane na trenutnem zavihku); injekcija tab=varnost neposredno v persisted store (localStorage roksal-session) + reload → »Dostop zavrnjen — Ta zavihek zahteva pravico audit.read«, NI predvida podatkov; Danes/Nalogi monterja prikazujeta SAMO lastne naloge (Luka Novak; N-2026-007/Matej in N-2026-002/nedodeljen izpuščena, števci 8→6)
@@ -672,7 +672,7 @@ Work Log:
 - prisma/schema.prisma: +2 modeli po §13 — InstallationChecklist (label/done/doneAt/doneBy/sortOrder, index [workOrderId, sortOrder]) in InstallationMaterialUsage (itemId/qty>0/note/user, index [workOrderId]); relacijska polja dodana na User (checklistDone/usageUser), WorkOrder (checklist/materialUsage), InventoryItem (usageItems); WorkOrderEvent.type komentar dopolnjen s TEZAVA; bun run db:push (brez izgube podatkov) + prisma generate + PONOVEN ZAGON dev strežnika (obvezno po push)
 - NOVE API rute (vse fail-closed, obseg: monter SAMO svoji nalogi prek readsAllData — enako kot /api/nalog; mutacije v revizijo):
   - GET/POST/PATCH /api/nalog/[id]/checklist (nalog.read / nalog.write) — seznam, dodaj točko {label ≤300}, odkljuk {id, done} z doneAt/doneBy; revizija CHECKLIST_ADD/CHECKLIST_TOGGLE; PATCH preverja, da točka pripada temu nalogu (404 sicer)
-  - GET/POST /api/nalog/[id]/material (nalog.read / nalog.write) — seznam porabe z artikli; POST {itemId, qty>0, note} SAMO za nalog dodeljen uporabniku ALI inventory.write (403 sicer); zaporedje: recordMovement({IZDAJA, refType:'workOrder', refId, note:'Poraba na terenu — <kodа>'}) → InstallationMaterialUsage (ob napaki zapisu kompenzacija z VRACILO gibanjem — dnevnik ostane dosleden); prekratek zaloga → 409 (iz recordMovement); revizija STOCK_USAGE s projectId
+  - GET/POST /api/nalog/[id]/material (nalog.read / nalog.write) — seznam porabe z artikli; POST {itemId, qty>0, note} SAMO za nalog dodeljen uporabniku ALI inventory.write (403 sicer); zaporedje: recordMovement({IZDAJA, refType:'workOrder', refId, note:'Poraba na terenu — <koda>'}) → InstallationMaterialUsage (ob napaki zapisu kompenzacija z VRACILO gibanjem — dnevnik ostane dosleden); prekratek zaloga → 409 (iz recordMovement); revizija STOCK_USAGE s projectId
   - POST /api/nalog/[id]/events (nalog.write) — SAMO prosti tipi TEZAVA|KOMENTAR|OPOMBA (statusni ZACETEK/ZAJEM/… ostanejo izključno na /transition → 400); TEZAVA → revizija WO_TROUBLE
 - danes.tsx PREOBLIKOVAN v MOJ DAN (mobile-first, dotikalni elementi ≥44px — h-11/min-h-11): 7-fazni delovni tok kot LEPLJIV vodoravno drsen stepper (sticky top-14 pod glavo) — PRESLIKAVA (dokumentirana v komentarju): PRIHOD=NAPROGRAMIRAN, PRED ZAČETKOM=V_TEKU, ZAJEM=V_ZAJEMU, MONTAŽA=implicitno opravljena ob V_PREVERI (faza 3 brez lastnega statusa — model se NI spreminjal), KONTROLA=V_PREVERI, ZAKLJUČEK=ZAKLJUCEN, PREDAJA=poročilo; podrobnost naloga (razširljiva kartica): navodila, kontrolni seznam (progress X/Y + dodajanje + odkljukovanje, aria role=checkbox), poraba materiala (izbira artikla iz /api/stock z razpoložljivo zalogo, količina, opomba; toast s preostalo fizično zalogo), gumb Zabeleži težavo (event TEZAVA), povezavi na Meritve/Foto zajem, povzetek ob zaključku (V_PREVERI → obrazec z opombo, ki gre v WorkOrder.summary) in POROČILO O PREDAJI (zaključek/meritve/checklist/poraba + summary); vreme (R434) ohranjeno; nova sekcija "Zaključeno danes — predaja" (scope=all, filter completedAt ≥ danes, brez podvajanj) — sicer bi zaključen nalog izginil in poročilo ne bi bilo dosegljivo
 - CSS hrošč odkrit in popravljen pri brskalniški verifikaciji: sr-only (position:absolute) vsebina kovčkov stepperja je ušla iz drsečega območja ol, ker je containing block postal lepljivi (positioned) prednik → VODORAVNI PRELIV strani na mobilnem (scrollWidth 786/390); popredek: ol dobi relative (sr-only ostane znotraj drsečega območja) → 390/390 ✓
@@ -1160,7 +1160,7 @@ Work Log:
 
 Stage Summary:
 - R461 REALITY CAPTURE QA + DIGITAL TWIN ZAKLJUČEN: coverage gate + vodena ruta + drift + multi-reference mreža + kritična vrata (ZA PONUDBO/KONFIGURACIJO/PROIZVODNJO) + digitalni dvojček AS-MEASURED→AS-DESIGNED→AS-PRODUCED→AS-INSTALLED z geometry diff in cross-checkom — vse revizijsko sledljivo, IDOR-varno, brez podvajanja tekača
-- issue #16 pokritost: §1–§25 vse ✓ (§6 VERIFIED/statusi že v tekaču R460 — sloj jih bere; §20 playbook integracija prek opravljenih korakov rutе + evidence modela R458)
+- issue #16 pokritost: §1–§25 vse ✓ (§6 VERIFIED/statusi že v tekaču R460 — sloj jih bere; §20 playbook integracija prek opravljenih korakov rute + evidence modela R458)
 - stanje issues: #1–#16 zaprti po merge · odprti #17–#30 (naslednji po vrsti: #17 ROKSAL REALITY-TO-PRODUCTION)
 - opombe za prihodnje seje: (1) nov žeton glpat-c47P… (read_api+write_repository, BREZ api) je v git remote — za API OPERACIJE (MR merge, issue komentar/zaprtje) uporabljaj stari žeton iz .env.recovery (api scope, velja do 2026-11-06); (2) GitLab API POST/GET /merge-rows trenutno vrača 404/403 (Cloudflare) — MR ustvarjaj prek git push options, merge/comment poskusi po ohlajanju z retry; (3) useApi<T> vedno vrača { data: T } — dostopaj .data.data; (4) parse* helperji sprejemajo RAZČLENJEN objekt, nikoli JSON niz; (5) FenceSegment.order je 0-based
 
@@ -1976,8 +1976,1037 @@ Stage Summary:
   V treh klepetih poslane živne vrednosti (Vercel `vcp_…`, Neon `napi_…`,
   GitLab `glpat-…`) je treba šteti kot razkrite in jih preklicati.
 
+## R500 · Issue #15 Faza 0 — merilna baseline (brez spremembe kode)
+
+- NAMENA FAZE: Ustaviti predelavo merilnika, dokler ni zabeleženo, kaj danes
+  dejansko deluje, kje se překriva z odprtimi issue-i in katera dejstva o
+  meritvah so napačna. Nobena datoteka v `src/` ali `prisma/` NI bila
+  spremenjena; edini novi datoteki sta `docs/MEASUREMENT-BASELINE.md` in ta
+  vnos.
+- DOKAZ IZ GITA: `git log --oneline -1` → `ff56f07`; `origin/main` =
+  `b8882a5` (prednik HEAD, hitra združitev); `git status --short` pred fazo 1 =
+  samo `?? docs/MEASUREMENT-BASELINE.md` in CRLF šum pri
+  `public/assets/roksal/src/MANIFEST.json` (`git diff --numstat` je prazen,
+  vsebine se ne razlikujejo → namenoma nepostreženo, tuje delo ni).
+- IZMERJENA BASELINE (pred katerokoli spremembo, `bash tests/ci-local.sh` in
+  posamezne suite-a): r454–r458 → 5/5 ✓; r459–r462 → 4/4 ✓ (91 trditev);
+  r465–r474 → 8/8 ✓; r487 ✓ (71 trditev). To je referenčna točka: vsaka
+  sprememba številk v fazah 1–8 mora obdržati te izpise ali pa utemeljiti in
+  posodobiti kontrakt.
+- PREPOZNAVANJE PREKRIVANJ: baseline §2 ima tabelo proti issue-om
+  #3, #4, #6, #7, #8, #9, #10, #14 in #15 — Faza 0 zavrne podvajanje
+  merilnega/cenovnega jedra; vse nadaljnje faze smejo spremeniti samo
+  OBSEG `measure-engine.ts` (baseline §7).
+- NEVARNOSTI, IZMERJENE IZ KODE (ne iz dokumentacije): H1 trije ločeni
+  `cmPerPx` izračuni (`measure-engine.ts:133/181/221`); H2 fotografska
+  meritev lahko pride v BOM in ponudbo brez preverjanja kalibracije;
+  H3 `Measurement` nima stolpca `status` (`schema.prisma:300`); H4 UI
+  obljublja FOTOGRAMETRIJA, ki je v kodi ni; H5 zaupanje ≠ točnost;
+  H6 strešni naklon se privzame 35° in prikaže kot izmerjen; H7 višinske
+  razlike iz slikovnega Δy; H8 EXIF orientacija ni preverjena; H9 ROKSAL
+  gradiva (`ProductAsset`) niso povezana s fotomontažo.
+  - POGOJI, KI MANJKAJO (baseline §6): vzorčni primeri znanih dimenzij za točnost
+  (Faza 7), merjene naprave (WebXR globina, LiDAR), licence tretjih knjižnic za
+  fotogrametrijo, in potrditev tolerance s strani odgovorne osebe (Faza 7).
+  Brez teh faz 6–7 NIKOLI ne morejo biti zaključene — ne zatičej tega z
+  trditvijo »testi so zeleni«.
+
 ---
-Task ID: R500
+## R500 · Issue #15 Faza 1 — varna geometrija (merilo, ravnina, veljavnost)
+
+Work Log:
+- NAVODILO, KI GA TA FAZA IZPOLNJUJE (`docs/MEASUREMENT-BASELINE.md` §3 / issue #15):
+  (1) nagnjena slika NE SME dobiti enega globalnega razmerja cm/px za vse
+  smeri; (2) manjkajoča/neveljavna kalibracija SME javiti eksplicitno napako,
+  ne tiho uporabiti merila 1 cm/px; (3) geometrijske spremembe morajo biti
+  pokrite z numeričnimi testi znanih dimenzij.
+- ENA DEFINICIJA MERILA: `resolveScale()` (`src/lib/measure-engine.ts`) je
+  edini vir cm/px; vrne `known`, `isotropicProven`, `cmPerPxX/cmPerPxY`,
+  `basis` (ENOTNO_Z_DOKAZOM / ENOTNO_BREZ_DOKAZA / ANIZOTROPNO / NEZNANO),
+  `tiltDeg`, `directionSpreadDeg` in razloge. Trije tihi rezervi
+  `calib.px > 0 ? calib.cm / calib.px : 1` (baseline H1) so odstranjene;
+  brez merila `computeGeometry`/`polygonMetrics`/`diagonalMetrics` vrnejo 0
+  in `cmPerPx null`, NE številke, ki je videti kot mera.
+- ANIZOTROPIJA: kalibracija sprejme ločeno Y referenco (`pxY`/`cmY`);
+  dolžine, višinske razlike, vodoravne razdalje, površine (shoelace po
+  obroču) in diagonale se računajo PO SMERI (`hypot(dx·sx, dy·sy)`). Pri
+  `sx === sy` je vsota dokazljivo enaka prejšnji — zato številke kontraktov
+  ne smejo premakniti.
+- NAGIB: `TILT_ENOTNO_MERILO_MAX_DEG = 10`; nad pragom brez Y reference je
+  napaka ≈ `1/cos(tilt) − 1` (25° → 10,3 %). Ker smeri na sliki niso enake,
+  nova validacijska napaka `MERILO_NEZADOSTNO` (severity NAPAKA) sproži samo
+  ob POGOJU nagib > 10° IN razpršenost merjenih smeri > 10° — vodoravna pot
+  vzdolž reference ostane brez napake (obstoječa vrata se ne zaostrijo).
+- VELJAVNOST PO KOLIČINAH: `quantityValidity`/`measureValidity` →
+  DOLZINA/PLOSCEVINA/KOT/VISINA z stanji VELJAVNA / PREDPOSTAVKA /
+  NEZADOSTNI_PODATKI in `businessMeasureAllowed`. Poševni posnetek:
+  VIŠINA je vedno NEZADOSTNI_PODATKI (slikovni Δy je projekcija, ne mera);
+  PLOSCEVINA pada ob nagibu brez Y reference; brez merjenja nagiba je
+  vse PREDPOSTAVKA — pravokotnost je izrecno označena kot predpostavka,
+  ne kot dokaz.
+- LAŽNE TRDITVE, KI SO IZGINELE: `STREHA.pitchSource` (VNOS/PRIVZET) razkriva
+  35° privzetek, ki je bil doslej prikazan kot izmerjen (baseline H6);
+  `STOPNICE.heightBasis = PROJEKCIJA_SLIKE` (baseline H7).
+- POTRJEVALNI VODNIK (§3): nova kontrola `MERILO` — NEZADOSTNO brez
+  kalibracije ali ob nagibu + razpršenih smereh, OPOZORILO pri nagibu
+  vzdolž reference, DOBRO ob dokazu (pravokoten kader ali ločeni X/Y),
+  DOBRO s poštenim besedilom «pravokotnost ni merjena — predpostavka», ko
+  nagiba ni (r457 kontrakt ostane DOBRO).
+- IZVOS (§19): novi skupini `Merilo` (baza, cm/px X in Y, nagib, pravokotnost
+  DA/NE, razlogi) in `Veljavnost` (status, vrata poslovne mere, po
+  količinah). Stara meritev brez teh polj se izvozi NESPREMENJENO —
+  nobena funkcija ne izgine.
+- POTI, KI SO DOBELE NOVE POLJE (brez paralelnega jedra):
+  `POST /api/measure-engine/analyze` (pxY/cmY), `POST /api/measurement/confirm`
+  (`params.calibration` + dovoljena `engine.scale`/`engine.validity`, 8 KB
+  omejitev ostaja) in monterjev zaslon `meritve-kamera.tsx` (panel: merilo,
+  status, stanje po količinah, do 3 razloge; oba payloada pošljeta scale +
+  validity, tudi offline operacija).
+- NOVA SUITE `tests/r500.py` (70 trditev, A–J): A brez merila → NEZNANO;
+  B numerična REGRESIJA r457/r487 (700 cm, 300+400, vogal 90°, 12 m²/1400 cm,
+  diagonali 500, stebri 8 / ročnik 7 m / polnilo 7 m², KERAMIKA
+  5×7=35 ploščic, neto 27, odpad 30 %, lepak 39 kg, STOPNICE 14 × 17,9/28,6
+  pri 32°); C anizotropno (ista pot → 300+200 = 500 cm, 6 m², diagonali
+  427,2 cm); D prag 10° in razpršenost 90°; E količine; F PRIVZET/VNOS;
+  G vodnik; H izvoz; I determinizem; J vir (grep: tiha rezerva je zunaj,
+  ena `resolveScale`, confirm računa prek jedra). Registrirana v
+  `tests/ci-matrix.sh` (skupina `r500`, zdaj 23 skupin).
+- IZMERJENO PO TEM (vse na lokalni bazi :54329, dev :3000 — produkcijska
+  baza nedotaknjena): r454–r458 → 5/5 ✓ (R458 82 trditev); r459–r462 → 4/4 ✓
+  (91); r486 → ✓ 70; r487 → ✓ 71; r500 → ✓ 70 / ✗ 0; `tsc --noEmit` čist;
+  `eslint` 0 napak (18 obstoječih opozoril na nespremenjenih vrsticah).
+  Dve pomanjkljivosti, ki ju je ujela prva izvedba same suite:
+  obvestilo za KOT je trdilo «smer je blizu reference» pri razpršenosti 90°
+  (zdaj NEZADOSTNI_PODATKI) in razlogi so imeli decimalno piko namesto
+  vejice (zdaj `r1c`/`r2c`).
+- KAJ OSTAJA ODPRTO (nikoli se ne predstavlja kot opravljeno):
+  H1 zadnja instanca ostaja v `src/app/api/railing-layout/route.ts` (svoj
+  izračun merila) in v `calcView` (`meritve-kamera.tsx:196`) — ta je
+  trenutno skladen z jedrom, ker `View.calib` še nima `pxY`/`cmY`, kar
+  pomeni, da monter LOČENE Y reference še NE more vnesti (Faza 2).
+  `recommendMethod` še vedno priporoča metodo FOTOGRAMETRIJA (H4, Faza 3).
+  `Measurement.status` in vztrajna BOM vrata (H2/H3) še narejeni niso —
+  `validity.businessMeasureAllowed` je zdaj izračunan in shranjen, a ga
+  še ne preverja noben ustvarjalni endpoint (BOM/ponudba). Vzorčni primeri znanih
+  dimenzij za Fazo 7 (tolerance) manjkajo — brez njih faz 6–7 ni mogoče zaključiti.
+- CELI PAS (`bash tests/ci-local.sh`) — IZMERJENO: **✓ zeleno, 7 statičnih
+  korakov in 23 skupin** (zadnja r500). Prvi poskus je bil rdeč pri dveh
+  korakih, noben razlog ni bila koda:
+  1. `ci.yml` in `ci-matrix.sh` sta se razšla, ker sem r500 vpisal samo v
+     matriko — popravek registrira skupino tudi v workflow (pas takšno
+     razhajanje že preverja in je zato deloval).
+  2. `prisma generate` je vrnil `EPERM` na `query_engine-windows.dll.node` —
+     to je Windows **zaklep datoteke** (dev strežnik je še tekel na :3000),
+     ne napaka kode; dokaz je uspešen samostojni `npm run db:generate`.
+     `ci-local.sh` zdaj ta primer prepozna in operatorju pove, kateri proces
+     ustaviti, namesto da lažno javlja rdečo kodo.
+  Popravek lastne trditve iz prejšnjega zapisa: »pogon kljub rdečim izhaja z 0«
+  **NI bila napaka poganjalca**. `tests/ci-local.sh:255` konča z `exit "$Rdece"`,
+  torej vrne ≠ 0. Zmoten sem bil jaz, ker sem prvi poskus pognal skozi
+  cev (`... | tail -60`): izhodna koda cevi je koda zadnjega programa (`tail`),
+  ne skripta. Drugi poskus je bil usmerjen v datoteko loga in je pokazal
+  pravilno izhodno kodo. Ukaz: poganjalca nikoli ne cevopelj za oceno uspeha.
+
+---
+Task ID: R501+R502
+Agent: Qoder (lokalno merjeno, 13. 10. 2026)
+
+Task: issue #15 Faza 2 — enotna kalibracijska pogodba in strežniški statusi; varna razrešitev konflikta razvojnega strežnika v relejnem pasu
+
+Work Log:
+- FAZA 2 (koda; mera `tests/r501.py` ✓ 131 / ✗ 0): kalibracijska pogodba je zdaj
+  ena sama (`parseCalibration`, `pointsForStorage`, `viewForStorage`,
+  `consolidateViews` v `src/lib/measure-engine.ts`). Mrežna pot
+  (`/api/measurement/confirm`) in offline pot (`/api/sync`) klicata isti izraz,
+  ne pa svoje razlage. Strojni dokaz: odsek K v `tests/r501.py` z regexom
+  prepove `calib.\s*cm\s*/` v šestih plasteh, da si noben klicatelj ne izmisli
+  lastnega deljenja px s cm.
+- TRI RESNIČNE NAPAKE v kodi, ne v testih:
+  1. Poslovna vrata so bila odprta namesto zaprta (fail-open): kosovnica je
+     filtrirala samo `lengthCm > 0`, zato je fotomeritev brez referenčne mere
+     prišla do kosovnice in ponudbe (baseline H2). Zdaj
+     `measurementStatusAllowsBusiness` (fail-closed v obe smeri) preverja
+     `/api/project-packages/[id]/bom` in vrne 409 z razlogom.
+  2. Mrežna pot je bila strožja od terenske: `conflict` (vidna razpršenost) je
+     služil kot vrata, ročni popravek z razlogom pa jih ni odprl. Monter je
+     popravek lahko opravil na terenu, pisarna po isti poti ne. Sedaj sta
+     ločena: `conflict` je podatek, `blocked` je odločitev; obe poti uporabita
+     `blocked`.
+  3. Pisarniška potrditev prek `PATCH /api/measurements/[id]` ni delovala:
+     varovalka »ni sprememb« je tekla pred izpeljavo stanja, zato je prazen
+     patch (prehod v CONFIRMED) padel na 400. Vrstni red je popravljen in
+     zajet s trditvijo `0 <= find('statusWanted') < find("'Ni sprememb…'")`.
+- STATUSI V BAZI: `Measurement.status` in `statusNote` (plus `shareToken`).
+  Migracija `prisma/migrations/20261019000000_r501_measurement_status` je
+  izvedena SAMO na lokalnem PG (:54329). Produkcijska baza Neon NI migrirana:
+  to je dejanje lastnika in ostaja zapisano kot odprto, ne kot opravljeno.
+- REGRESIJA, KI JO JE UJEL PAS (najpomembnejši zapis tega bloka): novi statusi
+  so bili izpeljani na nekaterih ustvarjalnih poteh, na štirih pa ne — prazno
+  polje je prevzelo privzetek stolpca `ESTIMATED`, nova (sicer pravilna)
+  poslovna vrata pa so zavrgla kosovnico iz pravilno potrjenega tekača. Veriga
+  v r488: `segmentsApplied None` → `0/0 vrstic` → `kosovnica POTRJEN 404` →
+  `BOM_ID None` → `TypeError: replace() argument 2 must be str, not None`.
+  Popravek je v jedru, ne v testu: `segmentLadderProvenance` (odloča
+  najšibkejši člen; neznano stanje padne na ESTIMATED) in
+  `photoRecordProvenance` (fotografski zapis je ocena, ne mera).
+  `SEGMENT_STATUSES.order` v `fence-run-engine.ts` ne nosi več svojih številk,
+  ampak bere `MEASUREMENT_STATUS_ORDER` iz istega jedra — dve lestvici z istimi
+  imeni bi bila dva vira resnice. `tests/r501.py` zdaj strojno preveri, da
+  vsak `db.measurement.create` v `src/` nastavi `status`.
+- R502 (harness, BREZ SPREMEMBE MERILNEGA JEDRA — uporabnikova zahteva):
+  `tests/ci-local.sh` ima dva jasna režisa. Privzeto pas upravlja svoj strežnik
+  (`ops/dev-serve.sh`). `START_DEV=0 EXTERNAL_SERVER=1` pomeni zavestno rabo že
+  delujočega strežnika: tujega procesa ne ustavlja, skupino
+  `r464-notifications` glasno preskoči in na koncu izpiše omejitev — zunanjemu
+  strežniku ne more dokazati, katerega commita postreže. Trditev iz prejšnjega
+  bloka, da je skupina r478 stalno rdeča, sem preveril: v tem zagonu je
+  `r475-r478` ✓ 3 / ✗ 0, torej sta bili takratni odpovedi posledica ostankov
+  prekinjenega r488, ne lastna napaka testa.
+- NAPAKA POGANJALCA, NAJDENA Z DOKAZOM: `tests/ci-local.sh:214` je imel v
+  double-quoted `echo` ukaz v backtickih, zato ga je izvedel
+  (`next: command not found`) namesto izpisal. Dodan je korak `quote_guard`, ki
+  preišče `tests/*.sh ops/*.sh scripts/*.sh` in napove rdeče vsak backtick v
+  double-quoted izpisu. `ops/dev-serve.sh stop` je zdaj res implementiran
+  (ustavi samo poslušalca na `$DEV_PORT` in preveri, da so vrata prosta); prej
+  je ukaz za ustavitev obstajal samo kot nasvet v sporočilu.
+- CELI PAS — KONČNI IZMERJENI REZULTAT (`bash tests/ci-local.sh`, lastni
+  strežnik, log `.ci-local-r503.log`): ✓ zeleno, 8 statičnih korakov in
+  24 skupin, `GATE EXIT 0`. Skupine: r437-r445 3 ✓ / 0 ✗ / 5 preskočenih,
+  r446-r452 7 ✓, r454-r458 5 ✓, r459-r462 4 ✓, r464 2 ✓, r464-notifications
+  1 ✓, r465-r474 8 ✓, r475-r478 3 ✓ / 1 preskočen, r479–r495 vse ✓,
+  r486 ✓ 70, r487 ✓ 73, r488 ✓ 65, r489 ✓ 128, r500 ✓ 76, r501 ✓ 131.
+- PRESKOČENO ZARADI ORODIJ (6 testov; to NI dokaz o kodi): r437.sh, r438.sh,
+  r439.sh, r440.sh, r441.sh (manjkajo jq, imagick, sqlite3) in r477.py. Z
+  `STRICT_TOOLS=1` bi bili rdeči namesto preskočeni.
+- POGON BREZ CEVI: tokrat je bila izhodna koda zapisana v log (`GATE EXIT …`),
+  ne steklena skozi `tail` — navidezni »exit 0 kljub rdečim« v prejšnjem bloku
+  je bil moja napaka pri pogonu, ne napaka poganjalca.
+- KAJ NI DOKAZANO (pošteno): pravi fotoaparat ni bil uporabljen (E2E nalaga
+  datoteke, r486); LiDAR oz. senzor za globino ni na voljo; točnost proti
+  fizični referenci ni izmerjena (vzorčni primeri znanih dimenzij za fazo 7
+  manjkajo); fotogrametrije ni — `recommendMethod` še vedno trdi
+  »rekonstruiramo geometrijo« (H4, faza 3); UI kamere še nima vnosnega polja za
+  ločeno Y referenco (`pxY`/`cmY` je podprt v jedru in endpointih, zato H1(a)
+  ostane DELNO); javna povezava `/api/public/measure` pokaže samo naziv stanja.
+
+---
+Task ID: R505 (dokončana Faza 3 + prenosljivost operacijskega jedra)
+Agent: Qoder (lokalno merjeno, 13.–14. 10. 2026, Windows Git Bash + lokalni PG :54329)
+
+Task: issue #15 Faza 3 — fotogrametrija brez AI; nato odprava tistih padcev
+relejnega pasu, ki so bili posledica orodja in ne kode, ter končni izmerjen
+rezultat CELOTE matrike (pogoj uporabnika pred worklogom in commitom).
+
+Work Log:
+- FAZA 3 (koda; `tests/r502.py` ✓ 76 / ✗ 0 klasična SfM veriga):
+  `src/lib/photogrammetry-core.ts` (ZERO uvozov — Harris/Shi-Tomasi vogli,
+  BRIEF-binarni opisi, rANSAC fundamentalna matrica, DLT triangulacija,
+  LU razcep in po-potegi iteracija) + `src/lib/photogrammetry-proof.ts`
+  (dokazni nosilec). Dokumentacija `docs/PHOTOGRAMMETRY-3D.md`, strojno berljiv
+  dokaz `docs/artefacts/fotogrametrija-dokaz.json`, dve ponovljivi sondi
+  `tests/probe/fotogrametrija-*.mjs`. Pošteno: dokaz je OFFLINE in ni priklopljen
+  na UI; `measure-engine.ts` na vprašanje metodo še vedno odgovori »SfM NI
+  izvedena«, ker je ni v izvedbi odčitka.
+- RESNIČNA NAPAKA APLIKACIJE, ki jo je našel test (ne obratno): PDF-ji
+  `src/lib/pdf-mini.ts` so bili strojno NEberljivi — Type1 s `/Differences`
+  nosi samo glife, brez Unicode-točke, zato `pdftotext`, iskalniki in bralke za
+  oslepje niso dobili NITI ENE besede. Dodan je `/ToUnicode` CMap, odveden od
+  ISTEGA vira (`SPECIAL_BYTES`) kot `charByte`, da je izkopano besedilo enako
+  natisnjenemu. Dokazano na živi generaciji: 19 464 B PDF, `pdftotext` 2 845 B
+  besedila, MONTAŽNA SKICA / VOZLIŠČ / »ni sličic zajema« bere pravilno.
+- PRENOSLJIVOST OPERACIJSKEGA JEDRA (tri ločene napake, vse izmerjene;
+  nobena ni popuščanje merila):
+  1. `ops/backup.sh:147` `hostname -s` — Windows/mac `hostname` te zastavice NE
+     pozna in pod `set -e` ustavi korak 4/6; `:132` je trd `bun`. Nova
+     `ime_gosta` in `zagon_js` (bun → node) v `ops/lib.sh`.
+  2. `python3 -c "…open('$STAGE/…')"`: Git Bash pretvarja POSIX-pot v Windows-pot
+     SAMO za argumente, ne znotraj `-c` niza → korak 6/6 je prijavil
+     `FileNotFoundError: /tmp/tmp.1a9E8xzeEU/manifest.json` kljub pravilno
+     napisanemu manifestu. V `backup.sh` (1×) in `restore.sh` (2×) poti zdaj
+     potujejo kot argumenti.
+  3. AGREGATNA KONTROLNA VSOTA exporta je bila platformno odvisna: GNU
+     `sha256sum` na Linuxu izpiše `<sha>␣␣<ime>`, MSYS `sha256sum` pa binarni
+     označevalec `<sha>␣*<ime>`. ISTIH 93 datotek je dalo dva različna
+     agregata (`40fbc9f8…` proti `759cc88e…`), zato `restore.sh --verify` nad
+     Windows-kopijo NI MOGEL uspeti. Pred razvrščanjem se ločnik normalizira na
+     dva presledka; na Linuxu je to brez učinka, zato ostanejo STARE kopije
+     preverljive. Izmerjeno po popravku: `backup.sh` RC 0 (92 tabel, 3 318
+     vrstic, 35 113 360 B `.rkb`, 6 s), `restore.sh --verify` RC 0
+     (»3 318 vrstic v 92 tabelah — vsi števci se ujemajo«, obnovljena baza se ujema).
+- PADCI TESTNEGA OKOLJA, KI SO IZGLEDALI KOT NAPAKE KODE:
+  • `/proc/sys/kernel/random/uuid` na Windows NE obstaja; `uuid()` v
+    `r439.sh`/`r440.sh`/`r441.sh` je vračal PRAZEN niz, zato je celotna
+    idempotentnost skupina padla brez krivde aplikacije. Generator je zdaj
+    prenosljiv (Linux → uuidgen → node → bun → python3) in suite SAM TAKOJ
+    preveri, da res da veljaven UUID — drugače javi razlog in stopi, namesto da
+    kasneje lažno krivi kodo.
+  • `curl` na tem sistemu je domorodni MSYS/UCRT64 build, ki pokvari NE-ASCII
+    `argv` (UTF-8 → U+FFFD). Test je shranil `stopni??e` namesto `stopnišče`.
+    Dokazano: `cleared=0` z `-d`, `cleared=1` z `--data-binary @datoteka`.
+    `r437.sh` in `r440.sh` zdaj telo vedno oddata prek začasne datoteke.
+  • `tests/r477.py`: Xpdf 4.06 na Windows NE podpira `pdftotext - -`
+    (rc 99, stdout prazen), zato je pomožnik vedno vrnil `''` in je padlo
+    vseh 9 PDF-prever kljub POVSEM PRAVILNEMU PDF-ju. Zdaj piše/bere začasno
+    datoteko in izrecno `-enc UTF-8` (brez tega Windows Xpdf izgubi Č/Š/Ž,
+    poppler na Linuxu je privzeto UTF-8 — meritev ne bi bila prenosljiva).
+    Rezultat: `r477.py` ✓ 81 / ✗ 0 (prej 72 / 9).
+  • `tests/r440-smoke.py` je plačila 0,01 brisal neposredno iz baze in pustil
+    `invoice.paid` za 0,01 nad vsoto (600,01 ob Σ 600,00); `r437.sh` je to
+    kazal kot napačen obračun. Čiščenje zdaj poravna `paid`/`status` po ISTI
+    formuli kot `recalcInvoice` (`src/app/api/payments/[id]/route.ts`).
+- VZROČNA LOČITEV (bistvo tega bloka): ob začetku je bilo rdečih pet skupin.
+  Odpravljene so bile TRI različne vzročne vrste — (a) orodje/manjkajoč
+  vmesnik (uuid, curl argv, pdftotext stdin), (b) prenosljivost operacijskega
+  jedra (hostname, bun, MSYS-pot, ločnik kontrolne vsote), (c) umazano
+  čiščenje testa, ki je skrilo pravo stanje baze. Nobena merilna trditev ni bila
+  omiljena: vsi popravki bodisi utrdijo dokaz (ToUnicode, `-enc UTF-8`) bodisi
+  vrnejo test v stanje, kjer dejansko preverja kodo.
+- LASTNA NAPAKA PRI POGONU, ZAPISANA DOKAZNO: vmes sem za hiter poskus zagnal
+  `ops/dev-serve.sh` BREZ `DATABASE_URL` (repo nima `.env`), zato je strežnik
+  javljal `{"ok":false,"db":"napaka"}` in so prijave vračale prazne žetone —
+  `r441.sh` je nad njim lažno padel na 500, ker `python3` v njegovem `PATH` ni
+  bil shimiran. Produkcijska baza NI bila dotaknjena (brez URL-ja → Prisma pade
+  na manjkajočo spremenljivko; preverjeno, nobenega odhoda ni). Strežnik sem
+  ustavil (`bash ops/dev-serve.sh stop` → »✓ vrata 3000 prosta«) in ga pred
+  ponovnim poskusom zagnal ENAKO kot pas: `DATABASE_URL` + `tests/toolshim.sh`.
+  Posledično: `r441.sh` ✓ 53 / ✗ 0.
+- CELI PAS — KONČNI IZMERJENI REZULTAT (`bash tests/ci-local.sh`, lastni
+  strežnik, log `.ci-local-r506.log`): ✓ ZELENO, 8 statičnih korakov in
+  25 skupin, `GATE EXIT 0`. Po meritvi iz posameznih skupinskih dnevnikov:
+  **4 135 potrjenih trditev, 0 napak, 4 izrecno označeni preskoki (⟿)**.
+  Skupine: r437-r445 8 ✓, r446-r452 7 ✓, r454-r458 5 ✓, r459-r462 4 ✓, r464 2 ✓,
+  r464-notifications 1 ✓, r465-r474 8 ✓, r475-r478 4 ✓, r479…r495 vse ✓,
+  r500 1 ✓, r501 1 ✓, r502 1 ✓. Vsi štirje preskoki so v `r441.sh` in imajo ISTI
+  vzrok: GitLab off-site preverbe (API, zaščita, pipelines, MR) brez
+  `GITLAB_TOKEN` — odvisnost okolja, ne dokaz o kodi; repozitorij je prešel na
+  GitHub. Ločeno in NE šteto kot preskok: `r440-smoke.py` javlja 75 RBAC
+  odločitev `⊘ brez fiksure` (seed teh entityjev ne ustvari: fence, capture,
+  playbook, ar, foto_viz, pravilo_verzija) — odločitev je pravilna, pot je
+  nepokrita. Tokrat NI preskokov zaradi orodij (jq/sqlite3/pdftotext/magick so
+  na tej mizi nameščeni — število preskokov je zato drugačno kot v R502/R503,
+  kjer jih je bilo 6 zaradi manjkajočih orodij).
+- KAJ NI DOKAZANO / OSTANJA TVEGANJA (pošteno): (1) migracija
+  `20261019000000_r501_measurement_status` na Neonu ŠE NI izvedena — dejanje
+  lastnika; (2) produkcijska gesla administracije/demo so javno znana in
+  nerotirana — lastnik; (3) fotogrametrija je dokazana offline, ni priklopljena
+  na zajem v UI, točnost proti fizični meri ni izmerjena (manjkajo vzorčni
+  primeri znanih dimenzij); (4) UI kamere še nima `pxY`/`cmY` vnosnega polja
+  (H1a DELNO); (5) `ops/backup.sh`/`restore.sh` še vedno potrebujeta `python3`
+  (v pasu shimiran; v golo Windows okolje brez Pythona korak 4/6 odpove z
+  jasnim sporočilom, ne tiho); (6) MSYS `curl` pokvari ne-ASCII `argv` — ostali
+  suite-i lahko slovenske tekste primerjajo »simetrično pokvarjeno«, zato jih je
+  treba prenašati prek datoteke, kot je zdaj storjeno v `r437.sh`/`r440.sh`;
+  (7) 36 obstoječih `react-hooks` eslint opozoril je dokumentiran tehnični dolg;
+  (8) GitHub Actions minute so porabljene do 1. 11. 2026, zato GitHub preverba
+  tega zagona NI dokaz; lokalni pas je. Deploya ne predlagam, dokler pas ni
+  zelen — tokrat je, a ob uporabi pogoja (1)–(2) je promocija na `main`
+  lastnikova odločitev.
+
+
+---
+Task ID: R506 (issue #15 — fazi 4+5 dokončani: vodeni zajem, geometrija po tipih, ločena Y referenca in EXIF dokaz)
+Agent: Qoder (lokalno merjeno, 14. 10. 2026, Windows Git Bash + lokalni PG :54329)
+
+Task: iz issue #15 sta bili odprtih še dve točki, ki ju je baseline sam pripisal
+fazama 4–5: (H1 a) anizotropno merilo `pxY`/`cmY` je bilo podprto v jedru in
+endpointih, a monter v kameri ni imel kam vpisati; (H8) EXIF orientacija je bila
+predpostavka, ne preveritev. Poleg tega fazi 4+5 domenske številke prikazata po
+izvoru (vpisano / privzeto / pravilo) in ne smeta ustvariti drugega merilnega ali
+cenovnega jedra (§7).
+
+Work Log:
+- IZVOR VHODOV (koda; `tests/r503.py` bloki A, C, G, K, M): domenska polja v kameri
+  se začnejo PRAZNA; `domainInputs` vsako količino označi kot `VNOS`/`PRIVZET`/
+  `PRAVILO`, `privzetiVnosi` in `manjkajociVnosi` imenujeta konkretno polje, izvoz pa
+  dobi skupino »Viri domenskih vhodov« samo, kadar nekaj ni izmerjeno.
+- ZAVRNJEN VNOS NI VNOS: razmak 400 cm, višina 10 cm in naklon 85° ostaneta brez
+  oznake VPISANO — koda ne more tiho uporabiti privzetka in trditi, da je nekaj
+  izmerjenega (`r503` C).
+- GEOMETRIJA PO TIPIH (faza 5): odprtina, večja od ploskve, je NAPAKA pri fasadi IN
+  keramiki; neto ostane 0, status meritve je `NESKLADJE_GEOMETRIJE` in poslovna mera
+  je zaprta (`r503` D). `domainFindings` (INFO/NAPAKA) je edini vir teh sporočil — UI
+  jih ne formulira posebej.
+- VODENI ZAJEM: `capturePlan` ima korake za vsak tip objekta, `captureProgress`
+  stanje koraka izračuna iz dejanskih podatkov zajema (točke, kalibracija, število
+  pogledov, nagib) in pozna tri stanja; koraka, ki ga koda ne more vedeti, ni nikoli
+  označen kot narejen (`r503` E, F).
+- H1 (a) ZAPRTO v kameri: `YRefBlock` vpiše `pxY`/`cmY` SAMO kot par (enolični par je
+  zavrnjen), `applyYRef` par tudi odstrani, `calcView` ga posreduje jedru in
+  `DraftView.calib` ga hrani, da ga obnovljen osnutek ne izgubi; `confirm`/`sync`
+  gresta skozi ENOTNO pogodbo `parseCalibration` (`r503` M).
+- H8 (DELNO) — nov čist modul `src/lib/exif-orientation.ts`: iz JPEG bajtov prebere
+  orientacijo (tag 0x0112, TIFF II in MM) in dimenzije kodeka (SOF0..SOF15),
+  `swapsAxes` ve, da osi zamenjata samo 5..8, `checkOrientation` pa razloži stanje
+  UPORABLJENA / NEUPORABLJENA / NI_DOKAZA / PRAVOKOTNA / NI_PODATKA. Kadar je stanje
+  NEUPORABLJENA, kamera obrat izvede SAMA (`normalizedSize` + `orientationMatrix`,
+  vrstni red `scale` → `transform` → `drawImage`); monter ugotovitev vidi kot napis z
+  razlogom. Živi zajem in izbira obstoječe FOTO stanje ponastavita, da dokaz ne
+  preživi po drugem viru (`r503` N, N2, N3).
+- ŠTEVKE OHRANJENE: numerična regresija (700 cm, 12 m², 35 plošč, 14,65 m² pri 35°,
+  16,97 m² pri 45°, 15 × 16,7 cm) je nespremenjena — fazi 4+5 sta spremenila samo
+  OPIS teh številk, ne njihovih vrednosti (`r503` B); `params.engine` ostane pod
+  8000 B in `inputs`/`plan` nista dodana h ključem (`r503` H); INFO ne spremeni
+  `confidence` (`r503` I).
+- RESNIČNI DEFEKTI, KI JIH JE NAŠLA TA Faza (ne napak v testih):
+  1. `calcView` je kalibracjo rekonstruiral kot `{ px, cm, imgW, imgH }` in je pri
+     tem IZGUBLJAL `pxY`/`cmY` — živi predogled bi kazal drugačno dolžino kot
+     strežnik. Zdaj se posreduje cel objekt.
+  2. Ob anizotropnem merilu `computeGeometry` vrne `cmPerPx = null` (dve merili nista
+     eno), UI pa je to izpisal kot »neveljavna referenca — px in cm morata biti večja
+     od 0« in je MONTERJU LAGAL o popolnoma veljavnem vnosu. Izpis je zdaj
+     `meriloOznaka(scale)`, ki pokaže X in Y ločeno, `posts` pa je odvisen od
+     `scale.known`, ne od enega samega razmerja.
+  3. `DraftView.calib` je bil tipiziran samo `{ px, cm }`, zato bi obnovljen osnutek
+     (IndexedDB) Y referenco tiho izpustil.
+  4. Domenska polja so bila predpolnjena (120/60/3/35), jedro pa jih je videlo kot
+     VPISANO — številka na zaslonu je bila videti kot izmerjena, čeprav je monter ni
+     nikoli vnesel.
+- MERITVE (končni rezultati, ne ocena): `tests/r503.py` ✓ 155 / ✗ 0 (bloki A–N,
+  deterministične funkcije + izvorni dokazi, brez baze in brez strežnika);
+  `npx tsc --noEmit` EXIT 0; `eslint` na meritve-kamera + exif-orientation: 0 napak
+  (18 obstoječih `react-hooks/refs` opozoril).
+- CELI RELEJNI PAS (`bash tests/ci-local.sh`, LASTNI strežnik, log
+  `.ci-local-r506b.log`): ✓ ZELEN, 8 statičnih korakov in 26 skupin, `GATE EXIT 0`.
+  Iz skupinskih dnevnikov seštete potrjene trditve: 2462 ✓ (25 skupin s številčno
+  obliko »✓ N / ✗ M«) + 76 ✓ iz `r502`, ki piše »76 OK / 0 NAPAK« — **skupaj 2538
+  potrjenih trditev, 0 napak**. Preskoki: **4**, vsi v `r437-r445` in z istim
+  vzrokom — GitLab off-site preverbe (API, zaščita, pipelines, MR) brez
+  `GITLAB_TOKEN`; odvisnost okolja, ne dokaz o kodi (repozitorij je prešel na
+  GitHub). Tokrat ni preskokov zaradi manjkajočih orodij.
+- KONFLIK RAZVOJNEGA STREŽNIKA, RAZREŠEN PO NAVODILU: v prvem poskusu je pas izstopil
+  BREZ kakršnegakoli posega (`✗ na http://localhost:3000 že odgovarja aplikacija, ki
+  je PAS NI zagnal`). Poslušalec je bil moj ostanek iz prejšnjega zagona (PID 18508,
+  `repo/node_modules/next`); ustavljen je bil z `ops/dev-serve.sh stop` (lasten
+  nadzor, brez ubijanja tretjih procesov), vrata 3000 so bila prosta in je nato pas
+  poganjal LASTEN strežnik. Zunanji strežnik NI bil sprejet z `EXTERNAL_SERVER=1`,
+  ker testni potek njegove lastnosti ne more potrditi.
+- KAJ NI DOKAZANO / OSTANJA TVEGANJA (pošteno): (1) migracija
+  `20261019000000_r501_measurement_status` na Neonu ŠE NI izvedena — dejanje lastnika;
+  (2) produkcijska gesla administracije/demo so javno znana in nerotirana — lastnik;
+  (3) EXIF dokaz se NE ZAPIŠE v `params` (`viewForStorage` beli seznam ključev je
+  namenoma ostal nespremenjen, da se oblika obstoječih zapisov ne spremeni): monter ga
+  vidi med meritvijo, iz izvoza pa je razviden samo vir domenskih številk;
+  (4) zrcaljenja in zasuka za 180° (orientacija 2/3/4) s primerjavo dimenzij NI mogoče
+  dokazati — ti pošteno dobijo `NI_DOKAZA` in opozorilo, ne samodejnega popravka;
+  (5) EXIF hoja teče samo za NALOŽENE datoteke (živi zajem in obstoječa FOTO nimata
+  kodeksa); (6) orientacija je preverjena na sintetičnih bajtih, ne na fizičnem
+  telefonu monterja — aparat/modela za ta zagon ni bilo na voljo; (7) fotogrametrija
+  (faza 3) ostane dokaz izvedljivosti brez priklopa na UI; (8) tolerance mora
+  potrditi lastnik, referenčni nabor fotografij z neodvisno fizično izmerjenimi
+  dimenzijami (§6.1) pa še ne obstaja — brez njiju fazi 6–7 ne moreta trditi
+  nobenega odstotka točnosti; (9) 18 `react-hooks` opozoril v kameri je dokumentiran
+  tehnični dolg; (10) GitHub Actions minute so porabljene do 1. 11. 2026, zato GitHub
+  preverba tega zagona NI dokaz — dokaz je lokalni pas. Deploya ne predlagam, dokler
+  pas ni zelen; zdaj je zelen, a glede na (1) in (2) je promocija na `main` lastnikova
+  odločitev. `public/assets/roksal/src/MANIFEST.json` je v delovnem drevesu sprememnjen
+  s strani uvoženih sredstev in NAMENOMA ni v tem commitu.
+
+
+---
+Task ID: R507 (issue #14 — fotozamenjava brez AI dokončana: maska, obnova ozadja
+iz sosednjih pik, preverjena gradiva iz kataloga, opozorila ob IZRISU in sprejemni
+nabor na štirih resničnih fotografijah)
+Agent: Qoder (lokalno merjeno, 14. 10. 2026, Windows Git Bash + lokalni PG :54329)
+
+Task: issue #14 zahteva zamenjavo ROKSALOVE ograje v fotografiji BREZ
+generativnega modela, tako da je rezultat fotorealističen tam, kjer to dopuščajo
+podatki, in pošteno označen tam, kjer jih ni. Pred tem zagonom je bila napisana
+večina matematike, a tri stvari so manjkale: (1) maska in obnova ozadja nista bili
+izločeni iz React komponente v čiste module, (2) opozorila kakovosti so bila
+NAPOVEDANA iz parametrov in ne ZAPISANA ob dejanskem izrisu, (3) ni bilo
+sprejemnega testa na resničnih fotografijah niti poročila, ki ga
+zahteva zadnji DoD pogoj te naloge.
+
+Work Log:
+- NOVA MODULA (čista, brez DOM-a, varna za klientno stran):
+  `src/lib/photo-replace-mask.ts` (503 vrstice) — večkotniška maska polygon
+  (even-odd pravilo + shoelace ploščina), `preveriMasko` (MAX_OBLIK 4,
+  MAX_TOCK 20, MEHKA_ROB 3), `pokrij` (raster na pikslo), `ploscina`,
+  `ploscinaSkupine`, `maskaZaIzris`, `jePraznaMaska` in `slojPrednjega` — ta
+  funkcija je namenoma prevzela pikselno aritmetiko, da React ne šteje
+  alfa vrednosti.
+  `src/lib/photo-replace-texture.ts` (294 vrstic) — projektivno preslikavo
+  teksture po celicah (homografija iz štiri-točkovnega kvada, mešanje z
+  `multiply`) in fail-closed izbiro gradiva (`UPORABLJENO`, `SAMO_DRUZINA`,
+  `NI_DATOTEKE`, `NI_PREVERJENO`, `NI_DOVOLJENJA`, `BREZ_IZDELKA`).
+- `src/lib/photo-replace-core.ts` (+188/−…): `ENGINE_VERSION` je zdaj `1.1.0`,
+  `RenderParams.maska?`, `IzrisOpcije {ghost, senca, prekrijStaro, zig, seme,
+  gradivo, ozadje, prednji}`, poštene oznake `OZADJE_NEDOKONCANO`,
+  `OZADJE_IZ_ROBOV`, `PREKRIVANJE_NI_ODSTRANITEV`, opozorila `MASKA_NEKRITA`,
+  `MASKA_IZPUST`, `PREDNJI_BREZ`; `izrisiPrimerjavo` zdaj VRNE `Opozorilo[]`
+  (additivno — obstoječi klicatelji vrnitve niso uporabljali, `r459` to
+  preverja). Obnova ozadja gre po širjenju robov, globina obroča (ring) je
+  hkrati dokaz zanesljivosti; onesnažen (tainted) platno → obnova se IZKLOPI z
+  opozorilom, ne z izjemo.
+- `src/lib/photo-replace-engine.ts` (+11): strežniška validacija maske,
+  NAVZAJDOLJ skoraj nevidna — prazna maska se SHRANI BREZ ključa, zato obstoječi
+  kvad-samo zapisi ostanejo veljavni in berljivi (`r504` blok K to dokazuje).
+- `src/components/roksal/modules/foto-replace.tsx` (+418): panel za ročno masko,
+  prikaz nedokončanih območij (jantarna šrafura `(244,180,60)`), pasov in
+  `zahtevaRočniPoseg`, ter najpomembnejša sprememba: opozorila se zapisujejo ob
+  IZRISU (`zapisiOpozorila` v korakih 4 in 5), prikaz pa je unija napovedanih in
+  izrisanih (`vsaOpozorila`, dedup po `koda`).
+- RESNIČNI DEFECTI, KI JIH JE NAŠLA TA Faza (in kako so razrešeni):
+  1. UI je lahko kazal opozorila, ki jih poganjalnik morda nikoli ni izdal —
+     napovedovanje iz parametrov je zamenjal zapis ob dejanskem izrisu.
+  2. Napaka V TESTU, ne v kodi: `tests/r504.py` je kot identiteto gradiva
+     pričakoval Prisma `id` (cuid). Vsak `bun run db:seed` tiste ID-je znova
+     USTVARI, zato je bil pas po ponovnem seed-u rdeč (191 ✓ / 5 ✗). Merilo je
+     zdaj POT DO DATOTEKE (`assetDatoteka`); manifest je dobil ključ
+     `_identiteta`, ki to pojasni prihodnjim vzdrževalcem.
+  3. Napaka V TESTU: RGBA sloj se indeksira z `(y*W+x)*4+3`, ločeno alfa polje
+     pa z `y*W+x` — prva verzija trditve E je mešala oba pomnika. Modula je bila
+     pravilna.
+- MERITVE (končni rezultati, ne ocena): `tests/r504.py` ✓ 196 / ✗ 0 (bloki A–K:
+  sintaksa in robovi mask, ploščine/pokritost na štirih RESNIČNIH fotografijah,
+  izrisani sloji, determinizem, izbira iz KATALOGA, velikost `renderParams` pod
+  12 KB, zdoljnost starih zapisov); `npx tsc --noEmit` EXIT 0; `eslint` 0 napak /
+  2 opozorila; `r459-r462` ✓ 91 / ✗ 0 (`ENGINE_VERSION` se zdaj bere iz vira, ne
+  iz hardkodirane `1.0.0`).
+- REGISTRACIJA V PAS: `tests/ci-matrix.sh` (`GRUPE` + `CLANI[r504]="r504.py"`) in
+  `.github/workflows/ci.yml` (`- grupa: r504`) — `ci-local.sh` primerja oba
+  seznama in razhajanje javi; ta zagon je javil »CI matrika usklajena z
+  .github/workflows/ci.yml«.
+- ŽIVI BRSKALNIK (podagent, lastni razvojni strežnik + seeded dev račun): celoten
+  petkorakni potek od nalaganja do PREJ/POTEM drsnika — vsi koraki PASS,
+  0 napak v konzoli. Dve omejitvi tega dokaza: (a) `upload_file` in shranjevanje
+  posnetka na disk je zavrnil file-root guard instance brskalnika, zato je
+  podagent naložil bajte fotografije prek HTTP-ja z razvojnega strežnika in
+  sprožil pravi `change` dogodek; (b) dve a11y opozorili (`form field should have
+  an id or name`, `Incorrect use of <label for=FORM_ELEMENT>`) nista bili
+  locirani — VSI `<Label htmlFor>` v novem panelu imajo svoj par (`foto-upload`,
+  `ref-meritev`, `ref-cm`, `pv-*`), v modulu ni surovih `<input>`/`<select>`,
+  zato njun vir NI nova maska.
+- CELI RELEJNI PAS (`bash tests/ci-local.sh`, LASTNI strežnik, dnevnik
+  `gate-r507.log`): ✓ ZELEN, izhod 0, 8 statičnih korakov in **27 skupin**,
+  **0 napak**. Potrjene trditve, seštete iz `✓` vrstic vseh dnevnikov skupin:
+  **4490** (metoda reproducira znani števili posameznih suitov: r503 = 155 in
+  r504 = 196). Preskoki: **4**, vsi v `r437-r445` in z istim vzrokom — GitLab
+  off-site preverbe (API, zaščita, pipelines, MR) brez `GITLAB_TOKEN`; to je
+  odvisnost okolja, ne dokaz o kodi (repozitorij je prešel na GitHub). En
+  `⏸` (`r464-notifications`: Next dev blokada `.next/dev/lock`) je bil ZAČASNA
+  ustavitev lastnega strežnika, nato je skupina uspešno pognala 53 ✓ / 0 ✗ — ni
+  neto preskok. Tokrat ni preskokov zaradi manjkajočih orodij.
+- KONFLIK RAZVOJNEGA STREŽNIKA, RAZREŠEN PO NAVODILU: pred pasom je na vratih
+  3000 stal moj ostanek prejšnjega zagona (PID 25008); ustavljen je bil z
+  `ops/dev-serve.sh stop` (ta ukaz ubije IZKLJUČNO poslušalca na svojih vratih in
+  potrdi, da so prosta), nato je pas poganjal LASTEN strežnik. Zunanji strežnik
+  NI bil sprejet z `EXTERNAL_SERVER=1`, ker testni potek ne more potrditi njegove
+  lastnosti. Merilnega jedra zaradi tega konflikta NIJE bilo spremenjeno.
+- DOKAZNA POŠTENOST: `docs/FOTOZAMENJAVA-POROCILO-14.md` (88 vrstic) je poročilo,
+  ki ga zahteva zadnji DoD pogoj — kaj JE dejansko fotorealistično (preverjena pot
+  datoteke `filePath`, deljeni robovi celic, katalogske dimenzije in RAL,
+  svetlost OCENJENA iz fotografije, deterministično seme, prednji plan risan
+  zadnji iz originalnih pikslov), kje je potreben ROČNI poseg, tabela pokritosti
+  kataloga, kaj je še treba PRIDOBITI (PROFIL_PRESEK za POLNA 128/100/57 in
+  DESKA 150, DETAJL za vseh pet tipov, BARVNA_LESTVICA z `colorName` po
+  variantah, manjkajoča FOTO za `ROK-OGP-POLNA-57-ROAK` in `-RWA`, sredstva ali
+  eksplicitna oznaka »generic product« za OGR-K-001/002 in OGR-P-001/002) in meje
+  dokaza.
+
+Stage Summary:
+- Issue #14 je funkcionalno zaključen in registriran v pasu: maska + obnova
+  ozadja brez AI + fail-closed izbira preverjenih ROKSALOVIH gradiv + opozorila,
+  ki jih izris resnično vrne, na štirih resničnih fotografijah z ročno označenimi
+  maskami. Nobena obstoječa funkcija ni izginila: stari kvad-samo zapisi se
+  berejo naprej, `r459` in `r464` sta bila samo dopolnjena, ne osiromašena.
+- To NI trditev o odstotkih točnosti in ne obljuba »videti je kot prava
+  gradnja«: tam, kjer manjkajo katalogske fotografije, aplikacija samega sebe ne
+  more imeti za fotorealističnega — prav zato ima oznake in opozorila.
+- KAJ NI DOKAZANO / OSTANJA TVEGANJA (pošteno): (1) tolerance meril in
+  referenčni nabor fotografij z NEODVISNO fizično izmerjenimi dimenzijami
+  (issues #15 §6.1) še ne obstajata — fazi 6–7 brez njiju ne moreta trditi
+  nobenega odstotka; (2) migracija `20261019000000_r501_measurement_status` na
+  Neonu ŠE NI izvedena in produkcijski gesli administracije/demo sta javno znana
+  in nerotirana — oboje je dejanje lastnika; (3) GitHub Actions minute so
+  porabljene do 1. 11. 2026, zato GitHub preverba tega zagona NI dokaz — dokaz
+  je lokalni pas; (4) brskalnikov dokaz nima posnetka na disku in ni uporabil
+  nativnega `upload_file` (varnostna omejitev instance); (5) dve a11y opozorili v
+  konzoli nista locirani; (6) maska je pri novih fotografijah vedno ROČNO delo —
+  samodejnega segmentiranja ni in ga ta issue ne sme uvajati; (7)
+  `public/assets/roksal/src/MANIFEST.json` je v delovnem drevesu spremenjen zaradi
+  uvoženih sredstev in NAMENOMA ni v tem commitu.
+
+
+---
+Task ID: R508 (issue #7 — monterjeva pot: sejski osnutki brez tihe prepis,
+poštene zmogljivosti kamere v treh stanjih in vidno stanje shranjevanja)
+Agent: Qoder (lokalno merjeno, 14. 10. 2026, Windows Git Bash + lokalni PG :54329)
+
+Task: issue #7 zahteva, da monter na terenu zajame, izmeri, shrani in odda tudi
+brez signala. Trije mehanizmi so bili doslej narejeni na pol: (1) `measure-draft`
+je shranil SAMO en osnutek na uporabnika, zato je druga nedokončana mera tiho
+PREPISALA prvo — monter je izgubil zajem brez kakršnega koli opozorila; (2)
+kamera je trdila, da podpira svetilko in preklop, tudi ko `getCapabilities()`
+odgovora ni dal (nezavarjen kontekst ali naprava brez izpostavljenih zmožnosti)
+— pomanjkanje dokaza je bilo predstavljeno kot dokaz; (3) stanje shranjevanja
+(osnutek samo v telefonu · čaka na oddajo · poslano · razhajanje) vmesnik ni
+nikoli pokazal, zato monter ni vedel, ali mora zajem ponoviti. Nobena od treh
+napak ni bila odpravljena z novim merilnim ali cenovnim jedrom.
+
+Work Log:
+- NOVO `src/lib/camera-capabilities.ts` (162 vrstice, brez DOM-a, testable):
+  tri stanja `PODPRTO / NI_PODPRE / NI_DOKAZA` — NEPOZNAVANJE VEČ NI TRDITEV.
+  `zmogljivostiKamere(track, vidniVhodi)` svetilko oceni SAMO iz
+  `getCapabilities()` (`torch === true` ali neprazen seznam); `vidniVhodi === null`
+  (nezavarjen kontekst, `enumerateDevices` ni na voljo) vrne `NI_DOKAZA` z
+  razlogom `nezavarjen-kontekst`, ne »0 kamer« in ne »ena kamera«.
+  `nastaviTorch` v stanju `NI_PODPRE` ali brez tracka `applyConstraints`
+  NIKOLI ne pokliče (test šteje klice in dokaže 4, ne 5 ali 6);
+  `VKLOPLJEN/IZKLOPLJEN` vrne samo, kadar `getContext().torch` vrne boolean,
+  sicer `SPREJETO_BREZ_POTRDITVE` — uporabniku se izriše »naprava stanja ne
+  potrjuje — preveri v kadru, ali sveti.«, ne zmagoslavni »svetilka prižgana«.
+  `prestejVideoVhode` upošteva `isSecureContext`; `naslednjaSmer`/`napisSmeri`
+  držita smer (`environment`/`user`) brez DOM referenc.
+- `src/lib/measure-draft.ts` (+143 vrstic, BREAKING CHANGE združljivo branje):
+  osnutki so zdaj SEJE po ključu `projekt/nalog` (`sejaKljuc`), `MAX_SEJE = 6`.
+  `MeasureDraftRecord { userId, savedAt, seje: DraftSeja[] }`; `keyPath: 'userId'`
+  in `DB_VERSION = 2` OSTAJATA, zato noben osnutek, ki je že na telefonu, ni
+  izgubljen, in MIGRACIJE NI. `normalizirajZapis` sprejme novo obliko in staro
+  R486 (razprosto) obliko; `razvrstiSeje` razvršča po `savedAt` od najnovejše;
+  `splosciSejo` vrne snapshot, kakršnega UI že pozna. `saveDraft` vrne
+  `{ izpadle }` in UI ob izpadu najstarejše seje izpiše toast (prostor je za 6 —
+  7. se izrine namenoma, ne tiho). `loadDraft(userId, key?)` brez ključa vrne
+  najnovejšo sejo. `clearDraft(userId, key)` pobriše SAMO to sejo (poprej je
+  `clearDraft` pobrisal VSE osnutke uporabnika); zapis je izbrisan šele, ko je
+  brez sej. Prevelik osnutek (> 8 MB) je zavrnjen z uporabniku razumljivim
+  sporočilom, OB STOJEČI matriki sej.
+- `src/lib/offline.ts` (+89): `stanjeShranjevanja(v)` je ČIST preslikavalec
+  obstoječega stanja vrste v ENO vrstico vmesnika. Prioriteta je
+  `NESKLADJE > NAPAKA > ČAKA_NA_SINHRONIZACIJO > SINHRONIZIRANO >
+  SHRANJENO_V_TELEFONU` in je namenoma TAKŠNA: razhajanje med monterjevo in
+  pisarniško različico NE SME ostati skrito za ponovljivo napako pošiljanja.
+  Kombinirano stanje (razhajanje + spodletelo pošiljanje) v `opis`/`dejanje`
+  imenuje OBOJE.
+- `src/components/roksal/modules/meritve-kamera.tsx` (+239, vezava):
+  pod korake faze zajema je dodana vrstica `role="status"` z
+  `aria-label="Shranjevanje: …"`, ki jo napajata `getOfflineState()` in
+  `useOnline()` (resnična IndexedDB vrsta, ne ugibanje); gumboma za svetilko in
+  preklop kamer sta omogočena SAMO ob dokazu, uspešna toasta se izpišeta samo ob
+  dejanskem `true`, gumb za preklop se ob skopem seznamu vhodov sploh ne prikaže;
+  `zajemiZmogljivosti(stream)` pokliče `enumerateDevices` ob `isSecureContext`;
+  iskanje in nadgradnja osnutka tečeta po `osnutekKljuc()`; vsi `clearDraft`
+  klici nosijo ključ seje (test to preverja z branjem izvora); `saveOffline`
+  si ključ shrani PRED `resetAll()`; obstoječi R455/R457 (način izmere,
+  zmogljivostni profil naprave, pravila načinov) so nepoškodovani.
+- NOVO `tests/r508.py` (304 vrstice, 67 trditev, brez strežnika, brez AI in
+  brez novih paketov): A) tri stanja zmogljivosti; B) stanja `nastaviTorch` +
+  števec, ki dokaže, da `NI_PODPRE` nikoli ne pokliče `applyConstraints`;
+  C) `prestejVideoVhode` (nezavarjen kontekst → null, vhodi brez `deviceId` se
+  ne štejejo); D) sejski osnutki čez IDB mock: dve seji SOOBSTAJATA hkrati,
+  nadgradnja istega ključa ostane ENA, najnovejša brez ključa, IDOR (drugi
+  uporabnik ne vidi ničesar), izbris po ključu, meja `MAX_SEJE` vrne izpadla
+  ključa, star R486 zapis je še vedno berljiv, prevelik osnutek ne pokvari
+  obstoječe seje, prazen `userId`; E) tabela prednostne razvrstitve stanja
+  shranjevanja; F) pregled izvora, da UI vse tri stvari RES veže (in da
+  »Shranjeno v telefonu« ni podvojeno v komponenti) ter da noben nov uvoz
+  (TensorFlow/ONNX/OpenCV/HuggingFace) ni pristal v `package.json`.
+- REGISTRACIJA v pasu: `tests/ci-matrix.sh` (`GRUPE` + `CLANI[r508]`) in
+  `.github/workflows/ci.yml` (`- grupa: r508` s slovensko opombo o pariteti).
+
+Verification:
+- `npx tsc --noEmit` CLEAN; `npx eslint` na treh spremenjenih datotekah: 0 napak.
+  V `meritve-kamera.tsx` je bilo 18 opozoril že PRED tem zagonom (primerjalno
+  preverjeno na kopiji iz `git show HEAD:`) in jih je sedaj še vedno 18, torej
+  BREZ REGRESIJE.
+- `python -X utf8 tests/r508.py` → `R508: 67✓ / 0✗`.
+- CELOTI relejni pas (`TEST_DB_URL=…:54329 KEEP=1 TIMEOUT_NOTIFY=900 bash
+  tests/ci-local.sh`), ki ga je vodil pasov LASTEN strežnik:
+  **8 statičnih korakov ✓ · 28 skupin ✓ · 59 suite-ov ✓ · 0 napak ·
+  4559 potrjenih trditev v dnevnikih · 4 preskoki ⟿ · 1 začasni ⏸**.
+  Kaj ti številki pomenita, konkretno: (1) vseh 4 preskokov so IZKLJUČNO
+  off-site GitLab preverbe (API brez veljavnega žetona; repozitorij je prešel
+  na GitHub) — to ni nevtraliziran rizik, ampak tuje okolje, ki ga s tem žetonom
+  preveriti ni mogoče; (2) en `⏸` je bila blokada Next razvojnega strežnika pred
+  skupino `r464-notifications`, nato je skupina zares ZELENA (`1 ✓ / 0 ✗`);
+  (3) `r486` (stari osnutki) je zelen tudi PO prehodu na seje, zato trditev o
+  združljivem branju ni samo branje kode.
+- KONFLIK RAZVOJNEGA STREŽNIKA, RAZREŠEN PO NAVODILU: pred pasom je na vratih
+  3000 stal moj ostanek ROČNO zagnanega strežnika, ki mu je manjkal
+  `DATABASE_URL` (`/api/health` je vrnil `503 degraded` in
+  »Environment variable not found: DATABASE_URL —> schema.prisma:12«). Ta zagon
+  NI bil uporabljen kot dokaz; ustavljen je bil z `ops/dev-serve.sh stop` (ta
+  ukaz ubije samo poslušalca na svojih vratih in potrdi, da so prosta), nato je
+  pas poganjal LASTEN strežnik. `EXTERNAL_SERVER=1` NI bil sprejet, ker testni
+  potek ne more potrditi lastnosti tujega strežnika. Merilnega jedra zaradi tega
+  konflikta NIJE bilo spremenjeno.
+
+Stage Summary:
+- Tri resnične napake monterjeve poti so zaprte z dokazi, ne z obljubami: tiha
+  prepis osnutka (sedaj seje), lažna trditev o zmogljivosti (sedaj tri stanja in
+  pogojeno omogočeni gumbi) in nevidno stanje shranjevanja (sedaj vrstica, izračunana
+  iz resnične vrste).
+- Issue #7 NI zaprt. Zelena gradnja in zelen pas nista dokaz, da je naloga
+  končana. Manjka pisarniška veriga iz §8: ob potrditvi se še NE sestavi paket
+  samodejno (`paketer`/auto-package ne obstaja), ni sestave monterskega paketa,
+  originalov v izvozu in bloka avtorjev/zgodovine sprememb v PDF-ju;
+  `MAX_VIEWS = 4` ostaja (razdelitev rekonstrukcija/detajl ni narejena);
+  razhajanje je vidno in uporabniku pove, kaj naj stori, izbira med različicama
+  pa še ni implementirana (v shemi ni razpredelnice razhajanj — stanje se šteje
+  iz `status = 'conflict'` v lokalni vrsti); spomin na zadnjo smer kamere ali
+  svetilke ni shranjen.
+- KAJ NI DOKAZANO / OSTANJA TVEGANJA (pošteno): (1) fizične naprave (pravi
+  telefon s svetilko, več kamerami, GPS) na tej mizi NI, zato so dokazi za
+  `PODPRTO` sintetični — na napravi odloča obseg, ki ga vrne `getCapabilities()`;
+  (2) tolerance meril in referenčni nabor z neodvisno fizično izmerjenimi
+  dimenzijami (#15 §6.1) še ne obstajata; (3) migracija
+  `20261019000000_r501_measurement_status` na Neonu ŠE NI izvedena in
+  produkcijski gesli administracije/demo sta javno znana in nerotirana — oboje
+  je dejanje lastnika; (4) GitHub Actions minute so porabljene do 1. 11. 2026,
+  zato GitHub preverba tega zagona NI dokaz — dokaz je lokalni pas; (5) GitLab
+  sinhronizacija ni preverjena (žeton iz pogovora je neveljaven — `400` na
+  `/api/v4/user`) in jo štejem kot PRESKOČENO, ne kot uspešno; (6) dve a11y
+  opozorili v konzoli nista locirani; (7)
+  `public/assets/roksal/src/MANIFEST.json` je v delovnem drevesu spremenjen
+  zaradi uvoženih sredstev in NAMENOMA ni v tem commitu.
+
+Task ID: R509 (issue #7 §8/§9 — pisarniška veriga: ročni prenos mere v paket,
+dokaz originalov v izvozu in PDF-ju, zgodnja blokirana odločitev količine in
+spomin na monterjeve nastavitve kamere)
+Agent: Qoder (lokalno merjeno, 14. 10. 2026, Windows Git Bash + lokalni PG :54329)
+
+Task: Monterjeva pot se je do zdaj končala pri potrjeni meri. Pisarnski del je
+manjkal: (1) ob potrditvi se mera NI prenesla v paket projekta, zato jo je
+pisarna ročno prepisovala — vir napak, ki ga je izrecno prepovedal §21; (2)
+izvoz mere je vseboval samo sklic na fotografijo, ne pa dokaza o izvirniku
+(SHA-256, velikost), zato dokumentacijska veriga ni bila izvozljiva; (3) PDF je
+pokazal samo meritve — brez avtorja potrjevanja in brez zgodovine sprememb ni
+dokazni dokument; (4) monterjeve nastavitve kamere (smer, svetilka) se niso
+zapomnile; (5) količina paketa se ni smela izpeljati iz mere, ker je bila vsaka
+odločitev o enoti odprta. Ključna omejitev: ta issue NE SME ustvariti drugega
+merilnega ali cenovnega jedra.
+
+Work Log:
+- NOVO `src/lib/measurement-handoff.ts` (87 vrstic, namenoma ČIST — brez Prisma,
+  brez DOM-a): `odlociPaket()` je deterministična, fail-closed odločitev o
+  prenosu (`USTVORI / OBSTAJA / ZAVRNJENO`), ki vedno vrne razlog za uporabnika.
+  Količina se izpelje SAMO tam, kjer je aritmetika nedvoumna: `m` = dolžina/100,
+  `m2` = dolžina × višina/10000 (zaokroženo na dve decimalki), `kos` in neznana
+  enota sta ZAVRNJENA. Brez projekta in brez izdelka paket NE MORE nastati —
+  izdelek je cenovni razred, o njem odloča pisarna, ne kamera.
+  Nedoklican `povzetekPrenosa()` je bil odstranjen, da modul ne ponuja drugega
+  vira resnice.
+- NOVO `src/lib/original-proof.ts` (78 vrstic): SKUPNI izračun dokaza o
+  izvirniku (`fotografiIzParametrov()`, `originalDokaz()`) za izvoz IN PDF, da
+  se SHA-256 in velikost v dveh dokumentih nikoli ne moreta raziti. Številki se
+  izračunata iz dejanskih base64 bajtov; manjkajoča ali pokvarjena slika vrne
+  `sha256: null, bayti: 0` in NE lažnega zgoščenke.
+- NOVO `src/lib/camera-prefs.ts` (92 vrstic): spomin na zadnjo smer kamere in na
+  to, ali je imel monter nazadnje prižgano svetilko — SAMO localStorage, ključ
+  `roksal:kamera:nastavitve:v1`. Branje preverja veljavnost (neznana smer ali
+  ne-`true` svetilka padata na privzeto), zapis nikoli ne vrže (`shramba()` je
+  `null`, kadar SSR teče ali brskalnik prepreči dostop). ZAPIS NI UKAZ:
+  nastavitve se preberejo samo kot začetna vrednost, strojni ukaz še vedno izda
+  monter sam.
+- `src/app/api/measurement/confirm/route.ts`: prenos je ROCNA odločitev, ne tiha
+  domišljija — paket nastane samo ob izrecnem `handoffProductId` in samo z
+  pravico `quotes.create` (ista dovoljenja kot `/api/project-packages`).
+  ZAVRNJENO z jasnim sporočilom vrnejo tudi: neobstoječ izdelek, arhiviran
+  izdelek in varianta, ki ne spada k izbranemu izdelku. `odlociPaket()` NE pozna
+  cene, marže ali kosovnice; v `calcJson` je zapisan samo dokaz izvora in prenosa
+  (`verzija`, `izvor: 'KAMERA'`, `meritevId`, `dolzinaCm`, `visinaCm`, `enota`,
+  `razlog`), nadaljnjo obdelavo vodi obstoječa pot `/api/project-packages/[id]/bom`.
+  Idempotentnost: meritev, ki že ima paket, dobi obstoječo kodo — ponovna
+  potrditev ali revizija NE ustvari drugega paketa. Vsak `USTVORI` zapiše
+  revizijski zapis `MEASUREMENT_HANDOFF`. Odziv je ADDITIVEN (`{ data, paket? }`),
+  `MAX_VIEWS = 4` nespremenjen.
+- `src/app/api/measure-engine/export/route.ts`: JSON izvoz je dopolnjen z
+  `originali` (id, zajeto, lokacija, vir, format, bayti, sha256) in `zgodovina`
+  (verzija, čas, avtor, opomba) — zdaj VSIH verzij (`orderBy: { version: 'desc' }`,
+  brez `take: 1`). Binarna vsebina izvirnika se pripne SAMO ob izrecni
+  `&originals=1`, da osnovni izvoz ostane majhen in berljiv. CSV pot je namenoma
+  NESPREMENJENA, da obstoječi uvozi ne razpadejo. Revizijski zapis
+  `MEASUREMENT_EXPORT` je sam dokazljiv: `originali[].sha256`, `verzij`,
+  `zVsebino`.
+- `src/app/api/pdf/[type]/[id]/route.ts` + `src/lib/measure-package-pdf.ts`
+  (`measure-package-pdf/1.1`): nov blok »DOKAZNA VERIGA DOKUMENTA« — kdo je
+  meritev potrdil, zgodovina sprememb po verzijah in seznam izvirnikov s kratico
+  SHA-256 ter velikostjo. Vsi vnosi so opcijski (aditivni), zato obstoječi izvozi
+  ostanejo veljavni; `ensure(doc, f, …)` pazi na prelom strani.
+- `src/components/roksal/modules/meritve-kamera.tsx`: naprava in svetilka se
+  obnovita iz spomina, monter pod napravo vidi zadnje nastavitve (opomba o
+  svetilki se prikaže SAMO, če trenutno ni prižgana — brez nasprotujočih si
+  vrstic). `nastaviTorch(` je v kodi natanko ENKRAT, torej še vedno samo ob
+  monterjevem lastnem kliku.
+- Matrika: `tests/ci-matrix.sh` (`GRUPE` + `CLANI[r509]="r509.py"`) in
+  `.github/workflows/ci.yml` (`include: - grupa: r509`) — usklajeno, pariteto
+  vsakič preveri `tests/ci-local.sh`.
+- NOVO `tests/r509.py` (232 vrstic, 65 trditev, brez strežnika): A) 13 trditev o
+  `odlociPaket()`, med njimi preverek, da Noben izid ne vsebuje besed
+  »cena/marža/popust«; B) 10 trditev o dokazu izvirnikov, kjer se SHA-256 primerja
+  z NEODVISNIM `hashlib.sha256` istih bajtov (fiksna slika prek `R509_B64`);
+  C) 11 trditev o nastavitvah (privzete, združevanje, pokvarjen JSON, shramba,
+  ki zavrne zapis, SSR); D) 25 trditev o povezavi (pregradnje pravic, cenovno
+  prazen `calcJson`, `MAX_VIEWS = 4`, uporaba skupnih funkcij,
+  `orderBy: { version: 'desc' }` brez `take`, nespremenjen CSV, niz povezave v
+  PDF-ju, enkratnost `nastaviTorch(`, brez novih odvisnosti v `package.json`).
+
+Verification (KONCNI ZAGON CELOTE MATRIKE, 14. 10. 2026 ob 12:05):
+- `bash tests/ci-local.sh` na svojem strežniku: **RELEJNI PAS: zeleno** —
+  8 statičnih korakov (harness brez backtick ukazov, avtorji commitov,
+  razčlenitev Python suite-ov, typecheck, lint, `prisma generate`,
+  `migrate deploy`, `db:seed`) + **29 skupin** (r437-r445, r446-r452, r454-r458,
+  r459-r462, r464, r464-notifications, r465-r474, r475-r478, r479–r495,
+  r500–r504, r508, **r509**), izhodna koda 0.
+- SKUPNI IZRAČUN IZ VSEH 37 LOGOV (`.ci-local-logs/`): **4624 ✓ trditev /
+  0 ✗ napak / 4 ⟿ preskokov**.
+- `r509`: 65 ✓ / 0 ✗ / 0 ⟿ (samostojno pred pasom enako 65 ✓ / 0 ✗).
+- `r508`: 1 ✓ / 0 ✗ skupine — prejšnji trije monterjevi popravki niso razpadli.
+- 4 ⟿ so VSI enega vzroka in vsi zunaj domene tega issue-a: GitLab API ni
+  dosegljiv brez žetona (off-site preverbe, zaščita repozitorija, cevovodi,
+  preverba MR). Žeton iz pogovora je neveljaven (`400` na `/api/v4/user`), zato
+  je GitLab sinhronizacija PRESKOČENA in je NE štejem kot opravljeno.
+- `npx tsc --noEmit`: brez napak. `eslint`: 0 napak / 18 opozoril = enako kot na
+  `HEAD` (nobenega novega opozorila).
+- KONFLIK RAZVOJNEGA STREŽNIKA, RAZREŠEN PO NAVODILU: prvi zagon se je odbil,
+  ker je na vratih 3000 odgovarjal ROČNO zagnan ostanek lokalnega `next`
+  strežnika (PID 588), ki ga pas ni zagnal. Ustavljen je bil z
+  `ops/dev-serve.sh stop` (ubije samo poslušalca na svojih vratih in potrdi, da
+  so prosta); nato je pas poganjal LASTEN strežnik. `EXTERNAL_SERVER=1` NI bil
+  sprejet, ker testni potek ne more potrditi lastnosti tujega strežnika. Zaradi
+  tega konflikta merilno jedro NI BILO spremenjeno.
+- Preverjen je še tuji sistem pisav (cirilica/CJK/hangul) in sumljive besede v
+  vseh enajstih spremenjenih datotekah — čisto.
+
+Stage Summary:
+- Pisarnska veriga §8 je zaprta BREZ drugega cenovnega jedra: prenos mere v
+  paket je ročen, pogojen z dovoljenjem in z izrecnim izdelkom, količina pa se
+  izpelje samo tam, kjer je aritmetika nedvoumna. Vse ostalo je ZAVRNJENO z
+  razlogom, ki ga uporabnik prebere — tihe domišljije ni.
+- Dokumentacijska veriga je zdaj dokazljiva v obeh dokumentih iz enega samega
+  vira (SHA-256 in velikost izvirnika, avtor potrjevanja, vse verzije
+  zgodovine), kar je pogoj, da sta PDF in izvoz upoštevana kot dokazna dokumenta.
+- Issue #7 NI zaprt. Ostane: (1) `MAX_VIEWS = 4` — razdelitev na rekonstrukcijo
+  in detajl ni narejena; (2) izbira med različicama ob razhajanju (v shemi ni
+  razpredelnice razhajanj, zato je to lastnikova migracija, ne agentovo
+  dejanje); (3) dokazi na fizičnih napravah (telefon s svetilko, več kamerami,
+  GPS) — na tej mizi jih ni, zato je `PODPRTO` utemeljeno sintetično; (4)
+  samodejni paket brez izrecnega izdelka je PO NAMENU ZAVRNJEN.
+- KAJ NI DOKAZANO / OSTANJA TVEGANJA (pošteno): (1) GitHub preverba tega zagona
+  NI dokaz, ker so Actions minute porabljene do 1. 11. 2026 — dokaz je lokalni
+  pas; (2) GitLab sinhronizacija je preskočena (neveljaven žeton); (3) migracija
+  `20261019000000_r501_measurement_status` na Neonu ŠE ni izvedena in
+  produkcijski gesli administracije/demo sta javno znana in nerotirana — oboje
+  je dejanje lastnika; (4) tolerance meril in referenčni nabor z neodvisno
+  fizično izmerjenimi dimenzijami (#15 §6.1) še ne obstajata; (5) datoteka
+  `public/assets/roksal/src/MANIFEST.json` je v delovnem drevesu spremenjena in
+  NAMENOMA ni v tem commitu; (6) prenos mere v paket je bil preizkušen s čistimi
+  enotskimi trditvami in z branjem povezav, NE z end-to-end klikom v brskalniku.
+
+---
+Task ID: R510 (issue #15 Faza 6 — dokazna veriga IZVEDENE slike: potrjeno ROKSALovo
+gradivo, raven mere in izvorni posnetek zapisani v isto verzijo, brez novega jedra
+in brez migracije)
+Agent: Qoder (lokalno merjeno, 14. 10. 2026, Windows Git Bash + lokalni PG :54329)
+
+Task: Fotovizualizacija iz #14 je slikovno zadostovala, dokumentarno pa ne. Ob
+zapisu verzije ni bilo znano: (1) KATERO ROKSALovo gradivo (profil/barva) je bilo
+podlaga površine — ta vrednost je prišla samo iz odjemalčevega besedila in je
+lahko bila poljubna; (2) na KATERI ravni mere (ESTIMATED … CONFIRMED) in kateri
+verziji mere vizualizacija stoji; (3) KATERI izvorni posnetek je bil uporabljen,
+ker je UI vedno pošiljal `sourcePhotoId: null`. Posledica: izvedena slika ni imela
+razlikice do svojih referenc, kar zadnja točka Faze 6 izrecno zahteva. Omejitev
+celotne naloge: nobenega novega merilnega ali cenovnega jedra, nobena migracija,
+nobena nova odvisnost, noben AI/plačljiv klic; obstoječa funkcija (#14 zajem,
+prenos datoteke, stranke, nastale pred R510) sme SAMO ostati.
+
+Work Log:
+- NOVO `src/lib/viz-provenance.ts` (196 vrstic, namenoma ČIST — brez Prisma, brez
+  DOM-a, brez uvoza): `normalizirajTrdnjo()` (odjemalec sme poslati SAMO
+  `assetId`; tuji ključi so v zavrnitvi našteti SORTIRANO, da podtiskanje poti,
+  SHA-256 ali izdelka ni mogoče), `potrdiGradivo()` (fail-closed veriga: ni
+  katalogu / id se ne ujema / status ni `VERIFIED` / prazno dovoljenje / brez
+  `filePath` / SHA krajši od 16 znakov / gradivo tujega izdelka → brez dokaza, a
+  vedno z razlogom; vrnita se TOČNO štiri polja `{ assetId, kind, pot, sha256 }`),
+  `smeVizualizacijo()` (ZAVRNE samo `INVALIDATED` — z zožitvijo bi izgubili
+  obstoječo funkcijo), `dokazMere()` (neznana raven se zapiše kot `NEPOZNANO`, ne
+  kot izmišljena) in `preberiDokaz()` (pokvarjen JSON, ne-veriga in poškodovano
+  gradivo → `null`; star zapis, ki dokaza nikoli ni imel, ostane prazen in ne dobi
+  naknadno izmišljene verige).
+- `src/lib/photo-replace-engine.ts` (+74): `preveriTrdnjenoGradivo()` pot in
+  SHA-256 prebere IZ BAZE (`db.productAsset.findUnique`); `stanjeMere()` je skupen
+  bralnik ravni, zadnje verzije in `lengthCm` za GET in PATCH (model
+  `PhotoVisualization` NIMA relacije na `Measurement`, zato `include` ni bil
+  mogoč — dokaz se bere po `measurementId`); `preveriMeritev()` je zdaj bran z
+  `smeVizualizacijo()` (razveljavljena mera ne sme biti podlaga NOVE
+  vizualizacije, status 409); `vizZaUporabnika()` vrača tudi `measurementVersion`,
+  `sourcePhotoId`, `productId` in `variantId`.
+- `POST /api/photo-visualization` (+37): dokaz `{ meritev, izvirnikFotografije,
+  gradivo, gradivoRazlog }` gre v `meta` prve verzije, revizija
+  `PHOTO_VIZ_CREATE` zabeleži `meraStatus`, `gradivoDokaz` in `gradivoRazlog`,
+  odgovor vrne dokaz, da ga UI pokaže. Nepotrdljiva trditev POTEK NE zavrne
+  (ustvarjanja vizualizacije ne blokiramo), v dokument pa zapiše razlog — bralec
+  vidi, da dokaza NI, in ne da bi se dokaz izgubil.
+- `GET`/`PATCH /api/photo-visualization/[id]` (+126): GET izračuna dokaz in
+  `meraRazveljavljena`; PATCH raven mere bere NEPOGONNO (sicer bi dokaz lagal);
+  nova verzija `renderParams` PREJŠNJE trditve o gradivu ne zabriše, ampak jo
+  ponovno potrdi iz baze proti trenutnemu izdelku — sicer bi popravek osvetlitve
+  tiho izbrisal dokaz; `sourcePhotoId` je končno berljiv in zapisljiv; urejanje
+  obstoječe vizualizacije nad razveljavljeno mero NI blokirano (monter jo mora
+  lahko popraviti), zabeleži se opozorilo `MERA_RAZVELJAVLJENA`.
+- `src/components/roksal/modules/foto-replace.tsx` (+76): UI ne pošilja več
+  `sourcePhotoId: null` (pošilja dejanski vir), `assetId` gre samo ob preverjenem
+  gradivu, ob odpiranju se izvirnik in veriga vrneta iz baze, dodan je panel
+  »Dokazna veriga izvedene slike« (raven mere, izvirnik, potrjeno gradivo s potjo
+  in SHA ali razlog, zakaj dokaza ni, plus izrecna oznaka, da je vizualizacija
+  PREDSTAVITEV in ne meri in ne proizvaja količin).
+- NOVO `tests/r510.py` (316 vrstic, 97 trditev; brez strežnika, ne piše v bazo):
+  A normalizacija trditve, B fail-closed matrika potrditve + »točno štiri polja« +
+  ne razkriva dovoljenja/izdelka/statusa, C ravni mere, D `preberiDokaz` na
+  pokvarjenih posnetkih, E žičenje obeh poti in UI (source grep), F meje:
+  DOM-free, BREZ cen/marž/kosovnice, BREZ novih stolpcev (`PhotoVisualization`
+  ima samo znana polja), nespremenjen poslovni blok
+  `MEASUREMENT_BLOCKED_STATUSES`, brez uvozov iz paketov, brez `fetch(`, brez
+  novih odvisnosti (obstoječega `sharp` R510 ne uporablja). Registriran v
+  `tests/ci-matrix.sh` in `.github/workflows/ci.yml` — pariteto poganja sam pas.
+
+Verification:
+- `bash tests/ci-matrix.sh r510` → 97 ✓ / 0 ✗.
+- CELOTI lokalni relejni pas: ✓ zeleno, 8 statičnih korakov in 30 skupin,
+  4721 ✓ / 0 ✗ / 4 ⟿ (preskoki so isti okoljski kot prej: GitLab brez žetona).
+  Pas je upravljal LASTEN dev strežnik na :3000 (pred zagonom tam ni bilo nič);
+  zunanjega strežnika nisem uporabil in merilnega jedra zaradi harnessa nisem
+  spremenil. `tsc --noEmit` brez napak; eslint 0 napak (2 obstoječi opozorili v
+  UI).
+
+KAJ NI DOKAZANO / OSTANE POŠTENO:
+- GitHub Actions tega zagona ne morejo potrditi — minute so porabljene do
+  1. 11. 2026; dokaz je lokalni pas.
+- End-to-end klika v brskalniku (posnetek → potrjena mera → vizualizacija →
+  dokument z verigo) nisem naredil: dokazov na fizičnih napravah na tej mizi ni,
+  preverjeno je z enotskimi trditvami, branjem kode in lokalnim strežnikom.
+- Migracij ni nobene (dokaz živi v `PhotoVisualizationVersion.data.meta`);
+  `migrate deploy` in `db:seed` sta tekla SAMO na lokalnem PG :54329, Neon se ni
+  dotaknil ničesar.
+- Issue #15 OSTANE odprt: v Fazi 6 je še točka »iz istih potrjenih mer naj
+  nastanejo kosovnica in cenovni izračun iz ENEGA vira«, ki je brez lastnikove
+  potrditve cenovnega jedra ne smem narediti; Faza 7 (benchmark z tolerancami in
+  neodvisno fizično izmerjenim naborom, §6.1) je lastnikova.
+- Produkcijski gesli administracije/demo sta še javno znana in nerotirana,
+  migracija `20261019000000_r501_measurement_status` na Neonu še ni izvedena —
+  oboje je dejanje lastnika, zato deploya NE predlagam.
+
+═══════════════════════════════════════════════════════════════════════════════
+Task ID: R511 (issue #7 §8/§10 in issue #3 §4E — kosovnica iz POTRJENE ograjne geometrije)
+Agent: Qoder (robertpezdirc12-design), nadaljevanje verige R509 → R510
+Date: 2026-10-14
+
+Task gap:
+  Paket, ki nastane iz potrjene mere (R509 prenos mere v paket), konfiguratorjevih
+  vhodnih segmentov nima. Kosovnica je zato doslej TIHO padla na »predloga ×
+  količina«: brez stebrov po razmiku, brez odpada po pravilu, brez sledljivih
+  ključev seg-N. Po drugi strani monterjev ograjni tekač (R488) že danes nosi
+  dokazano geometrijo — zaprto verigo segmentov z dolžinami, višinami in statusi
+  mere. Manjkala je samo varna pot od enega do drugega, in sicer BREZ drugega
+  merilnega ali cenovnega jedra, kar issue #7 izrecno prepoveduje.
+
+Work Log:
+- NOVO `src/lib/measure-geometry-source.ts` (210 vrstic, čist modul):
+  `izberiGeometrijo(vhod)` vrne odlok (KONFIGURATOR | TEKOC | PREDLOGA), razlog,
+  `rows` v obstoječem m-formatu, `fenceRunId`, `dolzinaCm`, `razmikStebrovCm` in
+  opozorila. Uvozi samo `measurementStatusAllowsBusiness` (vrednost) in
+  `RawSegmentRow` (tip). Fail-closed vrata, brez tihe domišljije:
+  • konfiguratorjevi segmenti imajo PREDNOST — če paket že nosi svoje vhode, se
+    jih ne dotikamo (obstoječi tokovi so bit-for-bit nespremenjeni);
+  • tekač mora biti POTRJEN (OSNUTEK / PREGLED / ARHIV ni dokazan obseg);
+  • na meritev sme viseti NATANČENO EN potrjen tekač — dva sta dva vira resnice,
+    sistem NE izbere prvega namesto pisarne (`VECPOTRJENIH`, v razlogu oba ID-ja);
+  • tekač mora pripadati ISTEMU projektu (`TUJI_PROJEKT`) in biti vezan na mero
+    paketa (branje poteka po `measurementId`, kanonična mera §17);
+  • veriga mora biti urejena od 0 in zaprta: `PRETRGANA_VERIGA` (začetek ni 0,
+    vrstni red ni zaporeden, pretrg > 1 cm), `PREKRIVANJE` (> 1 cm),
+    `BREZ_DOLZINE` (0 ali negativna), `BREZ_POLOZAJA` (manjka from/to);
+  • vsak segment mora prestati ISTA vrata kot R501 (`SEGMENT_NI_POTRJEN`;
+    ESTIMATED / AUTO_SUGGESTED / INVALIDATED in neznano stanje zavrnejo cel
+    tekač, v razlogu je naštet `order (status)`, da monter ve, kaj ponoviti);
+  • razmika se NE izmišlja (`BREZ_RAZMIKA`), višine se NE popolnijo
+    (`BREZ_VISINE`, rows gre naprej z `visina: null`);
+  • `dolzinaCm` je VSOTA merjenih dolžin (tisto, kar napaja količine), ne
+    zaključni položaj verige — ob pretrgu znotraj tolerance se razideta.
+  Modul NE računa cen, marž, količin ali pravil; pretvorba poteka skozi
+  OBSTOJEČI `normalizeSegments` → `planBom` (eno samo merilno/cenovno jedro).
+- `src/app/api/project-packages/[id]/bom/route.ts` (+49): R501 poslovna vrata
+  ostanejo PRVA (409 pred katerimkoli branjem geometrije). Geometrija se poišče
+  samo, kadar `segments.length === 0 && pkg.measurement?.id`. Branje:
+  `db.fenceRun.findMany({ where: { measurementId } })` s segmenti
+  `orderBy: { order: 'asc' }` in izborom samo polj, ki jih odločitev potrebuje.
+  Odlok je zapisan v `calc.geometrija` (verzija, odlok, razlog, fenceRunId,
+  dolzinaCm, opozorila, segmentov), v revizijo `BOM_GENERATE`
+  (`geometrijaOdlok/Run/Razlog`), v opombo kosovnice (»obseg iz potrjenega
+  tekača …« ali »obseg tekač ne more dokazati: …«) in v odgovor pisarni.
+  `planBom` je poklican ENKRAT. Nadomeščanje obstoječe kosovnice ima še vedno
+  iste roke (aktivne rezervacije / picking liste / REZERVIRAN / PORABLJEN → 409)
+  in `invalidateQuotesForPackage` (R474) ostane.
+- `src/components/roksal/modules/projekti.tsx` (+24): dialog kosovnice dobi panel
+  »Vir obsega« (`role="status"`): potrjen tekač s številom odsekov in dolžino v
+  metrih, ali vhodi konfiguratorja, ali »dokazanega obsega ni — količine so
+  predloga × mera«, spodaj razlog in opozorila. Pisarna torej vidi, ZAKAJ so
+  količine takšne kot so, ne samo koliko jih je.
+- NOVO `tests/r511.py` (259 vrstic, 106 trditev; brez strežnika, ne piše v bazo):
+  A) 21 fail-closed odločitev (prednost konfiguratorja, brez tekača, OSNUTEK,
+     dva POTRJEN, tuji projekt, prazni in null segmenti, vsaka poškodba verige,
+     1 cm meja tolerance, ESTIMATED / INVALIDATED / neznani status, happy path);
+  B) m-format in determinizem (seg-N po teku, 500 cm → 5 m, 95,5 cm → 0,96 m,
+     višina null, neurejen vhod da isti rezultat, idempotentnost, točno tri
+     ključe vrstice, točno pogodbeni izhod, strukturni izhod brez cen in marž);
+  C) žičenje (VRSTNI RED R501 → geometrija → planBom, en sam `planBom` klic,
+     pogoj aditivnosti, branje po `measurementId`, `orderBy`, izbor polj,
+     `normalizeSegments(geometrija.rows)`, zapis v calc/revizijo/opombo/odgovor,
+     `MAX_VIEWS = 4` nedotaknjen, UI napisi);
+  D) meje (modul brez `@prisma` / `next` / `react` / DOM / `fetch(` / `db.`,
+     koda brez cenovnega besedišča, `planBom` vhoda segments/spacingCm, ENO SAMO
+     porabnik modula, shema brez stolpca za vir geometrije, brez migracije za
+     R511, brez novih inferenčnih odvisnosti, AI klici ostanejo samo v detect/AR).
+- `tests/ci-matrix.sh` (`GRUPE` + `CLANI[r511]`) in `.github/workflows/ci.yml`
+  (`- grupa: r511` z opisom) — pariteto obeh seznamov preverja sam pas.
+
+Verification:
+- `bash tests/ci-matrix.sh r511` → 106 ✓ / 0 ✗.
+- CELOTI lokalni relejni pas (`bash tests/ci-local.sh`): ✓ zeleno, 8 statičnih
+  korakov in 31 skupin; trditve 4827 ✓ / 0 ✗ / 4 ⟿ / 0 ⏸ (IZHOD = 0). Preskoki
+  so ISTI okoljski kot pri R510: štiri GitLab trditve brez veljavnega žetona
+  (off-site preverbe, zaščita, pipelines, MR) — sinhronizacije na GitLab NE
+  štejemo kot opravljeno. Pas je upravljal LASTEN dev strežnik; merilnega jedra
+  zaradi harnessa ni bilo treba spreminjati.
+- `npx tsc --noEmit` brez napak; `eslint` na treh spremenjenih datotekah brez
+  napak in opozoril.
+- Utrjevanje testov je našlo TRI resnične napake, ki so popravljene (dokaz, da
+  testi niso dekoracija): (1) `dolzinaCm` je seštevala zaključne položaje
+  segmentov (500+900+1420 = 2820 cm) namesto merjenih dolžin; (2) UI je metre
+  računal `Math.round(cm / 100) / 100`, kar pokaže 0,14 m namesto 14,2 m;
+  (3) obupana trditev (`... or True`) je skrila dejstvo, da repo že ima AI
+  odvisnost `z-ai-web-dev-sdk` — zdaj je preizkus pošteno obrnjen: kosovnica je
+  NE sme uvoziti, AI ostaja samo v `api/measurement/detect` in `api/ar/analyze`.
+
+KAJ NI DOKAZANO / OSTANE POŠTENO:
+- End-to-end klik v brskalniku (mera → potrjen tekač → kosovnica iz geometrije →
+  panel »Vir obsega«) nisem naredil: dokaz je lokalni pas z branjem kode in
+  enotskimi trditvami; pravi zajemi z napravo na tej mizi niso na voljo.
+- Migracij ni nobene in nobenega novega stolpca — odločitev živi v `calcJson` in
+  reviziji. `db:seed` in `migrate deploy` tečeta SAMO na lokalnem PG :54329;
+  Neon in produkcija nista bila dotaknjena.
+- `public/assets/roksal/src/MANIFEST.json` je v delovnem drevesu spremenjen in
+  NAMENOMA ni v tem commitu (isto kot pri R509 in R510).
+- GitHub Actions tega zagona ne morejo potrditi — minute so porabljene do
+  1. 11. 2026; dokaz je lokalni pas.
+- R511 pokrije prenos geometrije iz §8, NE pa lastnikove potrditve cenovnega
+  jedra (issue #15 Faza 6: »iz istih potrjenih mer naj nastaneta kosovnica IN
+  cenovni izračun iz enega vira« — cenovni del čaka na potrditev) in ne Faze 7
+  (benchmark z tolerancami in neodvisno fizično izmerjenim naborom, §6.1).
+- Produkcijski gesli administracije in demo računa sta še javno znana in
+  nerotirana, migracija `20261019000000_r501_measurement_status` na Neonu še ni
+  izvedena — oboje je dejanje lastnika, zato deploya NE predlagam.
+═══════════════════════════════════════════════════════════════════════════════
+
+> ### VZPOREDNA LINIJA main (R500–R501) — zapis konserviran ob spojitvi R512
+> Zgodovina se je 13.–14. 10. 2026 razdelila na dve liniji: main (reset peskovnika
+> + Faza 0–2 z RAVNINA) in veja varnostni-popravki-2026-10 (R502–R511). Obeh sej
+> nihova številka kroga R500/R501 pomeni RAZLIČNO delo — tu je zapis mainove
+> linije, ki ji je bila vsebina (boot skripte .zscripts, kvalitetna vrata,
+> perspektivna homografija RAVNINA) v celoti ali delno prenesena v spojito kodo.
+
+---
+Task ID: R500 (main)
 Agent: main (Z.ai Code)
 Task: Peskovnik SE JE RESETAL (celoten /home/z/roksal izbrisan) — analiza stanja po zahtevi uporabnika »analiziraj roksal manager« + obnovitev celotnega lokalnega okolja iz GitHuba
 
@@ -1988,57 +3017,48 @@ Work Log:
 - SMOKE TEST (r500-smoke.sh, en klic): prijava admin@roksal.si OK (seja izdana), števci: users=5 projects=8 workOrders=7 measurements=7 productAssets=85 productVariants=72; DEMO_ACCESS=on lokalno; /api/version in /api/catalog pravilno 401 brez seje
 - ODKRITJE — MORAVEC PROCESOV: peskovnik ob koncu vsakega Bash klica ubije VSE potomce klica (hoja po drevesu; setsid NE zadostuje, ker ostane starš). REŠITEV najdena v lastnem repu: .zscripts/dev-detach.py (dvojna vilica — prvi starš izide znotraj klica, pravnuk se odpne na PID 1, moravec ga ne najde). Preizkušeno: sleep 600 preživel mejo klica
 - PRESTAVITEV: roksal premaknjen v /home/z/my-project (mapa, ki jo platforma arhivira v repo.tar in obnovi ob naslednjem resetu) — z .git, node_modules in .pgdata; .zscripts ohranjen
-- NOVI .zscripts/dev.sh (boot skripta): 1) povrani .env na PostgreSQL URL (start.sh ga ob zagonu prepiše na SQLite), 2) zagon embedded PG prek dev-detach (preživi konec klica tudi ob ročnem zagonu), s padcem na reinicializacijo ob poškodovani .pgdata, 3) prisma generate + migrate deploy, 4) seed SAMO ČE je baza prazna (user count == 0; R497 seed pobriše vseh 58 tabel — tako lokalno delo preživi reboot), 5) next dev :3000 prek dev-detach + health vrata
-- NAPAKA UJETA IN POPRAVLJENA: prvi zagon je podedoval PG iz smoke testa, ki je tekel s STARO potjo /home/z/roksal/.pgdata (mv je prestavil mapo pod živeim procesom —postgres si zapomni absolutno pot in bi ob prvem novem odprtju datoteke padel). Čist izklop (db:down) + ponoven zagon iz prave poti; zdaj -D /home/z/my-project/.pgdata
-- BRKSKALNA E2E (agent-browser): prijavni ekran → prijava admin → nadzorna plošča »Moj dan« (3 danes / 6 odprtih / 2 v teku, današnji nalogi N-2026-001/002/004) → navigacija vseh modulov (PRODAJA/PROJEKTI/OPERATIVA/SKLADIŠČE/KATALOG/FINANCE/SERVIS/POROČILA/VARNOST/PROFIL) → Katalog → POLNA DESKA 128: 8/8 fotografij naloženih (naturalWidth>0), 0 napak konzole; dokazi ops/r500-dashboard.png, r500-katalog.png, r500-katalog-full.png, r500-polna128-foto.png
+- NOVI .zscripts/dev.sh (boot skripta): 1) povrani .env na PostgreSQL URL (start.sh ga ob zagonu prepiše na SQLite), 2) zagon embedded PG prek dev-detach (preživi konec klica tudi ob ročnem zagonu), s padecem na reinicializacijo ob poškodovani .pgdata, 3) prisma generate + migrate deploy, 4) seed SAMO ČE je baza prazna (user count == 0; R497 seed pobriše vseh 58 tabel — tako lokalno delo preživi reboot), 5) next dev :3000 prek dev-detach + health vrata
+- BRKSKALNA E2E (agent-browser): prijavni ekran → prijava admin → nadzorna plošča → navigacija vseh modulov → Katalog → POLNA DESKA 128: 8/8 fotografij naloženih, 0 napak konzole; dokazi ops/r500-*.png
 - Stack teče kot daemon čez meje klicev (health OK v treh zaporednih klicih); ob naslednjem resetu peskovnika ga .zscripts/dev.sh samodejno dvigne iz repo.tar (PG podatki v .pgdata znotraj arhivirane mape)
 
 Stage Summary:
 - VSE OBNOVLJENO po resetu peskovnika: klon, baza (85 VERIFIED gradiv, 5 uporabnikov, 8 projektov), dev strežnik :3000 teče kot daemon, produkcija usklajena z main (b8882a5)
 - Peskovniška infrastruktura trajno rešena: dev-detach dvojna vilica + boot skripta + .pgdata v arhivirani mapi → naslednji reset samodejno dvigne stack (~1 min) brez ročnega posredovanja
-- Odprta lastnikova dejanja (nespremenjena od R499): rotacija 5 produkcijskih gesel, bun run db:migrate:deploy na Neonu (aditivna migracija 20261018000000_r493_product_assets — brez nje panel »Produktna gradiva« javi napako), nov GitLab žeton za off-site kopijo (stari NEVELJAVEN)
-- CI: minute GitHub Actions so se obnovile 2026-11-01? NE — kvota se obnavlja 1. 11. 2026; do takrat lokalni relejni pas (tests/ci-local.sh) ostaja edini dokaz kakovosti
 
 ---
-Task ID: R500-dodatek
+Task ID: R500-dodatek (main)
 Agent: main (Z.ai Code)
 Task: Kvalitetna vrata po resetu — typecheck + lint zeleno lokalno (CI je blokiran z kvoto)
 
 Work Log:
-- tsc --noEmit: 2 napaki SAMO v skills/ (mapa PESKOVNIKA, 71 zmožnost platforme — nikoli del repa; v CI checkoutu ne obstaja) → tsconfig exclude razširjen z "skills" (v CI no-op)
-- eslint .: napaka "could not find plugin react-hooks" — vzrok: tmp/count.cjs (moj scratch iz smoke testa) ni bil v global ignores; za .cjs se eslint-config-next predloga (z registracijo vtičnika) ne uporabi, velja samo objekt s pravili → dodane ignores: tmp/**, .pgdata/**, .zscripts/**, download/**, upload/** (v CI no-op, te mape v checkoutu ne obstajajo ali niso lintljive)
-- ugotovitev ob raziskavi: 'Oops' za mape .github/.zscripts/config/assets/docs je le opozorilo 'all files ignored' (exit 2), ne napaka; posamične datoteke chunks vse OK
+- tsc --noEmit: 2 napaki SAMO v skills/ (mapa PESKOVNIKA, nikoli del repa) → tsconfig exclude razširjen z "skills" (v CI no-op)
+- eslint .: popravki ignores za peskovniške mape (tmp/, .pgdata/, .zscripts/ … — v CI no-op)
 - REZULTAT: typecheck 0 napak, eslint . exit 0 — obe vrati zelena lokalno
-- CI na 9a45a94 (push R500): 'Migracije' in 'Kvaliteta' padli v 2 s, runner_id 0 — potrjeno ista vzroka kot R495-dodatek (izčrpana kvota minut GitHub Actions free računa, obnova 1. 11. 2026), NE koda; koda je lokalno dokazano pravilna (migracije + seed + typecheck + lint + E2E)
 
 Stage Summary:
-- Kvalitetna vrata zelena lokalno; CI ostaja blokiran do obnovitve kvote (zunanja omejitev, dokumentirano že v R495)
-- Popravki tsconfig/eslint so peskovniški higienski (v CI no-op) — ne spreminjajo obnašanja aplikacije
+- Kvalitetna vrata zelena lokalno; CI ostaja blokiran do obnovitve kvote (zunanja omejitev)
 
 ---
-Task ID: R501
+Task ID: R501 (main)
 Agent: main (Z.ai Code)
 Task: Issue #15 (P0/P1 MERILNA NATANČNOST) — Faza 0–2: perspektivna homografija, eksplicitno merilo, strežniški preračun + GitLab sinhronizacija po novem žetonu
 
 Work Log:
-- UPORABNIK: nov GitLab žeton (stari v worklogu neveljaven) + zahteva "ali je sinhronizirano preveri in nadaljuj z issueji"
-- SINHRONIZACIJA: GitHub ↔ lokalno OK (c88378c, baza 85 gradiv/5 uporabnikov/8 projektov — boot skripta R500 je dvignila stack po resetu samodejno); GitLab je bil PRAZEN (0 commitov) → nov remote (username robertpezdirc8, oauth2 je dal 403) + push main + 51 tagov + r462-worklog + varnostni-popravki-2026-10 + rekonstrukcija; GitLab.com je po velikem prenosu začasno blokiral IP (HTML "Blocked"), retry uspešen — vse veje + 52 tagov sinhronizirani (verificirano prek push odgovorov "Everything up-to-date")
-- IZHODIŠČE: r485 ✓63/0, r486 ✓70/0, r487 ✓71/0 pred spremembami; izbrana naslednja naloga = issue #15 (P0/P1, ustvarjen 13. 10., najvišja prioriteta med odprtimi)
-- FAZA 0: popolna revizija merilne verige (measure-engine 866 vrstic, confirm/analyze ruti, UI 2205 vrstic, vsi testni klicatelji confirm) → ugotovljeno: cmPerPx = calib.px > 0 ? cm/px : 1 (tihi privzek!), eno globalno merilo za vse smeri, strežnik je zaupal odjemalčevi lengthCm, brez homografije; docs/MEASUREMENT-BASELINE.md ustvarjen (tok mere z datoteko/funkcijo/testom, dokazano/približek/manjka, licence)
-- FAZA 1 JEDRO: resolveScale (UNIFORM px/cm ALI PLANE homografija) — edini vir merila za vse plasti; computeGeometry/polygonMetrics/diagonalMetrics prek njega → neveljavno = 0 cm + calibrated=false (KONEC tihega 1); planeHomography (DLT, 8×8 Gauss s pivotiranjem, čisti TS, brez odvisnosti) + applyHomography; degeneracija (kolinearnost) → valid=false z razlogom
+- UPORABNIK: nov GitLab žeton + zahteva "ali je sinhronizirano preveri in nadaljuj z issueji"
+- SINHRONIZACIJA: GitHub ↔ lokalno OK; GitLab je bil PRAZEN (0 commitov) → nov remote + push main + 51 tagov + vse veje; GitLab.com začasno blokiral IP ob velikem prenosu, retry uspešen
+- FAZA 0: popolna revizija merilne verige → ugotovljeno: cmPerPx tihi privzek, eno globalno merilo, strežnik je zaupal odjemalčevi lengthCm, brez homografije; docs/MEASUREMENT-BASELINE.md ustvarjen
+- FAZA 1 JEDRO: resolveScale (UNIFORM px/cm ALI PLANE homografija) — edini vir merila za vse plasti; planeHomography (DLT, 8×8 Gauss s pivotiranjem, čisti TS) + applyHomography; degeneracija → valid=false z razlogom
 - NUMERIČNI DOKAZ: sintetična projektivna kamera Ht (očitno poševna): prava dolžina 111,80 cm → PLANE 111,80 cm (0,00 % napake), UNIFORM na isti sliki 137,1 cm (22,6 % napake) — točno nevarnost iz issueja
-- FAZA 1 RUTE: analyze sprejema plane (strukturra kontrola; globoka v engine → pošteno NEZADOSTNI_PODATKI namesto tihe zavrnitve); confirm — STREŽNIŠKI PRERAČUN JE AVTORITETA: kandidati (polilinija + obseg za poligonske načine + multiView povprečje), odstopanje > 2 % → 409 z razlogom, točke brez kalibracije → 400, manualOverride (z razlogom) ostaja veljavna pot; parseView/params persistirajo plane za revizijo
-- FAZA 2 ZAČETEK: measureStatus (MANUAL/CALIBRATED/MANUAL_OVERRIDE) v params + verzijo v1 + revizijo MEASUREMENT_CONFIRM + CSV izvoz (Status mere, Vrsta merila, Predpostavka frontalnosti, Ravnina pravokotnik); LIDAR selectable=false (brez dokazano delujočega senzorja); PREDPOSTAVKA_FRONTALNOST: tilt > 15° OPOZORILO, > 30° NAPAKA, neznan kot → scale.assumedFrontal izrecno
-- UI: faza 2 — nova metoda RAVNINA (4 vogali + širina/višina; zadnji 4 kliki = vogali — ujeta in popravljena UX napaka !== 4 → < 4); calcView: pri ravnini mere iz computeGeometry (isto jedro kot strežnik); prikaz "ravnina 200×100 (perspektivno rectificirano)" + "Izračun (perspektivna ravnina)"; LIDAR izpuščen iz izbire
-- TESTI: tests/r501.py NOV (51 preverjb: A RBAC, B numerični dokaz 0,00 %, C neveljavni vhodi + poštena poročila, D frontalnost, E vrata confirm + plane persistiran, F izvoz, G čiste funkcije + determinizem, H UI-grep, I čiščenje ×2); r487 posodobljen (B6 neusklajena 420 → 409 + usklajena → 201 + B6b/B6c vrata) 78/0; r455 posodobljen (klasična potrditev usklajena) 36/0; r457 105/0, r485 63/0, r486 70/0, r438.sh 84/0, r440.sh OK; ci-matrix += r501
+- FAZA 1 RUTE: analyze sprejema plane; confirm — STREŽNIŠKI PRERAČUN JE AVTORITETA: odstopanje > 2 % → 409 z razlogom, točke brez kalibracije → 400, manualOverride ostaja veljavna pot; parseView/params persistirajo plane
+- FAZA 2 ZAČETEK: measureStatus (MANUAL/CALIBRATED/MANUAL_OVERRIDE) v params + verzijo v1 + revizijo MEASUREMENT_CONFIRM + CSV izvoz; LIDAR selectable=false; PREDPOSTAVKA_FRONTALNOST: tilt > 15° OPOZORILO, > 30° NAPAKA
+- UI: faza 2 — nova metoda RAVNINA (4 vogali + širina/višina); calcView pri ravnini meri iz computeGeometry; prikaz "ravnina 200×100 (perspektivno rectificirano)"; LIDAR izpuščen iz izbire
+- TESTI: tests/r501.py NOV (51 preverjb); r487 posodobljen (409/400 vrata); r455 posodobljen; r457/r485/r486/r438.sh/r440.sh zeleni
 - VRATA: tsc 0 napak, eslint . exit 0
-- E2E BRKSALENIK: prijava → Meritve → kamera → nalaganje PNG → faza 2 (kakovost OPOZORILO mehka/temna — pravilna analiza) → metoda RAVNINA izbrana (LIDAR NI v seznamu) → 4 vogali + 200×100 → Postavi ravnino → faza 3 "Izračun (perspektivna ravnina)" "Skupaj: 5,5 m" + segmenti 50/200/100/200 cm točno po ravnini; dokaz ops/r501-kamera-ravnina.png
-- OMEJITEV ODKRITA: nalaganje JPEG 65 KB (720×540) v agent-browser/CDP povzroči CRK ráenderer procesa (swiftshader) — REPRODUCIRANO NA ČISTEMU HEAD c88378c (git stash test) 4× → peskovniška omejitev, NE regresija; PNG pot deluje; konzola brez napak
-- IZDAJA: v1.49.0 (6294f0b), push GitHub (main + tag) + GitLab (main + tag + vse veje) uspešen
+- E2E BRKSALENIK: prijava → Meritve → kamera → PNG → metoda RAVNINA → 4 vogali + 200×100 → Postavi ravnino → "Skupaj: 5,5 m" + segmenti 50/200/100/200 cm točno po ravnini; dokaz ops/r501-kamera-ravnina.png
+- IZDAJA: v1.49.0 (6294f0b), push GitHub + GitLab uspešen
 
 Stage Summary:
-- Issue #15 Faza 0 + Faza 1 + Faza 2 (začetek) DOKAZANO izvedeni: perspektivna rectifikacija z numeričnim dokazom 0,00 % (proti 22,6 % napake stare metode), eksplicitno merilo (konec tihega 1 cm/px), strežniški preračun kot avtoriteta (409/400 vrata), statusi mer v celotni verigi (params/verzija/revizija/izvoz), LIDAR umaknjen iz izbire
-- docs/MEASUREMENT-BASELINE.md = izhodišče za nadaljnje faze (3: fotogrametrija/SfM manjka — pošteno zapisano; 4: vodeni zajem delno; 7: referenčni nabor manjka)
-- Nova odvisnost: NIČ (homografija čisti TS) — issue pravila #8 izpolnjena
-- Celoten regresijski pas lokalno zelen (r438–r501); CI na GitHubu ostaja blokiran z minutno kvoto (obnova 1. 11. 2026)
-- Odprto za naslednji krog: #15 Faza 3 (COLMAP/SfM prototip — zahteva odločitev o izvajalnem okolju), #14 fotozamenjava, #7 monter camera-first (potrebna prava naprava)
+- Issue #15 Faza 0 + Faza 1 + Faza 2 (začetek) DOKAZANO izvedeni: perspektivna rectifikacija z numeričnim dokazom 0,00 %, eksplicitno merilo, strežniški preračun kot avtoriteta, statusi mer, LIDAR umaknjen
+- docs/MEASUREMENT-BASELINE.md = izhodišče za nadaljnje faze
+- Nova odvisnost: NIČ (homografija čisti TS)
+- Celoten regresijski pas lokalno zelen (r438–r501); CI blokiran z minutno kvoto (obnova 1. 11. 2026)

@@ -1351,6 +1351,14 @@ function PackageBomDialog ({ pkg }: { pkg: PackageRow | null }) {
   const segCount = calc && typeof (calc as { segmentsApplied?: number }).segmentsApplied === 'number'
     ? (calc as { segmentsApplied: number }).segmentsApplied
     : 0
+  // R511 (issue #7 §8/§10): pisarna mora videti, ODKOD so količine — iz
+  // potrjenega tekača, iz konfiguratorja ali pa da dokazanega obsega ni.
+  const geometrija = (calc as {
+    geometrija?: { odlok: string; razlog: string; fenceRunId: string | null; dolzinaCm: number | null; segmentov?: number; opozorila?: string[] } | null
+  } | null)?.geometrija ?? null
+  const geoSeg = geometrija?.segmentov ?? 0
+  // dolžina verige je v cm — pretvorba v metre je samo prikaz, ne izračun.
+  const geoM = geometrija?.dolzinaCm != null ? Math.round(geometrija.dolzinaCm) / 100 : null
 
   return (
     <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
@@ -1414,6 +1422,22 @@ function PackageBomDialog ({ pkg }: { pkg: PackageRow | null }) {
                 Kosovnica je izpeljana <strong>po {segCount} {segCount === 1 ? 'segmentu' : segCount < 5 ? 'segmentih' : 'segmentih'}</strong> (ključi seg-N so usklajeni z digitalnim dvojčkom in merilnim modelom) —
                 stebri iz razmika, dolžine/ploščine z odpadom iz pravil.
               </span>
+            </div>
+          ) : null}
+          {geometrija ? (
+            <div className="min-w-0 rounded-lg border p-2.5 text-xs" role="status">
+              <p className="font-semibold">
+                Vir obsega:
+                {geometrija.odlok === 'TEKOC'
+                  ? ` potrjen ograjni tekač (${geoSeg} ${geoSeg === 1 ? 'odsek' : geoSeg < 5 ? 'odseki' : 'odsekov'}${geoM != null ? ` · ${geoM} m` : ''})`
+                  : geometrija.odlok === 'KONFIGURATOR'
+                    ? ' vhodi konfiguratorja'
+                    : ' dokazanega obsega ni — količine so predloga × mera'}
+              </p>
+              <p className="mt-1 break-words text-muted-foreground">{geometrija.razlog}</p>
+              {(geometrija.opozorila ?? []).length > 0 ? (
+                <p className="mt-1 text-muted-foreground">Opozorila: {(geometrija.opozorila ?? []).join(', ')}.</p>
+              ) : null}
             </div>
           ) : null}
           {grouped.map((g) => (
