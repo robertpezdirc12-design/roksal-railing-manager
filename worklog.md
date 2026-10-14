@@ -1998,3 +1998,19 @@ Stage Summary:
 - Peskovniška infrastruktura trajno rešena: dev-detach dvojna vilica + boot skripta + .pgdata v arhivirani mapi → naslednji reset samodejno dvigne stack (~1 min) brez ročnega posredovanja
 - Odprta lastnikova dejanja (nespremenjena od R499): rotacija 5 produkcijskih gesel, bun run db:migrate:deploy na Neonu (aditivna migracija 20261018000000_r493_product_assets — brez nje panel »Produktna gradiva« javi napako), nov GitLab žeton za off-site kopijo (stari NEVELJAVEN)
 - CI: minute GitHub Actions so se obnovile 2026-11-01? NE — kvota se obnavlja 1. 11. 2026; do takrat lokalni relejni pas (tests/ci-local.sh) ostaja edini dokaz kakovosti
+
+---
+Task ID: R500-dodatek
+Agent: main (Z.ai Code)
+Task: Kvalitetna vrata po resetu — typecheck + lint zeleno lokalno (CI je blokiran z kvoto)
+
+Work Log:
+- tsc --noEmit: 2 napaki SAMO v skills/ (mapa PESKOVNIKA, 71 zmožnost platforme — nikoli del repa; v CI checkoutu ne obstaja) → tsconfig exclude razširjen z "skills" (v CI no-op)
+- eslint .: napaka "could not find plugin react-hooks" — vzrok: tmp/count.cjs (moj scratch iz smoke testa) ni bil v global ignores; za .cjs se eslint-config-next predloga (z registracijo vtičnika) ne uporabi, velja samo objekt s pravili → dodane ignores: tmp/**, .pgdata/**, .zscripts/**, download/**, upload/** (v CI no-op, te mape v checkoutu ne obstajajo ali niso lintljive)
+- ugotovitev ob raziskavi: 'Oops' za mape .github/.zscripts/config/assets/docs je le opozorilo 'all files ignored' (exit 2), ne napaka; posamične datoteke chunks vse OK
+- REZULTAT: typecheck 0 napak, eslint . exit 0 — obe vrati zelena lokalno
+- CI na 9a45a94 (push R500): 'Migracije' in 'Kvaliteta' padli v 2 s, runner_id 0 — potrjeno ista vzroka kot R495-dodatek (izčrpana kvota minut GitHub Actions free računa, obnova 1. 11. 2026), NE koda; koda je lokalno dokazano pravilna (migracije + seed + typecheck + lint + E2E)
+
+Stage Summary:
+- Kvalitetna vrata zelena lokalno; CI ostaja blokiran do obnovitve kvote (zunanja omejitev, dokumentirano že v R495)
+- Popravki tsconfig/eslint so peskovniški higienski (v CI no-op) — ne spreminjajo obnašanja aplikacije
