@@ -169,8 +169,16 @@ jobs:
           # potrdi strežnik iz baze; razveljavljena mera blokira SAMO nov
           # nastanek (urejanje ostane z opozorilom); dokaz živi v JSON posnetku
           # verzije — brez novih stolpcev, brez migracij, brez novega jedra.
-          # Nova skupina MORA biti tudi v tests/ci-matrix.sh.
           - grupa: r510
+          # R511 (issue #7 §8/§10): kosovnica iz POTRJENEGA ograjnega tekača —
+          # obseg sme priti iz mere samo, kadar je na meritev vezan en sam
+          # potrjen tekač istega projekta z zaprto verigo poslovno uporabnih
+          # segmentov; vse drugo pošteno pade na predlogo Z razlogom. Pretvorba
+          # gre skozi obstoječa normalizeSegments → planBom (eno samo merilno/
+          # cenovno jedro), odlok pa je zapisan v kalkulaciji, reviziji in
+          # opombi kosovnice ter viden pisarni v dialogu.
+          # Nova skupina MORA biti tudi v tests/ci-matrix.sh.
+          - grupa: r511
     services:
       postgres:
         image: postgres:16

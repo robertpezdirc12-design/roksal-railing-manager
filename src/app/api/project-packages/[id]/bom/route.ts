@@ -5,6 +5,7 @@ import { writeAudit } from '@/lib/audit'
 import { nextBomCode, planBom } from '@/lib/product-core'
 import { invalidateQuotesForPackage } from '@/lib/quote-invalidation'
 import { normalizeSegments, SEGMENT_BOM_VERSION, type RawSegmentRow } from '@/lib/segment-bom'
+import { GEOMETRY_SOURCE_VERSION, izberiGeometrijo, type OdlokGeometrije } from '@/lib/measure-geometry-source'
 import { MEASUREMENT_STATUS_LABELS, measurementStatusAllowsBusiness, type MeasurementStatus } from '@/lib/measure-engine'
 
 type Params = { params: Promise<{ id: string }> }
@@ -59,6 +60,35 @@ export async function POST (req: NextRequest, { params }: Params) {
     } catch { /* starejše/prazne kalkulacije brez inputs — predloga × qty */ }
   }
 
+  // ── R511 (issue #7 §8/§10, issue #3 §4E): obseg iz POTRJENEGA tekača ───────
+  // Paket, ki je nastal iz mere (§8 prenos), konfiguratorjevih segmentov nima,
+  // zato je doslej tiho padel na „predloga × količina“ — brez stebrov po
+  // razmiku, brez odpada in brez sledljivosti seg-N. Če na isto meritev visi
+  // POTRJEN ograjni tekač, geometrijo vzamemo iz njega in jo podamo ISTI
+  // obstoječi matematiki (`normalizeSegments` → `planBom`); novega jedra ni.
+  // Vsak odlok (tudi zavrnitev) se zabeleži v kalkulacijo, da pisarna vidi,
+  // ZAKAJ so količine samo predloge.
+  let geometrija: OdlokGeometrije | null = null
+  if (segments.length === 0 && pkg.measurement?.id) {
+    const tekoci = await db.fenceRun.findMany({
+      where: { measurementId: pkg.measurement.id },
+      select: {
+        id: true, status: true, projectId: true,
+        segments: {
+          orderBy: { order: 'asc' },
+          select: { order: true, fromAtCm: true, toAtCm: true, lengthCm: true, heightCm: true, status: true },
+        },
+      },
+    })
+    geometrija = izberiGeometrijo({
+      paketProjectId: pkg.projectId,
+      paketZeImaSegmente: false,
+      razmikStebrovCm: spacingCm,
+      tekoci: tekoci.map((t) => ({ id: t.id, status: t.status, projectId: t.projectId, segmenti: t.segments })),
+    })
+    if (geometrija.odlok === 'TEKOC') segments = normalizeSegments(geometrija.rows)
+  }
+
   const plan = await planBom({
     productId: pkg.productId,
     variantId: pkg.variantId,
@@ -101,7 +131,7 @@ export async function POST (req: NextRequest, { params }: Params) {
       qty: pkg.qty,
       unit: pkg.unit,
       status: 'OSNUTEK',
-      note: `Generirano iz predloge ${plan.product.sku}${plan.variant ? ` / ${plan.variant.sku}` : ''}`,
+      note: `Generirano iz predloge ${plan.product.sku}${plan.variant ? ` / ${plan.variant.sku}` : ''}${geometrija?.odlok === 'TEKOC' && geometrija.fenceRunId ? ` — obseg iz potrjenega tekača ${geometrija.fenceRunId}` : ''}${geometrija?.odlok === 'PREDLOGA' ? ` — obseg tekač ne more dokazati: ${geometrija.razlog}` : ''}`,
       lines: {
         create: plan.lines.map((l, i) => ({
           itemId: l.itemId, qty: l.qty, unit: l.unit, note: l.note, sortOrder: i,
@@ -135,6 +165,19 @@ export async function POST (req: NextRequest, { params }: Params) {
       segmentEngine: plan.segmentEngine ?? SEGMENT_BOM_VERSION,
       warnings: plan.warnings,
     } : {}),
+    // R511: ZAKDaj so količine po segmentih oziroma zakaj so samo predloga —
+    // odločitev o viru geometrije mora brati tudi čez tri mesece.
+    ...(geometrija ? {
+      geometrija: {
+        verzija: GEOMETRY_SOURCE_VERSION,
+        odlok: geometrija.odlok,
+        razlog: geometrija.razlog,
+        fenceRunId: geometrija.fenceRunId,
+        dolzinaCm: geometrija.dolzinaCm,
+        opozorila: geometrija.opozorila,
+        segmentov: geometrija.rows.length,
+      },
+    } : {}),
     ...(preservedInputs ? { inputs: preservedInputs } : {}),
   }
   await db.projectPackage.update({
@@ -153,6 +196,8 @@ export async function POST (req: NextRequest, { params }: Params) {
       qty: plan.qty, unit: plan.unit, lines: plan.lines.length,
       materialCost: plan.materialCost, totalSale: plan.totalSale, marginPct: plan.marginPct,
       ...(plan.segmentsApplied > 0 ? { segmentsApplied: plan.segmentsApplied, segmentEngine: plan.segmentEngine } : {}),
+      // R511: vir geometrije je del revizijske sledi (kje so količine nastale)
+      ...(geometrija ? { geometrijaOdlok: geometrija.odlok, geometrijaRun: geometrija.fenceRunId, geometrijaRazlog: geometrija.razlog.slice(0, 200) } : {}),
     },
   })
 
@@ -168,6 +213,8 @@ export async function POST (req: NextRequest, { params }: Params) {
     data: {
       bom: { id: bom.id, code: bom.code, status: bom.status, qty: bom.qty, unit: bom.unit, lines: plan.lines },
       calc,
+      // R511: pisarna mora VIDETI, od kod so količine — ne šele v bazi
+      ...(geometrija ? { geometrija } : {}),
       ...(invalidated.reset + invalidated.flagged > 0 ? { invalidated } : {}),
     },
   }, { status: 201 })

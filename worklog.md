@@ -2885,3 +2885,115 @@ KAJ NI DOKAZANO / OSTANE POŠTENO:
 - Produkcijski gesli administracije/demo sta še javno znana in nerotirana,
   migracija `20261019000000_r501_measurement_status` na Neonu še ni izvedena —
   oboje je dejanje lastnika, zato deploya NE predlagam.
+
+═══════════════════════════════════════════════════════════════════════════════
+Task ID: R511 (issue #7 §8/§10 in issue #3 §4E — kosovnica iz POTRJENE ograjne geometrije)
+Agent: Qoder (robertpezdirc12-design), nadaljevanje verige R509 → R510
+Date: 2026-10-14
+
+Task gap:
+  Paket, ki nastane iz potrjene mere (R509 prenos mere v paket), konfiguratorjevih
+  vhodnih segmentov nima. Kosovnica je zato doslej TIHO padla na »predloga ×
+  količina«: brez stebrov po razmiku, brez odpada po pravilu, brez sledljivih
+  ključev seg-N. Po drugi strani monterjev ograjni tekač (R488) že danes nosi
+  dokazano geometrijo — zaprto verigo segmentov z dolžinami, višinami in statusi
+  mere. Manjkala je samo varna pot od enega do drugega, in sicer BREZ drugega
+  merilnega ali cenovnega jedra, kar issue #7 izrecno prepoveduje.
+
+Work Log:
+- NOVO `src/lib/measure-geometry-source.ts` (210 vrstic, čist modul):
+  `izberiGeometrijo(vhod)` vrne odlok (KONFIGURATOR | TEKOC | PREDLOGA), razlog,
+  `rows` v obstoječem m-formatu, `fenceRunId`, `dolzinaCm`, `razmikStebrovCm` in
+  opozorila. Uvozi samo `measurementStatusAllowsBusiness` (vrednost) in
+  `RawSegmentRow` (tip). Fail-closed vrata, brez tihe domišljije:
+  • konfiguratorjevi segmenti imajo PREDNOST — če paket že nosi svoje vhode, se
+    jih ne dotikamo (obstoječi tokovi so bit-for-bit nespremenjeni);
+  • tekač mora biti POTRJEN (OSNUTEK / PREGLED / ARHIV ni dokazan obseg);
+  • na meritev sme viseti NATANČENO EN potrjen tekač — dva sta dva vira resnice,
+    sistem NE izbere prvega namesto pisarne (`VECPOTRJENIH`, v razlogu oba ID-ja);
+  • tekač mora pripadati ISTEMU projektu (`TUJI_PROJEKT`) in biti vezan na mero
+    paketa (branje poteka po `measurementId`, kanonična mera §17);
+  • veriga mora biti urejena od 0 in zaprta: `PRETRGANA_VERIGA` (začetek ni 0,
+    vrstni red ni zaporeden, pretrg > 1 cm), `PREKRIVANJE` (> 1 cm),
+    `BREZ_DOLZINE` (0 ali negativna), `BREZ_POLOZAJA` (manjka from/to);
+  • vsak segment mora prestati ISTA vrata kot R501 (`SEGMENT_NI_POTRJEN`;
+    ESTIMATED / AUTO_SUGGESTED / INVALIDATED in neznano stanje zavrnejo cel
+    tekač, v razlogu je naštet `order (status)`, da monter ve, kaj ponoviti);
+  • razmika se NE izmišlja (`BREZ_RAZMIKA`), višine se NE popolnijo
+    (`BREZ_VISINE`, rows gre naprej z `visina: null`);
+  • `dolzinaCm` je VSOTA merjenih dolžin (tisto, kar napaja količine), ne
+    zaključni položaj verige — ob pretrgu znotraj tolerance se razideta.
+  Modul NE računa cen, marž, količin ali pravil; pretvorba poteka skozi
+  OBSTOJEČI `normalizeSegments` → `planBom` (eno samo merilno/cenovno jedro).
+- `src/app/api/project-packages/[id]/bom/route.ts` (+49): R501 poslovna vrata
+  ostanejo PRVA (409 pred katerimkoli branjem geometrije). Geometrija se poišče
+  samo, kadar `segments.length === 0 && pkg.measurement?.id`. Branje:
+  `db.fenceRun.findMany({ where: { measurementId } })` s segmenti
+  `orderBy: { order: 'asc' }` in izborom samo polj, ki jih odločitev potrebuje.
+  Odlok je zapisan v `calc.geometrija` (verzija, odlok, razlog, fenceRunId,
+  dolzinaCm, opozorila, segmentov), v revizijo `BOM_GENERATE`
+  (`geometrijaOdlok/Run/Razlog`), v opombo kosovnice (»obseg iz potrjenega
+  tekača …« ali »obseg tekač ne more dokazati: …«) in v odgovor pisarni.
+  `planBom` je poklican ENKRAT. Nadomeščanje obstoječe kosovnice ima še vedno
+  iste roke (aktivne rezervacije / picking liste / REZERVIRAN / PORABLJEN → 409)
+  in `invalidateQuotesForPackage` (R474) ostane.
+- `src/components/roksal/modules/projekti.tsx` (+24): dialog kosovnice dobi panel
+  »Vir obsega« (`role="status"`): potrjen tekač s številom odsekov in dolžino v
+  metrih, ali vhodi konfiguratorja, ali »dokazanega obsega ni — količine so
+  predloga × mera«, spodaj razlog in opozorila. Pisarna torej vidi, ZAKAJ so
+  količine takšne kot so, ne samo koliko jih je.
+- NOVO `tests/r511.py` (259 vrstic, 106 trditev; brez strežnika, ne piše v bazo):
+  A) 21 fail-closed odločitev (prednost konfiguratorja, brez tekača, OSNUTEK,
+     dva POTRJEN, tuji projekt, prazni in null segmenti, vsaka poškodba verige,
+     1 cm meja tolerance, ESTIMATED / INVALIDATED / neznani status, happy path);
+  B) m-format in determinizem (seg-N po teku, 500 cm → 5 m, 95,5 cm → 0,96 m,
+     višina null, neurejen vhod da isti rezultat, idempotentnost, točno tri
+     ključe vrstice, točno pogodbeni izhod, strukturni izhod brez cen in marž);
+  C) žičenje (VRSTNI RED R501 → geometrija → planBom, en sam `planBom` klic,
+     pogoj aditivnosti, branje po `measurementId`, `orderBy`, izbor polj,
+     `normalizeSegments(geometrija.rows)`, zapis v calc/revizijo/opombo/odgovor,
+     `MAX_VIEWS = 4` nedotaknjen, UI napisi);
+  D) meje (modul brez `@prisma` / `next` / `react` / DOM / `fetch(` / `db.`,
+     koda brez cenovnega besedišča, `planBom` vhoda segments/spacingCm, ENO SAMO
+     porabnik modula, shema brez stolpca za vir geometrije, brez migracije za
+     R511, brez novih inferenčnih odvisnosti, AI klici ostanejo samo v detect/AR).
+- `tests/ci-matrix.sh` (`GRUPE` + `CLANI[r511]`) in `.github/workflows/ci.yml`
+  (`- grupa: r511` z opisom) — pariteto obeh seznamov preverja sam pas.
+
+Verification:
+- `bash tests/ci-matrix.sh r511` → 106 ✓ / 0 ✗.
+- CELOTI lokalni relejni pas (`bash tests/ci-local.sh`): ✓ zeleno, 8 statičnih
+  korakov in 31 skupin; trditve 4827 ✓ / 0 ✗ / 4 ⟿ / 0 ⏸ (IZHOD = 0). Preskoki
+  so ISTI okoljski kot pri R510: štiri GitLab trditve brez veljavnega žetona
+  (off-site preverbe, zaščita, pipelines, MR) — sinhronizacije na GitLab NE
+  štejemo kot opravljeno. Pas je upravljal LASTEN dev strežnik; merilnega jedra
+  zaradi harnessa ni bilo treba spreminjati.
+- `npx tsc --noEmit` brez napak; `eslint` na treh spremenjenih datotekah brez
+  napak in opozoril.
+- Utrjevanje testov je našlo TRI resnične napake, ki so popravljene (dokaz, da
+  testi niso dekoracija): (1) `dolzinaCm` je seštevala zaključne položaje
+  segmentov (500+900+1420 = 2820 cm) namesto merjenih dolžin; (2) UI je metre
+  računal `Math.round(cm / 100) / 100`, kar pokaže 0,14 m namesto 14,2 m;
+  (3) obupana trditev (`... or True`) je skrila dejstvo, da repo že ima AI
+  odvisnost `z-ai-web-dev-sdk` — zdaj je preizkus pošteno obrnjen: kosovnica je
+  NE sme uvoziti, AI ostaja samo v `api/measurement/detect` in `api/ar/analyze`.
+
+KAJ NI DOKAZANO / OSTANE POŠTENO:
+- End-to-end klik v brskalniku (mera → potrjen tekač → kosovnica iz geometrije →
+  panel »Vir obsega«) nisem naredil: dokaz je lokalni pas z branjem kode in
+  enotskimi trditvami; pravi zajemi z napravo na tej mizi niso na voljo.
+- Migracij ni nobene in nobenega novega stolpca — odločitev živi v `calcJson` in
+  reviziji. `db:seed` in `migrate deploy` tečeta SAMO na lokalnem PG :54329;
+  Neon in produkcija nista bila dotaknjena.
+- `public/assets/roksal/src/MANIFEST.json` je v delovnem drevesu spremenjen in
+  NAMENOMA ni v tem commitu (isto kot pri R509 in R510).
+- GitHub Actions tega zagona ne morejo potrditi — minute so porabljene do
+  1. 11. 2026; dokaz je lokalni pas.
+- R511 pokrije prenos geometrije iz §8, NE pa lastnikove potrditve cenovnega
+  jedra (issue #15 Faza 6: »iz istih potrjenih mer naj nastaneta kosovnica IN
+  cenovni izračun iz enega vira« — cenovni del čaka na potrditev) in ne Faze 7
+  (benchmark z tolerancami in neodvisno fizično izmerjenim naborom, §6.1).
+- Produkcijski gesli administracije in demo računa sta še javno znana in
+  nerotirana, migracija `20261019000000_r501_measurement_status` na Neonu še ni
+  izvedena — oboje je dejanje lastnika, zato deploya NE predlagam.
+═══════════════════════════════════════════════════════════════════════════════
