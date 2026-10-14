@@ -59,6 +59,10 @@ import {
   nastaviTorch, naslednjaSmer, napisSmeri, napisZmogljivosti, prestejVideoVhode, zmogljivostiKamere,
   type SmerKamere, type ZmogljivostiKamere,
 } from '@/lib/camera-capabilities'
+import {
+  napisNastavitev, nastaviSmer, nastaviSvetilko, preberiNastavitve, shramba,
+  type KameraNastavitve,
+} from '@/lib/camera-prefs'
 import { useAppStore } from '@/lib/store'
 import {
   CALIB_METHODS, INPUT_SOURCE_LABELS, MEASURE_MODES, MEASUREMENT_STATUS_LABELS, MODE_RULES, captureGuide,
@@ -527,7 +531,12 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
   // statusna vrstica shranjevanja — obe sta povzeti iz naprave/strežnika, nikoli
   // predpostavljene.
   const [zmoKamere, setZmoKamere] = useState<ZmogljivostiKamere | null>(null)
-  const [smerKamere, setSmerKamere] = useState<SmerKamere>('environment')
+  // R509 (issue #7 §9): spomin na monterjeve nastavitve. Beremo SAMO na
+  // odjemalcu (`shramba()` je na strežniku `null` → privzeto), neveljaven zapis
+  // pade na privzeto. Svetilka se iz spomina NIKOLI ne prižge sama — iz njega je
+  // samo opomba, ker je prižig hardverski ukaz (§7).
+  const [nastavitve, setNastavitve] = useState<KameraNastavitve>(() => preberiNastavitve(shramba()))
+  const [smerKamere, setSmerKamere] = useState<SmerKamere>(() => nastavitve.smer)
   const [torchNa, setTorchNa] = useState(false)
   const [vrsticaShranjevanja, setVrsticaShranjevanja] = useState<VrsticaShranjevanja | null>(null)
   const [maxTilt, setMaxTilt] = useState<number | null>(null)
@@ -830,6 +839,8 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
       setSmerKamere(smer)
       setTorchNa(false)
       setCamActive(true)
+      // R509: uspešen zagon si zapomni smer (zapisi v brskalnik, ne v bazo).
+      if (nastaviSmer(shramba(), smer)) setNastavitve((p) => ({ ...p, smer }))
       requestAnimationFrame(() => { if (videoRef.current) videoRef.current.srcObject = stream })
       await zajemiZmogljivosti(stream)
       return true
@@ -866,8 +877,16 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
   const preklopiTorch = useCallback(async (): Promise<void> => {
     const track = streamRef.current?.getVideoTracks()[0] ?? null
     const izid = await nastaviTorch(track, !torchNa)
-    if (izid.stanje === 'VKLOPLJEN' || (izid.stanje === 'SPREJETO_BREZ_POTRDITVE' && !torchNa)) setTorchNa(true)
-    if (izid.stanje === 'IZKLOPLJEN' || (izid.stanje === 'SPREJETO_BREZ_POTRDITVE' && torchNa)) setTorchNa(false)
+    const prižgana = izid.stanje === 'VKLOPLJEN' || (izid.stanje === 'SPREJETO_BREZ_POTRDITVE' && !torchNa)
+    const ugasnjena = izid.stanje === 'IZKLOPLJEN' || (izid.stanje === 'SPREJETO_BREZ_POTRDITVE' && torchNa)
+    if (prižgana) setTorchNa(true)
+    if (ugasnjena) setTorchNa(false)
+    // R509 (issue #7 §9): v spomin gre samo stanje, ki ga UI zares pokaže —
+    // NAPAKA/NI_PODPRE ne spremenita ničesar, sicer bi monterju ostal prižig,
+    // ki se nikoli ni zgodil.
+    if (prižgana !== ugasnjena && nastaviSvetilko(shramba(), prižgana)) {
+      setNastavitve((p) => ({ ...p, svetilkaNazadnje: prižgana }))
+    }
     toast({
       title: 'Bliskavica',
       description: izid.sporocilo,
@@ -1776,6 +1795,9 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
                   Naprava: {napisZmogljivosti(zmoKamere)}
                 </p>
               ) : null}
+              {/* R509 (issue #7 §9): opomba o spominu — svetilke iz spomina ne
+                  prižgemo sami; monter jo mora prižgati. */}
+              <p className="px-2 pb-2 text-[11px] text-muted-foreground">{napisNastavitev(nastavitve, torchNa)}</p>
             </div>
           ) : null}
 

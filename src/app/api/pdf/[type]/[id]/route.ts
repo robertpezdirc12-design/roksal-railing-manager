@@ -4,6 +4,8 @@
 // R459: tip photoviz — dokument FOTO-VIZUALIZACIJE s PREJ/POTEM slikama (issue #14 §14).
 // R477: tip measure — MERILNI PAKET tekača (issue #9 §6 Faza 4: risba +
 // montažna skica + tabele + odrezni seznam + fotografije + preverjanja).
+// R509 (issue #7 §8): merilni paket ima DOKAZNO VERIGO — potrditelj, zgodovina
+// verzij meritve in SHA-256 + velikost izvirnikov zajemov (brez binarne vsebine).
 // Revizija: DOC_GENERATE (entity quote|invoice|photoviz|measure-package).
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -16,6 +18,7 @@ import { VIZ_ZIG } from '@/lib/photo-replace-core'
 import { fenceRunZaUporabnika } from '@/lib/fence-run-access'
 import { computeSegments, qualityGate, validateRun } from '@/lib/fence-run-engine'
 import { loadRunContext } from '@/lib/fence-run-service'
+import { fotografiIzParametrov, originalDokaz } from '@/lib/original-proof'
 import { buildPlanModel, parseTurns, type CornerTurn } from '@/lib/model-core'
 import {
   segmentLinesForComponent, SEGMENT_ROLES, POSTS_RULE_KEY, WASTE_RULE_KEY,
@@ -450,6 +453,29 @@ async function renderPhotoVizPdf (id: string): Promise<{ bytes: Uint8Array<Array
 
 // ─── MERILNI PAKET (R477 — issue #9 §6 Faza 4) ──────────────────────────────
 
+/** R509 (issue #7 §8): izvirniki zajemov, na katerih temelijo podane meritve.
+ *  V dokument gre SAMO SHA-256 + velikost (dokaz o nespremenjenosti), ne binarna
+ *  vsebina — PDF ostane lahek, originali pa so dosegljivi prek
+ *  /api/measure-engine/export?originals=1. Iste funkcije uporablja izvoz, zato
+ *  se izkaz originala med dokumenti ne more razhajati. */
+async function originaliZaMeritve (meritevIds: string[]): Promise<Array<{ id: string; sha256: string | null; bayti: number; lokacija: string | null }>> {
+  if (meritevIds.length === 0) return []
+  const zajeti = await db.measurement.findMany({
+    where: { id: { in: meritevIds } },
+    select: { id: true, params: true },
+  })
+  const fotoIds = [...new Set(zajeti.flatMap((zr) => fotografiIzParametrov(zr.params)))]
+  if (fotoIds.length === 0) return []
+  const fotografije = await db.measurement.findMany({
+    where: { id: { in: fotoIds } },
+    select: { id: true, location: true, params: true },
+  })
+  return fotografije.map((fr) => {
+    const d = originalDokaz(fr)
+    return { id: d.id, sha256: d.sha256, bayti: d.bayti, lokacija: d.lokacija }
+  })
+}
+
 async function renderMeasurePackage (
   user: SessionUser, id: string, turns: CornerTurn[] | null
 ): Promise<{ bytes: Uint8Array<ArrayBuffer>; code: string; projectId: string | null } | NextResponse> {
@@ -584,6 +610,34 @@ async function renderMeasurePackage (
     hasSegments: model.segments.length > 0,
   })
 
+  // ── R509 (issue #7 §8): DOKAZNA VERIGA — kdo je potrdil, kaj se je spreminjalo
+  //    in kateri originali so bili merjeni (SHA-256 + velikost, ne binarna vsebina).
+  const kanonicna = ctx.run.measurementId
+    ? await db.measurement.findUnique({
+        where: { id: ctx.run.measurementId },
+        select: {
+          id: true,
+          createdAt: true,
+          author: { select: { name: true, role: true } },
+          versions: {
+            select: { version: true, note: true, createdAt: true, user: { select: { name: true } } },
+            orderBy: { version: 'desc' },
+          },
+        },
+      })
+    : null
+  const originali = await originaliZaMeritve(kanonicna ? [kanonicna.id] : [])
+  const avtorRow = kanonicna?.author ?? null
+  const avtor = avtorRow
+    ? { ime: avtorRow.name, vloga: avtorRow.role, ustvarjeno: kanonicna?.createdAt.toISOString() ?? '' }
+    : null
+  const zgodovina = (kanonicna?.versions ?? []).map((v) => ({
+    verzija: v.version,
+    kdaj: v.createdAt.toISOString(),
+    avtor: v.user?.name ?? null,
+    opomba: v.note ?? null,
+  }))
+
   const bytes = renderMeasurePackagePdf({
     run: {
       id: ctx.run.id, name: ctx.run.name, status: ctx.run.status,
@@ -602,7 +656,7 @@ async function renderMeasurePackage (
       maxRazdaljaStebrovCm: spacingCm,
       odpadRezPct: wastePct,
     },
-    cutList, cutListNote, photos, checks,
+    cutList, cutListNote, photos, checks, avtor, zgodovina, originali,
   })
 
   return { bytes, code: `merilni-paket-${ctx.run.id.slice(-8)}`, projectId: ctx.run.projectId }

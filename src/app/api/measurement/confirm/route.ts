@@ -36,6 +36,18 @@
 //     mer z nerešenim kritičnim konfliktom«); manualOverride z razlogom (r455)
 //     je VELJAVNA rešitev → 201;
 //   • BREZ views ostane params BITNO enak staremu (r439/r455 legacy).
+//
+// R509 (issue #7 §8 — pisarniška veriga) — aditivno:
+//   • handoffProductId (+ handoffVariantId) — IZREČNA zahteva po prenosu
+//     potrjene meritve v paket projekta (status IZMERA). Brez njega se paket
+//     NE ustvari (nobena tiha domišljija izdelka/cenovnega razreda);
+//   • prenos potrebuje pravico `quotes.create` (ista kot /api/project-packages);
+//   • količina je izpeljiva SAMO nedvoumno (m ← dolžina; m2 ← dolžina × višina;
+//     'kos' in neznane enote → ZAVRNJENO z razlogom);
+//   • cene/marže/kosovnice TU NE NASTAJEJO (calcJson je samo dokaz izvora) —
+//     en vir cenovnega resnice ostaja `/api/project-packages/[id]/bom`;
+//   • idempotentno: meritev s paketom → OBSTAJA (noben dvojni paket);
+//   • odgovor: `{ data, paket? }` — obstoječi klicatelji berejo samo `data`.
 
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
@@ -48,6 +60,8 @@ import {
   pickEngineExtras, deriveProvenance, provenanceForParams, type MeasureMode,
 } from '@/lib/measure-engine'
 import { MEASURE_CONFLICT_PCT } from '@/lib/scene-understanding-core'
+import { odlociPaket, HANDOFF_VERSION } from '@/lib/measurement-handoff'
+import { nextPackageCode } from '@/lib/product-core'
 
 const TYPES = ['OGRAJA', 'BALUSTRADA', 'NAGIB', 'OSTANEO']
 
@@ -73,7 +87,7 @@ function int (v: unknown): number | null {
 export async function POST (req: NextRequest) {
   const auth = await requirePermission(req, 'measurements.write')
   if (auth instanceof NextResponse) return auth
-  const { user } = auth
+  const { user, perms } = auth
 
   const body = await req.json().catch(() => null)
   if (!body || typeof body !== 'object') return jsonError(400, 'Neveljavno telo zahteve.')
@@ -365,5 +379,87 @@ export async function POST (req: NextRequest) {
       })
     }
   }
-  return NextResponse.json({ data: measurement }, { status: 201 })
+  // ── R509 (issue #7 §8): prenos potrjene meritve V PAKET ────────────────────
+  // Ročna odločitev, NE tiha domišljija: paket ustvarimo samo, če izvajalec
+  // zahteve izrecno podaja izdelek (`handoffProductId`) in ima pravico `quotes.create`
+  // (isto dovoljenje kot `/api/project-packages`). Količino izpeljemo samo tam,
+  // kjer je aritmetika nedvoumna (`odlociPaket`); cene, marže in kosovnice tu
+  // NE nastajajo — ostanejo obstoječi poti `/api/project-packages/[id]/bom`, da
+  // ta issue ne ustvari drugega cenovnega jedra. Idempotentno: meritev, ki že
+  // ima paket, DOBI obstoječi kode, drugega paketa ne.
+  const handoffProductId = typeof body.handoffProductId === 'string' && body.handoffProductId ? body.handoffProductId : null
+  const handoffVariantId = typeof body.handoffVariantId === 'string' && body.handoffVariantId ? body.handoffVariantId : null
+  let paket: Record<string, unknown> | null = null
+  if (handoffProductId !== null) {
+    const postojeci = await db.projectPackage.findFirst({
+      where: { measurementId: measurement.id },
+      select: { id: true, code: true },
+    })
+    const produkt = await db.product.findUnique({
+      where: { id: handoffProductId },
+      select: { id: true, name: true, unit: true, active: true, family: { select: { code: true, name: true } } },
+    })
+    const varianta = handoffVariantId
+      ? await db.productVariant.findUnique({ where: { id: handoffVariantId }, select: { id: true, productId: true, name: true } })
+      : null
+    let odlok = odlociPaket({
+      projectId,
+      productId: produkt?.active === true ? produkt.id : null,
+      unit: produkt?.unit ?? null,
+      lengthCm,
+      heightCm,
+      postojeciPaketId: postojeci?.id ?? null,
+    })
+    if (produkt === null) odlok = { odlok: 'ZAVRNJENO', razlog: 'Izbrani izdelek ne obstaja — paketa nismo ustvarili.', qty: null, unit: null }
+    else if (!produkt.active) odlok = { odlok: 'ZAVRNJENO', razlog: `Izdelek ${produkt.name} ni aktiven — paketa ne ustvarjamo za arhiviran izdelek.`, qty: null, unit: produkt.unit }
+    else if (!perms.includes('quotes.create')) odlok = { odlok: 'ZAVRNJENO', razlog: 'Meritev je potrjena; paketov monterjev profil ne ustvarja — prenos stori pisarna.', qty: null, unit: produkt.unit }
+    else if (handoffVariantId !== null && varianta?.productId !== produkt.id) odlok = { odlok: 'ZAVRNJENO', razlog: 'Izbrana varianta ne spada k izbranemu izdelku — paketa nismo ustvarili.', qty: null, unit: produkt.unit }
+
+    if (odlok.odlok === 'OBSTAJA' && postojeci) {
+      paket = { id: postojeci.id, code: postojeci.code, odlok: odlok.odlok, qty: null, unit: null, status: null, razlog: odlok.razlog }
+    } else if (odlok.odlok === 'USTVORI' && produkt && odlok.qty !== null) {
+      const code = await nextPackageCode(measurement.project?.code ?? 'P')
+      const ustvarjen = await db.projectPackage.create({
+        data: {
+          code,
+          projectId: projectId as string,
+          productId: produkt.id,
+          variantId: varianta?.id ?? null,
+          measurementId: measurement.id,
+          name: `${produkt.name} — izmera${measurement.location ? ` (${measurement.location})` : ''}`,
+          qty: odlok.qty,
+          unit: odlok.unit as string,
+          status: 'IZMERA',
+          // NOBENA cena/marža/načrt tu ne nastane (R488 isti pogoj): calcJson je
+          // samo dokaz izvora in prenosa, ki ga pisarna nadaljuje s kosovnico.
+          calcJson: JSON.stringify({
+            prenos: {
+              verzia: HANDOFF_VERSION,
+              izvor: 'KAMERA',
+              meritevId: measurement.id,
+              dolzinaCm: lengthCm,
+              visinaCm: heightCm,
+              enota: odlok.unit,
+              razlog: odlok.razlog,
+            },
+          }),
+          note: `§8 prenos iz meritve s kamero (${produkt.family.code})`,
+        },
+        select: { id: true, code: true },
+      })
+      paket = { id: ustvarjen.id, code: ustvarjen.code, odlok: odlok.odlok, qty: odlok.qty, unit: odlok.unit, status: 'IZMERA', razlog: odlok.razlog }
+      await writeAudit({
+        userId: user.id,
+        action: 'MEASUREMENT_HANDOFF',
+        entity: 'projectPackage',
+        entityId: ustvarjen.id,
+        projectId,
+        detail: { measurementId: measurement.id, code: ustvarjen.code, qty: odlok.qty, unit: odlok.unit, verzia: HANDOFF_VERSION },
+      })
+    } else {
+      paket = { id: null, code: null, odlok: odlok.odlok, qty: null, unit: odlok.unit, status: null, razlog: odlok.razlog }
+    }
+  }
+
+  return NextResponse.json({ data: measurement, ...(paket !== null ? { paket } : {}) }, { status: 201 })
 }

@@ -23,7 +23,7 @@ import {
 import type { PlanModel, ModelNode, ModelSegment } from '@/lib/model-core'
 import type { ExportCheck } from '@/lib/export-core'
 
-export const MEASURE_PACKAGE_VERSION = 'measure-package-pdf/1.0'
+export const MEASURE_PACKAGE_VERSION = 'measure-package-pdf/1.1'
 
 // ─── Vrste (vhod — pripravi API route) ───────────────────────────────────────
 
@@ -58,6 +58,12 @@ export interface MeasurePackageInput {
   cutListNote: string | null // BREZ_PRODUKTA / BREZ_RAZMIKA …
   photos: PackagePhoto[]
   checks: ExportCheck[]
+  /** R509 (issue #7 §8): kdo je dokument ustvaril — iz Measurement.author. */
+  avtor?: { ime: string; vloga: string | null; ustvarjeno: string } | null
+  /** R509 (issue #7 §8): zgodovina sprememb meritve (MeasurementVersion). */
+  zgodovina?: Array<{ verzija: number; kdaj: string; avtor: string | null; opomba: string | null }>
+  /** R509: izvirniki fotografij (SHA-256 + velikost) — dokaz, kaj je bilo merjeno. */
+  originali?: Array<{ id: string; sha256: string | null; bayti: number; lokacija: string | null }>
 }
 
 // ─── Barve statusov (usklajeno z UI model-core STROKE) ─────────────────────
@@ -92,6 +98,13 @@ const fmtDate = (iso: string | null | undefined): string => {
   return Number.isNaN(d.getTime())
     ? '—'
     : `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()}`
+}
+
+const fmtDateTime = (iso: string | null | undefined): string => {
+  if (!iso) return '—'
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return '—'
+  return `${fmtDate(iso)} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -507,6 +520,38 @@ export function renderMeasurePackagePdf (inp: MeasurePackageInput): Uint8Array<A
     f.y += 13
   }
   f.y += 12
+
+  // ── R509 (issue #7 §8): avtor, zgodovina sprememb in izvirniki zajemov ────
+  // Dokument je moral doslej pokazati samo MERITVE — pisarna in stranka nista
+  // videli, KDO je meritev potrdil, KAJ se je po tem spremenilo in KATERE
+  // originalne fotografije so bile pod njo. Brez teh podatkov PDF ni dokazni
+  // dokument — v njem so samo lepe številke.
+  if (inp.avtor || (inp.zgodovina?.length ?? 0) > 0 || (inp.originali?.length ?? 0) > 0) {
+    doc.text(M, f.y, 'DOKAZNA VERIGA DOKUMENTA', { size: 8, bold: true, color: LIGHT })
+    f.y += 14
+    if (inp.avtor) {
+      ensure(doc, f, 13)
+      doc.text(M, f.y, 'Potrdil:', { size: 9, bold: true, color: BLACK })
+      doc.text(M + 110, f.y, `${inp.avtor.ime}${inp.avtor.vloga ? ` (${inp.avtor.vloga})` : ''} · ${fmtDate(inp.avtor.ustvarjeno)}`, { size: 9, color: GRAY })
+      f.y += 13
+    }
+    for (const v of inp.zgodovina ?? []) {
+      ensure(doc, f, 12)
+      doc.text(M, f.y, `v${v.verzija}`, { size: 8, bold: true, color: BLACK })
+      doc.text(M + 40, f.y, fmtDateTime(v.kdaj), { size: 8, color: GRAY })
+      doc.text(M + 150, f.y, v.avtor ?? '—', { size: 8, color: GRAY })
+      doc.text(M + 260, f.y, v.opomba ?? '—', { size: 8, color: GRAY })
+      f.y += 12
+    }
+    for (const o of inp.originali ?? []) {
+      ensure(doc, f, 12)
+      doc.text(M, f.y, 'izvirnik', { size: 8, bold: true, color: BLACK })
+      doc.text(M + 40, f.y, `${o.id.slice(-8)} · ${o.bayti} B · SHA-256 ${o.sha256 ? `${o.sha256.slice(0, 16)}…` : '— (ni datoteke)'}`, { size: 8, color: GRAY })
+      doc.text(M + 420, f.y, o.lokacija ?? '—', { size: 8, color: GRAY })
+      f.y += 12
+    }
+    f.y += 12
+  }
 
   // ── 1. TLORIS
   sectionTitle(doc, f, '1', 'Tloris (merilni model)')

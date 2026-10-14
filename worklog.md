@@ -2659,3 +2659,136 @@ Stage Summary:
   opozorili v konzoli nista locirani; (7)
   `public/assets/roksal/src/MANIFEST.json` je v delovnem drevesu spremenjen
   zaradi uvoženih sredstev in NAMENOMA ni v tem commitu.
+
+Task ID: R509 (issue #7 §8/§9 — pisarniška veriga: ročni prenos mere v paket,
+dokaz originalov v izvozu in PDF-ju, zgodnja blokirana odločitev količine in
+spomin na monterjeve nastavitve kamere)
+Agent: Qoder (lokalno merjeno, 14. 10. 2026, Windows Git Bash + lokalni PG :54329)
+
+Task: Monterjeva pot se je do zdaj končala pri potrjeni meri. Pisarnski del je
+manjkal: (1) ob potrditvi se mera NI prenesla v paket projekta, zato jo je
+pisarna ročno prepisovala — vir napak, ki ga je izrecno prepovedal §21; (2)
+izvoz mere je vseboval samo sklic na fotografijo, ne pa dokaza o izvirniku
+(SHA-256, velikost), zato dokumentacijska veriga ni bila izvozljiva; (3) PDF je
+pokazal samo meritve — brez avtorja potrjevanja in brez zgodovine sprememb ni
+dokazni dokument; (4) monterjeve nastavitve kamere (smer, svetilka) se niso
+zapomnile; (5) količina paketa se ni smela izpeljati iz mere, ker je bila vsaka
+odločitev o enoti odprta. Ključna omejitev: ta issue NE SME ustvariti drugega
+merilnega ali cenovnega jedra.
+
+Work Log:
+- NOVO `src/lib/measurement-handoff.ts` (87 vrstic, namenoma ČIST — brez Prisma,
+  brez DOM-a): `odlociPaket()` je deterministična, fail-closed odločitev o
+  prenosu (`USTVORI / OBSTAJA / ZAVRNJENO`), ki vedno vrne razlog za uporabnika.
+  Količina se izpelje SAMO tam, kjer je aritmetika nedvoumna: `m` = dolžina/100,
+  `m2` = dolžina × višina/10000 (zaokroženo na dve decimalki), `kos` in neznana
+  enota sta ZAVRNJENA. Brez projekta in brez izdelka paket NE MORE nastati —
+  izdelek je cenovni razred, o njem odloča pisarna, ne kamera.
+  Nedoklican `povzetekPrenosa()` je bil odstranjen, da modul ne ponuja drugega
+  vira resnice.
+- NOVO `src/lib/original-proof.ts` (78 vrstic): SKUPNI izračun dokaza o
+  izvirniku (`fotografiIzParametrov()`, `originalDokaz()`) za izvoz IN PDF, da
+  se SHA-256 in velikost v dveh dokumentih nikoli ne moreta raziti. Številki se
+  izračunata iz dejanskih base64 bajtov; manjkajoča ali pokvarjena slika vrne
+  `sha256: null, bayti: 0` in NE lažnega zgoščenke.
+- NOVO `src/lib/camera-prefs.ts` (92 vrstic): spomin na zadnjo smer kamere in na
+  to, ali je imel monter nazadnje prižgano svetilko — SAMO localStorage, ključ
+  `roksal:kamera:nastavitve:v1`. Branje preverja veljavnost (neznana smer ali
+  ne-`true` svetilka padata na privzeto), zapis nikoli ne vrže (`shramba()` je
+  `null`, kadar SSR teče ali brskalnik prepreči dostop). ZAPIS NI UKAZ:
+  nastavitve se preberejo samo kot začetna vrednost, strojni ukaz še vedno izda
+  monter sam.
+- `src/app/api/measurement/confirm/route.ts`: prenos je ROCNA odločitev, ne tiha
+  domišljija — paket nastane samo ob izrecnem `handoffProductId` in samo z
+  pravico `quotes.create` (ista dovoljenja kot `/api/project-packages`).
+  ZAVRNJENO z jasnim sporočilom vrnejo tudi: neobstoječ izdelek, arhiviran
+  izdelek in varianta, ki ne spada k izbranemu izdelku. `odlociPaket()` NE pozna
+  cene, marže ali kosovnice; v `calcJson` je zapisan samo dokaz izvora in prenosa
+  (`verzija`, `izvor: 'KAMERA'`, `meritevId`, `dolzinaCm`, `visinaCm`, `enota`,
+  `razlog`), nadaljnjo obdelavo vodi obstoječa pot `/api/project-packages/[id]/bom`.
+  Idempotentnost: meritev, ki že ima paket, dobi obstoječo kodo — ponovna
+  potrditev ali revizija NE ustvari drugega paketa. Vsak `USTVORI` zapiše
+  revizijski zapis `MEASUREMENT_HANDOFF`. Odziv je ADDITIVEN (`{ data, paket? }`),
+  `MAX_VIEWS = 4` nespremenjen.
+- `src/app/api/measure-engine/export/route.ts`: JSON izvoz je dopolnjen z
+  `originali` (id, zajeto, lokacija, vir, format, bayti, sha256) in `zgodovina`
+  (verzija, čas, avtor, opomba) — zdaj VSIH verzij (`orderBy: { version: 'desc' }`,
+  brez `take: 1`). Binarna vsebina izvirnika se pripne SAMO ob izrecni
+  `&originals=1`, da osnovni izvoz ostane majhen in berljiv. CSV pot je namenoma
+  NESPREMENJENA, da obstoječi uvozi ne razpadejo. Revizijski zapis
+  `MEASUREMENT_EXPORT` je sam dokazljiv: `originali[].sha256`, `verzij`,
+  `zVsebino`.
+- `src/app/api/pdf/[type]/[id]/route.ts` + `src/lib/measure-package-pdf.ts`
+  (`measure-package-pdf/1.1`): nov blok »DOKAZNA VERIGA DOKUMENTA« — kdo je
+  meritev potrdil, zgodovina sprememb po verzijah in seznam izvirnikov s kratico
+  SHA-256 ter velikostjo. Vsi vnosi so opcijski (aditivni), zato obstoječi izvozi
+  ostanejo veljavni; `ensure(doc, f, …)` pazi na prelom strani.
+- `src/components/roksal/modules/meritve-kamera.tsx`: naprava in svetilka se
+  obnovita iz spomina, monter pod napravo vidi zadnje nastavitve (opomba o
+  svetilki se prikaže SAMO, če trenutno ni prižgana — brez nasprotujočih si
+  vrstic). `nastaviTorch(` je v kodi natanko ENKRAT, torej še vedno samo ob
+  monterjevem lastnem kliku.
+- Matrika: `tests/ci-matrix.sh` (`GRUPE` + `CLANI[r509]="r509.py"`) in
+  `.github/workflows/ci.yml` (`include: - grupa: r509`) — usklajeno, pariteto
+  vsakič preveri `tests/ci-local.sh`.
+- NOVO `tests/r509.py` (232 vrstic, 65 trditev, brez strežnika): A) 13 trditev o
+  `odlociPaket()`, med njimi preverek, da Noben izid ne vsebuje besed
+  »cena/marža/popust«; B) 10 trditev o dokazu izvirnikov, kjer se SHA-256 primerja
+  z NEODVISNIM `hashlib.sha256` istih bajtov (fiksna slika prek `R509_B64`);
+  C) 11 trditev o nastavitvah (privzete, združevanje, pokvarjen JSON, shramba,
+  ki zavrne zapis, SSR); D) 25 trditev o povezavi (pregradnje pravic, cenovno
+  prazen `calcJson`, `MAX_VIEWS = 4`, uporaba skupnih funkcij,
+  `orderBy: { version: 'desc' }` brez `take`, nespremenjen CSV, niz povezave v
+  PDF-ju, enkratnost `nastaviTorch(`, brez novih odvisnosti v `package.json`).
+
+Verification (KONCNI ZAGON CELOTE MATRIKE, 14. 10. 2026 ob 12:05):
+- `bash tests/ci-local.sh` na svojem strežniku: **RELEJNI PAS: zeleno** —
+  8 statičnih korakov (harness brez backtick ukazov, avtorji commitov,
+  razčlenitev Python suite-ov, typecheck, lint, `prisma generate`,
+  `migrate deploy`, `db:seed`) + **29 skupin** (r437-r445, r446-r452, r454-r458,
+  r459-r462, r464, r464-notifications, r465-r474, r475-r478, r479–r495,
+  r500–r504, r508, **r509**), izhodna koda 0.
+- SKUPNI IZRAČUN IZ VSEH 37 LOGOV (`.ci-local-logs/`): **4624 ✓ trditev /
+  0 ✗ napak / 4 ⟿ preskokov**.
+- `r509`: 65 ✓ / 0 ✗ / 0 ⟿ (samostojno pred pasom enako 65 ✓ / 0 ✗).
+- `r508`: 1 ✓ / 0 ✗ skupine — prejšnji trije monterjevi popravki niso razpadli.
+- 4 ⟿ so VSI enega vzroka in vsi zunaj domene tega issue-a: GitLab API ni
+  dosegljiv brez žetona (off-site preverbe, zaščita repozitorija, cevovodi,
+  preverba MR). Žeton iz pogovora je neveljaven (`400` na `/api/v4/user`), zato
+  je GitLab sinhronizacija PRESKOČENA in je NE štejem kot opravljeno.
+- `npx tsc --noEmit`: brez napak. `eslint`: 0 napak / 18 opozoril = enako kot na
+  `HEAD` (nobenega novega opozorila).
+- KONFLIK RAZVOJNEGA STREŽNIKA, RAZREŠEN PO NAVODILU: prvi zagon se je odbil,
+  ker je na vratih 3000 odgovarjal ROČNO zagnan ostanek lokalnega `next`
+  strežnika (PID 588), ki ga pas ni zagnal. Ustavljen je bil z
+  `ops/dev-serve.sh stop` (ubije samo poslušalca na svojih vratih in potrdi, da
+  so prosta); nato je pas poganjal LASTEN strežnik. `EXTERNAL_SERVER=1` NI bil
+  sprejet, ker testni potek ne more potrditi lastnosti tujega strežnika. Zaradi
+  tega konflikta merilno jedro NI BILO spremenjeno.
+- Preverjen je še tuji sistem pisav (cirilica/CJK/hangul) in sumljive besede v
+  vseh enajstih spremenjenih datotekah — čisto.
+
+Stage Summary:
+- Pisarnska veriga §8 je zaprta BREZ drugega cenovnega jedra: prenos mere v
+  paket je ročen, pogojen z dovoljenjem in z izrecnim izdelkom, količina pa se
+  izpelje samo tam, kjer je aritmetika nedvoumna. Vse ostalo je ZAVRNJENO z
+  razlogom, ki ga uporabnik prebere — tihe domišljije ni.
+- Dokumentacijska veriga je zdaj dokazljiva v obeh dokumentih iz enega samega
+  vira (SHA-256 in velikost izvirnika, avtor potrjevanja, vse verzije
+  zgodovine), kar je pogoj, da sta PDF in izvoz upoštevana kot dokazna dokumenta.
+- Issue #7 NI zaprt. Ostane: (1) `MAX_VIEWS = 4` — razdelitev na rekonstrukcijo
+  in detajl ni narejena; (2) izbira med različicama ob razhajanju (v shemi ni
+  razpredelnice razhajanj, zato je to lastnikova migracija, ne agentovo
+  dejanje); (3) dokazi na fizičnih napravah (telefon s svetilko, več kamerami,
+  GPS) — na tej mizi jih ni, zato je `PODPRTO` utemeljeno sintetično; (4)
+  samodejni paket brez izrecnega izdelka je PO NAMENU ZAVRNJEN.
+- KAJ NI DOKAZANO / OSTANJA TVEGANJA (pošteno): (1) GitHub preverba tega zagona
+  NI dokaz, ker so Actions minute porabljene do 1. 11. 2026 — dokaz je lokalni
+  pas; (2) GitLab sinhronizacija je preskočena (neveljaven žeton); (3) migracija
+  `20261019000000_r501_measurement_status` na Neonu ŠE ni izvedena in
+  produkcijski gesli administracije/demo sta javno znana in nerotirana — oboje
+  je dejanje lastnika; (4) tolerance meril in referenčni nabor z neodvisno
+  fizično izmerjenimi dimenzijami (#15 §6.1) še ne obstajata; (5) datoteka
+  `public/assets/roksal/src/MANIFEST.json` je v delovnem drevesu spremenjena in
+  NAMENOMA ni v tem commitu; (6) prenos mere v paket je bil preizkušen s čistimi
+  enotskimi trditvami in z branjem povezav, NE z end-to-end klikom v brskalniku.

@@ -158,6 +158,12 @@ jobs:
           # osnutek meritve PO SEJI (brez tihe prepisi) in status shranjevanja
           # korak-na-korak — nova skupina MORA biti tudi v tests/ci-matrix.sh.
           - grupa: r508
+          # R509 (issue #7 §8/§9): pisarniška veriga — prenos mere v paket samo
+          # ob izrecnem izdelku in pravici quotes.create (brez novega cenovnega
+          # jedra), količina se izpelje samo tam, kjer je aritmetika nedvoumna,
+          # dokaz originalov (SHA-256 + velikost, skupen izvozu in PDF-ju) in
+          # spomin na monterjeve nastavitve (zapis ≠ ukaz napravi).
+          - grupa: r509
     services:
       postgres:
         image: postgres:16
