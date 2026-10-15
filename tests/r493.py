@@ -81,8 +81,8 @@ chk(tech.get('maxRazmakPokoncnaMm') == 1100, 'ROMB 67: max razmak pokončna 110 
 s, d = callj('GET', '/api/product-assets?status=VERIFIED', tok_adm)
 chk(s == 200, 'GET /api/product-assets?status=VERIFIED → 200')
 assets = d.get('data', [])
-# R495: 85 = 35 (r494) + 50 galerijskih povezav
-chk(len(assets) == 85, f'85 preverjenih gradiv — 27 fotografij + 8 lestvic + 50 galerijskih (dejansko: {len(assets)})')
+# R523: 91 = 85 (r494+r495) + 6 novih (4 čipi KUBO + PROFIL_PRESEK + produktni posnetek 57/32)
+chk(len(assets) == 91, f'91 preverjenih gradiv — 27 fotografij + 8 lestvic + 50 galerijskih + 6 r523 (dejansko: {len(assets)})')
 manjkajoce_datoteke = [a for a in assets if not a.get('filePath')]
 chk(len(manjkajoce_datoteke) == 0, 'vse VERIFIED gradive imajo filePath')
 # preveri 3 vzorčne datoteke po sha256
@@ -134,8 +134,8 @@ chk(all(r.get('fotografije', 0) >= 0 for r in rows), 'matrika: števec fotografi
 # (R493: samo Rustic Oak/Walnut iz besedila; R494: vsa imena iz lestvic + besedila)
 s, d = callj('GET', '/api/products?family=all&q=ROK-', tok_adm)
 allvars = [v for p in d.get('data', []) for v in p.get('variants', [])]
-# R495: 50 = 46 + 4 nove 57/32
-chk(len(allvars) == 50, f'50 variant (dejansko: {len(allvars)})')
+# R523: 49 = 46 + 3 uradne 57/32 (namenska lestvica 57/32 — ROAK odstranjen)
+chk(len(allvars) == 49, f'49 variant (dejansko: {len(allvars)}) — R523: POLNA-57 brez ROAK')
 chk(all(v.get('ral') is None for v in allvars), 'Roksal variante BREZ RAL kode (WPC odtenki niso RAL — približek bi bil napačen)')
 barve = set(v.get('color') for v in allvars)
 # R495: normalizirano na uradno obliko s lestvic (Rustic oak/walnut — vseh 5 lestvic VLM dosledno)
@@ -174,6 +174,13 @@ r = subprocess.run(['node', 'prisma/seed-r495.cjs'], cwd=REPO, capture_output=Tr
 chk(r.returncode == 0 and '50 povezav' in r.stdout, 'obnova stanja: seed-r495 po r493 preverbi (50 povezav)')
 s, d = callj('GET', '/api/product-assets?status=VERIFIED', tok_adm)
 chk(len(d.get('data', [])) == 85, f'obnova stanja: 85 VERIFIED (dejansko: {len(d.get("data", []))})')
+
+# R523: veriga se konča s seed-r523 (čipi KUBO, lestvici, POLNA-57 brez ROAK) —
+# brez tega koraka bi naslednje skupine (r520/r523) videle stanje BREZ r523 gradiv
+r = subprocess.run(['node', 'prisma/seed-r523.cjs'], cwd=REPO, capture_output=True, text=True, timeout=180, env=subenv)
+chk(r.returncode == 0 and 'KUBO DETAJL ×4' in r.stdout, 'obnova stanja: seed-r523 (čipi KUBO + lestvici + 3 variante 57/32)')
+s, d = callj('GET', '/api/product-assets?status=VERIFIED', tok_adm)
+chk(len(d.get('data', [])) == 91, f'obnova stanja: 91 VERIFIED po r523 (dejansko: {len(d.get("data", []))})')
 
 # ── 12. regresija temeljev ──
 s, d = callj('GET', '/api/guide', tok_mon)

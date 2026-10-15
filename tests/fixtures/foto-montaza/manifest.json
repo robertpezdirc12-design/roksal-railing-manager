@@ -1,702 +1,700 @@
 {
-  "_namen": "tests/fixtures/foto-montaza/manifest.json — R507 (issue #14): nabor RESNIČNIH ROKSALOVIH fotografij s ROČNO označeno masko, izbranimi PREVERJENIMI gradivi in pričakovanim izidom. Test tests/r504.py bere ta datoteko in jo preverja proti katalogu in čistim funkcijam.",
-  "_kako_so_narejene_maske": "Maske je agent (2026-10-14) označil ROČNO iz pregleda vsake fotografije v naravni velikosti. Niso izhod prepoznavanja in ne trdijo, da algoritem sam najde ograjo — testimonjajo geometrijo maske, poštenost poročila o obnovi ozadja in pravilnost izbire gradiva. Koordinate so normalizirane 0..1 (x desno, y DOL), vrstni red oglišč kvada je spodaj-levo → spodaj-desno → zgoraj-desno → zgoraj-levo.",
-  "_pravno": {
-    "vir_slik": "Roksal d.o.o. — javna produktna gradiva roksal.com (issue #6)",
-    "dovoljenje": "Zapis v ProductAsset.permission: lastnik aplikacije sme gradiva uporabiti v poslovnem orodju ROKSAL",
-    "omejitev": "Vizualizacija ostane Oznaka 'VIZUALIZACIJA ZA PREDSTAVITEV' (VIZ_ZIG); prikaz ne potrjuje barve iz slike, barva pride iz kataloga."
-  },
-  "_pogoji": {
-    "UPORABLJENO": "obstaja VERIFIED gradivo s to variantSku in datoteko → sme se risati originalna površina",
-    "SAMO_DRUZINA": "za to barvo ni preverjene datoteke, obstaja pa preverjena fotografija izdelka → sme se risati samo STRUKTURA, barva iz kataloga",
-    "NI_PREVERJENO / NI_DATOTEKE / NI_DOVOLJENJA / BREZ_IZDELKA": "fail-closed — originalne površine NI, prikaz je barvni približek in to tudi pove"
-  },
-  "_identiteta": "Gradivo se prepozna po POTI DO DATOTEKE (assetDatoteka), ne po ID-ju zapisa: Prisma ID (cuid) vsak znova ustvari 'bun run db:seed', zato ID NE sme biti merilo pričakovanja — merilo je ista PREVERJENA ROKSALOVA datoteka v katalogu.",
-  "primeri": [
+ "_namen": "tests/fixtures/foto-montaza/manifest.json — R507 (issue #14): nabor RESNIČNIH ROKSALOVIH fotografij s ROČNO označeno masko, izbranimi PREVERJENIMI gradivi in pričakovanim izidom. Test tests/r504.py bere ta datoteko in jo preverja proti katalogu in čistim funkcijam.",
+ "_kako_so_narejene_maske": "Maske je agent (2026-10-14) označil ROČNO iz pregleda vsake fotografije v naravni velikosti. Niso izhod prepoznavanja in ne trdijo, da algoritem sam najde ograjo — testimonjajo geometrijo maske, poštenost poročila o obnovi ozadja in pravilnost izbire gradiva. Koordinate so normalizirane 0..1 (x desno, y DOL), vrstni red oglišč kvada je spodaj-levo → spodaj-desno → zgoraj-desno → zgoraj-levo.",
+ "_pravno": {
+  "vir_slik": "Roksal d.o.o. — javna produktna gradiva roksal.com (issue #6)",
+  "dovoljenje": "Zapis v ProductAsset.permission: lastnik aplikacije sme gradiva uporabiti v poslovnem orodju ROKSAL",
+  "omejitev": "Vizualizacija ostane Oznaka 'VIZUALIZACIJA ZA PREDSTAVITEV' (VIZ_ZIG); prikaz ne potrjuje barve iz slike, barva pride iz kataloga."
+ },
+ "_pogoji": {
+  "UPORABLJENO": "obstaja VERIFIED gradivo s to variantSku in datoteko → sme se risati originalna površina",
+  "SAMO_DRUZINA": "za to barvo ni preverjene datoteke, obstaja pa preverjena fotografija izdelka → sme se risati samo STRUKTURA, barva iz kataloga",
+  "NI_PREVERJENO / NI_DATOTEKE / NI_DOVOLJENJA / BREZ_IZDELKA": "fail-closed — originalne površine NI, prikaz je barvni približek in to tudi pove"
+ },
+ "_identiteta": "Gradivo se prepozna po POTI DO DATOTEKE (assetDatoteka), ne po ID-ju zapisa: Prisma ID (cuid) vsak znova ustvari 'bun run db:seed', zato ID NE sme biti merilo pričakovanja — merilo je ista PREVERJENA ROKSALOVA datoteka v katalogu.",
+ "primeri": [
+  {
+   "id": "hotel-bazen-zicna-ograja-desno",
+   "opis": "Hotel z zunanjim bazenom: črna žična ograja na desnem robu terase, pred njo drevo in terasa z ležalniki.",
+   "izvirnik": "public/assets/roksal/src/0573714678e7.jpg",
+   "sha256": "96508b2771aa43fd430f36fc59098509d422bed144ce3bd82c01cbc18e1a3e57",
+   "sirinaPx": 1620,
+   "visinaPx": 1080,
+   "assetDokumenta": {
+    "id": "cmv7ngubp002pwgtsbv3plu88",
+    "kind": "GALERIJA",
+    "status": "VERIFIED",
+    "produktSku": "ROK-TER-KLASIK",
+    "opomba": "GALERIJA ni vrsta površine (VRSTE_POVRSINE) — ta posnetek je samo PRIMER SCENE, ne gradivo za teksturo."
+   },
+   "quad": [
     {
-      "id": "hotel-bazen-zicna-ograja-desno",
-      "opis": "Hotel z zunanjim bazenom: črna žična ograja na desnem robu terase, pred njo drevo in terasa z ležalniki.",
-      "izvirnik": "public/assets/roksal/src/0573714678e7.jpg",
-      "sha256": "96508b2771aa43fd430f36fc59098509d422bed144ce3bd82c01cbc18e1a3e57",
-      "sirinaPx": 1620,
-      "visinaPx": 1080,
-      "assetDokumenta": {
-        "id": "cmv7ngubp002pwgtsbv3plu88",
-        "kind": "GALERIJA",
-        "status": "VERIFIED",
-        "produktSku": "ROK-TER-KLASIK",
-        "opomba": "GALERIJA ni vrsta površine (VRSTE_POVRSINE) — ta posnetek je samo PRIMER SCENE, ne gradivo za teksturo."
-      },
-      "quad": [
-        {
-          "x": 0.78,
-          "y": 0.72
-        },
-        {
-          "x": 1.0,
-          "y": 0.875
-        },
-        {
-          "x": 1.0,
-          "y": 0.6
-        },
-        {
-          "x": 0.78,
-          "y": 0.585
-        }
-      ],
-      "maska": {
-        "ograja": [
-          [
-            {
-              "x": 0.78,
-              "y": 0.72
-            },
-            {
-              "x": 1.0,
-              "y": 0.875
-            },
-            {
-              "x": 1.0,
-              "y": 0.6
-            },
-            {
-              "x": 0.78,
-              "y": 0.585
-            }
-          ]
-        ],
-        "izpusti": [],
-        "prednji": [
-          [
-            {
-              "x": 0.455,
-              "y": 0.855
-            },
-            {
-              "x": 0.76,
-              "y": 0.79
-            },
-            {
-              "x": 0.8,
-              "y": 0.7
-            },
-            {
-              "x": 0.8,
-              "y": 0.6
-            },
-            {
-              "x": 0.7,
-              "y": 0.3
-            },
-            {
-              "x": 0.52,
-              "y": 0.24
-            }
-          ]
-        ]
-      },
-      "referenca": {
-        "tip": "ROCNO",
-        "cm": 200,
-        "opis": "ležalnik na terasi je dolg 200 cm"
-      },
-      "izbraniProdukt": {
-        "sku": "ROK-OG-POLNA-128",
-        "varianta": "ROK-OG-POLNA-128-BUT",
-        "orientacija": "SPLOSNO"
-      },
-      "pricakovano": {
-        "stanje": "UPORABLJENO",
-        "assetDatoteka": "public/assets/roksal/src/r495-pokoncna-ograjam-burma128-2.jpg",
-        "smeUporabiti": true,
-        "manjkajo": [
-          "profilni presek"
-        ],
-        "opozorila": [
-          "Ravnina_POSEVNA"
-        ],
-        "ploscinaOgraja": 0.0451,
-        "ploscinaIzpusti": 0.0,
-        "delezOgraje": 0.04507,
-        "delezPrednjega": 0.15148,
-        "razlaga": "Za Burma teak obstaja preverjena originalna fotografija → površina SE sme uporabiti. Profilnega preseka za POLNA 128 v katalogu ni, zato to manjka in je tudi povedano. Stranska robova kvada sta zelo različno dolga (perspektiva vzdolž ograje) → Ravnina_POSEVNA."
-      }
+     "x": 0.78,
+     "y": 0.72
     },
     {
-      "id": "vt-terasa-panelna-ograja-za-pergolo",
-      "opis": "Vrt s teraso in pergolo: panelna ograja betonskih plošč v ozadju, nad daljnim delom se vidi koruza (ni ograja), stebra pergole stoji PRED ograjo.",
-      "izvirnik": "public/assets/roksal/src/1c1e56ca52bc.jpg",
-      "sha256": "9a1963547d41e40c5bd1f27c34e03b266ac05f467322d4a607c4adcb2ae19dfb",
-      "sirinaPx": 1000,
-      "visinaPx": 1000,
-      "assetDokumenta": {
-        "id": "cmv7ngubj002nwgts6olxmvqg",
-        "kind": "GALERIJA",
-        "status": "VERIFIED",
-        "produktSku": "ROK-TER-KLASIK",
-        "opomba": "samo primer scene"
-      },
-      "quad": [
-        {
-          "x": 0.0,
-          "y": 0.305
-        },
-        {
-          "x": 0.575,
-          "y": 0.335
-        },
-        {
-          "x": 0.575,
-          "y": 0.268
-        },
-        {
-          "x": 0.0,
-          "y": 0.235
-        }
-      ],
-      "maska": {
-        "ograja": [
-          [
-            {
-              "x": 0.0,
-              "y": 0.305
-            },
-            {
-              "x": 0.575,
-              "y": 0.335
-            },
-            {
-              "x": 0.575,
-              "y": 0.268
-            },
-            {
-              "x": 0.0,
-              "y": 0.235
-            }
-          ]
-        ],
-        "izpusti": [
-          [
-            {
-              "x": 0.42,
-              "y": 0.272
-            },
-            {
-              "x": 0.575,
-              "y": 0.268
-            },
-            {
-              "x": 0.575,
-              "y": 0.235
-            },
-            {
-              "x": 0.42,
-              "y": 0.235
-            }
-          ]
-        ],
-        "prednji": [
-          [
-            {
-              "x": 0.394,
-              "y": 0.205
-            },
-            {
-              "x": 0.414,
-              "y": 0.205
-            },
-            {
-              "x": 0.418,
-              "y": 0.42
-            },
-            {
-              "x": 0.398,
-              "y": 0.42
-            }
-          ]
-        ]
-      },
-      "referenca": {
-        "tip": "ROCNO",
-        "cm": 220,
-        "opis": "višina stebra pergole od tal do temena 220 cm"
-      },
-      "izbraniProdukt": {
-        "sku": "ROK-OGP-POLNA-57",
-        "varianta": "ROK-OGP-POLNA-57-ROAK",
-        "orientacija": "POKOCNA"
-      },
-      "pricakovano": {
-        "stanje": "SAMO_DRUZINA",
-        "assetDatoteka": "public/assets/roksal/src/c4a3c06d3e1b.jpg",
-        "smeUporabiti": true,
-        "manjkajo": [
-          "profilni presek",
-          "originalna površina te barve/odtenka"
-        ],
-        "opozorila": [],
-        "ploscinaOgraja": 0.03939,
-        "ploscinaIzpusti": 0.00543,
-        "delezOgraje": 0.03839,
-        "delezPrednjega": 0.0043,
-        "razlaga": "ROAK (Rustic oak) nima preverjene fotografije — izdelek ima sicer preverjeno površino (brez variante), zato se sme uporabiti SAMO njena struktura, barva pa iz kataloga. Izpust (koruza nad daljnim delom panelov) je ZNOTRAJ kvada in zmanjša obnovljeno območje za ~14 %."
-      }
+     "x": 1.0,
+     "y": 0.875
     },
     {
-      "id": "kupska-patio-zicna-ograja-levo",
-      "opis": "Pokriti patio zunanje kuhinje: na levem robu slike se konča žična ograja (na robu slike), pred njo je jeklen steber nadstreška, pod njo travnati rob.",
-      "izvirnik": "public/assets/roksal/src/7d47a11b864e.jpg",
-      "sha256": "f1145598f390989a34702331979bdbf7711ef3c7b23645bcdd4d53d0e90e23bd",
-      "sirinaPx": 1693,
-      "visinaPx": 1270,
-      "assetDokumenta": {
-        "id": "cmv7ngubs002rwgtsu0rebn2q",
-        "kind": "GALERIJA",
-        "status": "VERIFIED",
-        "produktSku": "ROK-TER-KLASIK",
-        "opomba": "samo primer scene"
-      },
-      "quad": [
-        {
-          "x": 0.0,
-          "y": 0.665
-        },
-        {
-          "x": 0.098,
-          "y": 0.705
-        },
-        {
-          "x": 0.098,
-          "y": 0.505
-        },
-        {
-          "x": 0.0,
-          "y": 0.487
-        }
-      ],
-      "maska": {
-        "ograja": [
-          [
-            {
-              "x": 0.0,
-              "y": 0.665
-            },
-            {
-              "x": 0.098,
-              "y": 0.705
-            },
-            {
-              "x": 0.098,
-              "y": 0.505
-            },
-            {
-              "x": 0.0,
-              "y": 0.487
-            }
-          ]
-        ],
-        "izpusti": [
-          [
-            {
-              "x": 0.0,
-              "y": 0.645
-            },
-            {
-              "x": 0.098,
-              "y": 0.685
-            },
-            {
-              "x": 0.098,
-              "y": 0.705
-            },
-            {
-              "x": 0.0,
-              "y": 0.665
-            }
-          ]
-        ],
-        "prednji": [
-          [
-            {
-              "x": 0.082,
-              "y": 0.345
-            },
-            {
-              "x": 0.099,
-              "y": 0.345
-            },
-            {
-              "x": 0.101,
-              "y": 0.705
-            },
-            {
-              "x": 0.084,
-              "y": 0.705
-            }
-          ]
-        ]
-      },
-      "referenca": {
-        "tip": "ROCNO",
-        "cm": 90,
-        "opis": "standardni panel žične ograje je širok 90 cm"
-      },
-      "izbraniProdukt": {
-        "sku": "ROK-OG-ROMB-67",
-        "varianta": "ROK-OG-ROMB-67-GLT",
-        "orientacija": "SPLOSNO"
-      },
-      "pricakovano": {
-        "stanje": "UPORABLJENO",
-        "assetDatoteka": "public/assets/roksal/src/r495-wpc-woodcore-romb-golden-precna-ograja-gasper1.jpg",
-        "smeUporabiti": true,
-        "manjkajo": [],
-        "opozorila": [],
-        "ploscinaOgraja": 0.01852,
-        "ploscinaIzpusti": 0.00196,
-        "delezOgraje": 0.01657,
-        "delezPrednjega": 0.00612,
-        "razlaga": "ROMB 67 ima za Golden teak preverjeno fotografijo, preverjeno barvno lestvico IN profilni presek → nič ne manjka. Ta primer namenoma ima masko, ki SE DOTIKA roba slike (x = 0) — rasterizacija mora ostati znotraj platna."
-      }
+     "x": 1.0,
+     "y": 0.6
     },
     {
-      "id": "stopnisce-betonski-parapeti",
-      "opis": "Vhodno stopnišče pred hišo: betonska parapetna ograja na obeh straneh stopnic (DVE ločeni območji), v levem ospredju visoka rastlina pred novim ročajem.",
-      "izvirnik": "tests/fixtures/r454-terasa.jpg",
-      "sha256": "137dbd42049905497ee3e57f18799f36e4fb1a6ee707d4f5499b4066a44a3e31",
-      "sirinaPx": 720,
-      "visinaPx": 540,
-      "assetDokumenta": {
-        "id": null,
-        "kind": "FIXTURE",
-        "status": "TESTNA_FOTOGRAFIJA",
-        "produktSku": null,
-        "opomba": "uporabljena že pri issue #13 (r454) kot resnična fotografija stopnišča; ni ROKSALOV izdelek, zato je tu samo nosilec scene."
-      },
-      "quad": [
-        {
-          "x": 0.055,
-          "y": 0.455
-        },
-        {
-          "x": 0.335,
-          "y": 0.3
-        },
-        {
-          "x": 0.315,
-          "y": 0.262
-        },
-        {
-          "x": 0.085,
-          "y": 0.355
-        }
-      ],
-      "maska": {
-        "ograja": [
-          [
-            {
-              "x": 0.085,
-              "y": 0.455
-            },
-            {
-              "x": 0.335,
-              "y": 0.3
-            },
-            {
-              "x": 0.315,
-              "y": 0.262
-            },
-            {
-              "x": 0.055,
-              "y": 0.355
-            }
-          ],
-          [
-            {
-              "x": 0.665,
-              "y": 0.3
-            },
-            {
-              "x": 0.915,
-              "y": 0.455
-            },
-            {
-              "x": 0.945,
-              "y": 0.355
-            },
-            {
-              "x": 0.685,
-              "y": 0.262
-            }
-          ]
-        ],
-        "izpusti": [],
-        "prednji": [
-          [
-            {
-              "x": 0.0,
-              "y": 0.52
-            },
-            {
-              "x": 0.155,
-              "y": 0.555
-            },
-            {
-              "x": 0.185,
-              "y": 0.9
-            },
-            {
-              "x": 0.0,
-              "y": 0.9
-            }
-          ]
-        ]
-      },
-      "referenca": {
-        "tip": "ROCNO",
-        "cm": 150,
-        "opis": "dvoje vhodnih vrat je širokih 150 cm"
-      },
-      "izbraniProdukt": {
-        "sku": "ROK-TER-KLASIK",
-        "varianta": "ROK-TER-KLASIK-AMW",
-        "orientacija": "PRECNA"
-      },
-      "pricakovano": {
-        "stanje": "SAMO_DRUZINA",
-        "assetDatoteka": "public/assets/roksal/src/a288c99889de.jpg",
-        "smeUporabiti": true,
-        "manjkajo": [
-          "profilni presek",
-          "originalna površina te barve/odtenka"
-        ],
-        "opozorila": [
-          "Ravnina_POSEVNA"
-        ],
-        "ploscinaOgraja": 0.04139,
-        "ploscinaIzpusti": 0.0,
-        "delezOgraje": 0.04137,
-        "delezPrednjega": 0.06137,
-        "razlaga": "Quad je samo LEVI parapet, maska pa ima DVE obliki (desni parapet sega čez quad) — maska sme biti VEČJA od kvada, zato MASKA_NEKRITA ne sme sprožiti. Amazon wood nima preverjene fotografije → SAMO_DRUZINA."
-      }
-    },
-    {
-      "id": "kubo-fasada-hisa-levo",
-      "opis": "Hisa s KUBO WPC fasado (namestitvena fotografija ROKSAL): cist odsek fasade z navpicnimi letvicami levo od vhodnih vrat.",
-      "izvirnik": "public/assets/roksal/src/b6cd18418118.jpg",
-      "sha256": "9981afca6fff30afa7ff33db27edac55351c68b51c4a035fdf76b234bd434ab9",
-      "sirinaPx": 2560,
-      "visinaPx": 2028,
-      "assetDokumenta": {
-        "id": "kubo-fasada-namestitev-b6cd",
-        "kind": "FOTO_IZDELEK",
-        "status": "VERIFIED",
-        "produktSku": "ROK-FAS-KUBO",
-        "opomba": "Namestitvena fotografija KUBO fasade - PRIMER SCENE, ne gradivo za teksturo."
-      },
-      "quad": [
-        {
-          "x": 0.145,
-          "y": 0.715
-        },
-        {
-          "x": 0.595,
-          "y": 0.725
-        },
-        {
-          "x": 0.59,
-          "y": 0.065
-        },
-        {
-          "x": 0.15,
-          "y": 0.055
-        }
-      ],
-      "maska": {
-        "ograja": [
-          [
-            {
-              "x": 0.145,
-              "y": 0.715
-            },
-            {
-              "x": 0.595,
-              "y": 0.725
-            },
-            {
-              "x": 0.59,
-              "y": 0.065
-            },
-            {
-              "x": 0.15,
-              "y": 0.055
-            }
-          ]
-        ],
-        "izpusti": [],
-        "prednji": []
-      },
-      "referenca": {
-        "tip": "ROCNO",
-        "cm": 245,
-        "opis": "sirina odseka fasade ~245 cm (ocena po visini pritlija ~280 cm)"
-      },
-      "izbraniProdukt": {
-        "sku": "ROK-FAS-KUBO",
-        "varianta": "ROK-FAS-KUBO-ROAK",
-        "orientacija": "SPLOSNO"
-      },
-      "pricakovano": {
-        "stanje": "UPORABLJENO",
-        "assetDatoteka": "public/assets/roksal/src/r495-20240208_140526-1.jpg",
-        "ploscinaOgraja": 0.2937,
-        "ploscinaIzpusti": 0,
-        "delezOgraje": 0.2937,
-        "delezPrednjega": 0,
-        "manjkajo": [
-          "profilni presek"
-        ],
-        "smeUporabiti": true,
-        "opozorila": [
-          "PREDNJI_BREZ"
-        ]
-      }
-    },
-    {
-      "id": "hotel-bazen-terasa-tla",
-      "opis": "Hotel z zunanjim bazenom: WPC terasna povrsina v spodnjem (prednjem) delu fotografije z lezalniki na njej.",
-      "izvirnik": "public/assets/roksal/src/0573714678e7.jpg",
-      "sha256": "96508b2771aa43fd430f36fc59098509d422bed144ce3bd82c01cbc18e1a3e57",
-      "sirinaPx": 1620,
-      "visinaPx": 1080,
-      "assetDokumenta": {
-        "id": "cmv7ngubp002pwgtsbv3plu88",
-        "kind": "GALERIJA",
-        "status": "VERIFIED",
-        "produktSku": "ROK-TER-KLASIK",
-        "opomba": "GALERIJA terase - PRIMER SCENE za talno povrsino; gradivo za teksturo so DETAJL posnetki."
-      },
-      "quad": [
-        {
-          "x": 0.02,
-          "y": 0.995
-        },
-        {
-          "x": 0.75,
-          "y": 0.995
-        },
-        {
-          "x": 0.71,
-          "y": 0.79
-        },
-        {
-          "x": 0.06,
-          "y": 0.79
-        }
-      ],
-      "maska": {
-        "ograja": [
-          [
-            {
-              "x": 0.02,
-              "y": 0.995
-            },
-            {
-              "x": 0.75,
-              "y": 0.995
-            },
-            {
-              "x": 0.71,
-              "y": 0.79
-            },
-            {
-              "x": 0.06,
-              "y": 0.79
-            }
-          ]
-        ],
-        "izpusti": [],
-        "prednji": [
-          [
-            {
-              "x": 0.005,
-              "y": 0.93
-            },
-            {
-              "x": 0.27,
-              "y": 0.995
-            },
-            {
-              "x": 0.285,
-              "y": 0.855
-            },
-            {
-              "x": 0.02,
-              "y": 0.8
-            }
-          ],
-          [
-            {
-              "x": 0.27,
-              "y": 1.0
-            },
-            {
-              "x": 0.425,
-              "y": 1.0
-            },
-            {
-              "x": 0.41,
-              "y": 0.915
-            },
-            {
-              "x": 0.28,
-              "y": 0.925
-            }
-          ],
-          [
-            {
-              "x": 0.43,
-              "y": 1.0
-            },
-            {
-              "x": 0.56,
-              "y": 1.0
-            },
-            {
-              "x": 0.54,
-              "y": 0.95
-            },
-            {
-              "x": 0.445,
-              "y": 0.955
-            }
-          ]
-        ]
-      },
-      "referenca": {
-        "tip": "ROCNO",
-        "cm": 480,
-        "opis": "sirina terasne povrsine ob bazenu ~480 cm (sprednji rob)"
-      },
-      "izbraniProdukt": {
-        "sku": "ROK-TER-RUSTIC",
-        "varianta": "ROK-TER-RUSTIC-ROAK",
-        "orientacija": "SPLOSNO"
-      },
-      "pricakovano": {
-        "stanje": "UPORABLJENO",
-        "assetDatoteka": "public/assets/roksal/src/r495-woodcore-rustic-oak-zel-detajl.jpg",
-        "ploscinaOgraja": 0.14145,
-        "ploscinaIzpusti": 0,
-        "delezOgraje": 0.14184,
-        "delezPrednjega": 0.05344,
-        "manjkajo": [
-          "profilni presek"
-        ],
-        "smeUporabiti": true,
-        "opozorila": []
-      }
+     "x": 0.78,
+     "y": 0.585
     }
-  ]
+   ],
+   "maska": {
+    "ograja": [
+     [
+      {
+       "x": 0.78,
+       "y": 0.72
+      },
+      {
+       "x": 1.0,
+       "y": 0.875
+      },
+      {
+       "x": 1.0,
+       "y": 0.6
+      },
+      {
+       "x": 0.78,
+       "y": 0.585
+      }
+     ]
+    ],
+    "izpusti": [],
+    "prednji": [
+     [
+      {
+       "x": 0.455,
+       "y": 0.855
+      },
+      {
+       "x": 0.76,
+       "y": 0.79
+      },
+      {
+       "x": 0.8,
+       "y": 0.7
+      },
+      {
+       "x": 0.8,
+       "y": 0.6
+      },
+      {
+       "x": 0.7,
+       "y": 0.3
+      },
+      {
+       "x": 0.52,
+       "y": 0.24
+      }
+     ]
+    ]
+   },
+   "referenca": {
+    "tip": "ROCNO",
+    "cm": 200,
+    "opis": "ležalnik na terasi je dolg 200 cm"
+   },
+   "izbraniProdukt": {
+    "sku": "ROK-OG-POLNA-128",
+    "varianta": "ROK-OG-POLNA-128-BUT",
+    "orientacija": "SPLOSNO"
+   },
+   "pricakovano": {
+    "stanje": "UPORABLJENO",
+    "assetDatoteka": "public/assets/roksal/src/r495-pokoncna-ograjam-burma128-2.jpg",
+    "smeUporabiti": true,
+    "manjkajo": [
+     "profilni presek"
+    ],
+    "opozorila": [
+     "Ravnina_POSEVNA"
+    ],
+    "ploscinaOgraja": 0.0451,
+    "ploscinaIzpusti": 0.0,
+    "delezOgraje": 0.04507,
+    "delezPrednjega": 0.15148,
+    "razlaga": "Za Burma teak obstaja preverjena originalna fotografija → površina SE sme uporabiti. Profilnega preseka za POLNA 128 v katalogu ni, zato to manjka in je tudi povedano. Stranska robova kvada sta zelo različno dolga (perspektiva vzdolž ograje) → Ravnina_POSEVNA."
+   }
+  },
+  {
+   "id": "vt-terasa-panelna-ograja-za-pergolo",
+   "opis": "Vrt s teraso in pergolo: panelna ograja betonskih plošč v ozadju, nad daljnim delom se vidi koruza (ni ograja), stebra pergole stoji PRED ograjo.",
+   "izvirnik": "public/assets/roksal/src/1c1e56ca52bc.jpg",
+   "sha256": "9a1963547d41e40c5bd1f27c34e03b266ac05f467322d4a607c4adcb2ae19dfb",
+   "sirinaPx": 1000,
+   "visinaPx": 1000,
+   "assetDokumenta": {
+    "id": "cmv7ngubj002nwgts6olxmvqg",
+    "kind": "GALERIJA",
+    "status": "VERIFIED",
+    "produktSku": "ROK-TER-KLASIK",
+    "opomba": "samo primer scene"
+   },
+   "quad": [
+    {
+     "x": 0.0,
+     "y": 0.305
+    },
+    {
+     "x": 0.575,
+     "y": 0.335
+    },
+    {
+     "x": 0.575,
+     "y": 0.268
+    },
+    {
+     "x": 0.0,
+     "y": 0.235
+    }
+   ],
+   "maska": {
+    "ograja": [
+     [
+      {
+       "x": 0.0,
+       "y": 0.305
+      },
+      {
+       "x": 0.575,
+       "y": 0.335
+      },
+      {
+       "x": 0.575,
+       "y": 0.268
+      },
+      {
+       "x": 0.0,
+       "y": 0.235
+      }
+     ]
+    ],
+    "izpusti": [
+     [
+      {
+       "x": 0.42,
+       "y": 0.272
+      },
+      {
+       "x": 0.575,
+       "y": 0.268
+      },
+      {
+       "x": 0.575,
+       "y": 0.235
+      },
+      {
+       "x": 0.42,
+       "y": 0.235
+      }
+     ]
+    ],
+    "prednji": [
+     [
+      {
+       "x": 0.394,
+       "y": 0.205
+      },
+      {
+       "x": 0.414,
+       "y": 0.205
+      },
+      {
+       "x": 0.418,
+       "y": 0.42
+      },
+      {
+       "x": 0.398,
+       "y": 0.42
+      }
+     ]
+    ]
+   },
+   "referenca": {
+    "tip": "ROCNO",
+    "cm": 220,
+    "opis": "višina stebra pergole od tal do temena 220 cm"
+   },
+   "izbraniProdukt": {
+    "sku": "ROK-OGP-POLNA-57",
+    "varianta": "ROK-OGP-POLNA-57-RWA",
+    "orientacija": "POKOCNA"
+   },
+   "pricakovano": {
+    "stanje": "SAMO_DRUZINA",
+    "assetDatoteka": "public/assets/roksal/src/c4a3c06d3e1b.jpg",
+    "smeUporabiti": true,
+    "manjkajo": [
+     "profilni presek",
+     "originalna površina te barve/odtenka"
+    ],
+    "opozorila": [],
+    "ploscinaOgraja": 0.03939,
+    "ploscinaIzpusti": 0.00543,
+    "delezOgraje": 0.03839,
+    "delezPrednjega": 0.0043,
+    "razlaga": "ROAK (Rustic oak) nima preverjene fotografije — izdelek ima sicer preverjeno površino (brez variante), zato se sme uporabiti SAMO njena struktura, barva pa iz kataloga. Izpust (koruza nad daljnim delom panelov) je ZNOTRAJ kvada in zmanjša obnovljeno območje za ~14 %."
+   }
+  },
+  {
+   "id": "kupska-patio-zicna-ograja-levo",
+   "opis": "Pokriti patio zunanje kuhinje: na levem robu slike se konča žična ograja (na robu slike), pred njo je jeklen steber nadstreška, pod njo travnati rob.",
+   "izvirnik": "public/assets/roksal/src/7d47a11b864e.jpg",
+   "sha256": "f1145598f390989a34702331979bdbf7711ef3c7b23645bcdd4d53d0e90e23bd",
+   "sirinaPx": 1693,
+   "visinaPx": 1270,
+   "assetDokumenta": {
+    "id": "cmv7ngubs002rwgtsu0rebn2q",
+    "kind": "GALERIJA",
+    "status": "VERIFIED",
+    "produktSku": "ROK-TER-KLASIK",
+    "opomba": "samo primer scene"
+   },
+   "quad": [
+    {
+     "x": 0.0,
+     "y": 0.665
+    },
+    {
+     "x": 0.098,
+     "y": 0.705
+    },
+    {
+     "x": 0.098,
+     "y": 0.505
+    },
+    {
+     "x": 0.0,
+     "y": 0.487
+    }
+   ],
+   "maska": {
+    "ograja": [
+     [
+      {
+       "x": 0.0,
+       "y": 0.665
+      },
+      {
+       "x": 0.098,
+       "y": 0.705
+      },
+      {
+       "x": 0.098,
+       "y": 0.505
+      },
+      {
+       "x": 0.0,
+       "y": 0.487
+      }
+     ]
+    ],
+    "izpusti": [
+     [
+      {
+       "x": 0.0,
+       "y": 0.645
+      },
+      {
+       "x": 0.098,
+       "y": 0.685
+      },
+      {
+       "x": 0.098,
+       "y": 0.705
+      },
+      {
+       "x": 0.0,
+       "y": 0.665
+      }
+     ]
+    ],
+    "prednji": [
+     [
+      {
+       "x": 0.082,
+       "y": 0.345
+      },
+      {
+       "x": 0.099,
+       "y": 0.345
+      },
+      {
+       "x": 0.101,
+       "y": 0.705
+      },
+      {
+       "x": 0.084,
+       "y": 0.705
+      }
+     ]
+    ]
+   },
+   "referenca": {
+    "tip": "ROCNO",
+    "cm": 90,
+    "opis": "standardni panel žične ograje je širok 90 cm"
+   },
+   "izbraniProdukt": {
+    "sku": "ROK-OG-ROMB-67",
+    "varianta": "ROK-OG-ROMB-67-GLT",
+    "orientacija": "SPLOSNO"
+   },
+   "pricakovano": {
+    "stanje": "UPORABLJENO",
+    "assetDatoteka": "public/assets/roksal/src/r495-wpc-woodcore-romb-golden-precna-ograja-gasper1.jpg",
+    "smeUporabiti": true,
+    "manjkajo": [],
+    "opozorila": [],
+    "ploscinaOgraja": 0.01852,
+    "ploscinaIzpusti": 0.00196,
+    "delezOgraje": 0.01657,
+    "delezPrednjega": 0.00612,
+    "razlaga": "ROMB 67 ima za Golden teak preverjeno fotografijo, preverjeno barvno lestvico IN profilni presek → nič ne manjka. Ta primer namenoma ima masko, ki SE DOTIKA roba slike (x = 0) — rasterizacija mora ostati znotraj platna."
+   }
+  },
+  {
+   "id": "stopnisce-betonski-parapeti",
+   "opis": "Vhodno stopnišče pred hišo: betonska parapetna ograja na obeh straneh stopnic (DVE ločeni območji), v levem ospredju visoka rastlina pred novim ročajem.",
+   "izvirnik": "tests/fixtures/r454-terasa.jpg",
+   "sha256": "137dbd42049905497ee3e57f18799f36e4fb1a6ee707d4f5499b4066a44a3e31",
+   "sirinaPx": 720,
+   "visinaPx": 540,
+   "assetDokumenta": {
+    "id": null,
+    "kind": "FIXTURE",
+    "status": "TESTNA_FOTOGRAFIJA",
+    "produktSku": null,
+    "opomba": "uporabljena že pri issue #13 (r454) kot resnična fotografija stopnišča; ni ROKSALOV izdelek, zato je tu samo nosilec scene."
+   },
+   "quad": [
+    {
+     "x": 0.055,
+     "y": 0.455
+    },
+    {
+     "x": 0.335,
+     "y": 0.3
+    },
+    {
+     "x": 0.315,
+     "y": 0.262
+    },
+    {
+     "x": 0.085,
+     "y": 0.355
+    }
+   ],
+   "maska": {
+    "ograja": [
+     [
+      {
+       "x": 0.085,
+       "y": 0.455
+      },
+      {
+       "x": 0.335,
+       "y": 0.3
+      },
+      {
+       "x": 0.315,
+       "y": 0.262
+      },
+      {
+       "x": 0.055,
+       "y": 0.355
+      }
+     ],
+     [
+      {
+       "x": 0.665,
+       "y": 0.3
+      },
+      {
+       "x": 0.915,
+       "y": 0.455
+      },
+      {
+       "x": 0.945,
+       "y": 0.355
+      },
+      {
+       "x": 0.685,
+       "y": 0.262
+      }
+     ]
+    ],
+    "izpusti": [],
+    "prednji": [
+     [
+      {
+       "x": 0.0,
+       "y": 0.52
+      },
+      {
+       "x": 0.155,
+       "y": 0.555
+      },
+      {
+       "x": 0.185,
+       "y": 0.9
+      },
+      {
+       "x": 0.0,
+       "y": 0.9
+      }
+     ]
+    ]
+   },
+   "referenca": {
+    "tip": "ROCNO",
+    "cm": 150,
+    "opis": "dvoje vhodnih vrat je širokih 150 cm"
+   },
+   "izbraniProdukt": {
+    "sku": "ROK-TER-KLASIK",
+    "varianta": "ROK-TER-KLASIK-AMW",
+    "orientacija": "PRECNA"
+   },
+   "pricakovano": {
+    "stanje": "SAMO_DRUZINA",
+    "assetDatoteka": "public/assets/roksal/src/r495-burma-terasa.jpg",
+    "smeUporabiti": true,
+    "manjkajo": [
+     "profilni presek",
+     "originalna površina te barve/odtenka"
+    ],
+    "opozorila": [
+     "Ravnina_POSEVNA"
+    ],
+    "ploscinaOgraja": 0.04139,
+    "ploscinaIzpusti": 0.0,
+    "delezOgraje": 0.04137,
+    "delezPrednjega": 0.06137,
+    "razlaga": "Quad je samo LEVI parapet, maska pa ima DVE obliki (desni parapet sega čez quad) — maska sme biti VEČJA od kvada, zato MASKA_NEKRITA ne sme sprožiti. Amazon wood nima preverjene fotografije → SAMO_DRUZINA (R523: DETAJL Burma teak pred FOTO_IZDELEK)."
+   }
+  },
+  {
+   "id": "kubo-fasada-hisa-levo",
+   "opis": "Hisa s KUBO WPC fasado (namestitvena fotografija ROKSAL): cist odsek fasade z navpicnimi letvicami levo od vhodnih vrat.",
+   "izvirnik": "public/assets/roksal/src/b6cd18418118.jpg",
+   "sha256": "9981afca6fff30afa7ff33db27edac55351c68b51c4a035fdf76b234bd434ab9",
+   "sirinaPx": 2560,
+   "visinaPx": 2028,
+   "assetDokumenta": {
+    "id": "kubo-fasada-namestitev-b6cd",
+    "kind": "FOTO_IZDELEK",
+    "status": "VERIFIED",
+    "produktSku": "ROK-FAS-KUBO",
+    "opomba": "Namestitvena fotografija KUBO fasade - PRIMER SCENE, ne gradivo za teksturo."
+   },
+   "quad": [
+    {
+     "x": 0.145,
+     "y": 0.715
+    },
+    {
+     "x": 0.595,
+     "y": 0.725
+    },
+    {
+     "x": 0.59,
+     "y": 0.065
+    },
+    {
+     "x": 0.15,
+     "y": 0.055
+    }
+   ],
+   "maska": {
+    "ograja": [
+     [
+      {
+       "x": 0.145,
+       "y": 0.715
+      },
+      {
+       "x": 0.595,
+       "y": 0.725
+      },
+      {
+       "x": 0.59,
+       "y": 0.065
+      },
+      {
+       "x": 0.15,
+       "y": 0.055
+      }
+     ]
+    ],
+    "izpusti": [],
+    "prednji": []
+   },
+   "referenca": {
+    "tip": "ROCNO",
+    "cm": 245,
+    "opis": "sirina odseka fasade ~245 cm (ocena po visini pritlija ~280 cm)"
+   },
+   "izbraniProdukt": {
+    "sku": "ROK-FAS-KUBO",
+    "varianta": "ROK-FAS-KUBO-ROAK",
+    "orientacija": "SPLOSNO"
+   },
+   "pricakovano": {
+    "stanje": "UPORABLJENO",
+    "assetDatoteka": "public/assets/roksal/src/roksal-kubo-cip-roak.png",
+    "ploscinaOgraja": 0.2937,
+    "ploscinaIzpusti": 0,
+    "delezOgraje": 0.2937,
+    "delezPrednjega": 0,
+    "manjkajo": [],
+    "smeUporabiti": true,
+    "opozorila": [
+     "PREDNJI_BREZ"
+    ]
+   }
+  },
+  {
+   "id": "hotel-bazen-terasa-tla",
+   "opis": "Hotel z zunanjim bazenom: WPC terasna povrsina v spodnjem (prednjem) delu fotografije z lezalniki na njej.",
+   "izvirnik": "public/assets/roksal/src/0573714678e7.jpg",
+   "sha256": "96508b2771aa43fd430f36fc59098509d422bed144ce3bd82c01cbc18e1a3e57",
+   "sirinaPx": 1620,
+   "visinaPx": 1080,
+   "assetDokumenta": {
+    "id": "cmv7ngubp002pwgtsbv3plu88",
+    "kind": "GALERIJA",
+    "status": "VERIFIED",
+    "produktSku": "ROK-TER-KLASIK",
+    "opomba": "GALERIJA terase - PRIMER SCENE za talno povrsino; gradivo za teksturo so DETAJL posnetki."
+   },
+   "quad": [
+    {
+     "x": 0.02,
+     "y": 0.995
+    },
+    {
+     "x": 0.75,
+     "y": 0.995
+    },
+    {
+     "x": 0.71,
+     "y": 0.79
+    },
+    {
+     "x": 0.06,
+     "y": 0.79
+    }
+   ],
+   "maska": {
+    "ograja": [
+     [
+      {
+       "x": 0.02,
+       "y": 0.995
+      },
+      {
+       "x": 0.75,
+       "y": 0.995
+      },
+      {
+       "x": 0.71,
+       "y": 0.79
+      },
+      {
+       "x": 0.06,
+       "y": 0.79
+      }
+     ]
+    ],
+    "izpusti": [],
+    "prednji": [
+     [
+      {
+       "x": 0.005,
+       "y": 0.93
+      },
+      {
+       "x": 0.27,
+       "y": 0.995
+      },
+      {
+       "x": 0.285,
+       "y": 0.855
+      },
+      {
+       "x": 0.02,
+       "y": 0.8
+      }
+     ],
+     [
+      {
+       "x": 0.27,
+       "y": 1.0
+      },
+      {
+       "x": 0.425,
+       "y": 1.0
+      },
+      {
+       "x": 0.41,
+       "y": 0.915
+      },
+      {
+       "x": 0.28,
+       "y": 0.925
+      }
+     ],
+     [
+      {
+       "x": 0.43,
+       "y": 1.0
+      },
+      {
+       "x": 0.56,
+       "y": 1.0
+      },
+      {
+       "x": 0.54,
+       "y": 0.95
+      },
+      {
+       "x": 0.445,
+       "y": 0.955
+      }
+     ]
+    ]
+   },
+   "referenca": {
+    "tip": "ROCNO",
+    "cm": 480,
+    "opis": "sirina terasne povrsine ob bazenu ~480 cm (sprednji rob)"
+   },
+   "izbraniProdukt": {
+    "sku": "ROK-TER-RUSTIC",
+    "varianta": "ROK-TER-RUSTIC-ROAK",
+    "orientacija": "SPLOSNO"
+   },
+   "pricakovano": {
+    "stanje": "UPORABLJENO",
+    "assetDatoteka": "public/assets/roksal/src/r495-woodcore-rustic-oak-zel-detajl.jpg",
+    "ploscinaOgraja": 0.14145,
+    "ploscinaIzpusti": 0,
+    "delezOgraje": 0.14184,
+    "delezPrednjega": 0.05344,
+    "manjkajo": [
+     "profilni presek"
+    ],
+    "smeUporabiti": true,
+    "opozorila": []
+   }
+  }
+ ]
 }

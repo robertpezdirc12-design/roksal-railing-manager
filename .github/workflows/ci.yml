@@ -207,6 +207,7 @@ jobs:
           # (online) oz. docOffline poštena oznaka (offline vrsta).
           # Nova skupina MORA biti tudi v tests/ci-matrix.sh.
           - grupa: r522
+          - grupa: r523
     services:
       postgres:
         image: postgres:16

@@ -176,16 +176,25 @@ async function main () {
   console.log(`${MARKER} ── issue #6 (R494): lestvice + paleta + pohištvo ──`)
 
   // ── A. lestvice: MISSING → VERIFIED (poišči po sourceUrl; poveži na VSE relevantne izdelke) ──
+  // R523: iskanje po (izdelek, vrsta) namesto po sourceUrl — veriga za r494
+  // NADGRADI sourceUrl (r523: KUBO → izvirnik 2217×675, POLNA-57 → namenska
+  // lestvica 57/32); iskanje po starem URL-ju bi ob ponovnem zagonu ustvarilo
+  // podvojene zapise oz. padlo na manjkajočem zapisu.
   let scalesOk = 0
   for (const s of SCALES) {
     const fp = path.join(SRC_DIR, s.file)
     if (!fs.existsSync(fp)) throw new Error(`manjka datoteka: ${fp}`)
     const buf = fs.readFileSync(fp)
     const sha = crypto.createHash('sha256').update(buf).digest('hex')
-    const rec = await db.productAsset.findFirst({ where: { sourceUrl: s.url, kind: 'BARVNA_LESTVICA' } })
+    const prviSku = s.productSkus[0]
+    const prviProd = await db.product.findUnique({ where: { sku: prviSku } })
+    if (!prviProd) throw new Error(`manjka izdelek ${prviSku}`)
+    const rec = (await db.productAsset.findFirst({ where: { sourceUrl: s.url, kind: 'BARVNA_LESTVICA' } }))
+      ?? (await db.productAsset.findFirst({ where: { productId: prviProd.id, kind: 'BARVNA_LESTVICA' } }))
     if (!rec) throw new Error(`manjka zapis lestvice za ${s.url} — poženi seed-r493 najprej`)
     const data = {
       status: 'VERIFIED',
+      sourceUrl: s.url,
       filePath: `public/assets/roksal/src/${s.file}`,
       sha256: sha,
       bytes: buf.length,
@@ -198,7 +207,7 @@ async function main () {
       const prod = await db.product.findUnique({ where: { sku } })
       if (!prod) throw new Error(`manjka izdelek ${sku}`)
       const zeObst = await db.productAsset.findFirst({
-        where: { productId: prod.id, kind: 'BARVNA_LESTVICA', sourceUrl: s.url },
+        where: { productId: prod.id, kind: 'BARVNA_LESTVICA' },
       })
       if (zeObst) {
         await db.productAsset.update({ where: { id: zeObst.id }, data })

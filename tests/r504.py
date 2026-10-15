@@ -486,9 +486,9 @@ chk(f.get('stanja') == ['UPORABLJENO', 'SAMO_DRUZINA', 'NI_DATOTEKE', 'NI_PREVER
     f'F: vseh pet stanj doseženih ({f.get("stanja")})')
 chk(f.get('sme') == [True, True, False, False, False, False, False],
     'F: originalno površino sme risati samo UPORABLJENO in SAMO_DRUZINA')
-chk(f.get('prioritetnaVrsta') == '1', 'F: FOTO_IZDELEK ima prednost pred DETAJL')
-chk(f.get('druzinaAsset') == '1' and 'originalna površina te barve/odtenka' in json.dumps(f.get('manjkajo', {}), ensure_ascii=False),
-    'F: brez variante → gradivo izdelka samo v strukturo, manjkajoče imenovano')
+chk(f.get('prioritetnaVrsta') == '2', 'F: DETAJL ima prednost pred FOTO_IZDELEK (R523 — posnetek površine variante je najboljši vir teksture)')
+chk(f.get('druzinaAsset') == '2' and 'originalna površina te barve/odtenka' in json.dumps(f.get('manjkajo', {}), ensure_ascii=False),
+    'F: brez variante → gradivo izdelka samo v strukturo (R523: DETAJL tudi v družinski rezervi), manjkajoče imenovano')
 chk(f.get('presekZadnjiAsset') == '3', 'F: profilni presek je zadnja izbira (tehnični posnetek ni površina)')
 chk(f.get('orientacija', {}).get('stanje') == 'SAMO_DRUZINA',
     "F: napačna orientacija ne trdi 'originalne površine te orientacije'")
@@ -623,7 +623,7 @@ chk('MASKA_NEKRITA' not in h.get('brezMaske', []), 'H: brez maske (stari vhod) n
 chk('MERA_ODSTOPA' in h.get('meraOdstopa', []), 'H: prikazna dolžina ≠ potrjena mera → opozorilo ostane (§6/§15)')
 chk(h.get('maskaZaIzris') is True, 'H: maskaZaIzris brez ročne maske = quad (en vir resnice za UI in test)')
 chk(h.get('zig') == 'VIZUALIZACIJA ZA PREDSTAVITEV', 'H: obvezni žig §15 nespremenjen')
-chk(h.get('engine') == '1.1.0', f'H: ENGINE_VERSION dvignjen na 1.1.0 (dejansko {h.get("engine")})')
+chk(h.get('engine') == '1.2.0', f'H: ENGINE_VERSION dvignjen na 1.2.0 — R523: DETAJL prednost + množica izrezov (dejansko {h.get("engine")})')
 
 # ══ I. nabor resničnih fotografij ══════════════════════════════════════════
 print('── I) fixture nabor: resnične fotografije + maska + gradivo ──')
@@ -886,7 +886,7 @@ else:
     chk(shranjeni.get('maska', {}).get('ograja', []), 'K: maska je SHRAMNJENA v renderParams (2 obliki ograje)')
     chk(len(shranjeni.get('maska', {}).get('prednji', [])) == 1, 'K: prednji plan je shranjen')
     chk(len(shranjeni.get('quad', [])) == 4, 'K: quad je ostal (navzaj združljiv vhod)')
-    chk(d.get('data', {}).get('engineVersion') == '1.1.0', 'K: različica pogona 1.1.0 zapisana')
+    chk(d.get('data', {}).get('engineVersion') == '1.2.0', 'K: različica pogona 1.2.0 zapisana')
 
     s, d = callj('POST', '/api/photo-visualization', admin, body())
     chk(s == 201, f'K: STARI vhod brez maske je veljaven ({s})')

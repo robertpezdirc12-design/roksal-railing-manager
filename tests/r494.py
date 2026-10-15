@@ -60,7 +60,7 @@ for c in charts:
     dober = fp and os.path.exists(fp) and hashlib.sha256(open(fp, 'rb').read()).hexdigest() == c.get('sha256')
     chk(dober, f'datoteka+sha256: {os.path.basename(c.get("filePath") or "?")}')
     datoteke.add(c.get('filePath'))
-chk(len(datoteke) == 5, f'5 edinstvenih datotek lestvic (dejansko: {len(datoteke)})')
+chk(len(datoteke) == 6, f'6 edinstvenih datotek lestvic (5 r494 + namenska 57/32 iz R523; dejansko: {len(datoteke)})')
 
 # imena odtenkov v opombi + provenienca
 chk(all('Odtenki:' in (c.get('note') or '') for c in charts), 'opomba vsake lestvice navaja odtenke')
@@ -74,7 +74,10 @@ polna128 = kjer.get('ROK-OG-POLNA-128', {})
 chk('NESKLADJE' in (polna128.get('note') or ''), 'POLNA 128: neskladje slika(6)/besedilo(5) IZRECNO zabeleženo')
 chk('6 odtenkov' in (polna128.get('note') or ''), 'POLNA 128: opomba navaja 6 odtenkov s slike')
 p57 = kjer.get('ROK-OGP-POLNA-57', {})
-chk('tri barve' in (p57.get('note') or '') and 'ni naveden' in (p57.get('note') or ''), 'POLNA 57/32: »3 barve, izbor ni naveden« zabeleženo')
+chk('NAMENJENA' in (p57.get('note') or '') or 'namenska' in (p57.get('note') or ''),
+    'POLNA 57/32: NAMENJENA lestvica 57/32 (R523) — izbor odtenkov ZNAN, ne več »ni naveden«')
+chk('Odtenki: Amazon wood, Oak wood, Rustic walnut' in (p57.get('note') or ''),
+    'POLNA 57/32: opomba navaja točne 3 odtenke namenske lestvice (R523)')
 
 # ── 3. polna paleta variant po profilih ──
 s, d = callj('GET', '/api/products?family=all&q=ROK-', tok_adm)
@@ -87,8 +90,8 @@ for sku, n in PRICAKOVANE_BARVE.items():
     p = prods.get(sku)
     vs = [v for v in (p.get('variants') or []) if v.get('active', True)]
     chk(p is not None and len(vs) == n, f'{sku}: {n} barvnih variant (dejansko: {len(vs) if p else "MANJKA"})')
-# R495 posodobitev: raziskava je medtem POTRDILA izbor (stran ograj »štiri barve« + lestvica KUBO) → 4 variante
-chk(len((prods.get('ROK-OGP-POLNA-57') or {}).get('variants') or []) == 4, 'POLNA 57/32: 4 variante (R495: stran ograj »štiri barve« + lestvica KUBO)')
+# R495→R523 posodobitev: namenska uradna lestvica 57/32 (3 čipi) je odločilen dokaz → 3 variante
+chk(len((prods.get('ROK-OGP-POLNA-57') or {}).get('variants') or []) == 3, 'POLNA 57/32: 3 variante (R523: namenska lestvica 57/32 — AMW, OKW, RWA)')
 polna100 = prods.get('ROK-OGP-POLNA-100', {})
 colors100 = set(v.get('color') for v in (polna100.get('variants') or []))
 chk('White' in colors100, 'POLNA 100: White med variantami (8 odtenkov s lestvice)')
@@ -168,19 +171,23 @@ chk(subenv['DATABASE_URL'].startswith('postgresql://'), f'subenv DATABASE_URL ({
 r = subprocess.run(['node', 'prisma/seed-r494.cjs'], cwd=REPO, capture_output=True, text=True, timeout=180, env=subenv)
 chk(r.returncode == 0 and 'KONEC: 5 lestvic VERIFIED' in r.stdout, 'seed-r494 idemponten: 5 lestvic, brez podvajanj')
 s, d = callj('GET', '/api/product-assets?status=VERIFIED', tok_adm)
-# R495: seed-r494 pobriše le ROK-VRT izdelke (cascade 10 r495 gradiv pohištva) → 85−10 = 75
-chk(len(d.get('data', [])) == 75, f'po ponovnem seedu: 75 VERIFIED (35 r494 + 40 preživelih r495; dejansko: {len(d.get("data", []))})')
+# R523: seed-r494 pobriše le ROK-VRT izdelke (cascade 10 r495 gradiv pohištva) → 91−10 = 81
+chk(len(d.get('data', [])) == 81, f'po ponovnem seedu: 81 VERIFIED (91 − 10 ROK-VRT; r523 gradiva preživijo; dejansko: {len(d.get("data", []))})')
 s, d = callj('GET', '/api/products?family=all&q=ROK-', tok_adm)
 chk(len(d.get('data', [])) == 18, 'po ponovnem seedu: 18 izdelkov')
-chk(len([v for p in d.get('data', []) for v in p.get('variants', [])]) == 50, 'po ponovnem seedu: 50 variant (46 r494 + 4 nove 57/32 iz R495)')
+chk(len([v for p in d.get('data', []) for v in p.get('variants', [])]) == 49, 'po ponovnem seedu: 49 variant (46 r494 + 3× 57/32 iz r495/r523 — ROAK ostaja odstranjen; r494 POLNA-57 variant ne ustvarja)', )
 
 # R495: seed-r494 briše ROK-VRT izdelke (cascade na gradiva) → obnovimo najnovejše stanje
 r = subprocess.run(['node', 'prisma/seed-r495.cjs'], cwd=REPO, capture_output=True, text=True, timeout=180, env=subenv)
 chk(r.returncode == 0 and '50 povezav' in r.stdout, 'obnova stanja: seed-r495 po r494 preverbi (50 povezav)')
+# R523: veriga se konča s seed-r523 (čipi KUBO, lestvici) — naslednje skupine
+# (r520/r523) drugače vidijo stanje BREZ čipov
+r = subprocess.run(['node', 'prisma/seed-r523.cjs'], cwd=REPO, capture_output=True, text=True, timeout=180, env=subenv)
+chk(r.returncode == 0 and 'KUBO DETAJL ×4' in r.stdout, 'obnova stanja: seed-r523 po r494 preverbi (čipi KUBO)')
 s, d = callj('GET', '/api/product-assets?status=VERIFIED', tok_adm)
-chk(len(d.get('data', [])) == 85, f'obnova stanja: 85 VERIFIED (dejansko: {len(d.get("data", []))})')
+chk(len(d.get('data', [])) == 91, f'obnova stanja: 91 VERIFIED po r523 (dejansko: {len(d.get("data", []))})')
 s, d = callj('GET', '/api/products?family=all&q=ROK-', tok_adm)
-chk(len([v for p in d.get('data', []) for v in p.get('variants', [])]) == 50, 'obnova stanja: 50 variant')
+chk(len([v for p in d.get('data', []) for v in p.get('variants', [])]) == 49, 'obnova stanja: 49 variant (R523)')
 
 # ── 10. regresija temeljev ──
 s, d = callj('GET', '/api/guide', tok_mon)

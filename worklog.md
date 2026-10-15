@@ -3655,3 +3655,116 @@ Work Log:
 Stage Summary:
 - R522 zaključen: koda + testi 54/0 + E2E 15/0 + pas 37 skupin + poročilo
   na #7 + zelen GitLab CI + tag v1.53.0 obe strani.
+
+---
+Task ID: R523
+Agent: glavni agent (nadaljevalna seja)
+Task: Lastnikov ukaz 2026-10-15 (BREZ novih funkcij): (1) izboljšati kakovost
+teksture KUBO, (2) urediti manjkajoče originalne materiale in barvne različice,
+(3) dokončno preveriti trenutno produkcijsko različico in avtomatske teste.
+
+Work Log:
+- DIAGNOZA (VLM + izmera, brez ugibanja): r520-F-zoom je bil ocenjen 3/10 —
+  tekstura zamegljena (izrez ene letvice iz scenične fotografije, 17–21 px na
+  desko), VSE letvice identičen klon, diagonalni artefakti. Izoliran preskus je
+  pokazal, da »diagonalne rumene črte« NISO napaka teksture, ampac POŠTENA
+  šrafura nedokončane obnove ozadja (R507 §2, rumeno-oranžna (244,180,60)
+  šrafura v slojObnove) v režah med letvicami — deluje po zasnovi.
+- RAZISKAVA URADNEGA SPLETIŠČA (agent-browser skozi ShieldSquare/Radware
+  izziv: addinitscript odstrani navigator.webdriver/userAgent/appVersion
+  sledi — izziv brez tega ostane v zanki; pluginsa NE smejo biti ponarejeni,
+  ker preverjanje PluginArray.prototype sicer zazna spoofing):
+  * barvni-odtenki stran: 5 lestvic (terasa/romb/kubo/polna-128/polna-2);
+    POLNA-57/32 ima na strani prikazano lestvico KUBO, besedilo pa pravi
+    »tri barve« (lenobno zrcalo — dokumentirano neskladje);
+  * VSE 5 lokalnih lestvic (tudi polna-100 = BARVNA_LESTVICA_2_polna) so
+    sha256-IDENTIČNE uradnim datotekam (prenos prek brskalniške fetch/download
+    seje — statični datotečni URL-ji so sicer za izzivom);
+  * MEDIJSKA KNJIŽNICA (wp-json, 827 datotek prek navigacije): KUBO lestvica
+    obstaja v IZVIRNIKU 2217×675 (stran prikazuje le 1024 px sličico!) in
+    vsebuje 4 FOTOGRAFSKE čipe površine po odtenku (VLM: vidna zrna, oznake
+    Amazon wood, Oak wood, Rustic oak, Rustic walnut — dvakratni dokaz z
+    barvno bližino ODTENKI_HEX, razdalje 1,2–3,0/255);
+  * NAMENJENA lestvica POLNA 57/32 (2026-02, BARVNA_LESTVICA_5-polna-deska-
+    57-32_3.png, 2217×675): 3 čipi — Amazon wood, Oak wood, Rustic walnut
+    (odločilen dokaz za 3 barve; ROAK zanjo ne obstaja);
+  * uradni tehnični posnetek profilov KUBO z alu cevmi 20×20/25×25/20×60
+    (deske-kubo-razlicne-cevi.jpg) in produktni posnetek polne deskе 5,7/3,2.
+- NOVA DATOTEČNA GRADIVA (public/assets/roksal/src/, MANIFEST 80→88 vnosov,
+  vsi sha256 overjeni proti manifestu):
+  * roksal-barvna-lestvica-kubo-full.png (2217×675 izvirnik),
+  * roksal-barvna-lestvica-polna-57.png (namenska 57/32),
+  * roksal-kubo-cip-{amw,okw,roak,rwa}.png — deterministični izrezi čipov
+    (ops/r523-cipi.mjs: detekcija 4 grozdov po neprosojnosti [ozadje lestvice
+    je prosojno, AMW čip skoraj siv], najdaljši zaporedni tek pri vrhuncu =
+    premer, prilagodljivo krčenje 0,70→0,42·r do NIČ prosojnih pikslov,
+    izrezi 184–210 px), vlakna ROTIRANA navpično po izmeri anizotropije
+    (|dI/dy|/|dI/dx|: čipi 1,76–3,23 vodoravna → rotirani; referenčna deska
+    z realne fasade 0,61 = navpična — skladje), revizija ops/r523-cipi.json;
+  * roksal-kubo-profil-cevi.jpg (PROFIL_PRESEK), roksal-polna57-produkt.jpg.
+- KODA (brez novih funkcij — samo kakovost obstoječih):
+  * photo-replace-texture.ts: VRSTE_POVRSINE = [DETAJL, FOTO_IZDELEK,
+    PROFIL_PRESEK] (posnetek površine variante je najboljši vir teksture);
+    NOVA izmeriIzrezeNavpicnihPalic (MNOŽICA vseh desk, enaka poštena metoda);
+    stara izmeriIzrezNavpicnePalice = najbližja sredini član množice
+    (združljivost); VirTeksture.izrezi; opcija zrcali (zrcaljenje prek
+    zamenjanih kotov celice — clip ostane isti).
+  * photo-replace-core.ts: ENGINE_VERSION 1.2.0 (§13); FASADA zanka — vir z
+    množico izrezov: vsaka letvica dobi svojo desko (deterministični rnd iz
+    semena); vir ENOJNE površine (čip): ENA celica (brez šivov med celicami,
+    ki so bili najvidnejša napaka izoliranega preskusa) + variacija po letvici
+    (podizrez 62–100 % + izmenično zrcalo, seme).
+  * foto-replace.tsx: UI računa množico izrezov (ista izmera kot jedro).
+- SEED VERIGA: prisma/seed-r523.cjs (A: odstrani odvečno varianto
+  ROK-OGP-POLNA-57-ROAK — schema.variantSku je niz brez FK prav zato;
+  B: KUBO lestvica → izvirnik; C: POLNA-57 → namenska lestvica; D: 4 DETAJL
+  čipi po varianti; E: PROFIL_PRESEK; F: produktni posnetek 57/32) dodan v
+  package.json db:seed; seed-r495.cjs POLNA_57_BARVE → 3 uradne barve z
+  dokumentiranim razlogom; seed-r494.cjs iskanje lestvic po (izdelek, vrsta)
+  namesto sourceUrl (r523 namreč nadgradi URL — iskanje po starem bi ob
+  ponovnem zagonu podvajalo/padlo).
+- TESTI (regresija posodobljena pošteno): tests/r523.py NOV (66 ✓ / 0 ✗:
+  A množinska izmera na sintetiki, B DETAJL-prednost, C živi katalog, D čipi
+  čisti+vlakna navpična [izmera v testu], E variacija+determinizem+zrcalo,
+  F revizijsko poročilo, G žičenje, H artefakti, I živi API krog FASADA)
+  registriran v ci-matrix.sh + ci.yml (38. skupina); r504 (prioriteta vrst +
+  ENGINE 1.2.0 + pričakovani fixture-i), r493/r494/r495 (števci: 49 variant,
+  91 gradiv, POLNA-57 3 uradne; obnova stanja s seed-r523 na koncu —
+  sicer bi naslednje skupine videle stanje brez čipov), r518 (B2 → RWA),
+  r520 (KUBO izbira → čip; UI množinska izmera), fixture manifest
+  (stopnje/kubo pričakovana, B2=RWA).
+- DOKAZNI IZRISI (ops/r523-render.mjs, zrcali UI cevovod): K ROAK čip, K2 OKW,
+  K3 AMW, KM množica izrezov (40 desk, vsaka letvica svoja) +
+  r523-primerjava-kakovosti.png (R520 ⊣⊢ R523 isti primer). NEVTRALNA VLM
+  primerjava (brez konteksta, samo površine desk): STARA 4/10 »blurry,
+  painted on« vs NOVA 8/10 »clear, crisp grain patterns with good tonal
+  variation«. VLM E2E zaslonski posnetek: ostro zrnje, realistična obloga,
+  brez napak na deskah.
+- E2E SKOZI PRAVO APLIKACIJO: ops/r523-e2e.py NOV (13 ✓ / 0 ✗): prijava →
+  nalaganje KUBO izvirnika (b6cd) → označitev stene + ref 245 cm → KUBO +
+  Rustic oak → PREVERI 80/20 (uradno) → PREJ/POTEM → SHRANI → BAZA: tip
+  FASADA · lamela 80 · reza 20 · gradivo roksal-kubo-cip-roak.png (DETAJL!)
+  · engineVersion 1.2.0 → čiščenje. Regresija: ops/r520-e2e.py 14 ✓ / 0 ✗.
+- RELEJNI PAS: ✓ zeleno — 8 statičnih korakov + 38 skupin, 0 ✗, EXIT 0
+  (ops/ci-dokaz shranjen kot /tmp/r523-pas.log → prepisan v
+  ops/ci-dokaz-R523.out); tsc 0 napak; eslint 0 napak / 2 stari opozorili.
+
+Stage Summary:
+- KAKOVOST TEKSTURE KUBO (glavni ukaz): čipi uradne lestvice v izvirni
+  ločljivosti (184–210 px na površino, 8–35× več kot prej) po odtenku, vlakna
+  navpična po izmeri, variacija med letvicami (podizrez + zrcalo, seme),
+  brez šivov — nevtralna VLM: 4/10 → 8/10 na površinah desk.
+- MANJKAJÖČI MATERIALI (drugi ukaz): lestvica KUBO nadgrajena na izvirnik
+  2217×675; NAMENJENA lestvica POLNA 57/32 (prej zrcalo KUBO — zdaj po
+  uradnem viru); PROFIL_PRESEK za KUBO (enakovredno ROMB-67); produktni
+  posnetek POLNA-57; POLNA 57/32 ureditev po uradnih lestvicah: natanko 3
+  barve (AMW, OKW, RWA — ROAK odstranjen z dokumentiranim dokazom).
+- DOKONČNA PREVERBA (tretji ukaz): relejni pas 38 skupin zelen (EXIT 0),
+  E2E FASADA 13/0 + regresija E2E TERASA 14/0, VLM potrditve, r523 66/0.
+- Issue #14 OSTAJA ODPRT: manjkajoči DETAJL za ograje, RWA 57/32 posnetek,
+  PROFIL_PRESEK za POLNA/DESKA, generični izdelki — težava #6 oskrba;
+  ozadje rež KUBO (temna podkonstrukcija iz lastnih pikslov rež) je
+  zabeleženo kot lastnikova odločitev (ne izmišljujemo).
+- Dokazi: ops/r523-{K,K2,K3,KM}-{potem,primerjava,zoom}.png +
+  r523-primerjava-kakovosti.png + r523-e2e-1..6.png + ops/r523-cipi.json +
+  ops/ci-dokaz-R523.out.

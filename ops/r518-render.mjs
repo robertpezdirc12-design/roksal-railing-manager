@@ -62,10 +62,11 @@ const PRIMERI = [
     zoom: { x: 0.05, y: 0.05, w: 0.55, h: 0.45 },
   },
   {
-    id: 'B2', fixture: 'vt-terasa-panelna-ograja-za-pergolo', ime: 'polna57-rustic-BREZ',
-    sku: 'ROK-OGP-POLNA-57', varianta: 'ROK-OGP-POLNA-57-ROAK',
+    id: 'B2', fixture: 'vt-terasa-panelna-ograja-za-pergolo', ime: 'polna57-rusticwalnut-BREZ',
+    sku: 'ROK-OGP-POLNA-57', varianta: 'ROK-OGP-POLNA-57-RWA',
     refSmer: 'NAVPIČNO',
     // to je TOČNO pričakovani primer iz fixture: SAMO_DRUZINA (brez slike odtenka)
+    // R523: RWA (ne ROAK — namenska uradna lestvica 57/32 ima 3 barve: AMW/OKW/RWA)
     pričakovanoStanje: 'SAMO_DRUZINA', pričakovanaDatoteka: 'c4a3c06d3e1b.jpg',
   },
   {

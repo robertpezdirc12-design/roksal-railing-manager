@@ -225,7 +225,7 @@ const out = {}
 for (const [ime, sku, variantSku, orientacija] of [
   ['A', 'ROK-OG-POLNA-128', 'ROK-OG-POLNA-128-BUT', 'SPLOSNO'],
   ['B', 'ROK-OGP-POLNA-57', 'ROK-OGP-POLNA-57-OKW', 'POKOCNA'],
-  ['B2', 'ROK-OGP-POLNA-57', 'ROK-OGP-POLNA-57-ROAK', 'POKOCNA'],
+  ['B2', 'ROK-OGP-POLNA-57', 'ROK-OGP-POLNA-57-RWA', 'POKOCNA'],
   ['D', 'ROK-OGP-POLNA-100', 'ROK-OGP-POLNA-100-WHT', 'POKOCNA'],
   ['E', 'OGR-K-002', 'OGR-K-002-ANT', 'POKOCNA'],
 ]) {
@@ -248,7 +248,7 @@ a, b, b2, d, e = D.get('A') or {}, D.get('B') or {}, D.get('B2') or {}, D.get('D
 chk(a.get('stanje') == 'UPORABLJENO' and 'burma128-2' in (a.get('datoteka') or ''), f'A: POLNA-128 Burma teak → UPORABLJENO ({a.get("datoteka")})')
 chk(b.get('stanje') == 'UPORABLJENO' and 'Polna-deska-57-32_salon1' in (b.get('datoteka') or ''), f'B: POLNA-57 Oak wood → UPORABLJENO ({b.get("datoteka")})')
 chk(b2.get('stanje') == 'SAMO_DRUZINA' and (b2.get('datoteka') or '').startswith('c4a3c06d3e1b'),
-    f'B2: POLNA-57 Rustic oak → SAMO_DRUZINA — družinska tekstura brez odtenka ({b2.get("datoteka")})')
+    f'B2: POLNA-57 Rustic walnut → SAMO_DRUZINA — družinska tekstura brez odtenka ({b2.get("datoteka")}) [R523: ROAK odstranjen — namenska lestvica 57/32 ima 3 barve]')
 chk(any('odtenk' in m for m in (b2.get('manjkajo') or [])), f'B2: manjka izrecno naveden (pošteno): {b2.get("manjkajo")}')
 chk(d.get('stanje') == 'UPORABLJENO' and 'Domzale-4' in (d.get('datoteka') or ''), f'D: POLNA-100 White → UPORABLJENO ({d.get("datoteka")})')
 chk(e.get('stanje') == 'NI_PREVERJENO' and e.get('datoteka') is None and any('površina variante' in m for m in (e.get('manjkajo') or [])),

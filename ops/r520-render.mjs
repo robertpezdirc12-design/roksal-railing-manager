@@ -188,23 +188,32 @@ for (const P of PRIMERI) {
   const prednjiPlatno = createCanvas(W, H)
   prednjiPlatno.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(MASK.slojPrednjega(izvirnik, W, H, pk.prednji)), W, H), 0, 0)
   const tekstura = imgTekstura ? (() => {
-    // R520: FASADA — izreži ENO desko iz scenične fotografije (ista izmera kot
-    // UI: izmeriIzrezNavpicnePalice). TERASA (DETAJL ene deske) ostane cela.
+    // R520→R523: FASADA — izmeri VSE deske iz scenične fotografije (ista
+    // izmera kot UI: izmeriIzrezeNavpicnihPalic — vsaka letvica svoja).
+    // DETAJL/čip ene površine ostane cel (izmera vrne null).
     let izrez
+    let izrezi
     if (P.tip === 'FASADA') {
       const mc = createCanvas(imgTekstura.width, imgTekstura.height)
       const mctx = mc.getContext('2d')
       mctx.drawImage(imgTekstura, 0, 0)
-      izrez = TEKS.izmeriIzrezNavpicnePalice((x, y) => {
+      izrezi = TEKS.izmeriIzrezeNavpicnihPalic((x, y) => {
         const d = mctx.getImageData(Math.round(x), Math.round(y), 1, 1).data
         return (d[0] * 0.299 + d[1] * 0.587 + d[2] * 0.114) / 255
       }, imgTekstura.width, imgTekstura.height)
-      console.log(`[tekstura] izrez ene palice: ${izrez ? `x=${izrez.x} w=${izrez.w} (celotna višina)` : 'NI (cela slika)'}`)
+      if (izrezi && izrezi.length > 0) {
+        const sredina = imgTekstura.width / 2
+        izrez = izrezi.reduce((a, b) => Math.abs(a.x + a.w / 2 - sredina) <= Math.abs(b.x + b.w / 2 - sredina) ? a : b)
+        console.log(`[tekstura] množica izrezov: ${izrezi.length} desk → vsaka letvica svoja (seme); najbližja sredini w=${izrez.w}`)
+      } else {
+        console.log('[tekstura] posnetok ene površine (DETAJL/čip) — cela slika, brez reza')
+      }
     }
     return {
       slika: imgTekstura, sirinaPx: imgTekstura.width, visinaPx: imgTekstura.height,
       doklad: izbira.doklad ?? '', oznaka: izbira.gradivo?.variantSku ?? izbira.gradivo?.id ?? '',
       ...(izrez ? { izrez } : {}),
+      ...(izrezi && izrezi.length > 0 ? { izrezi } : {}),
     }
   })() : null
   console.log(`[obnova] nedokončano: ${(obnova.razmerjeNedokončanega * 100).toFixed(1)} % · zahteva ročni poseg: ${obnova.zahtevaRočniPoseg}`)

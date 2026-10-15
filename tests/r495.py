@@ -72,7 +72,8 @@ for e in r495m:
         good += 1
 chk(good == 48, f'sha256+velikost se ujema za vseh 48 datotek (dejansko: {good})')
 
-# ── 3. POLNA 57/32: 4 variante (AMW, OKW, ROAK, RWA) + opomba ──
+# ── 3. POLNA 57/32: 3 variante (AMW, OKW, RWA) + opomba ── (R523: namenska
+# uradna lestvica 57/32 — 3 čipi — je odločilen dokaz; ROAK odstranjen)
 rows = db_rows("""
 import { PrismaClient } from '@prisma/client';
 const db = new PrismaClient();
@@ -82,12 +83,12 @@ await db.$disconnect();
 """)
 r57 = rows[0]
 colors57 = sorted(v['color'] for v in r57['varianti'])
-chk(colors57 == sorted(['Amazon wood', 'Oak wood', 'Rustic oak', 'Rustic walnut']),
-    f'POLNA 57/32: 4 variante = lestvica KUBO (dejansko: {colors57})')
+chk(colors57 == sorted(['Amazon wood', 'Oak wood', 'Rustic walnut']),
+    f'POLNA 57/32: 3 variante po NAMENSKI lestvici (dejansko: {colors57}) — R523')
 chk(all('ROK-OGP-POLNA-57-' in v['sku'] for v in r57['varianti']), 'POLNA 57/32: SKU vzorec ROK-OGP-POLNA-57-{KODA}')
-chk('4 barve' in r57['tech'].get('barvOpomba', '') and '3 barve' in r57['tech'].get('barvOpomba', ''),
-    'POLNA 57/32: opomba dokumentira OBE trditvi vira (4 ograje / 3 barvna stran)')
-chk(r57['tech'].get('barv') == 4, 'POLNA 57/32: tech.barv = 4')
+chk('namenska' in r57['tech'].get('barvOpomba', '').lower() or 'Namenjena' in r57['tech'].get('barvOpomba', ''),
+    'POLNA 57/32: opomba dokumentira namensko lestvico (R523)')
+chk(r57['tech'].get('barv') == 3, 'POLNA 57/32: tech.barv = 3 (R523)')
 
 # ── 4. ProductAsset: 50 galerijskih povezav, colorName potrjen ──
 rows = db_rows("""
@@ -159,7 +160,7 @@ chk('barva: {a.colorName} (potrjena)' in kat or '(potrjena)' in kat, 'UI katalog
 
 # ── 9. API: product-assets vrača podatke ──
 s, d = callj('GET', '/api/product-assets?status=VERIFIED', tok_adm)
-chk(s == 200 and len(d.get('data', [])) == 85, f'85 VERIFIED gradiv skupaj (dejansko: {len(d.get("data", []))})')
+chk(s == 200 and len(d.get('data', [])) == 91, f'91 VERIFIED gradiv skupaj z r523 (dejansko: {len(d.get("data", []))})')
 s, d = callj('GET', '/api/product-assets', tok_mon)
 chk(s == 200, 'monter lahko bere gradiva (_read)')
 
@@ -168,6 +169,9 @@ subenv = {**os.environ, 'DATABASE_URL': DBURL}
 r = subprocess.run(['node', 'prisma/seed-r495.cjs'], cwd=REPO, capture_output=True, text=True, timeout=180, env=subenv)
 chk(r.returncode == 0 and '0 novih zapisov' in r.stdout and '50 povezav' in r.stdout,
     'seed-r495 idempotenten: 0 novih, 50 posodobljenih')
+# R523: veriga se konča s seed-r523 (čipi KUBO, lestvici, POLNA-57 brez ROAK)
+r = subprocess.run(['node', 'prisma/seed-r523.cjs'], cwd=REPO, capture_output=True, text=True, timeout=180, env=subenv)
+chk(r.returncode == 0 and 'KUBO DETAJL ×4' in r.stdout, 'obnova stanja: seed-r523 po r495 preverbi (čipi KUBO)')
 rows = db_rows("""
 import { PrismaClient } from '@prisma/client';
 const db = new PrismaClient();
@@ -175,8 +179,8 @@ console.log(JSON.stringify({ assets: await db.productAsset.count(), verified: aw
 await db.$disconnect();
 """)
 st = rows[0]
-chk(st['assets'] == 85 and st['verified'] == 85, f'skupaj 85 gradiv VERIFIED (dejansko: {st["assets"]}/{st["verified"]})')
-chk(st['vars'] == 50, f'50 ROK variant (dejansko: {st["vars"]})')
+chk(st['assets'] == 91 and st['verified'] == 91, f'skupaj 91 gradiv VERIFIED po r523 (dejansko: {st["assets"]}/{st["verified"]})')
+chk(st['vars'] == 49, f'49 ROK variant (dejansko: {st["vars"]}) — R523: POLNA-57 brez ROAK')
 
 # ── 11. regresija temeljev ──
 s, d = callj('GET', '/api/guide', tok_mon)

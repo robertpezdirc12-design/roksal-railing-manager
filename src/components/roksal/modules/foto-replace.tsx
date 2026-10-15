@@ -48,7 +48,7 @@ import {
   slojObnove, slojPrednjega, MAX_OBLIK, MAX_TOCK, type Maska, type Oblika,
 } from '@/lib/photo-replace-mask'
 import {
-  celiceZaElement, izberiGradivo, izmeriIzrezNavpicnePalice, projekcijaIzRavnine, vzorciTeksturo,
+  celiceZaElement, izberiGradivo, izmeriIzrezeNavpicnihPalic, projekcijaIzRavnine, vzorciTeksturo,
   type GradivoDTO, type IzbiraGradiva, type VirTeksture,
 } from '@/lib/photo-replace-texture'
 import { cn } from '@/lib/utils'
@@ -492,6 +492,10 @@ export default function FotoReplaceModule () {
       // navpičnimi deskami: izrežemo ENO (izmerjeno korak), da se na letvico
       // ne stiska cela hiša. TERASA/ograje imajo DETAJL posnetke ene deske —
       // izmera vrne null in slika ostane cela (fail-closed).
+      // R523: izmerimo VSE deske (množina) — izris nato vsako letvico obleče
+      // z drugo (deterministično seme), konec identičnih klonov. En sam izrez
+      // (najbližji sredini) ostane zaradi združljivosti poročil/stanjev.
+      let izrezi: VirTeksture['izrezi']
       let izrez: VirTeksture['izrez']
       if (slot.tip === 'FASADA') {
         try {
@@ -500,10 +504,16 @@ export default function FotoReplaceModule () {
           const mctx = mc.getContext('2d', { willReadFrequently: true })
           if (mctx) {
             mctx.drawImage(img, 0, 0)
-            izrez = izmeriIzrezNavpicnePalice((x, y) => {
+            const vsi = izmeriIzrezeNavpicnihPalic((x, y) => {
               const d = mctx.getImageData(Math.round(x), Math.round(y), 1, 1).data
               return (d[0] * 0.299 + d[1] * 0.587 + d[2] * 0.114) / 255
-            }, img.naturalWidth, img.naturalHeight) ?? undefined
+            }, img.naturalWidth, img.naturalHeight)
+            if (vsi && vsi.length > 0) {
+              izrezi = vsi
+              const sredina = img.naturalWidth / 2
+              izrez = vsi.reduce((a, b) =>
+                Math.abs(a.x + a.w / 2 - sredina) <= Math.abs(b.x + b.w / 2 - sredina) ? a : b)
+            }
           }
         } catch { /* izrez ni nujen — cela slika kot doslej */ }
       }
@@ -512,6 +522,7 @@ export default function FotoReplaceModule () {
         doklad: izbiraGradiva?.doklad ?? g.filePath ?? '',
         oznaka: g.variantSku ?? g.id,
         ...(izrez ? { izrez } : {}),
+        ...(izrezi && izrezi.length > 0 ? { izrezi } : {}),
       })
     }
     img.onerror = () => { if (alive) setTekstura(null) }

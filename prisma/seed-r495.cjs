@@ -31,11 +31,13 @@ const KODA = {
   'Oak wood': 'OKW', 'White': 'WHT', 'Rustic oak': 'ROAK', 'Rustic walnut': 'RWA',
 }
 
-// ── 1. POLNA 57/32: 4 variante (stran ograj: »štiri barve« + lestvica KUBO) ──
-const POLNA_57_BARVE = ['Amazon wood', 'Oak wood', 'Rustic oak', 'Rustic walnut']
+// ── 1. POLNA 57/32: 3 variante (R523: NAMENJENA lestvica 57/32 iz uradne
+// medijske knjižnice, 2026-02, ima 3 čipe: Amazon wood, Oak wood, Rustic
+// walnut — to je odločilen dokaz za tri barve; Rustic oak je bil odveč) ──
+const POLNA_57_BARVE = ['Amazon wood', 'Oak wood', 'Rustic walnut']
 const POLNA_57_OPOMBA =
-  'Stran pokončnih ograj (roksal.com, 2026-10-13): »Pri deskah s polnim profilom 57-32 so trenutno na voljo štiri barve« + prikazana lestvica KUBO (Amazon wood, Oak wood, Rustic oak, Rustic walnut). ' +
-  'Barvna stran pravi »tri barve« (neskladje vira, oboje zabeleženo). Fotografski dokaz iz galerije: Amazon wood (naleganje 5,7 cm), Oak wood (salon, klopi Linea).'
+  'Namenjena barvna lestvica POLNA 57/32 (roksal.com medijska knjižnica, 2026-02, BARVNA_LESTVICA_5-polna-deska-57-32_3.png): 3 odtenki — Amazon wood, Oak wood, Rustic walnut. ' +
+  'Stran Barvni odtenki za 57/32 prikazuje lestvico KUBO (4 odtenki) z besedilom »tri barve«; R523 je odkril namensko lestvico in odstranil odvečni Rustic oak. Fotografski dokaz: Amazon wood, Oak wood.'
 
 
 // ── 2. FOTOGRAFIJE (48 datotek, 50 povezav na izdelke; colorName = Roksalov lastni naziv iz galerije) ──
@@ -745,7 +747,7 @@ const PHOTOS = [
 async function main () {
   console.log(`${MARKER} ── issue #6 (R495): galerijske fotografije profil×barva ──`)
 
-  // ── A. POLNA 57/32: 4 variante + posodobljena opomba ──
+  // ── A. POLNA 57/32: 3 variante (R523) + posodobljena opomba ──
   const p57 = await db.product.findUnique({ where: { sku: 'ROK-OGP-POLNA-57' } })
   if (!p57) throw new Error('manjka izdelek ROK-OGP-POLNA-57')
   let nVar = 0
@@ -758,10 +760,10 @@ async function main () {
     })
     nVar++
   }
-  console.log(`${MARKER} POLNA 57/32: ${nVar} variant (AMW, OKW, ROAK, RWA)`)
+  console.log(`${MARKER} POLNA 57/32: ${nVar} variant (AMW, OKW, RWA — namenska lestvica, R523)`)
   const tech57 = typeof p57.tech === 'string' ? JSON.parse(p57.tech) : (p57.tech || {})
-  tech57.barvOpomba = 'Stran ograj: 4 barve (lestvica KUBO); barvna stran: 3 barve — neskladje vira zabeleženo. Fotografski dokaz: Amazon wood, Oak wood.'
-  tech57.barv = 4
+  tech57.barvOpomba = POLNA_57_OPOMBA
+  tech57.barv = 3
   await db.product.update({ where: { id: p57.id }, data: { tech: JSON.stringify(tech57) } })
 
   // ── B. fotografije: ProductAsset zapisi z dokazljivo provenienco ──

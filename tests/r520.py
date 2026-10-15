@@ -302,8 +302,8 @@ ter2 = G.get('ROK-TER-RUSTIC') or {}
 alu = G.get('TER-ALU-001') or {}
 chk(not kubo.get('manjka') and kubo.get('sirinaTech') is None and kubo.get('rezaTech') is None and kubo.get('sirinaIme') is None,
     f'KUBO: tech nima niti profil niti razmak, ime brez mere → UI uporabi URADNO 80/20 (dejansko tech {kubo.get("sirinaTech")}/{kubo.get("rezaTech")})')
-chk((G.get('kuboIzbira') or {}).get('stanje') == 'UPORABLJENO' and 'r495-20240208_140526-1' in ((G.get('kuboIzbira') or {}).get('datoteka') or ''),
-    f'KUBO Rustic oak prek SPLOSNO → UPORABLJENO ({(G.get("kuboIzbira") or {}).get("datoteka")})')
+chk((G.get('kuboIzbira') or {}).get('stanje') == 'UPORABLJENO' and 'roksal-kubo-cip-roak' in ((G.get('kuboIzbira') or {}).get('datoteka') or ''),
+    f'KUBO Rustic oak prek SPLOSNO → UPORABLJENO — R523: DETAJL čip uradne lestvice namesto scenične fotografije ({(G.get("kuboIzbira") or {}).get("datoteka")})')
 chk(ter1.get('sirinaIme') == 150 and ter1.get('sirinaTech') is None,
     f'KLASIK: mera IZ IMENA »150×25« → 150 mm (dejansko {ter1.get("sirinaIme")}), tech brez')
 chk(ter2.get('sirinaIme') == 150, f'RUSTIC: mera iz imena → 150 mm (dejansko {ter2.get("sirinaIme")})')
@@ -319,7 +319,7 @@ chk(src_has(UI, "p.family.code === 'FASADA' || p.family.code === 'TERASA'"), 'UI
 chk(src_has(UI, "tip: jeFasada ? 'FASADA' : jeTerasa ? 'TERASA'"), 'izbor družine nastavi tip FASADA/TERASA')
 chk(src_has(UI, 'sirinaIzImena(p.name)'), 'UI bere mero iz imena izdelka (150×25)')
 chk(src_has(UI, 'FASADA_SIRINA_MM') and src_has(UI, 'TERASA_REZA_MM'), 'UI prednastavi uradni KUBO 80 mm + terasno režo 6 mm')
-chk(src_has(UI, 'izmeriIzrezNavpicnePalice'), 'UI ob FASADA izreže eno desko iz scenične teksture (ista izmera)')
+chk(src_has(UI, 'izmeriIzrezeNavpicnihPalic'), 'UI ob FASADA izreze VSE deske iz scenične teksture (R523: množica — vsaka letvica svoja)')
 chk(src_has(UI, "slot.tip === 'PRECNA' ? 'PRECNA' : slot.tip === 'POKOCNA' ? 'POKOCNA' : 'SPLOSNO'"),
     'orientacija gradiva: FASADA/TERASA padata na SPLOSNO (DETAJL sredstva so SPLOSNO/SPREDAJ)')
 chk(src_has(UI, "jePovrsina ? (slot.tip === 'FASADA' ? 'oblogo' : 'tla') : 'ograjo'"), 'UI besedila se prilagodijo površini (obloga/tla/ograja)')
@@ -333,7 +333,7 @@ chk(src_has(RENDER, 'MASK.slojObnove(obnova, pk.ograja, W, H)'), 'dokazni izris 
 chk(src_has(RENDER, 'MASK.slojPrednjega(izvirnik, W, H, pk.prednji)'), 'dokazni izris uporablja MASK.slojPrednjega (ležalniki ostanejo pred)')
 chk(src_has(RENDER, 'CORE.izrisiOgrajo(') and src_has(RENDER, 'CORE.izrisiPrimerjavo('), 'dokazni izris uporablja CORE.izrisiOgrajo/izrisiPrimerjavo')
 chk(src_has(RENDER, 'TEKS.izberiGradivo(assets,'), 'gradivo izbere TEKS.izberiGradivo (fail-closed izbira)')
-chk(src_has(RENDER, 'TEKS.izmeriIzrezNavpicnePalice('), 'FASADA tekstura: izrez ene deske (ista izmera kot UI)')
+chk(src_has(RENDER, 'TEKS.izmeriIzrezeNavpicnihPalic('), 'FASADA tekstura: množica izrezov (R523 — ista izmera kot UI)')
 chk(src_has(RENDER, 'zig: true'), 'dokazni izris POTEM nosi žig VIZUALIZACIJA ZA PREDSTAVITEV (§15)')
 for artefakt, min_kb in [
     ('ops/r520-F-potem.png', 500), ('ops/r520-F-primerjava.png', 500), ('ops/r520-F-zoom.png', 300),

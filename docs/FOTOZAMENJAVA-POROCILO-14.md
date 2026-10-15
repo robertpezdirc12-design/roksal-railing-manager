@@ -1,12 +1,14 @@
 # Poročilo fotozamenjave (issue #14) — kaj je dejansko fotorealistično, kje je potreben ročni poseg in katera originalna gradiva manjkajo
 
-Izdaja: R521, 2026-10-15 (posodobitev izdaje R507 z dejanskim stanjem po R517/R518/R520).
+Izdaja: R523, 2026-10-15 (posodobitev izdaje R521: kakovost teksture KUBO iz uradne
+lestvice v izvirni ločljivosti, manjkajoči uradni materiali, ureditev variant po
+namenski lestvici POLNA 57/32).
 Viri teh trditev: koda (`src/lib/photo-replace-{mask,texture,core,engine}.ts`,
 `sirinaIzTecha`/`rezaIzTecha`/`sirinaIzImena` v jedru), suite `tests/r504.py` (216 trditev),
-`tests/r517.py` (66), `tests/r518.py` (69), `tests/r520.py` (83) ter nabor
-`tests/fixtures/foto-montaza/manifest.json` (resnične ROKSALOVE fotografije z ROČNO
-označenimi maskami). Pokritost gradiv je IZMERJENA iz istega kataloga, ki ga zagna
-`bun run db:seed` (17 izdelkov v 4 fotomontažnih družinah, 68 variant; 85 preverjenih
+`tests/r517.py` (66), `tests/r518.py` (69), `tests/r520.py` (83), `tests/r523.py` (66)
+ter nabor `tests/fixtures/foto-montaza/manifest.json` (resnične ROKSALOVE fotografije z
+ROČNO označenimi maskami). Pokritost gradiv je IZMERJENA iz istega kataloga, ki ga zagna
+`bun run db:seed` (17 izdelkov v 4 fotomontažnih družinah, 67 variant; 91 preverjenih
 sredstev skupaj).
 
 ## 1. Kaj je DEJANSKO fotorealistično
@@ -19,7 +21,8 @@ sredstev skupaj).
 | Perspektiva | homografija iz 4 označenih kotov kvada; vsaka celica dobi svojo afino preslikavo iz vira | mreža celic si deli TOČNE kote (brez rež in podvajanja), gostota se računa iz mere slike |
 | Svetlost in robovi | svetlost se OCENI IZ FOTOGRAFIJE (`oceniSvetlobo` na kvadu), robovi in mehki prehodi so deterministični (mulberry32 `seme`) | enaki vhodi → enak izris; determinizem dokazan v r504 D/E |
 | Red prekrivanja | prednji plan (rastlinje, stebri, rob balkona, celo ležalniki na terasi) se riše ZADNJI iz ORIGINALNIH pikslov | nova ograja/površina nikoli ne prekrije tega, kar je pred njo; zunaj maske izvirni piksel nespremenjen |
-| Tekstura iz scenične fotografije | kadar katalog nima posnetka površine, a ima namestitveno fotografijo, se z deterministično izmero koraka desk (≥ 4 prereze, robustna mediana) izreže ENE letvice tekstura — cela slika se NIKOLI ne stisne na eno letvico (R520) | brez te metode bi se na 80 mm letvico stisnila cela hiša; izmera je poštena: rebrasta površina ali premalo desk → `null` → fail-closed |
+| Tekstura iz scenične fotografije | kadar katalog nima posnetka površine, a ima namestitveno fotografijo, se z deterministično izmero koraka desk (≥ 4 prereze, robustna mediana) izreze VSE letvice — izris vsako letvico fasade obleče z DRUGO desko po determinističnem semeanu (R523; R520 je vzel le eno — vse letvice so bile identičen klon) | brez te metode bi se na 80 mm letvico stisnila cela hiša; izmera je poštena: rebrasta površina ali premalo desk → `null` → fail-closed |
+| **Tekstura KUBO iz uradne lestvice (R523)** | uradna barvna lestvica KUBO v IZVIRNIKU (2217×675, `wp-content/uploads`) vsebuje 4 FOTOGRAFSKE čipe površine po odtenku — vsak čip je deterministično izrezan (največji neprosojni kvadrat 184–210 px znotraj čipa, vlakna rotirana NAVPIČNO po izmeri anizotropije — skladno z realno KUBO fasado), registriran kot `DETAJL` variante in izbran PRED scenično FOTO_IZDELEK; vsaka letvica dobi svoj podizrez (62–100 %) in izmenično zrcalo po semean | 8–35× več ločljivosti na površino kot izrez iz namestitvene fotografije (17–21 px); nevtralna VLM primerjava stare/nove teksture na deskah: 4/10 → 8/10; revizija izreza: `ops/r523-cipi.json` |
 
 Bistvo: fotorealističen je **površinski videz izbranega ROKSALOVEGA izdelka v perspektivi
 fotografije**. Ni fotorealistična rekonstrukcija skrite 3D-scene — iz ene fotografije tega
@@ -45,63 +48,75 @@ in trditve, da bi jo, ni.
 ## 3. Pokritost originalnih ROKSALOVIH gradiv (izmerjeno 2026-10-15)
 
 Družine v fotomontaži: `OGRAJA_PRECNA`, `OGRAJA_POKOCNA`, `FASADA`, `TERASA` —
-17 izdelkov, 68 variant; 85 preverjenih sredstev skupaj.
+17 izdelkov, 67 variant; 91 preverjenih sredstev skupaj.
 
 | Izdelek | družina | gradiva (nivo izdelka) |
 |---|---|---|
-| ROK-OG-ROMB-67 | OGRAJA_PRECNA | BARVNA_LESTVICA, FOTO_IZDELEK, **PROFIL_PRESEK, KOMPONENTA** (edini s presekom) |
+| ROK-OG-ROMB-67 | OGRAJA_PRECNA | BARVNA_LESTVICA, FOTO_IZDELEK, PROFIL_PRESEK, KOMPONENTA |
 | ROK-OG-POLNA-128 | OGRAJA_PRECNA | BARVNA_LESTVICA, FOTO_IZDELEK |
 | ROK-OG-DESKA-150 | OGRAJA_PRECNA | BARVNA_LESTVICA, FOTO_IZDELEK |
-| ROK-OGP-POLNA-100 | OGRAJA_POKOCNA | BARVNA_LESTVICA, FOTO_IZDELEK |
-| ROK-OGP-POLNA-57 | OGRAJA_POKOCNA | BARVNA_LESTVICA, FOTO_IZDELEK |
-| ROK-FAS-KUBO | FASADA | BARVNA_LESTVICA, FOTO_IZDELEK (namestitvene/scenične fotografije) |
+| ROK-OGP-POLNA-100 | OGRAJA_POKOCNA | BARVNA_LESTVICA (uradni izvirnik prenesen — R523 preveril identiteto), FOTO_IZDELEK |
+| ROK-OGP-POLNA-57 | OGRAJA_POKOCNA | BARVNA_LESTVICA (**NAMENJENA lestvica 57/32** iz uradne medijske knjižnice — R523; prej zrcalo lestvice KUBO s strani Barvni odtenki), FOTO_IZDELEK (novi uradni produktni posnetek — R523) |
+| ROK-FAS-KUBO | FASADA | BARVNA_LESTVICA (**IZVORNIK 2217×675** — R523), FOTO_IZDELEK, **DETAJL ×4 (čipi po odtenku)**, **PROFIL_PRESEK** (uradni tehnični posnetek profilov z alu cevmi — R523) |
 | ROK-TER-KLASIK | TERASA | BARVNA_LESTVICA, FOTO_IZDELEK, DETAJL, GALERIJA |
 | ROK-TER-RUSTIC | TERASA | BARVNA_LESTVICA, DETAJL |
 | OGR-K-001/002, OGR-P-001/002, TER-WPC-001/002, TER-ALU-001, FAS-L-001, FAS-K-002 | vse 4 | — (generični demo izdelki, brez preverjenih gradiv) |
 
-Po variantah (68): **34 ima lastni `FOTO_IZDELEK`** z datoteko; **68/68 ima zapisano barvo**
-(`color`, RAL kjer obstaja); **5 variant ima lastni `DETAJL`** (vse terasne:
-RUSTIC ROAK/RWA, KLASIK ASH/BUT/OKW — makro posnetki 1920×1080 ene deske).
+Po variantah (67): **34 ima lastni `FOTO_IZDELEK`** z datoteko; **67/67 ima zapisano barvo**
+(`color`, RAL kjer obstaja); **9 variant ima lastni `DETAJL`** (terasni KLASIK ASH/BUT/OKW,
+RUSTIC ROAK/RWA + vsi 4 odtenki KUBO — čipi uradne lestvice, R523).
 
-Sprememba proti izdaji R507: `DETAJL` takrat ni obstajal za NITI EN izdelek; zdaj obstaja
-za 5 terasnih variant in 2 terasna izdelka. Katalog se je razširil tudi na FASADO (KUBO)
-in TERASE (KLASIK/RUSTIC) — te družine R507 poročilo še ni pokrivalo.
+Ureditev po uradnih lestvicah (R523): POLNA 57/32 ima namensko uradno lestvico s 3 čipi
+(Amazon wood, Oak wood, Rustic walnut) — odvečna varianta Rustic oak je ODSTRANJENA
+(zrcalni KUBO prikaz s strani Barvni odtenki je dokumentirano neskladje vira; namenska
+lestvica iz februarja 2026 je odločilen dokaz). POLNA 128: lestvica ima 6 čipov in točno
+ujema z aplikacijo (uradno besedilo »petimi barvami« je zastarelo — zabeleženo).
 
-## 4. Dokazani primeri fotomontaže (R517–R520, vsak z izrisom + E2E skozi aplikacijo)
+## 4. Dokazani primeri fotomontaže (R517–R523, vsak z izrisom + E2E skozi aplikacijo)
 
 | Primer | Izdelek · varianta | Stanje gradiva | Dokaz |
 |---|---|---|---|
 | R517 | ROMB 67 · Golden teak | **UPORABLJENO** (VERIFIED tekstura, sha256 v dokazu) | `ops/r517-1..5-*` (original … zoom), `ops/r517-ui-2..6.png` |
 | R518-A | POLNA 128 · Burma teak | **UPORABLJENO** | `ops/r518-A-{potem,primerjava,zoom}.png` |
 | R518-B | POLNA 57 · Oak wood | **UPORABLJENO** | `ops/r518-B-*.png` |
-| R518-B2 | POLNA 57 · Rustic oak | SAMO_DRUZINA (variantni odtenek manjka — izrecno povedano) | `ops/r518-B2-*.png` |
+| R518-B2 | POLNA 57 · Rustic walnut | SAMO_DRUZINA (variantni odtenek manjka — izrecno povedano; R523: ROAK zamenjan z uradno RWA po namenski lestvici) | `ops/r518-B2-*.png` |
 | R518-C | DESKA 150 · Rustic oak | **UPORABLJENO** (reža 30 mm iz izmere produktne fotografije) | `ops/r518-C-*.png` |
 | R518-D | POLNA 100 · White | **UPORABLJENO** | `ops/r518-D-*.png` |
 | R518-E | ALU · antracit | NI_PREVERJENO (0 gradiv — pošteni barvni približek RAL 7016) | `ops/r518-E-*.png` |
-| R520-F | KUBO fasada · Rustic oak | **UPORABLJENO** (izrez ene letvice iz namestitvene fotografije) | `ops/r520-F-*.png` |
-| R520-F2 | KUBO fasada · Oak wood | UPORABLJENO (izrez; vir 8–16 px/desko — mehkejša tekstura, izrecno) | `ops/r520-F2-*.png` |
+| R520-F | KUBO fasada · Rustic oak | **UPORABLJENO** — R523: DETAJL čip uradne lestvice (ne več izrez iz namestitvene fotografije) | `ops/r520-F-*.png` |
+| R520-F2 | KUBO fasada · Oak wood | UPORABLJENO — R523: čip (prej izrez 8–16 px/desko — mehkejša tekstura) | `ops/r520-F2-*.png` |
 | R520-T | RUSTIC terasa · Rustic oak | **UPORABLJENO** (DETAJL zel-detajl, deska 150 iz imena + reža 6 iz FAQ) | `ops/r520-T-*.png` |
 | R520-T2 | KLASIK terasa · Burma teak | **UPORABLJENO** | `ops/r520-T2-*.png` |
 | R520-T3 | ALU terasa · Antracit | NI_PREVERJENO (0 gradiv — barvni približek) | `ops/r520-T3-*.png` |
+| **R523-K** | KUBO fasada · Rustic oak | **UPORABLJENO — čip uradne lestvice** (204×204 px, vlakna navpično, variacija med letvicami) | `ops/r523-K-*.png` + `ops/r523-primerjava-kakovosti.png` (R520 ⊣⊢ R523 na istem primeru: 4/10 → 8/10 po nevtralni VLM) |
+| R523-K2 | KUBO fasada · Oak wood | **UPORABLJENO — čip** (194×194) | `ops/r523-K2-*.png` |
+| R523-K3 | KUBO fasada · Amazon wood | **UPORABLJENO — čip** (210×210) | `ops/r523-K3-*.png` |
+| R523-KM | KUBO fasada brez variante | SAMO_DRUZINA — množica izrezov iz scenične fotografije: vsaka letvica svoja deska (dokaz poti) | `ops/r523-KM-*.png` |
 
 E2E skozi pravo aplikacijo (prijava → nalaganje → maska → referenca → izdelek →
 PREJ/POTEM → SHRANI → preverba zapisa v bazi → čiščenje): `ops/r517-ui-*`,
-`ops/r518-e2e.py` (14 ✓ / 0 ✗), `ops/r520-e2e.py` (14 ✓ / 0 ✗).
+`ops/r518-e2e.py` (14 ✓ / 0 ✗), `ops/r520-e2e.py` (14 ✓ / 0 ✗), **`ops/r523-e2e.py`
+(13 ✓ / 0 ✗ — FASADA: tip FASADA · letvica 80 mm · razmik 20 mm · gradivo
+roksal-kubo-cip-roak.png (DETAJL) · engine 1.2.0)**.
 
 ## 5. Kaj je treba še pridobiti (težava #6 — oskrba, ne aplikacija)
 
 1. `DETAJL` (makro posnetek površine) za **ograje** (POLNA 128/100/57, DESKA 150, ROMB 67) —
    trenutno se uporabljajo produktne fotografije FOTO_IZDELEK, kar je dokazano dovolj za
    razmerja/barvo, makro pa bi dvignil verodostojnost površine.
-2. `DETAJL` za **KUBO fasado** — namestitvene fotografije so scenične (cela hiša, 8–16 px na
-   desko); izrez ene letvice deluje, a je na povečavi mehak.
-3. `FOTO_IZDELEK` za manjkajoče variante: `ROK-OGP-POLNA-57-ROAK` in `-RWA` (ograji),
-   terasne variante brez lastne slike (KLASIK in RUSTIC imata slike/DETAJL le za del
+2. ~~`DETAJL` za KUBO fasado~~ — **REŠENO v R523**: čipi uradne lestvice v izvirni
+   ločljivosti (4 odtenki, 184–210 px na površino, vlakna navpično).
+3. `FOTO_IZDELEK` za manjkajoče variante: `ROK-OGP-POLNA-57-RWA` (ograja; AMW/OKW imata
+   slike), terasne variante brez lastne slike (KLASIK in RUSTIC imata slike/DETAJL le za del
    variant; preostale delujejo prek DETAJL/GALERIJA na nivoju izdelka — pošteno stanje
    `SAMO_DRUZINA`).
-4. `PROFIL_PRESEK` za POLNA 128/100/57 in DESKA 150 (trenutno samo ROMB 67).
+4. `PROFIL_PRESEK` za POLNA 128/100/57 in DESKA 150 (trenutno ROMB 67 in KUBO).
 5. Gradiva (ali izrecna oznaka »generični izdelek, ni ROKSALOV original«) za
    OGR-K-001/002, OGR-P-001/002, TER-WPC-001/002, TER-ALU-001, FAS-L-001, FAS-K-002.
+6. Ozadje za KUBO fasado: reže med letvicami prikazujejo pošteno šrafuro nedokončane
+   obnove (R507 §2). Realna KUBO namestitev ima v režah temno podkonstrukcijo — barvo
+   bi bilo mogoče izpeljati iz lastnih pikslov rež na izvirni fotografiji (dokazljiv vir);
+   odločitev o tem je lastnikova, aplikacija ne izmišljuje ozadja.
 
 ## 6. Meje dokaza (pošten zapis)
 

@@ -766,5 +766,85 @@
   "virUrl": "https://roksal.com/wp-content/uploads/2020/03/zakljucna-letev.jpg",
   "sha256": "f91b05944f9594a9b480a2985bf393c3d40e3ede01a6889bad25ddd0b1e1e8ac",
   "bytes": 2564
+ },
+ {
+  "file": "roksal-barvna-lestvica-kubo-full.png",
+  "kategorija": "barvna-lestvica",
+  "opis": "Uradna barvna lestvica KUBO — IZVORNIK 2217×675 (stran prikazuje le 1024 px sličico istega motiva)",
+  "source": "Roksal d.o.o. (roksal.com) — neposreden prenos iz uradne medijske knjižnice (wp-content/uploads), R523",
+  "cdnUrl": null,
+  "virUrl": "https://roksal.com/wp-content/uploads/2024/09/BARVNA_LESTVICA_5-kubo4.png",
+  "sha256": "c2e76500e25cc395b376509eb2e8d36d22cec5c6a732c6eaaade905efa13b838",
+  "bytes": 344711
+ },
+ {
+  "file": "roksal-barvna-lestvica-polna-57.png",
+  "kategorija": "barvna-lestvica",
+  "opis": "NAMENJENA barvna lestvica POLNA DESKA 57/32 (2217×675, 3 čipi: Amazon wood, Oak wood, Rustic walnut) — od februarja 2026 v medijski knjižnici; stran Barvni odtenki za 57/32 namreč prikazuje lestvico KUBO",
+  "source": "Roksal d.o.o. (roksal.com) — neposreden prenos iz uradne medijske knjižnice (wp-content/uploads), R523",
+  "cdnUrl": null,
+  "virUrl": "https://roksal.com/wp-content/uploads/2026/02/BARVNA_LESTVICA_5-polna-deska-57-32_3.png",
+  "sha256": "cb46e129f8b1d242b6c726a9249816d386666006bc006fef0d5147b8ce287686",
+  "bytes": 676149
+ },
+ {
+  "file": "roksal-kubo-profil-cevi.jpg",
+  "kategorija": "profil-presek",
+  "opis": "ROK-FAS-KUBO — profil KUBO 80×42 z alu cevmi 20×20 / 25×25 / 20×60 (uradni tehnični posnetek; primerno za PROFIL_PRESEK)",
+  "source": "Roksal d.o.o. (roksal.com) — neposreden prenos iz uradne medijske knjižnice (wp-content/uploads), R523",
+  "cdnUrl": null,
+  "virUrl": "https://roksal.com/wp-content/uploads/2024/03/deske-kubo-razlicne-cevi.jpg",
+  "sha256": "4dda84931f33bf9258c0455fe2d99aee3f72dded4581df455e59419519f39a56",
+  "bytes": 211194
+ },
+ {
+  "file": "roksal-polna57-produkt.jpg",
+  "kategorija": "produkt",
+  "opis": "ROK-OGP-POLNA-57 — WPC polna deska širine 5,7 cm ali 3,2 cm (uradni produktni posnetek, odtenek Oak wood)",
+  "source": "Roksal d.o.o. (roksal.com) — neposreden prenos iz uradne medijske knjižnice (wp-content/uploads), R523",
+  "cdnUrl": null,
+  "virUrl": "https://roksal.com/wp-content/uploads/2025/07/polna-deska-57-32.jpg",
+  "sha256": "2e16d6695e702babccb608d653e63774fabf280882f2f2eab27c6262cbbd2663",
+  "bytes": 28805
+ },
+ {
+  "file": "roksal-kubo-cip-amw.png",
+  "kategorija": "detajl-barva",
+  "opis": "ROK-FAS-KUBO — Amazon wood | Čip površine iz uradne barvne lestvice KUBO (deterministični izrez: največji neprosojni kvadrat znotraj čipa, vlakna rotirana navpično po izmeri anizotropije; revizija: ops/r523-cipi.json)",
+  "source": "Roksal d.o.o. (roksal.com) — neposreden prenos iz uradne medijske knjižnice (wp-content/uploads), R523",
+  "cdnUrl": null,
+  "virUrl": "https://roksal.com/wp-content/uploads/2024/09/BARVNA_LESTVICA_5-kubo4.png",
+  "sha256": "64ff60ead74048d22eccbe18a31e2a28f85c48822706fc79d87a3d415709e3c1",
+  "bytes": 77877
+ },
+ {
+  "file": "roksal-kubo-cip-okw.png",
+  "kategorija": "detajl-barva",
+  "opis": "ROK-FAS-KUBO — Oak wood | Čip površine iz uradne barvne lestvice KUBO (deterministični izrez: največji neprosojni kvadrat znotraj čipa, vlakna rotirana navpično po izmeri anizotropije; revizija: ops/r523-cipi.json)",
+  "source": "Roksal d.o.o. (roksal.com) — neposreden prenos iz uradne medijske knjižnice (wp-content/uploads), R523",
+  "cdnUrl": null,
+  "virUrl": "https://roksal.com/wp-content/uploads/2024/09/BARVNA_LESTVICA_5-kubo4.png",
+  "sha256": "38482232b67cca2a31d574a4ad968b53150c927fcf7d2790553820d72b355194",
+  "bytes": 81392
+ },
+ {
+  "file": "roksal-kubo-cip-roak.png",
+  "kategorija": "detajl-barva",
+  "opis": "ROK-FAS-KUBO — Rustic oak | Čip površine iz uradne barvne lestvice KUBO (deterministični izrez: največji neprosojni kvadrat znotraj čipa, vlakna rotirana navpično po izmeri anizotropije; revizija: ops/r523-cipi.json)",
+  "source": "Roksal d.o.o. (roksal.com) — neposreden prenos iz uradne medijske knjižnice (wp-content/uploads), R523",
+  "cdnUrl": null,
+  "virUrl": "https://roksal.com/wp-content/uploads/2024/09/BARVNA_LESTVICA_5-kubo4.png",
+  "sha256": "6515d654acdb7bd35f2d003292340adb7fe7880927b61943c5d1989ab4f20ca9",
+  "bytes": 80004
+ },
+ {
+  "file": "roksal-kubo-cip-rwa.png",
+  "kategorija": "detajl-barva",
+  "opis": "ROK-FAS-KUBO — Rustic walnut | Čip površine iz uradne barvne lestvice KUBO (deterministični izrez: največji neprosojni kvadrat znotraj čipa, vlakna rotirana navpično po izmeri anizotropije; revizija: ops/r523-cipi.json)",
+  "source": "Roksal d.o.o. (roksal.com) — neposreden prenos iz uradne medijske knjižnice (wp-content/uploads), R523",
+  "cdnUrl": null,
+  "virUrl": "https://roksal.com/wp-content/uploads/2024/09/BARVNA_LESTVICA_5-kubo4.png",
+  "sha256": "8699b594e00e16c6742bf62047143e607f097a0892fb43aea53ee25bf5e42e81",
+  "bytes": 68824
  }
 ]

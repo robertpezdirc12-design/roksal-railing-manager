@@ -22,12 +22,13 @@ import {
   type Maska, type Oblika,
 } from './photo-replace-mask'
 import {
-  celiceZaElement, projekcijaIzRavnine, vzorciTeksturo, type VirTeksture,
+  celiceZaElement, projekcijaIzRavnine, vzorciTeksturo, type Pravokotnik, type VirTeksture,
 } from './photo-replace-texture'
 
 // ─── Verzija engine-a (§13 revizija: katera verzija je izrisala sliko) ──────
-
-export const ENGINE_VERSION = '1.1.0'
+// R523 (1.2.0): DETAJL pred FOTO_IZDELEK v izbiri gradiva + množica izrezov
+// (vsaka letvica fasade dobi svojo desko) + čipi uradne lestvice KUBO.
+export const ENGINE_VERSION = '1.2.0'
 
 /** §15: obvezni žig na vsaki POTEM sliki in zaslonu. */
 export const VIZ_ZIG = 'VIZUALIZACIJA ZA PREDSTAVITEV'
@@ -878,13 +879,20 @@ export function izrisiOgrajo (
    * ostane, a izrisiOgrajo to sporoči prek opozorila UI-ja).
    */
   const gradivoMoc = 0.28 + material.struktura * 0.42
-  const struktura = (x0: number, y0: number, x1: number, y1: number): void => {
+  // R523: `enaCelica` — vir ENOJNE površine (DETAJL čip) se preslika z ENO
+  // afino transformacijo čez cel element: mreža celic je namenjena perspektivni
+  // aproksimaciji velikih elementov, pri tanki letvici pa pušča šibke šive
+  // (anti-alias črte med sosednjimi celicami), ki pri naključni enakomerni
+  // površini postanejo najvidnejša napaka.
+  const struktura = (x0: number, y0: number, x1: number, y1: number, izrez?: Pravokotnik, enaCelica = false, zrcali = false): void => {
     const vir = opcije.gradivo
     if (!vir) return
     const dolzinaPx = razdalja(P(x0, y0), P(x1, y0))
     const visinaPx = razdalja(P(x0, y0), P(x0, y1))
     const gostota = celiceZaElement(dolzinaPx, visinaPx)
-    vzorciTeksturo(ctx, projekcijaIzRavnine(P, x0, y0, x1, y1), vir, { ...gostota, moc: gradivoMoc })
+    vzorciTeksturo(ctx, projekcijaIzRavnine(P, x0, y0, x1, y1), izrez ? { ...vir, izrez } : vir, {
+      ...(enaCelica ? { celiceU: 1, celiceV: 1 } : gostota), moc: gradivoMoc, ...(zrcali ? { zrcali } : {}),
+    })
   }
 
   // ── 3. STEBRI (§6: število/pozicije iz konfiguracije) ──────────────────────
@@ -948,6 +956,10 @@ export function izrisiOgrajo (
     // R520: KUBO letvice čez CELO označeno območje stene — navpične, brez
     // stebrov in ročnika (uradno: »kubo profile can only be mounted
     // vertically«, pritrditev zadaj). Tekstura gre po celotni letvici.
+    // R523: če vir nosi MNOŽICO izrezov (scenična namestitvena fotografija),
+    // vsaka letvica dobi DRUGO desko (deterministični rnd iz semena) — konec
+    // identičnih klonov. DETAJL posnetek (čip površine) se uporabi cel.
+    const izreziPalic = opcije.gradivo?.izrezi?.filter((p) => p.w > 0 && p.h > 0) ?? []
     for (const palica of razpored.palice) {
       const a = P(palica.xCm, 0)
       const b = P(palica.xCm + palica.sirinaCm, 0)
@@ -966,7 +978,26 @@ export function izrisiOgrajo (
         ctx.lineTo(d.x + (c.x - d.x) * 0.32, d.y)
         ctx.stroke()
       }
-      struktura(palica.xCm, 0, palica.xCm + palica.sirinaCm, cfg.heightCm)
+      // R523: vir z množico izrezov (scenična) → mreža + izrez te letvice;
+      // vir ENOJNE površine (DETAJL čip) → ena celica brez šivov + določena
+      // VARIACIJA po letvici (podizrez 62–100 % in izmenično zrcalo, seme),
+      // sicer bi vse letvice bile identičen klon istega čipa.
+      const imaMnozico = izreziPalic.length > 0
+      let izrezLetvice: Pravokotnik | undefined
+      let zrcali = false
+      if (!imaMnozico) {
+        const vir = opcije.gradivo
+        if (vir) {
+          const dw = Math.max(8, Math.round(Math.min(vir.sirinaPx, vir.visinaPx) * (0.62 + rnd() * 0.38)))
+          const dx = Math.round(rnd() * (vir.sirinaPx - dw))
+          const dy = Math.round(rnd() * (vir.visinaPx - dw))
+          izrezLetvice = { x: dx, y: dy, w: dw, h: dw }
+          zrcali = rnd() < 0.5
+        }
+      }
+      struktura(palica.xCm, 0, palica.xCm + palica.sirinaCm, cfg.heightCm,
+        imaMnozico ? izreziPalic[Math.floor(rnd() * izreziPalic.length)] : izrezLetvice,
+        !imaMnozico, zrcali)
     }
   } else if (cfg.tip === 'TERASA') {
     // R520: terasne deske ležijo po CELI globini označenega območja — vsaka

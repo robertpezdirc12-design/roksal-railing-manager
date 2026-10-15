@@ -68,8 +68,11 @@ export interface IzbiraGradiva {
   smeUporabiti: boolean
 }
 
-/** Prednostni red vrst gradiva za površino deske/profila. */
-const VRSTE_POVRSINE = ['FOTO_IZDELEK', 'DETAJL', 'PROFIL_PRESEK']
+/** Prednostni red vrst gradiva za površino deske/profila.
+ * R523: DETAJL je prvi — posnetek površine variante je najboljši vir teksture
+ * (KUBO čipi iz uradne lestvice, terasni DETAJL posnetki); scenična FOTO_IZDELEK
+ * fotografija je druga (družinska struktura), tehnični presek zadnja. */
+const VRSTE_POVRSINE = ['DETAJL', 'FOTO_IZDELEK', 'PROFIL_PRESEK']
 
 const primerjId = (a: GradivoDTO, b: GradivoDTO): number => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
 
@@ -229,8 +232,13 @@ export interface VirTeksture {
    * R520: izrez vira v PX (cela slika privzeto). Za scenične namestitvene
    * fotografije KUBO fasade ga postavi izmeriIzrezNavpicnePalice — vrstica
    * IZREZ ENE deske, da se na letvico ne stiska cela hiša.
+   * R523: `izrezi` (množina) nosi VSE izmerjene deske — izris vsako letvico
+   * obleče z drugo desko (seme je deterministično), sicer bi bile vse letvice
+   * identičen klon ene same deske (najvidnejša pomanjkljivost R520).
    */
   izrez?: Pravokotnik
+  /** R523: vsi veljavni izrezi desk iz scenične fotografije (glej izrez). */
+  izrezi?: Pravokotnik[]
 }
 
 export interface TeksturaOpcije {
@@ -240,6 +248,9 @@ export interface TeksturaOpcije {
   moc?: number
   /** navpični izrez posnetka (0..1) */
   pas?: [number, number]
+  /** R523: horizontalno zrcaljenje — razbija ponavljanje med sosednjimi
+   * letvicami, ko vse rišejo isti vir ene površine (DETAJL čip). */
+  zrcali?: boolean
 }
 
 function potMnogokotnik (ctx: CanvasRenderingContext2D, k: [Tocka, Tocka, Tocka, Tocka]): void {
@@ -279,7 +290,13 @@ export function vzorciTeksturo (
   ctx.globalAlpha = moc
   ctx.globalCompositeOperation = 'multiply'
   for (const c of celice) {
-    const [a, b, , d] = c.koti
+    // R523: zrcaljenje — zamenjani vogali po vodoravni osi pustita obliko
+    // (clip) ISTO, afina preslikava pa riše površino ogledalno (u → 1-u);
+    // razbija ponavljanje, kadar vse letvice rišejo isti vir ene površine.
+    const k: [Tocka, Tocka, Tocka, Tocka] = opcije.zrcali
+      ? [c.koti[1], c.koti[0], c.koti[3], c.koti[2]]
+      : c.koti
+    const [a, b, , d] = k
     if (c.vir.w <= 0 || c.vir.h <= 0) continue
     ctx.save()
     potMnogokotnik(ctx, c.koti)
@@ -305,42 +322,13 @@ export function celiceZaElement (dolzinaPx: number, visinaPx: number): { celiceU
 
 // ── R520: izrez ENE navpične palice iz scenične fotografije (KUBO fasada) ────
 
-/**
- * Iz slike z NAVPIČNIMI deskami (namestitvena fotografija KUBO fasade) izmeri
- * korak med deskami in vrne izrez ene deske: celotna višina slike × širina
- * enega profila. Deterministično (mediana gladilo + pragovi, enaka metoda kot
- * ops/r520-izmeri.mjs, samo po eni prerezu).
- *
- * `beriPiksel(x, y)` vrne svetlost 0..1 (odjemalec poda getImageData bralca).
- * Vrne null, kadar ni vsaj 4 zaporednih desk z doslednim korakom — takrat je
- * slika verjetno posnetek ENE deske (DETAJL) in se uporabi cela (fail-closed
- * na obstoječe obnašanje, brez naključnega rezanja).
- */
-export function izmeriIzrezNavpicnePalice (
-  beriPiksel: (x: number, y: number) => number,
-  sirinaPx: number,
-  visinaPx: number
-): Pravokotnik | null {
-  if (sirinaPx < 40 || visinaPx < 40) return null
-  // več prereznih črt (0.35 … 0.8) — scena ima pogosto nebo/okna čez sredino;
-  // vzamemo NAJBOLJŠO izmero (najširša mediana desk ≥ 4 desk z režami)
-  let najboljsa: Pravokotnik | null = null
-  let najboljsaMediana = 0
-  for (const yd of [0.35, 0.5, 0.65, 0.8]) {
-    const izrez = izmeriPoPrerezu(beriPiksel, sirinaPx, visinaPx, Math.round(visinaPx * yd))
-    if (!izrez) continue
-    if (izrez.w > najboljsaMediana) { najboljsaMediana = izrez.w; najboljsa = izrez }
-  }
-  return najboljsa
-}
-
-/** Ena prerezna črta — vrne izrez ene deske ali null (premalo dokazov). */
-function izmeriPoPrerezu (
+/** Ena prerezna črta — VSE veljavne deske (uporabne za množični izrez) ali null. */
+function izmeriVsePoPrerezu (
   beriPiksel: (x: number, y: number) => number,
   sirinaPx: number,
   visinaPx: number,
   y: number
-): Pravokotnik | null {
+): Pravokotnik[] | null {
   const pas: number[] = []
   for (let x = 0; x < sirinaPx; x++) pas.push(beriPiksel(x, y))
   // gladilo (mediana 5)
@@ -377,20 +365,72 @@ function izmeriPoPrerezu (
   // vendar mora vsaka veljavna reža biti ožja od deske
   const veljavneReze = reze.filter((r) => r.dol > 0 && r.dol < medianaD)
   if (veljavneReze.length < 3) return null
-  // izberi DESKO najbliže sredini slike, ki ima na obeh straneh veljavno režo
-  const sredina = sirinaPx / 2
-  const kandidati = deske.filter((d) => {
+  // izrezi VSEH desk z veljavno režo na obeh straneh (vrstni red po x —
+  // izris jih razdeljuje po determinističnem semeanu, torej vrstni red ni odločilen)
+  const izrezi: Pravokotnik[] = []
+  for (const d of deske) {
     const levo = veljavneReze.some((r) => r.od + r.dol <= d.od + 1 && r.od + r.dol > d.od - medianaD)
     const desno = veljavneReze.some((r) => r.od >= d.od + d.dol - 1 && r.od < d.od + d.dol + medianaD)
-    return levo && desno
-  })
-  const izbrana = kandidati.length
-    ? kandidati.reduce((a, b) => (Math.abs(a.od + a.dol / 2 - sredina) < Math.abs(b.od + b.dol / 2 - sredina) ? a : b))
-    : null
-  if (!izbrana) return null
-  // rahlo odštej notranji rob (svetla kantica profila na robu posnetka)
-  const rez = Math.max(0, Math.round(izbrana.dol * 0.06))
-  const w = izbrana.dol - rez * 2
-  if (w < 4) return null
-  return { x: izbrana.od + rez, y: 0, w, h: visinaPx }
+    if (!levo || !desno) continue
+    // rahlo odštej notranji rob (svetla kantica profila na robu posnetka)
+    const rez = Math.max(0, Math.round(d.dol * 0.06))
+    const w = d.dol - rez * 2
+    if (w >= 4) izrezi.push({ x: d.od + rez, y: 0, w, h: visinaPx })
+  }
+  return izrezi.length >= 4 ? izrezi : null
+}
+
+/**
+ * R523: iz slike z NAVPIČNIMI deskami (namestitvena fotografija KUBO fasade)
+ * izmeri korak med deskami in vrne izreze VSEH veljavnih desk (celotna višina
+ * slike × širina enega profila). Deterministično — enaka metoda kot
+ * izmeriIzrezNavpicnePalice, le da vrne množico: izris nato vsako letvico
+ * fasade obleče z DRUGO desko (deterministično seme), sicer so vse letvice
+ * identičen klon ene same deske.
+ */
+export function izmeriIzrezeNavpicnihPalic (
+  beriPiksel: (x: number, y: number) => number,
+  sirinaPx: number,
+  visinaPx: number
+): Pravokotnik[] | null {
+  if (sirinaPx < 40 || visinaPx < 40) return null
+  // več prereznih črt (0.35 … 0.8) — scena ima pogosto nebo/okna čez sredino;
+  // vzamemo NAJBOLJŠO izmero (najširša mediana desk ≥ 4 desk z režami)
+  let najboljsi: Pravokotnik[] | null = null
+  let najboljsaMediana = 0
+  for (const yd of [0.35, 0.5, 0.65, 0.8]) {
+    const izrez = izmeriVsePoPrerezu(beriPiksel, sirinaPx, visinaPx, Math.round(visinaPx * yd))
+    if (!izrez) continue
+    const mediana = izreziMedian(izrez)
+    if (mediana > najboljsaMediana) { najboljsaMediana = mediana; najboljsi = izrez }
+  }
+  return najboljsi
+}
+
+const izreziMedian = (izrezi: Pravokotnik[]): number => {
+  const s = [...izrezi.map((p) => p.w)].sort((a, b) => a - b)
+  return s[Math.floor(s.length / 2)] ?? 0
+}
+
+/**
+ * Iz slike z NAVPIČNIMI deskami (namestitvena fotografija KUBO fasade) izmeri
+ * korak med deskami in vrne izrez ene deske: celotna višina slike × širina
+ * enega profila. Deterministično (mediana gladilo + pragovi, enaka metoda kot
+ * ops/r520-izmeri.mjs, samo po eni prerezu).
+ *
+ * `beriPiksel(x, y)` vrne svetlost 0..1 (odjemalec poda getImageData bralca).
+ * Vrne null, kadar ni vsaj 4 zaporednih desk z doslednim korakom — takrat je
+ * slika verjetno posnetek ENE deske (DETAJL) in se uporabi cela (fail-closed
+ * na obstoječe obnašanje, brez naključnega rezanja).
+ */
+export function izmeriIzrezNavpicnePalice (
+  beriPiksel: (x: number, y: number) => number,
+  sirinaPx: number,
+  visinaPx: number
+): Pravokotnik | null {
+  const sredina = sirinaPx / 2
+  const vsi = izmeriIzrezeNavpicnihPalic(beriPiksel, sirinaPx, visinaPx)
+  if (!vsi) return null
+  return vsi.reduce((a, b) =>
+    Math.abs(a.x + a.w / 2 - sredina) <= Math.abs(b.x + b.w / 2 - sredina) ? a : b)
 }
