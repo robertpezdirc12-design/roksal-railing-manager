@@ -3551,3 +3551,92 @@ Work Log:
 
 Stage Summary:
 - R521 zaključen: poročilo na issue #14 + osvežena dokumentacija + zelen CI.
+
+---
+Task ID: R522
+Agent: glavni agent (nadaljevalna seja)
+Task: Issue #7 §4B — DOKUMENTACIJSKE SLIKE DETAJLOV v merilni seji:
+ločitev od merilnih pogledov (R508 ostanek 1: »Pogledi > 4« in »razdelitev
+na rekonstrukcija/detajl ni narejena«)
+
+Work Log:
+- VRZEL (iz R508 seznama ostankov za #7): merilni pogledi (max 4) so bili
+  edini kontejner za vse fotografije — issue #7 §4B pa zahteva »poljubno
+  smiselno število dokumentacijskih fotografij« in »loči fotografije, ki se
+  uporabljajo za rekonstrukcijo, od dokumentacijskih fotografij detajlov«
+  ter »pripnejo k ustreznemu segmentu/elementu«.
+- NOV ČIST MODUL src/lib/measure-doc.ts (brez Prisma/next/DOM): DOC_TAGS =
+  VIJAK/NOSILEC/PODLAGA/OVIRA/SPLOSNO (iz issue §4B + splošni), človeški
+  napisi; MAX_DOK_SLIK=30 (dokumentirana meja »smiselnega«); preveriDocPolja
+  (fail-closed: neznana oznaka → napaka, tip≠FOTO → napaka, opomba ≤ 200);
+  normalizacija segmenta (negativ→null, float→round, smet→null);
+  zapišiDocVParams (aditivni merge — obstoječi ključi params OSTANEJOjo);
+  prostorZaDokSlike (fail-safe).
+- API /api/measurements POST: doc* polja so TOP-LEVEL (docOfMeasurementId,
+  docTag, docSegmentIdx, docNote) — odjemalec NE more podtiskati v params,
+  strežnik jih preveri in zapiše; docOf → obstoj izvorne meritve PREVERJEN
+  (400 z jasno napako, slepa vez nemogoča — vzorec projectId); revizija
+  nosi docOf+docTag; nazaj kompatibilno (klici brez doc* nespremenjeni).
+- OFFLINE POT (poštena, brez lažne veze): queuePhoto nosi docTag/
+  docSegmentIdx/docNote; opFoto v /api/sync jih preveri (fail-closed
+  neznana oznaka = napaka op-a) in zapiše v params Z docOffline: true —
+  docOf NI MOGOČ offline (id dodeli strežnik šele ob sinhronizaciji), zato
+  se izrecno zapiše, da vez NI bila mogoča, ne pa izmišljena.
+- KAMERA UI (meritve-kamera.tsx): nov seznam detajli (DokSlika: dataUrl,
+  tag, note, segmentIdx) LOČEN od views; gumb »Dok. slika (n/30)« v fazi
+  Meritev dostopen NEODVISNO od MAX_VIEWS (to je poanta ločitve); dvopotni
+  panel (capture/file + izbira obstoječe FOTO); seznam z oznako (radix
+  Select), pripnitvijo na segment (če jih je več, z dolžinami) in opombo,
+  vse popravljivo + brisanje pred potrditvijo; confirm po uspehu pokliče
+  zapisiDokSlike(id) — POST vsake slike kot FOTO z docOf; napaka ene slike
+  NE požre uspeha meritve (§6) — pove se X od Y; saveOffline da vsako
+  sliko v vrsto kot svoj foto op z oznako; resetAll čisti; osnutek
+  (measure-draft.ts) prenaša dokSlike (§6 brez izgube ob osvežitvi —
+  MeasureDraftSnapshot.dokSlike neobvezno + normalizacija, stari zapisi
+  ostanejo berljivi).
+- TESTI tests/r522.py: 54 ✓ / 0 ✗ (A čist modul 17 trditev; B žičenje 19 —
+  vključno merila, da gumb Dok. slika NI odvisen od MAX_VIEWS in da je
+  measure-doc brez Prisma/next uvozov; C živi API krog z žetonom: 401 brez,
+  400 napačna oznaka/tip/dolga opomba/neobstoječi docOf, 201 veljaven krog
+  z dvema detajloma na isto izvorno meritev, preverba params v bazi
+  (docOf/docTag/docSegmentIdx/docNote/stage, brez docOffline smeti),
+  idempotentno čiščenje ×2; D dokazni artefakti 9 PNG > 20 kB).
+  Registriran v tests/ci-matrix.sh IN .github/workflows/ci.yml (r522).
+- E2E SKOZI PRAVO APLIKACIJO (ops/r522-e2e.py, 15 ✓ / 0 ✗): prijava →
+  Projekti → Meritve → Meritve s kamero → nalaganje kupska izvirnika
+  (DataTransfer, 507×380 px) → Naloži fotografijo (photoId — pogoj POTRDI,
+  odkrit v debugu) → kalibracija 2 točki + 110 cm → faza Meritev: 2 merilni
+  točki → gumb »Dok. slika« → nalaganje hotel-bazen prek lastnega vhoda →
+  seznam »Dokumentacijske slike (1/30) — dokaz, ne mera« → oznaka VIJAK +
+  opomba → Naprej — preverjanje → Naprej — potrditev → Potrdi in shrani →
+  BAZA: meritev OGRAJA 362,9 cm CALIBRATED + FOTO detajl z docOf ==
+  meritevId, docTag VIJAK, stage DOKUMENTACIJA, docOffline false →
+  čiščenje. VLM potrdil ključni screenshot (oznaka Vijak / pritrditev,
+  opomba vijaki M12, gumb Dodaj pogled (1/4) še vedno viden — ločitev).
+- E2E METODološke ugotovitve (zapisane v skripti): React onClick zahteva
+  CLICK dogodek (samo pointerdown/up ne zadostuje — debug: opcije
+  kalibracijskega Select-a so ostale prazne); galerija obstoječih FOTO
+  vsebuje MINIATURE iz prejšnjih testov (1×1) — izbira pusti nevidno
+  sliko (rect 1×1), zato PRAVI upload; agent-browser eval izpis je lahko
+  dvojno JSON-kodiran ali večvrstičen — blokovska parse; toast-i se v
+  agent-browser seji NE renderajo (viewport ol je prazen tudi ob toastu
+  napake pri prijavi — izven obsega R522, dokaz je baza, enako kot vsi
+  prejšnji E2E).
+- RELEJNI PAS: ✓ zeleno — 8 statičnih korakov + 37 skupin, 0 ✗
+  (ops/ci-dokaz-R522.out, EXIT 0; r522 nova skupina, vsa prejšnja
+  regresija zelena). tsc 0 napak; eslint 0 napak / 2 stari opozorili.
+
+Stage Summary:
+- KLJUČNA ZMOŽNOST: dokumentacijske slike detajlov (vijak, nosilec,
+  podlaga, ovira) so zdaj LOČENE od merilnih pogledov — neomejene z
+  MAX_VIEWS, z oznako, pripnitvijo na segment in opombo, shranjene kot FOTO
+  zapisi z docOf vezavo na izvorno meritev (online) oz. pošteno docOffline
+  oznako (offline vrsta).
+- Zaprta R508 ostanek 1 za #7 (»Pogledi > 4 / razdelitev rekonstrukcija —
+  detajl«); MAX_VIEWS=4 ostaja NAMERNO (rekonstrukcija — konsolidacija in
+  konflikti zahtevajo nadzor).
+- Preverjeno: r522 54 ✓ / 0 ✗ (živi strežnik), E2E 15 ✓ / 0 ✗ skozi pravo
+  aplikacijo, relejni pas 37 skupin zelen, VLM potrditev UI dokaza.
+- Dokazi: ops/r522-ui-1..6.png (6 ključnih PNG) + ops/ci-dokaz-R522.out.
+- Issue #7 ostaja odprt: fizične naprave (terenski test), izbira med
+  različicami ob razhajanju (migracija — lastnikovo dejanje) ostajajo.

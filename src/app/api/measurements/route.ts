@@ -10,6 +10,7 @@ import { jsonError, readsAllData, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
 import { FAMILY_CODES, type FamilyCode } from '@/lib/product-core'
 import { deriveProvenance, photoRecordProvenance } from '@/lib/measure-engine'
+import { preveriDocPolja, zapišiDocVParams } from '@/lib/measure-doc'
 
 const TYPES = ['OGRAJA', 'BALUSTRADA', 'NAGIB', 'FOTO', 'OSTANEO']
 
@@ -104,6 +105,29 @@ export async function POST (req: NextRequest) {
     ? photoRecordProvenance()
     : deriveProvenance({ points: paramsGeo?.points, calibration: paramsGeo?.calibration, legacyType: type })
 
+  // R522 (issue #7 §4B): dokumentacijska slika detajla — doc* polja so
+  // TOP-LEVEL (ne v params odjemalca!), strežnik pa jih preveri in zapiše v
+  // params SAMO ob veljavnosti. docOfMeasurementId je TUJA referenca —
+  // obstoj se preveri (vzorec projectId zgoraj), ker bi sicer nastala slepa
+  // povezava, ki je noben filter ne najde.
+  const doc = preveriDocPolja({
+    type,
+    docOfMeasurementId: body.docOfMeasurementId,
+    docTag: body.docTag,
+    docSegmentIdx: body.docSegmentIdx,
+    docNote: body.docNote,
+  })
+  if ('napaka' in doc) return jsonError(400, doc.napaka)
+  if (doc.docOf) {
+    const izvor = await db.measurement.findUnique({ where: { id: doc.docOf }, select: { id: true } })
+    if (!izvor) {
+      return jsonError(400, 'Izvorna meritev ne obstaja.', `Zapis ${doc.docOf.slice(0, 12)}… ni veljaven docOfMeasurementId.`)
+    }
+  }
+  const paramsKoncni = (doc.docOf || doc.docTag || doc.docSegmentIdx !== null || doc.docNote)
+    ? zapišiDocVParams(typeof body.params === 'string' ? body.params : null, doc)
+    : (typeof body.params === 'string' ? body.params : null)
+
   const measurement = await db.measurement.create({
     data: {
       type,
@@ -120,7 +144,7 @@ export async function POST (req: NextRequest) {
       segments,
       handrail: typeof body.handrail === 'boolean' ? body.handrail : true,
       slopeDeg,
-      params: typeof body.params === 'string' ? body.params : null,
+      params: paramsKoncni,
       note: typeof body.note === 'string' && body.note.trim() ? body.note.trim() : null,
     },
     include: {
@@ -151,7 +175,7 @@ export async function POST (req: NextRequest) {
     entity: 'measurement',
     entityId: measurement.id,
     projectId: measurement.projectId,
-    detail: { type, workOrderId: workOrderId ?? null, location: measurement.location, lengthCm, slopeDeg, isPhoto: type === 'FOTO', status: provenance.status },
+    detail: { type, workOrderId: workOrderId ?? null, location: measurement.location, lengthCm, slopeDeg, isPhoto: type === 'FOTO', status: provenance.status, ...(doc.docOf ? { docOf: doc.docOf, docTag: doc.docTag ?? null } : {}) },
   })
   return NextResponse.json({ data: measurement }, { status: 201 })
 }

@@ -201,6 +201,12 @@ jobs:
           # imena izdelka (150×25); izrez ene deske iz scenične teksture.
           # Nova skupina MORA biti tudi v tests/ci-matrix.sh.
           - grupa: r520
+          # R522 (issue #7 §4B): dokumentacijske slike detajlov — ločene od
+          # merilnih pogledov (dokaz, ne rekonstrukcija), oznaka VIJAK/
+          # NOSILEC/PODLAGA/OVIRA/SPLOSNO, pripnitev na segment, docOf vezava
+          # (online) oz. docOffline poštena oznaka (offline vrsta).
+          # Nova skupina MORA biti tudi v tests/ci-matrix.sh.
+          - grupa: r522
     services:
       postgres:
         image: postgres:16

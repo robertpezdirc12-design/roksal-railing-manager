@@ -41,7 +41,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import {
-  Camera, Check, CloudUpload, Cpu, Crosshair, Eraser, FileJson, FileSpreadsheet, Flashlight, FlashlightOff, Grid3x3, Image as ImageIcon, Loader2, Lock, LockOpen, ArrowDownToLine,
+  Camera, Check, CloudUpload, Cpu, Crosshair, Eraser, FileJson, FileSpreadsheet, Flashlight, FlashlightOff, Grid3x3, Image as ImageIcon, Loader2, Lock, LockOpen, ArrowDownToLine, Paperclip,
   Redo2, Ruler, Sparkles, SquarePlus, SwitchCamera, Trash2, Undo2, WifiOff,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
@@ -55,6 +55,7 @@ import { useToast } from '@/hooks/use-toast'
 import { apiPost, fmtDate, useApi } from '@/lib/api-client'
 import { getCachedNalogi, getOfflineState, queuePhoto, stanjeShranjevanja, useOnline, type VrsticaShranjevanja } from '@/lib/offline'
 import { clearDraft, loadSeje, saveDraft, sejaKljuc, splosciSejo, type MeasureDraft, type MeasureDraftSnapshot } from '@/lib/measure-draft'
+import { DOC_TAG_LABELS, DOC_TAGS, MAX_DOK_SLIK, prostorZaDokSlike, jeVeljavenDocTag, type DocTag, type DokSlika } from '@/lib/measure-doc'
 import {
   nastaviTorch, naslednjaSmer, napisSmeri, napisZmogljivosti, prestejVideoVhode, zmogljivostiKamere,
   type SmerKamere, type ZmogljivostiKamere,
@@ -506,6 +507,11 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
 
   // R455: pogledi (fotografije istega objekta) + aktivni zavihek
   const [views, setViews] = useState<View[]>([])
+  // R522 (issue #7 §4B): dokumentacijske slike detajlov — LOČENE od merilnih
+  // pogledov. Pogled (max 4) je vir REKONSTRUKCIJE (točke + kalibracija);
+  // detajl (max 30) je DOKAZ (vijak/nosilec/podlaga/ovira) brez mere.
+  const [detajli, setDetajli] = useState<DokSlika[]>([])
+  const [addingDok, setAddingDok] = useState(false)
   const [activeView, setActiveView] = useState(0)
   const viewKey = useRef(1)
 
@@ -582,6 +588,8 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
   const streamRef = useRef<MediaStream | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const fileViewRef = useRef<HTMLInputElement>(null)
+  const fileDokRef = useRef<HTMLInputElement>(null)
+  const dokKey = useRef(1)
 
   // R455: referenca na vlečenje — vključuje stanje pred vlečenjem (undo)
   const dragRef = useRef<{ view: number; point: number; startX: number; startY: number; moved: boolean; preViews: View[] } | null>(null)
@@ -676,10 +684,23 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
     const validType = typeof d.type === 'string' && types.includes(d.type) ? d.type : null
     const restored: View[] = d.views.map((v, i) => ({ ...v, key: viewKey.current + i }))
     viewKey.current += d.views.length
+    // R522: obnovi tudi dokumentacijske slike (samo veljavne oznake —
+    // pokvarjen osnutek ne sme ustaviti obnove meritev)
+    const restoredDok = (Array.isArray(d.dokSlike) ? d.dokSlike : [])
+      .filter((s) => s && typeof s.dataUrl === 'string' && s.dataUrl.startsWith('data:image/'))
+      .slice(0, MAX_DOK_SLIK)
+      .map((s) => ({
+        key: dokKey.current++,
+        dataUrl: s.dataUrl,
+        tag: jeVeljavenDocTag(s.tag) ? s.tag : 'SPLOSNO' as DocTag,
+        note: typeof s.note === 'string' ? s.note.slice(0, 200) : '',
+        segmentIdx: typeof s.segmentIdx === 'number' && Number.isFinite(s.segmentIdx) && s.segmentIdx >= 0 ? Math.round(s.segmentIdx) : null,
+      }))
     if (validMode !== mode) typeRestoreRef.current = true
     setMode(validMode)
     if (validType) setType(validType)
     setViews(restored)
+    setDetajli(restoredDok)
     setActiveView(Math.max(0, Math.min(d.activeView ?? 0, restored.length - 1)))
     const ph = Math.min(5, Math.max(1, Math.round(d.phase ?? 1)))
     setPhase(ph as 1 | 2 | 3 | 4 | 5)
@@ -712,6 +733,9 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
       heightS,
       note,
       maxTilt,
+      // R522: dokumentacijski detajli so dela seje (§6 — brez izgube podatkov
+      // ob osvežitvi). dataUrl-ji so že kompresirani (shrinkToDataUrl/izbira).
+      dokSlike: detajli.map((d) => ({ dataUrl: d.dataUrl, tag: d.tag, note: d.note, segmentIdx: d.segmentIdx })),
     }
   }
 
@@ -750,7 +774,7 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
         })
     }, 500)
     return () => { if (draftTimer.current !== null) { window.clearTimeout(draftTimer.current); draftTimer.current = null } }
-  }, [open, phase, views, activeView, projectId, workOrderId, mode, location, calibMethod, type, heightS, note, maxTilt, toast, osveziShranjevanje])
+  }, [open, phase, views, activeView, projectId, workOrderId, mode, location, calibMethod, type, heightS, note, maxTilt, detajli, toast, osveziShranjevanje])
 
   // R457 (§16): zmogljivosti naprave ob odprtju pogovornega okna
   useEffect(() => {
@@ -1014,6 +1038,32 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
     await addView(pri.url)
   }
 
+  /** R522: doda DOKUMENTACIJSKO sliko detajla (§4B) — brez točk, brez
+   *  kalibracije, BREZ meje pogledov (ločena meja MAX_DOK_SLIK). Pošteno
+   *  predstavljeno: slika je dokaz, ne mera. */
+  async function addDokSlika (url: string): Promise<void> {
+    if (prostorZaDokSlike(detajli.length) <= 0) {
+      toast({ title: `Največ ${MAX_DOK_SLIK} dokumentacijskih slik.`, variant: 'destructive' })
+      return
+    }
+    setDetajli((ds) => [...ds, { key: dokKey.current++, dataUrl: url, tag: 'SPLOSNO', note: '', segmentIdx: null }])
+    toast({ title: `Dokumentacijska slika dodana (${detajli.length + 1}/${MAX_DOK_SLIK}).`, description: 'Slika je dokaz, ne merilni pogled — izberite oznako detajla in jo po potrebi pripnite na segment.' })
+  }
+
+  async function onFileDok (f: File | undefined): Promise<void> {
+    if (!f) return
+    const pri = await naložiDatoteko(f)
+    await addDokSlika(pri.url)
+  }
+
+  /** R522: izbere obstoječo FOTO kot dokumentacijski detajl. */
+  function pickExistingDok (p: PhotoRow): void {
+    const url = parsePhoto(p.params)
+    if (!url) return
+    setAddingDok(false)
+    void addDokSlika(url)
+  }
+
   /** Izbere obstoječo FOTO meritev. */
   function pickExisting (p: PhotoRow): void {
     const url = parsePhoto(p.params)
@@ -1273,6 +1323,37 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
   const conflictBlocked = multi.lengths.length > 1 && multi.spreadPct !== null && multi.spreadPct > 5 &&
     !(overrideOn && Number(overrideLen.replace(',', '.')) > 0 && overrideReason.trim().length >= 3)
 
+  /** R522: shrani vse dokumentacijske slike kot FOTO zapise, vezane na
+   *  POTRJENO meritev (docOf). Poštenost: napaka ene slike NE požre uspeha
+   *  meritve (issue #7 §6) — pove se, koliko je uspelo. */
+  async function zapisiDokSlike (meritevId: string): Promise<void> {
+    if (detajli.length === 0) return
+    let uspeh = 0
+    for (const d of detajli) {
+      try {
+        await apiPost('/api/measurements', {
+          type: 'FOTO',
+          projectId: projectId !== 'none' ? projectId : null,
+          workOrderId: workOrderId !== 'none' ? workOrderId : null,
+          location: location.trim() || null,
+          params: JSON.stringify({ photo: d.dataUrl, stage: 'DOKUMENTACIJA' }),
+          docOfMeasurementId: meritevId,
+          docTag: d.tag,
+          docSegmentIdx: d.segmentIdx,
+          docNote: d.note || null,
+        })
+        uspeh += 1
+      } catch {
+        // slika ostane v seznamu (monter vidi, kaj manjka) — brez ustavljanja
+      }
+    }
+    if (uspeh === detajli.length) {
+      toast({ title: `Shranjenih ${uspeh} dokumentacijskih slik.`, description: 'Vsaka je vezana na potrjeno meritev (oznaka detajla + segment + opomba).' })
+    } else {
+      toast({ title: `Shranjenih ${uspeh} od ${detajli.length} dokumentacijskih slik.`, description: 'Meritev JE shranjena — slike, ki niso uspele, lahko dodaš prek modula Foto z opombo.', variant: 'destructive' })
+    }
+  }
+
   /** Potrditev in shranjevanje (POST /api/measurement/confirm) — R455 razširjeno. */
   async function confirm (again: boolean): Promise<void> {
     if (!view) return
@@ -1340,6 +1421,9 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
           : undefined,
       })
       setSavedId(res.data.id)
+      // R522: dokumentacijske slike gredo ZA meritvijo (docOf = njen id) —
+      // napake posamezne slike ne rušijo meritve.
+      await zapisiDokSlike(res.data.id)
       // R501 (issue #15 faza 2): o poslovni meri odloči STREŽNIK — monterju
       // pokažemo njegovo stanje (in razlog), ne lastno trditev.
       const stanje = res.data.status ? MEASUREMENT_STATUS_LABELS[res.data.status] : null
@@ -1437,9 +1521,29 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
           ? { domain: analysis.domain, validation: analysis.validation, confidence: analysis.confidence, scale: analysis.scale, validity: analysis.validity }
           : null,
       })
+      // R522: dokumentacijske slike gredo v vrsto vsaka KOT SVOJ op (vzorec
+      // photos) — brez merilnih podatkov (slika ni mera). docOf ni možen
+      // offline (id dodeli strežnik ob sinhronizaciji) → opFoto zapiše
+      // docOffline: true, oznaka/segment/opomba pa se OHRANITA.
+      for (const d of detajli) {
+        try {
+          await queuePhoto({
+            dataUrl: d.dataUrl,
+            projectId: projectId !== 'none' ? projectId : null,
+            workOrderId: workOrderId !== 'none' ? workOrderId : null,
+            type: 'FOTO',
+            note: d.note || null,
+            docTag: d.tag,
+            docSegmentIdx: d.segmentIdx,
+            docNote: d.note || null,
+          })
+        } catch {
+          // ena slika ne sme izbrisati seje (§6) — poved se zapiše v toast
+        }
+      }
       toast({
         title: 'Shranjeno lokalno — sinhroniziralo se bo samodejno',
-        description: `${finalLengthCm ? `Meritev ${fmt1(finalLengthCm / 100)} m in fotografija` : 'Fotografija'} bosta poslani, ko se signal vrne. Ali bo številka poslovna mera ali ocena, na sinhronizaciji odloči strežnik (merilo px/cm).`,
+        description: `${finalLengthCm ? `Meritev ${fmt1(finalLengthCm / 100)} m in fotografija` : 'Fotografija'} bosta poslani, ko se signal vrne.${detajli.length > 0 ? ` Dokumentacijske slike (${detajli.length}) gredo v isti vrsti.` : ''} Ali bo številka poslovna mera ali ocena, na sinhronizaciji odloči strežnik (merilo px/cm).`,
       })
       // R508: ključ se izračuna PRED resetAll() — resetAll počisti projekt/nalog.
       const uid = useAppStore.getState().user?.id
@@ -1467,6 +1571,7 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
 
   function resetAll (): void {
     setPhase(1); setViews([]); setActiveView(0)
+    setDetajli([]); setAddingDok(false) // R522: detajli so dela seje
     setCalibA(null); setCalibCm(''); setNote('')
     setLocation(''); setServerLayout(null); setStairMode(mode === 'STOPNICE')
     setProjectId('none'); setWorkOrderId('none')
@@ -2174,6 +2279,12 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
                 <SquarePlus className="size-4" aria-hidden /> Dodaj pogled ({views.length}/{MAX_VIEWS})
               </Button>
             ) : null}
+            {/* R522 (issue #7 §4B): dokumentacijska slika detajla — LOČENA od
+                merilnih pogledov (dokaz, ne rekonstrukcija) zato je na voljo
+                TUDI ko so vsi pogledi zasedeni. Meja je lastna (MAX_DOK_SLIK). */}
+            <Button size="sm" variant="outline" onClick={() => setAddingDok((a) => !a)} aria-expanded={addingDok} disabled={prostorZaDokSlike(detajli.length) <= 0}>
+              <Paperclip className="size-4" aria-hidden /> Dok. slika{detajli.length > 0 ? ` (${detajli.length}/${MAX_DOK_SLIK})` : ''}
+            </Button>
           </div>
 
           {/* R487 (issue #3): panel dodajanja pogleda — terenska pot OSTANE
@@ -2207,6 +2318,86 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
                   </div>
                 </div>
               ) : null}
+            </div>
+          ) : null}
+
+          {/* R522 (issue #7 §4B): panel dodajanja DOKUMENTACIJSKE slike — isto
+              dvopotno nalaganje kot pogled, a gre v ločen seznam (dokaz). */}
+          {addingDok ? (
+            <div className="space-y-2 rounded-lg border border-emerald-300 bg-emerald-50/60 p-3 dark:border-emerald-900 dark:bg-emerald-950/30">
+              <p className="text-sm font-medium">Dodaj dokumentacijsko sliko detajla</p>
+              <p className="text-[11px] text-muted-foreground">
+                Slika je DOKAZ (vijak, nosilec, podlaga, ovira), ne merilni pogled — brez kalibracije in točk. Po dodajanju izberite oznako in jo po potrebi pripnite na segment.
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button size="sm" variant="outline" onClick={() => fileDokRef.current?.click()}>
+                  <Camera className="size-4" aria-hidden /> Posnemi / naloži iz telefona
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setAddingDok(false)}>Prekliči</Button>
+              </div>
+              <input ref={fileDokRef} type="file" accept="image/*" capture="environment" className="hidden"
+                onChange={(e) => { setAddingDok(false); void onFileDok(e.target.files?.[0]); e.target.value = '' }} aria-label="Dodaj dokumentacijsko sliko detajla" />
+              {existingPhotos.length > 0 ? (
+                <div className="space-y-1.5">
+                  <p className="text-[11px] font-medium text-muted-foreground">Ali izberi obstoječo fotografijo:</p>
+                  <div className="grid max-h-40 grid-cols-3 gap-2 overflow-y-auto pr-1 sm:grid-cols-4" role="list">
+                    {existingPhotos.map((p) => (
+                      <button key={p.id} type="button" onClick={() => pickExistingDok(p)} className="group overflow-hidden rounded-lg border text-left transition hover:border-roksal-amber" role="listitem">
+                        <img src={parsePhoto(p.params) ?? ''} alt={`Fotografija ${p.location ?? 'brez lokacije'}`} className="h-16 w-full object-cover" />
+                        <span className="block truncate px-1.5 py-1 text-[10px] text-muted-foreground group-hover:text-foreground">
+                          {p.location ?? p.project?.code ?? fmtDate(p.createdAt)}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          {/* R522: seznam dokumentacijskih slik — oznaka + segment + opomba +
+              brisanje pred potrditvijo (vse popravljivo, §4B »ročno popravljivo«). */}
+          {detajli.length > 0 ? (
+            <div className="space-y-2 rounded-lg border p-3" aria-label="Dokumentacijske slike detajlov">
+              <p className="text-xs font-medium">Dokumentacijske slike ({detajli.length}/{MAX_DOK_SLIK}) — dokaz, ne mera</p>
+              <div className="max-h-96 space-y-2 overflow-y-auto pr-1">
+                {detajli.map((d, i) => (
+                  <div key={d.key} className="flex flex-wrap items-start gap-2 rounded-md border bg-muted/30 p-2">
+                    <img src={d.dataUrl} alt={`Detajl ${i + 1}`} className="h-16 w-24 shrink-0 rounded object-cover" />
+                    <div className="flex min-w-0 flex-1 flex-wrap items-end gap-2">
+                      <div className="space-y-1">
+                        <Label htmlFor={`dok-tag-${d.key}`} className="text-[11px]">Oznaka detajla</Label>
+                        <Select value={d.tag} onValueChange={(v) => { if (jeVeljavenDocTag(v)) setDetajli((ds) => ds.map((x) => x.key === d.key ? { ...x, tag: v } : x)) }}>
+                          <SelectTrigger id={`dok-tag-${d.key}`} className="h-8 w-44" aria-label="Oznaka detajla"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {DOC_TAGS.map((t) => <SelectItem key={t} value={t}>{DOC_TAG_LABELS[t]}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      {calc.segs.length > 1 ? (
+                        <div className="space-y-1">
+                          <Label htmlFor={`dok-seg-${d.key}`} className="text-[11px]">Segment</Label>
+                          <Select value={d.segmentIdx === null ? 'cela' : String(d.segmentIdx)} onValueChange={(v) => setDetajli((ds) => ds.map((x) => x.key === d.key ? { ...x, segmentIdx: v === 'cela' ? null : Number(v) } : x))}>
+                            <SelectTrigger id={`dok-seg-${d.key}`} className="h-8 w-36" aria-label="Pripni na segment"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="cela">Cela meritev</SelectItem>
+                              {calc.segs.map((s, si) => <SelectItem key={si} value={String(si)}>Segment {si + 1} ({fmt1((s.cmLen ?? 0) / 100)} m)</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      ) : null}
+                      <div className="min-w-32 flex-1 space-y-1">
+                        <Label htmlFor={`dok-note-${d.key}`} className="text-[11px]">Opomba</Label>
+                        <Input id={`dok-note-${d.key}`} className="h-8" value={d.note} maxLength={200} placeholder="npr. vijaki M12 na betonskih sidrih"
+                          onChange={(e) => setDetajli((ds) => ds.map((x) => x.key === d.key ? { ...x, note: e.target.value } : x))} />
+                      </div>
+                      <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" aria-label={`Odstrani detajl ${i + 1}`} onClick={() => setDetajli((ds) => ds.filter((x) => x.key !== d.key))}>
+                        <Trash2 className="size-4" aria-hidden />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           ) : null}
 

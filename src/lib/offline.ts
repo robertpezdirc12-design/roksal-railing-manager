@@ -188,6 +188,13 @@ export interface QueuePhotoInput {
   manualOverride?: { computedLengthCm: number; reason: string } | null
   mode?: string | null
   engine?: Record<string, unknown> | null
+  /** R522 (issue #7 §4B): dokumentacijska slika detajla — offline pot.
+   *  docOf NI MOGOČ prenesti (ID izvorne meritve dodeli strežnik šele ob
+   *  sinhronizaciji), zato nosi samo oznako/segment/opombo; opFoto zapiše
+   *  docOffline: true, da pisarna ve, da vez ni bila mogoča. */
+  docTag?: string | null
+  docSegmentIdx?: number | null
+  docNote?: string | null
 }
 
 /**
@@ -229,6 +236,13 @@ export async function queuePhoto (input: QueuePhotoInput): Promise<{ photoId: st
     }
   }
   if (typeof input.mode === 'string' && input.mode.trim()) payload.mode = input.mode.trim()
+  // R522: dokumentacijski detajl — samo označena polja (brez dolžin, ker slika
+  // ni mera; opFoto ne bo ustvaril vezane meritve).
+  if (typeof input.docTag === 'string' && input.docTag.trim()) payload.docTag = input.docTag.trim()
+  if (input.docSegmentIdx !== null && input.docSegmentIdx !== undefined && Number.isFinite(input.docSegmentIdx)) {
+    payload.docSegmentIdx = Math.round(input.docSegmentIdx)
+  }
+  if (typeof input.docNote === 'string' && input.docNote.trim()) payload.docNote = input.docNote.trim().slice(0, 200)
   const op = await queueOp('foto', payload)
   return { photoId, opId: op.opId }
 }

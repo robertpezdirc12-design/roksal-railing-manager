@@ -23,6 +23,7 @@ import { writeAudit } from '@/lib/audit'
 import { emitEvent } from '@/lib/notify'
 import { izvediAkcijo, type AkcijaVhod } from '@/lib/playbook-engine'
 import { MEASURE_MODES, calibrationForParams, parseCalibration, pointsForStorage, viewForStorage, pickEngineExtras, consolidateViews, deriveProvenance, photoRecordProvenance, provenanceForParams, type MeasureMode } from '@/lib/measure-engine'
+import { DOC_TAGS, jeVeljavenDocTag, normalizirajDocSegment, normalizirajDocNote, zapišiDocVParams, type DocTag } from '@/lib/measure-doc'
 import { MEASURE_CONFLICT_PCT } from '@/lib/scene-understanding-core'
 import { posodobiCheck, preveriBlokadoZakljucka } from '@/lib/montaza-qa-core'
 
@@ -313,7 +314,12 @@ async function opMeritev (
   return { data: measurement }
 }
 
-/** FOTO meritev (ISTA kot /api/measure/photo) + vezana meritev, če so podatki v payloadu. */
+/** FOTO meritev (ISTA kot /api/measure/photo) + vezana meritev, če so podatki v payloadu.
+ *  R522 (issue #7 §4B): offline dokumentacijska slika detajla — nosi
+ *  docTag/docSegmentIdx/docNote, NE MORE pa nositi docOf (ID izvorne meritve
+ *  dodeli strežnik šele ob sinhronizaciji vrste). Zato se zapiše docOffline:
+ *  true — pisarna vidi, da je vez izgubljena zaradi offline poti, ne da bi
+ *  bila nikoli obstajala (lažna vez je prepovedana). */
 async function opFoto (
   user: SessionUser,
   payload: Record<string, unknown>
@@ -324,6 +330,14 @@ async function opFoto (
   }
   if (dataUrl.length > MAX_PHOTO_BYTES) {
     return { error: 'Fotografija je prevelika. Največja dovoljena velikost je 8 MB.' }
+  }
+
+  // R522: oznaka detajla — fail-closed (neznana oznaka je napaka, ker jo je
+  // postavila naša UI koda, ne uporabnikovo tipkanje).
+  const docTag = payload.docTag
+  const jeDokSlika = docTag !== undefined && docTag !== null && docTag !== ''
+  if (jeDokSlika && !jeVeljavenDocTag(docTag)) {
+    return { error: `Neveljavna oznaka dokumentacijske slike. Veljavne: ${DOC_TAGS.join(', ')}.` }
   }
 
   const workOrderId = str(payload.workOrderId)
@@ -338,6 +352,16 @@ async function opFoto (
   }
 
   const zapis = photoRecordProvenance()
+  // R522: doc polja se zapišejo v params SAMO kadar gre za dokumentacijsko
+  // sliko — navadne offline fotografije ostanejo nespremenjene.
+  const paramsOut = jeDokSlika
+    ? zapišiDocVParams(JSON.stringify({ photo: dataUrl, stage: 'ZAJEM', synced: true }), {
+      docTag: docTag as DocTag,
+      docSegmentIdx: normalizirajDocSegment(payload.docSegmentIdx),
+      docNote: normalizirajDocNote(payload.docNote),
+      docOffline: true,
+    })
+    : JSON.stringify({ photo: dataUrl, stage: 'ZAJEM', synced: true })
   const photo = await db.measurement.create({
     data: {
       type: 'FOTO',
@@ -348,7 +372,7 @@ async function opFoto (
       workOrderId,
       authorId: user.id,
       location: str(payload.location),
-      params: JSON.stringify({ photo: dataUrl, stage: 'ZAJEM', synced: true }),
+      params: paramsOut,
     },
     include: {
       author: { select: { name: true } },

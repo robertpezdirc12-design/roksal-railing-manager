@@ -50,6 +50,18 @@ export interface MeasureDraftSnapshot {
   heightS?: string
   note?: string
   maxTilt?: number | null
+  /** R522 (issue #7 §4B): dokumentacijske slike detajlov — NEODVISNE od
+   *  pogledov (rekonstrukcija). Neobvezno: starejši zapisi brez njih so
+   *  veljavni (normalizacija spodaj jih bere kot []). */
+  dokSlike?: DokSlikaVDraftu[]
+}
+
+/** Dokumentacijska slika v osnutku (DokSlika brez key, ki ga UI dodeli znova). */
+export interface DokSlikaVDraftu {
+  dataUrl: string
+  tag: string
+  note: string
+  segmentIdx: number | null
 }
 
 export interface MeasureDraft extends MeasureDraftSnapshot {
@@ -95,12 +107,16 @@ export function normalizirajZapis (raw: unknown): DraftSeja[] {
   if (!raw || typeof raw !== 'object') return []
   const r = raw as Record<string, unknown>
   if (Array.isArray(r.seje)) {
+    // R522: dokSlike so neobvezne — normaliziraj POŠTENO (samo veljavne
+    // slike, da pokvarjen zapis ne obori obnove seje).
     return (r.seje as DraftSeja[]).filter((s) => s && typeof s.key === 'string' && s.snapshot)
+      .map((s) => ({ ...s, snapshot: { ...s.snapshot, dokSlike: Array.isArray(s.snapshot?.dokSlike) ? s.snapshot.dokSlike : [] } }))
   }
   if (Array.isArray(r.views)) {
     const snapshot: Record<string, unknown> = {}
     for (const k of Object.keys(r)) if (k !== 'userId' && k !== 'savedAt') snapshot[k] = r[k]
     const snap = snapshot as unknown as MeasureDraftSnapshot
+    snap.dokSlike = Array.isArray(snap.dokSlike) ? snap.dokSlike : []
     return [{ key: sejaKljuc(snap), savedAt: typeof r.savedAt === 'string' ? r.savedAt : new Date(0).toISOString(), snapshot: snap }]
   }
   return []
