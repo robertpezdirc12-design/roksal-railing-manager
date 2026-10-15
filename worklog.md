@@ -3986,3 +3986,66 @@ Stage Summary:
   /user/runners + gitlab-runner + clone_url + .zscripts/ci-mirror.sh ensure
   (celoten postopek zabeležen v tem vnosu).
 - Ni sprememb aplikacijske kode; issue #14 ostaja ODPRT (oskrba #6 itd.).
+
+---
+Task ID: R526
+Agent: glavni agent (nadaljevalna seja)
+Task: Posodobitev README na dokončno projektno dokumentacijo + izdaja v1.55.1
+(uporabnik: »odlično, nadaljuj, posodobi readme in nadaljuj«).
+
+Work Log:
+- Ugotovitev stanja: README.md (42 vrstic) je še vedno opis »recovery
+  repozitorija« iz dneva incidenta — zrcalil le rešene artefakte, ne
+  rekonstruirane aplikacije; README-REKONSTRUKCIJA.md pokriva samo obdobje
+  R431–R439. Projekt ima trenutno 195 API rut, 45 modulov, 72 knjižnic,
+  12 migracij, 39 testnih skupin, MANIFEST 116 sredstev s SHA-256 — vse
+  nedokumentirano v glavnem README.
+- NOVI README.md (~130 vrstic): zgodovina v 4 točkah (izvirnik R120–R430 →
+  recovery artefakti → rekonstrukcija R431–R439 → razvoj R440–R525), IA 5
+  sekcij/29 zavihkov po nav-registry, poslovni tok, fotomontaža PREJ/POTEM po
+  poročilu #14 (uradna gradiva MANIFEST 116 SHA-256, mere iz kataloga, engine
+  1.3.0, poštene meje — šrafura, PREKRIVANJE_NI_ODSTRANITEV, SAMO_DRUZINA),
+  varnost (RBAC 38 pravic, zaščiten main, skrivnostni pregled, glave),
+  zagon + demo računi (gesla izrecno NE v README — R496 disciplina),
+  relejni pas 39 skupin z E2E disciplino, CI/CD (zasebni runner + zrcalo
+  R525), varnostne kopije (RTO 65 s, RPO ~3,5 min), struktura repozitorija,
+  odprte točke oskrbe #6 (RWA 57/32 scenski posnetek in PROFIL_PRESEK za
+  POLNA/DESKA v uradnih virih ne obstajata — preverjeno R524).
+- PAKET: ime preimenovano nextjs_tailwind_shadcn_ts → roksal-railing-manager
+  (zadnja ostalina Z.ai ogrodja) + verzija usklajena z izdajami 1.49.0 →
+  1.55.1; bun.lock root ime ročno usklajeno (enajst mest — točno to, kar bi
+  zapisal bun; bun install --frozen-lockfile preverjen ZELEN; python json
+  parser zavrne bun.lock — uporablja razširjen JSON s komentarji, odločilen
+  je bun sam). Health build oznaka prihaja iz env ROKSAL_BUILD, ne
+  package.json — ni runtime sklopljenosti; noben test ne preverja verzije
+  (preverjeno z iskanjem).
+- PREVERBI PRED IZDAJO: bun run lint 0 napak / 2 stari opozorili (R524
+  stanje), bun run typecheck 0 napak.
+- IZDAJA: commit 2a17327 + anotiran tag v1.55.1; push GitHub (b18cc96..
+  2a17327 + nov tag) in GitLab (isto) — oba uspešna prvi poskus; zrcalo
+  sinhronizirano (main + tag).
+- PAST ŽETONA: trenutni glpat-…mql1xx NE more brati /projects/:id/pipelines
+  (401 tudi z glavo User-Agent: git/2.43; scopes: push + runner management,
+  brez read_api) — status cevovodov NI dosegljiv prek API. Nadomestna pot
+  dokaza: dnevnik lokalnega runnerja.
+- INCIDENT MED DELOM (znan iz R525 NAPAKA 4): runner se je ob 19:28 UTC —
+  PRED mojim pushem — po 3 zaporednih 403 na POST /api/v4/jobs/request
+  samoizklopi za 1 uro. Posledica: oba joba mojih cevovodov sta čakala
+  (time_in_queue 288 s / 414 s). Rešitev: kill 27604 + ponovni zagon prek
+  dev-detach.py (enako kot R525) — runner je takoj pobral oba čakajoča joba.
+- CI REZULTAT: job 17213882892 (pipeline 2952558556, main) Job succeeded
+  97,66 s + job 17213882929 (pipeline 2952558557, v1.55.1) Job succeeded
+  97,77 s; build workspace checkout TOČNO 2a17327 (klon iz zrcala → bun
+  install --frozen-lockfile → lint → tsc → prisma validate + db push na
+  roksal_ci → secret-audit → bash -n). Dokaz: ops/ci-dokaz-R526.out (SHA
+  uskladitev: lokalno = GitHub = GitLab = zrcalo = build = 2a17327).
+
+Stage Summary:
+- README sedaj zrcali dejansko stanje projekta (ne več opis recovery
+  repozitorija); ime paketa in verzija usklajena z izdajami.
+- Izdaja v1.55.1: GitLab CI ZELEN na main + tag (2 joba na zasebnem runnerju,
+  dokaz v ops/), GitHub = GitLab sinhron.
+- Nadomestna pot dokaza cevovodov prek runner dnevnika (žeton brez read_api
+  scope-a) — zabeleženo za prihodnje seje.
+- Brez sprememb aplikacijske kode; issue #14 ostaja ODPRT (odprte točke so
+  izključno oskrbovalne #6 — lastnikova stran).

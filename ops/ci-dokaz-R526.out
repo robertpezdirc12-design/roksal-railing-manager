@@ -1,0 +1,27 @@
+# CI dokaz R526 — README v1.55.1 (2a17327), zasebni runner sandbox-runner-roksal-R525
+# Zapisano: 2026-10-15 19:56:57Z
+
+## Lokalno stanje
+2a17327 R526: README zamenjan z dokončno projektno dokumentacijo — star 42-vrstični 'recovery repozitorij' opis (zrcalil le rešene artefakte iz dneva incidenta) je nadomeščen s trenutnim stanjem: zgodovina v 4 točkah (izvirnik R120–R430 → recovery artefakti → rekonstrukcija R431–R439 → razvoj R440–R525), IA 5 sekcij/29 zavihkov, poslovni tok, fotomontaža PREJ/POTEM po poročilu #14 (uradna gradiva MANIFEST 116 SHA-256, engine 1.3.0, poštene meje), varnost (RBAC 38 pravic, zaščiten main, skrivnostni pregled), zagon, relejni pas 39 skupin z E2E disciplino, CI/CD (zasebni runner + zrcalo R525), varnostne kopije (RTO 65 s), struktura repota (195 rut, 45 modulov, 72 knjižnic, 12 migracij), odprte točke oskrbe #6; paket preimenovan nextjs_tailwind_shadcn_ts → roksal-railing-manager (zadnja ostalina Z.ai ogrodja) in verzija usklajena z izdajami 1.49.0 → 1.55.1 (bun.lock root ime posodobljeno, frozen-lockfile preverjen zelen); brez sprememb aplikacijske kode — lint 0 napak, tsc 0 napak
+
+## Oddaljeni (oba remota)
+2a173273fa1ccca960d383f9711119d3e6347b2c	refs/heads/main
+70352b601e975598ae48e7d4f0d3721cc6209a01	refs/tags/v1.55.1
+2a173273fa1ccca960d383f9711119d3e6347b2c	refs/heads/main
+70352b601e975598ae48e7d4f0d3721cc6209a01	refs/tags/v1.55.1
+
+## Zrcalo
+2a173273fa1ccca960d383f9711119d3e6347b2c
+2a173273fa1ccca960d383f9711119d3e6347b2c
+
+## Build workspace (checkout joba)
+2a17327 R526: README zamenjan z dokončno projektno dokumentacijo — star 42-vrstični 'recovery repozitorij' opis (zrcalil le rešene artefakte iz dneva incidenta) je nadomeščen s trenutnim stanjem: zgodovina v 4 točkah (izvirnik R120–R430 → recovery artefakti → rekonstrukcija R431–R439 → razvoj R440–R525), IA 5 sekcij/29 zavihkov, poslovni tok, fotomontaža PREJ/POTEM po poročilu #14 (uradna gradiva MANIFEST 116 SHA-256, engine 1.3.0, poštene meje), varnost (RBAC 38 pravic, zaščiten main, skrivnostni pregled), zagon, relejni pas 39 skupin z E2E disciplino, CI/CD (zasebni runner + zrcalo R525), varnostne kopije (RTO 65 s), struktura repota (195 rut, 45 modulov, 72 knjižnic, 12 migracij), odprte točke oskrbe #6; paket preimenovan nextjs_tailwind_shadcn_ts → roksal-railing-manager (zadnja ostalina Z.ai ogrodja) in verzija usklajena z izdajami 1.49.0 → 1.55.1 (bun.lock root ime posodobljeno, frozen-lockfile preverjen zelen); brez sprememb aplikacijske kode — lint 0 napak, tsc 0 napak
+
+## Runner log — Job succeeded (zadnjih 4)
+Job succeeded                                     [0;m  duration_s[0;m=100.584092802 gitlab_user_id[0;m=43141577 job[0;m=17212094915 job-status[0;m=success job_name[0;m=verify namespace_id[0;m=144207225 organization_id[0;m=1 pipeline_id[0;m=2952191817 project[0;m=87474527 project_full_path[0;m=markec-group1/roksal-railing-manager root_namespace_id[0;m=144207225 runner[0;m=TFQrRVGSD runner_name[0;m=sandbox-runner-roksal-R525 runner_uuid[0;m=01a140b8-b652-76f2-a51a-44ba5f626269
+Job succeeded                                     [0;m  duration_s[0;m=108.317660827 gitlab_user_id[0;m=43141577 job[0;m=17212218142 job-status[0;m=success job_name[0;m=verify namespace_id[0;m=144207225 organization_id[0;m=1 pipeline_id[0;m=2952338896 project[0;m=87474527 project_full_path[0;m=markec-group1/roksal-railing-manager root_namespace_id[0;m=144207225 runner[0;m=TFQrRVGSD runner_name[0;m=sandbox-runner-roksal-R525 runner_uuid[0;m=01a140b8-b652-76f2-a51a-44ba5f626269
+Job succeeded                                     [0;m  duration_s[0;m=97.658289477 gitlab_user_id[0;m=43141577 job[0;m=17213882892 job-status[0;m=success job_name[0;m=verify namespace_id[0;m=144207225 organization_id[0;m=1 pipeline_id[0;m=2952558556 project[0;m=87474527 project_full_path[0;m=markec-group1/roksal-railing-manager root_namespace_id[0;m=144207225 runner[0;m=TFQrRVGSD runner_name[0;m=sandbox-runner-roksal-R525 runner_uuid[0;m=01a140b8-b652-76f2-a51a-44ba5f626269
+Job succeeded                                     [0;m  duration_s[0;m=97.771583597 gitlab_user_id[0;m=43141577 job[0;m=17213882929 job-status[0;m=success job_name[0;m=verify namespace_id[0;m=144207225 organization_id[0;m=1 pipeline_id[0;m=2952558557 project[0;m=87474527 project_full_path[0;m=markec-group1/roksal-railing-manager root_namespace_id[0;m=144207225 runner[0;m=TFQrRVGSD runner_name[0;m=sandbox-runner-roksal-R525 runner_uuid[0;m=01a140b8-b652-76f2-a51a-44ba5f626269
+
+## Incidenca med delom: self-disable runnerja
+[31;1mERROR: Runner "https://gitlab.com/TFQrRVGSD" is unhealthy and will be disabled for 1h0m0s seconds![0;m  [31;1munhealthy_requests[0;m=3 [31;1munhealthy_requests_limit[0;m=3
