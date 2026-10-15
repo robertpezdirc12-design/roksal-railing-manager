@@ -184,6 +184,10 @@ jobs:
           # razhajanje je ujel lokalni pas (tests/ci-local.sh, 1. korak).
           # Nova skupina MORA biti tudi v tests/ci-matrix.sh.
           - grupa: r513
+          # R516: avtomatski uvoz cenikov (/api/import/cenik) — issue #15 Faza 6
+          # cenovni del: cene ostanejo PODATEK, uvoz pa odpravi ročno tipkanje.
+          # Nova skupina MORA biti tudi v tests/ci-matrix.sh.
+          - grupa: r516
     services:
       postgres:
         image: postgres:16

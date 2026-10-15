@@ -31,6 +31,10 @@ import {
   IMPORT_CORE_VERSION, parseBomCsv, parseBomJson, parseQuoteJson, sheetRowsToBom, bomImportDiff,
   type BomImportLine, type ImportRowError,
 } from '@/lib/import-core'
+import {
+  PRICE_IMPORT_CORE_VERSION, PRICE_CSV_HEADER, parseCenikCsv, parseCenikJson, sheetRowsToCenik, cenikImportPreview,
+  type CenikImportLine,
+} from '@/lib/price-import-core'
 import { readXlsx, findSheetWithHeader } from '@/lib/xlsx-read'
 
 type Params = { params: Promise<{ kind: string }> }
@@ -406,18 +410,259 @@ async function importQuote (req: NextRequest, userId: string): Promise<NextRespo
   }, { status: 201 })
 }
 
+// ─── uvoz cenika (R516 — issue #15 Faza 6: cene ostanejo PODATEK, uvoz pa je ──)
+// ─── lastnikovo orodje, da jih ne vpisuje ročno) ─────────────────────────────
+
+const CENIK_TYPES = ['NABAVNA', 'PRODAJNA', 'MONTAZA']
+
+/** Datoteko cenika (CSV/XLSX/JSON) → veljavne vrstice + napake vrstic. */
+async function parseCenikFile (file: File): Promise<{ lines: CenikImportLine[]; errors: ImportRowError[]; warnings: string[] }> {
+  const name = file.name.toLowerCase()
+  const buf = new Uint8Array(await file.arrayBuffer())
+
+  const headText = new TextDecoder('utf-8', { fatal: false }).decode(buf.subarray(0, 64)).trimStart()
+  if (name.endsWith('.json') || headText.startsWith('{')) {
+    let obj: unknown
+    try {
+      obj = JSON.parse(new TextDecoder().decode(buf))
+    } catch (e) {
+      return { lines: [], errors: [{ row: 1, field: 'JSON', problem: `JSON se ne razčleni: ${e instanceof Error ? e.message : '?'}` }], warnings: [] }
+    }
+    return parseCenikJson(obj)
+  }
+
+  if (name.endsWith('.xlsx') || (buf.length > 4 && buf[0] === 0x50 && buf[1] === 0x4b && buf[2] === 0x03 && buf[3] === 0x04)) {
+    let sheets: Map<string, string[][]>
+    try {
+      sheets = readXlsx(buf).sheets
+    } catch (e) {
+      return { lines: [], errors: [{ row: 1, field: 'XLSX', problem: `Datoteke XLSX ni mogoče prebrati: ${e instanceof Error ? e.message : '?'}` }], warnings: [] }
+    }
+    const sheet = findSheetWithHeader({ sheets }, PRICE_CSV_HEADER, 'Cenik')
+    if (sheet == null) {
+      return { lines: [], errors: [{ row: 1, field: 'XLSX', problem: `V nobenem listu ni glave cenika (${PRICE_CSV_HEADER.join(';')}).` }], warnings: [] }
+    }
+    return sheetRowsToCenik(sheet.rows)
+  }
+
+  const text = new TextDecoder().decode(buf)
+  return parseCenikCsv(text)
+}
+
+async function importCenik (req: NextRequest, userId: string): Promise<NextResponse> {
+  const form = await readForm(req)
+  if (form instanceof NextResponse) return form
+  const f = requireFile(form)
+  if (f instanceof NextResponse) return f
+  const { file } = f
+  const m = requireMode(form)
+  if (m instanceof NextResponse) return m
+  const { mode } = m
+
+  // ── ciljni cenik: obstoječi (priceListId) ALI nov (name [+ type]) ──
+  const priceListId = String(form.get('priceListId') ?? '')
+  const newName = String(form.get('name') ?? '').trim()
+  const newType = String(form.get('type') ?? 'PRODAJNA')
+  if (priceListId === '' && newName === '') {
+    return jsonError(400, 'Manjka cilj uvoza.', 'Navedite priceListId (obstoječi cenik) ali name (nov cenik).')
+  }
+  if (priceListId !== '' && newName !== '') {
+    return jsonError(400, 'Cilj je dvoumen.', 'Navedite ALI priceListId ALI ime novega cenika — ne oboje.')
+  }
+  if (priceListId === '' && !CENIK_TYPES.includes(newType)) {
+    return jsonError(400, `Neveljaven tip cenika "${newType}".`, `Veljavni tipi: ${CENIK_TYPES.join(', ')}.`)
+  }
+
+  let target: { id: string; name: string; type: string } | null = null
+  if (priceListId !== '') {
+    const list = await db.priceList.findUnique({ where: { id: priceListId }, select: { id: true, name: true, type: true, active: true } })
+    if (list == null) return jsonError(404, 'Cenik ne obstaja.')
+    if (!list.active) return jsonError(409, `Cenik ${list.name} ni aktiven — uvoz vanj ni mogoč.`)
+    target = { id: list.id, name: list.name, type: list.type }
+  }
+
+  // ── razčlenitev datoteke ──
+  const parsed = await parseCenikFile(file)
+  if (parsed.errors.length > 0) {
+    return NextResponse.json({
+      error: `Datoteka ima ${parsed.errors.length} napak v vrsticah.`,
+      rowErrors: parsed.errors.slice(0, 20),
+    }, { status: 409 })
+  }
+  if (parsed.lines.length === 0) return jsonError(400, 'Datoteka nima veljavnih vrstic cenika.')
+
+  // ── katalog: SKU → produkt ALI artikel (dvoumnost = napaka, ne tiha izbira) ──
+  const skus = [...new Set(parsed.lines.map((l) => l.sku))]
+  const products = await db.product.findMany({
+    where: { sku: { in: skus } },
+    select: { id: true, sku: true, unit: true },
+  })
+  const items = await db.inventoryItem.findMany({
+    where: { sku: { in: skus } },
+    select: { id: true, sku: true, unit: true },
+  })
+  const productBySku = new Map(products.map((p) => [p.sku, p]))
+  const itemBySku = new Map(items.map((i) => [i.sku, i]))
+  const knownSkus = new Set([...productBySku.keys(), ...itemBySku.keys()])
+  const ambiguous = skus.filter((s) => productBySku.has(s) && itemBySku.has(s))
+  if (ambiguous.length > 0) {
+    return jsonError(409, `Dvoumni SKU (produkt IN artikel hkrati): ${ambiguous.slice(0, 10).join(', ')}${ambiguous.length > 10 ? ' …' : ''}.`, 'SKU mora biti enoličen — preimenujte artikel ali produkt.')
+  }
+  const catalogUnits = new Map<string, string>()
+  for (const p of products) catalogUnits.set(p.sku, p.unit)
+  for (const i of items) catalogUnits.set(i.sku, i.unit)
+
+  // ── obstoječa PRAVILA ciljnega cenika (za predogled nadomestitve) ──
+  const existing = new Map<string, { price: number }>()
+  if (target != null) {
+    const rules = await db.priceRule.findMany({
+      where: { priceListId: target.id, active: true },
+      include: { product: { select: { sku: true } }, item: { select: { sku: true } } },
+    })
+    for (const r of rules) {
+      const sku = r.product?.sku ?? r.item?.sku
+      if (sku != null && !existing.has(sku)) existing.set(sku, { price: Number(r.price) })
+    }
+  }
+
+  const diff = cenikImportPreview(parsed.lines, knownSkus, catalogUnits, existing)
+
+  const warnings = [...parsed.warnings]
+  if (target == null) warnings.push(`Uvoz bo ustvaril NOV cenik „${newName}“ (${newType}).`)
+  else warnings.push(`Uvoz v obstoječi cenik „${target.name}“ — obstoječa pravila istih SKUjev bodo nadomeščena (arhivirana).`)
+
+  if (diff.neznani.length > 0) {
+    return NextResponse.json({
+      error: `Neznani SKU (${diff.neznani.length}): ${diff.neznani.slice(0, 10).join(', ')}${diff.neznani.length > 10 ? ' …' : ''}.`,
+      rowErrors: parsed.errors,
+      diff: { novo: diff.novo, posodobljeno: diff.posodobljeno, neznani: diff.neznani },
+      hint: 'Dodajte produkte/artikle v katalog ali popravite datoteko. Uvoz je VSE ALI NIČ — brez delnega uvoza.',
+    }, { status: 409 })
+  }
+  if (diff.brezEnote.length > 0) {
+    return NextResponse.json({
+      error: `Vrstice brez enote (ne v datoteki, ne v katalogu): ${diff.brezEnote.slice(0, 10).join(', ')}${diff.brezEnote.length > 10 ? ' …' : ''}.`,
+      hint: 'Dodajte stolpec „Enota“ v datoteko ali enoto v katalogu.',
+    }, { status: 409 })
+  }
+
+  if (mode === 'preveri') {
+    return NextResponse.json({
+      data: {
+        mode: 'preveri',
+        file: { name: file.name, size: file.size },
+        list: target != null ? { id: target.id, name: target.name, type: target.type } : { id: null, name: newName, type: newType },
+        lines: parsed.lines.length,
+        skus: skus.length,
+        diff: {
+          novo: diff.novo,
+          posodobljeno: diff.posodobljeno,
+          neznani: diff.neznani,
+          brezEnote: diff.brezEnote,
+          entries: diff.entries.slice(0, 50),
+        },
+        warnings,
+        engineVersion: PRICE_IMPORT_CORE_VERSION,
+      },
+    })
+  }
+
+  // ── mode === 'uvozi' (VSE ALI NIČ) ──
+
+  const list = target != null
+    ? await db.priceList.update({ where: { id: target.id }, data: { updatedAt: new Date() } })
+    : await db.priceList.create({
+        data: {
+          name: newName,
+          type: newType,
+          note: `Uvoženo iz ${file.name} (${PRICE_IMPORT_CORE_VERSION})`,
+        },
+      })
+
+  const now = new Date()
+
+  // obstoječa aktivna pravila istih SKUjev se ARHIVIRAJO (active=false,
+  // validTo=zdaj) — nadomestitev, ne seštevanje; zgodovina ostane vidna
+  const targetProductIds = products.map((p) => p.id)
+  const targetItemIds = items.map((i) => i.id)
+  const oldProductRules = targetProductIds.length > 0
+    ? await db.priceRule.findMany({ where: { priceListId: list.id, active: true, productId: { in: targetProductIds } }, select: { id: true } })
+    : []
+  const oldItemRules = targetItemIds.length > 0
+    ? await db.priceRule.findMany({ where: { priceListId: list.id, active: true, itemId: { in: targetItemIds } }, select: { id: true } })
+    : []
+  const oldIds = [...oldProductRules, ...oldItemRules].map((r) => r.id)
+  if (oldIds.length > 0) {
+    await db.priceRule.updateMany({ where: { id: { in: oldIds } }, data: { active: false, validTo: now } })
+  }
+  const posodobljeno = diff.posodobljeno
+
+  const created = await db.priceRule.createMany({
+    data: parsed.lines.map((l) => {
+      const product = productBySku.get(l.sku)
+      const item = itemBySku.get(l.sku)
+      const unit = l.unit ?? catalogUnits.get(l.sku) ?? 'kos'
+      return {
+        priceListId: list.id,
+        productId: product?.id ?? null,
+        itemId: item?.id ?? null,
+        price: l.price,
+        unit,
+        discountPct: l.discountPct,
+        minPrice: l.minPrice,
+        validFrom: l.validFrom != null ? new Date(l.validFrom) : now,
+        validTo: l.validTo != null ? new Date(l.validTo) : null,
+        note: l.note,
+        active: true,
+      }
+    }),
+  })
+  if (created.count !== parsed.lines.length) {
+    return jsonError(500, 'Uvoz je delno uspel — stanje preverite v ceniku.', `Pričakovano ${parsed.lines.length} pravil, ustvarjenih ${created.count}.`)
+  }
+  const novo = created.count
+
+  await writeAudit({
+    userId,
+    action: 'PRICE_LIST_IMPORT', entity: 'priceList', entityId: list.id,
+    detail: {
+      list: { id: list.id, name: list.name, type: list.type },
+      file: file.name,
+      lines: parsed.lines.length,
+      novo,
+      posodobljeno,
+      engineVersion: PRICE_IMPORT_CORE_VERSION,
+    },
+  })
+
+  return NextResponse.json({
+    data: {
+      mode: 'uvozi',
+      list: { id: list.id, name: list.name, type: list.type },
+      lines: parsed.lines.length,
+      novo,
+      posodobljeno,
+      warnings,
+      engineVersion: PRICE_IMPORT_CORE_VERSION,
+    },
+  }, { status: 201 })
+}
+
 // ─── POST ────────────────────────────────────────────────────────────────────
 
 export async function POST (req: NextRequest, { params }: Params) {
   const { kind } = await params
-  if (kind !== 'bom' && kind !== 'quote') {
-    return jsonError(400, 'Neznana vrsta uvoza.', 'Veljavne vrste: bom, quote.')
+  if (kind !== 'bom' && kind !== 'quote' && kind !== 'cenik') {
+    return jsonError(400, 'Neznana vrsta uvoza.', 'Veljavne vrste: bom, quote, cenik.')
   }
 
-  const auth = await requirePermission(req, 'quotes.create')
+  // R516: cenik je cenovno dejanje → price.override (isti varnostni prag kot
+  // ročni vnos pravil); kosovnica in ponudba ostajata na quotes.create.
+  const auth = await requirePermission(req, kind === 'cenik' ? 'price.override' : 'quotes.create')
   if (auth instanceof NextResponse) return auth
   const { user } = auth
 
   if (kind === 'bom') return importBom(req, user.id)
+  if (kind === 'cenik') return importCenik(req, user.id)
   return importQuote(req, user.id)
 }

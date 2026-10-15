@@ -2098,8 +2098,8 @@
       "note": "allow=200 dobil=400"
     },
     "GET /api/picking/:id": {
-      "status": "NO_FIXTURE",
-      "http": 404,
+      "status": "PASS",
+      "http": 200,
       "permission": "inventory.read",
       "roles": [
         "ADMIN",
@@ -2108,7 +2108,7 @@
         "SKLADISCE",
         "PROIZVODNJA"
       ],
-      "note": "allow=200 dobil=404"
+      "note": ""
     },
     "PATCH /api/picking/:id": {
       "status": "PASS_VALIDATION",
@@ -7054,46 +7054,46 @@
       "method": "GET",
       "path": "/api/picking/:id",
       "role": "ADMIN",
-      "http": 404,
+      "http": 200,
       "expected": "ALLOW",
-      "ok": null,
-      "status": "NO_FIXTURE"
+      "ok": true,
+      "status": "PASS"
     },
     {
       "method": "GET",
       "path": "/api/picking/:id",
       "role": "VODJA",
-      "http": 404,
+      "http": 200,
       "expected": "ALLOW",
-      "ok": null,
-      "status": "NO_FIXTURE"
+      "ok": true,
+      "status": "PASS"
     },
     {
       "method": "GET",
       "path": "/api/picking/:id",
       "role": "MONTER",
-      "http": 404,
+      "http": 200,
       "expected": "ALLOW",
-      "ok": null,
-      "status": "NO_FIXTURE"
+      "ok": true,
+      "status": "PASS"
     },
     {
       "method": "GET",
       "path": "/api/picking/:id",
       "role": "SKLADISCE",
-      "http": 404,
+      "http": 200,
       "expected": "ALLOW",
-      "ok": null,
-      "status": "NO_FIXTURE"
+      "ok": true,
+      "status": "PASS"
     },
     {
       "method": "GET",
       "path": "/api/picking/:id",
       "role": "PROIZVODNJA",
-      "http": 404,
+      "http": 200,
       "expected": "ALLOW",
-      "ok": null,
-      "status": "NO_FIXTURE"
+      "ok": true,
+      "status": "PASS"
     },
     {
       "method": "GET",
@@ -9169,14 +9169,14 @@
   "summary": {
     "endpoints": 297,
     "smoke": {
-      "PASS": 147,
+      "PASS": 148,
       "SKIPPED_SAFE": 9,
       "PASS_VALIDATION": 122,
-      "NO_FIXTURE": 19
+      "NO_FIXTURE": 18
     },
     "rbacChecks": 645,
     "rbacFailures": 0,
-    "rbacNoFixture": 80,
+    "rbacNoFixture": 75,
     "noFixturePaths": [
       "GET /api/ar-snapshots/:id",
       "GET /api/ar-snapshots/:id/scene-element",
@@ -9193,7 +9193,6 @@
       "GET /api/fence-run/:id/review",
       "GET /api/fence-run/:id/review-link",
       "GET /api/photo-visualization/:id",
-      "GET /api/picking/:id",
       "GET /api/pins",
       "GET /api/playbook/runs/:id",
       "GET /api/viz/projects/:id"

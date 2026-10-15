@@ -7,8 +7,8 @@
 // s preslikavo ProductFamily.code v slovenska imena.
 // Profile (stari railing katalog) ostaja v /api/catalog za konfigurator/viz.
 
-import { useMemo, useState } from 'react'
-import { BadgeJapaneseYen, Boxes, Calculator, Layers, ListTree, Package, Pencil, Plus, Ruler, Search, Shapes, ShieldCheck, Tag } from 'lucide-react'
+import { useMemo, useRef, useState } from 'react'
+import { BadgeJapaneseYen, Boxes, Calculator, Layers, ListTree, Package, Pencil, Plus, Ruler, Search, Shapes, ShieldCheck, Tag, Upload } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -552,11 +552,22 @@ function PriceListsTab () {
   const lists = useApi<{ data: PriceListRow[] }>('/api/price-lists')
   const canManage = hasPerm(user?.perms, 'price.override')
   const [editing, setEditing] = useState<{ listId: string; listName: string; rule: PriceRuleRow | null } | null>(null)
+  const [importing, setImporting] = useState(false)
 
   const rows = lists.data?.data ?? []
 
   return (
     <div className="space-y-4">
+      {canManage ? (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="max-w-xl text-xs text-muted-foreground">
+            Poslovne cene niso hardcodirane — živijo kot pravila cenika. Uvozite jih iz CSV/XLSX/JSON (glava: SKU;Cena;Enota;Popust %;Min cena;Veljavno od;Veljavno do;Opomba).
+          </p>
+          <Button size="sm" onClick={() => setImporting(true)}>
+            <Upload className="mr-1.5 size-4" aria-hidden /> Uvozi cenik
+          </Button>
+        </div>
+      ) : null}
       {canManage ? null : (
         <p className="rounded-xl border border-dashed bg-secondary/40 p-3 text-xs text-muted-foreground">
           Prikazani so prodajni in montažni ceniki. Nabavni cenik je viden samo pooblaščeni osebi (price.override).
@@ -641,8 +652,211 @@ function PriceListsTab () {
           onSaved={async () => { setEditing(null); await lists.reload() }}
         />
       </Dialog>
+
+      <ImportCenikDialog
+        open={importing}
+        onOpenChange={setImporting}
+        lists={rows}
+        onImported={async () => { setImporting(false); await lists.reload() }}
+      />
     </div>
   )
+}
+
+/** R516 (issue #15 Faza 6): uvoz cenika iz CSV/XLSX/JSON — PREVERI (brez
+ *  zapisov, diff se pokaže) nato UVOZI. Cene ostanejo PODATEK (PriceRule). */
+function ImportCenikDialog ({ open, onOpenChange, lists, onImported }: {
+  open: boolean
+  onOpenChange: (o: boolean) => void
+  lists: PriceListRow[]
+  onImported: () => Promise<void>
+}) {
+  const token = useAppStore((s) => s.token)
+  const { toast } = useToast()
+  const inputRef = useRef<HTMLInputElement>(null)
+  const [file, setFile] = useState<File | null>(null)
+  const [targetId, setTargetId] = useState<string>('__nov__')
+  const [newName, setNewName] = useState('')
+  const [newType, setNewType] = useState('PRODAJNA')
+  const [result, setResult] = useState<CenikImportResult | null>(null)
+  const [rowErrors, setRowErrors] = useState<{ row: number; field: string; problem: string }[] | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  function reset (): void {
+    setFile(null); setResult(null); setRowErrors(null)
+    if (inputRef.current != null) inputRef.current.value = ''
+  }
+
+  async function run (mode: 'preveri' | 'uvozi'): Promise<void> {
+    if (file == null || !token) return
+    if (targetId === '__nov__' && newName.trim() === '') {
+      toast({ title: 'Vnesite ime novega cenika.', variant: 'destructive' })
+      return
+    }
+    setBusy(true)
+    try {
+      const fd = new FormData()
+      fd.append('file', file)
+      fd.append('mode', mode)
+      if (targetId === '__nov__') {
+        fd.append('name', newName.trim())
+        fd.append('type', newType)
+      } else {
+        fd.append('priceListId', targetId)
+      }
+      const res = await fetch('/api/import/cenik', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: fd,
+      })
+      const raw = await res.json().catch(() => ({})) as { data?: CenikImportResult; error?: string; hint?: string; rowErrors?: { row: number; field: string; problem: string }[]; diff?: CenikImportResult['diff'] }
+      if (!res.ok) {
+        setRowErrors(raw.rowErrors ?? null)
+        setResult(raw.error != null && raw.diff != null ? { ...raw.diff, mode: 'preveri', lines: 0 } as CenikImportResult : null)
+        throw new Error([raw.error ?? `Napaka strežnika (${res.status}).`, raw.hint].filter(Boolean).join(' '))
+      }
+      setRowErrors(null)
+      if (mode === 'preveri') {
+        setResult(raw.data ?? null)
+      } else {
+        const d = raw.data
+        toast({
+          title: `Cenik „${d?.list?.name ?? ''}“ uvožen (${d?.novo ?? 0} novih, ${d?.posodobljeno ?? 0} nadomeščenih pravil).`,
+          description: 'Cene so zapisane kot pravila cenika — izračuni ponudb jih upoštevajo od zdaj.',
+        })
+        reset()
+        onOpenChange(false)
+        await onImported()
+      }
+    } catch (e) {
+      toast({ title: 'Uvoz ni uspel.', description: e instanceof Error ? e.message : 'Neznana napaka.', variant: 'destructive' })
+    } finally { setBusy(false) }
+  }
+
+  const d = result?.diff
+  return (
+    <Dialog open={open} onOpenChange={(o) => { if (!o) { reset(); onOpenChange(false) } else { onOpenChange(true) } }}>
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-xl">
+        <DialogHeader className="min-w-0">
+          <DialogTitle>Uvoz cenika</DialogTitle>
+          <DialogDescription>
+            CSV (podpičje, decimalna vejica ali pika), XLSX ali JSON. Najprej PREVERI (brez zapisov) — predogled se pokaže spodaj. Neznani SKU zavrne CEL uvoz.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <input
+            ref={inputRef}
+            type="file"
+            accept=".csv,.xlsx,.json"
+            className="block w-full rounded-md border border-input bg-background px-3 py-2 text-sm file:mr-3 file:rounded-md file:border-0 file:bg-secondary file:px-3 file:py-1 file:text-sm file:font-medium hover:file:bg-secondary/80"
+            aria-label="Datoteka cenika (CSV, XLSX ali JSON)"
+            onChange={(e) => { setFile(e.target.files?.[0] ?? null); setResult(null); setRowErrors(null) }}
+          />
+
+          <div className="grid gap-2 sm:grid-cols-2">
+            <div className="space-y-1">
+              <Label htmlFor="cenik-target">Cilj uvoza</Label>
+              <Select value={targetId} onValueChange={setTargetId}>
+                <SelectTrigger id="cenik-target"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__nov__">Nov cenik …</SelectItem>
+                  {lists.map((l) => (
+                    <SelectItem key={l.id} value={l.id}>{l.name} ({PL_TYPE_LABELS[l.type] ?? l.type})</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {targetId === '__nov__' ? (
+              <>
+                <div className="space-y-1">
+                  <Label htmlFor="cenik-name">Ime novega cenika</Label>
+                  <Input id="cenik-name" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="npr. Prodajni cenik 2027" />
+                </div>
+                <div className="space-y-1 sm:col-span-2">
+                  <Label htmlFor="cenik-type">Tip</Label>
+                  <Select value={newType} onValueChange={setNewType}>
+                    <SelectTrigger id="cenik-type"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="PRODAJNA">Prodajni</SelectItem>
+                      <SelectItem value="NABAVNA">Nabavni</SelectItem>
+                      <SelectItem value="MONTAZA">Montažni</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </>
+            ) : null}
+          </div>
+
+          {file != null ? (
+            <p className="text-xs text-muted-foreground">{file.name} · {Math.max(1, Math.round(file.size / 1024))} KB</p>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              Glava: <span className="font-mono">SKU;Cena;Enota;Popust %;Min cena;Veljavno od;Veljavno do;Opomba</span> — enota je neobvezna (vzame se iz kataloga), datumi ISO ali DD.MM.YYYY.
+            </p>
+          )}
+
+          {rowErrors != null && rowErrors.length > 0 ? (
+            <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-900 dark:border-red-900 dark:bg-red-950 dark:text-red-200" role="alert">
+              <p className="mb-1 font-bold">Napake v vrsticah ({rowErrors.length}):</p>
+              <ul className="max-h-32 space-y-0.5 overflow-y-auto">
+                {rowErrors.map((e, i) => <li key={i}>Vrsta {e.row} · {e.field}: {e.problem}</li>)}
+              </ul>
+            </div>
+          ) : null}
+
+          {result != null && d != null ? (
+            <div className="space-y-2 rounded-lg border bg-secondary/30 p-3 text-xs">
+              <p className="font-bold">Predogled: {result.lines} vrstic · {result.skus ?? 0} SKU</p>
+              <p className={d.neznani.length === 0 ? 'font-medium text-emerald-700 dark:text-emerald-400' : 'font-medium text-red-700 dark:text-red-400'}>
+                {d.novo} novih · {d.posodobljeno} nadomeščenih{d.neznani.length > 0 ? ` · ${d.neznani.length} NEZNANIH SKU (uvoz bo zavrnjen)` : ''}
+              </p>
+              {d.entries != null && d.entries.length > 0 ? (
+                <ul className="max-h-40 space-y-0.5 overflow-y-auto font-mono">
+                  {d.entries.slice(0, 30).map((e: { kind: string; sku: string; unit: string | null; fromPrice?: number; toPrice: number }, i: number) => (
+                    <li key={i}>
+                      {e.kind === 'NOVO' ? '+' : e.kind === 'POSODOBLJENO' ? '±' : '✗'} {e.sku}
+                      {e.kind === 'POSODOBLJENO' ? `: ${e.fromPrice} → ${e.toPrice}` : `: ${e.toPrice}`} EUR/{e.unit ?? '?'}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              {(result.warnings ?? []).length > 0 ? (
+                <ul className="space-y-0.5 text-muted-foreground">
+                  {(result.warnings ?? []).slice(0, 5).map((w: string, i: number) => <li key={i}>• {w}</li>)}
+                </ul>
+              ) : null}
+            </div>
+          ) : null}
+
+          <DialogFooter className="gap-2">
+            <Button type="button" variant="secondary" disabled={busy || file == null} onClick={() => { void run('preveri') }}>
+              {busy ? '…' : 'Preveri'}
+            </Button>
+            <Button type="button" disabled={busy || file == null || (d != null && d.neznani.length > 0)} onClick={() => { void run('uvozi') }}>
+              {busy ? '…' : 'Uvozi'}
+            </Button>
+          </DialogFooter>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+interface CenikImportResult {
+  mode: string
+  lines: number
+  skus?: number
+  list?: { id: string | null; name: string; type: string }
+  novo?: number
+  posodobljeno?: number
+  diff?: {
+    novo: number
+    posodobljeno: number
+    neznani: string[]
+    brezEnote: string[]
+    entries: { kind: string; sku: string; unit: string | null; fromPrice?: number; toPrice: number }[]
+  }
+  warnings?: string[]
 }
 
 function EditRuleDialog ({ ctx, onClose, onSaved }: {
