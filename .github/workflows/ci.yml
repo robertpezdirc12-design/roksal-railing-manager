@@ -196,6 +196,11 @@ jobs:
           # (POLNA 128/100/57 · DESKA 150 · ALU) + razmik iz tech.razmakDeskMm.
           # Nova skupina MORA biti tudi v tests/ci-matrix.sh.
           - grupa: r518
+          # R520: FASADE in TERASE — KUBO 80×42 samo navpično (uradno), razmik
+          # poljuben (izmera 20 mm), terasna reža 5–6 mm (uradni FAQ); mere iz
+          # imena izdelka (150×25); izrez ene deske iz scenične teksture.
+          # Nova skupina MORA biti tudi v tests/ci-matrix.sh.
+          - grupa: r520
     services:
       postgres:
         image: postgres:16

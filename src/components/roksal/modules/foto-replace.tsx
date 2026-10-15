@@ -38,7 +38,8 @@ import { hasPerm } from '@/lib/permissions-core'
 import { VizLinksPanel } from '@/components/roksal/modules/foto-replace-links'
 import {
   VIZ_ZIG, barvaVariante, generirajRazpored, izrisiOgrajo, izrisiPrimerjavo, lameleIzTecha,
-  materialIzTecha, maskaZaIzris, oceniKakovost, oceniSvetlobo, ralHex, rezaIzTecha, visinaIzTecha,
+  materialIzTecha, maskaZaIzris, oceniKakovost, oceniSvetlobo, ralHex, rezaIzTecha, sirinaIzImena, visinaIzTecha,
+  FASADA_REZA_MM, FASADA_SIRINA_MM, TERASA_REZA_MM,
   type NacinPritrditve, type Opozorilo, type OzadjeSloj, type RenderParams, type Tocka, type TipPolnila,
 } from '@/lib/photo-replace-core'
 // R507 (issue #14 §1–§4): lastna maska + obnova ozadja iz robov + originalna gradiva
@@ -47,7 +48,7 @@ import {
   slojObnove, slojPrednjega, MAX_OBLIK, MAX_TOCK, type Maska, type Oblika,
 } from '@/lib/photo-replace-mask'
 import {
-  celiceZaElement, izberiGradivo, projekcijaIzRavnine, vzorciTeksturo,
+  celiceZaElement, izberiGradivo, izmeriIzrezNavpicnePalice, projekcijaIzRavnine, vzorciTeksturo,
   type GradivoDTO, type IzbiraGradiva, type VirTeksture,
 } from '@/lib/photo-replace-texture'
 import { cn } from '@/lib/utils'
@@ -57,7 +58,7 @@ import { cn } from '@/lib/utils'
 const STEPS = [
   { key: 'projekt', label: 'Projekt', icon: FolderKanban },
   { key: 'foto', label: 'Fotografija', icon: Camera },
-  { key: 'oznaci', label: 'Označi ograjo', icon: Pencil },
+  { key: 'oznaci', label: 'Označi območje', icon: Pencil },
   { key: 'izdelek', label: 'Izdelek', icon: Package },
   { key: 'potem', label: 'PREJ / POTEM', icon: Eye },
 ] as const
@@ -332,8 +333,11 @@ export default function FotoReplaceModule () {
   )
 
   const project = (projects.data?.data ?? []).find((p) => p.id === projectId) ?? null
+  // R520: poleg ograj tudi FASADE in TERASE — enak modul, enak katalog.
   const ograjaProducts = useMemo(
-    () => (productsAll.data?.data ?? []).filter((p) => p.family.code === 'OGRAJA_PRECNA' || p.family.code === 'OGRAJA_POKOCNA'),
+    () => (productsAll.data?.data ?? []).filter((p) =>
+      p.family.code === 'OGRAJA_PRECNA' || p.family.code === 'OGRAJA_POKOCNA' ||
+      p.family.code === 'FASADA' || p.family.code === 'TERASA'),
     [productsAll.data]
   )
   const product = ograjaProducts.find((p) => p.id === slot.productId) ?? null
@@ -354,10 +358,14 @@ export default function FotoReplaceModule () {
     : toNum(slot.refCmS, 0, 20, 20000)
 
   // ── konfiguracija (številke iz nizov) ──
+  // R520: višina/globina je odvisna od tipa — ograja ≤ 400 cm, FASADA (odsek
+  // stene) in TERASA (globina tal) pa do 2000 cm (enaka meja kot preveriConfig).
+  const jePovrsina = slot.tip === 'FASADA' || slot.tip === 'TERASA'
+  const maxVisina = jePovrsina ? 2000 : 400
   const cfg = useMemo(() => ({
     tip: slot.tip,
     lengthCm: toNum(slot.lengthCmS, 400, 20, 6000),
-    heightCm: toNum(slot.heightCmS, 110, 20, 400),
+    heightCm: toNum(slot.heightCmS, 110, 20, maxVisina),
     posts: Math.round(toNum(slot.postsS, 5, 1, 40)),
     handrail: slot.handrail,
     lamelaMm: Math.round(toNum(slot.lamelaMmS, 70, 10, 300)),
@@ -365,7 +373,7 @@ export default function FotoReplaceModule () {
     deskaMm: Math.round(toNum(slot.deskaMmS, 120, 40, 400)),
     pritrditev: slot.pritrditev,
     vijaki: slot.vijaki,
-  }), [slot.tip, slot.lengthCmS, slot.heightCmS, slot.postsS, slot.handrail, slot.lamelaMmS, slot.rezaMmS, slot.deskaMmS, slot.pritrditev, slot.vijaki])
+  }), [slot.tip, slot.lengthCmS, slot.heightCmS, slot.postsS, slot.handrail, slot.lamelaMmS, slot.rezaMmS, slot.deskaMmS, slot.pritrditev, slot.vijaki, maxVisina])
 
   // ── R507 §1: lastna maska (ograža sme biti natančnejša od kvada, izpusti in
   //    PREDNJI plan ostanejo originalni piksli) ──
@@ -467,6 +475,8 @@ export default function FotoReplaceModule () {
       permission: a.permission, sourceName: a.sourceName,
     }))
     const orientacija = slot.tip === 'PRECNA' ? 'PRECNA' : slot.tip === 'POKOCNA' ? 'POKOCNA' : 'SPLOSNO'
+    // R520: FASADA/TERASA gradiva (DETAJL SPLOSNO/SPREDAJ) so splošne
+    // orientacije — enak kanal kot STEKLO.
     return izberiGradivo(dto, { productId: product.id, variantSku: variant?.sku ?? null, orientation: orientacija })
   }, [gradiva.data, product, variant, slot.tip])
 
@@ -478,16 +488,36 @@ export default function FotoReplaceModule () {
     const img = new Image()
     img.onload = () => {
       if (!alive) return
+      // R520: FASADA — tekstura KUBO pride iz namestitvene fotografije z VEČ
+      // navpičnimi deskami: izrežemo ENO (izmerjeno korak), da se na letvico
+      // ne stiska cela hiša. TERASA/ograje imajo DETAJL posnetke ene deske —
+      // izmera vrne null in slika ostane cela (fail-closed).
+      let izrez: VirTeksture['izrez']
+      if (slot.tip === 'FASADA') {
+        try {
+          const mc = document.createElement('canvas')
+          mc.width = img.naturalWidth; mc.height = img.naturalHeight
+          const mctx = mc.getContext('2d', { willReadFrequently: true })
+          if (mctx) {
+            mctx.drawImage(img, 0, 0)
+            izrez = izmeriIzrezNavpicnePalice((x, y) => {
+              const d = mctx.getImageData(Math.round(x), Math.round(y), 1, 1).data
+              return (d[0] * 0.299 + d[1] * 0.587 + d[2] * 0.114) / 255
+            }, img.naturalWidth, img.naturalHeight) ?? undefined
+          }
+        } catch { /* izrez ni nujen — cela slika kot doslej */ }
+      }
       setTekstura({
         slika: img, sirinaPx: img.naturalWidth, visinaPx: img.naturalHeight,
         doklad: izbiraGradiva?.doklad ?? g.filePath ?? '',
         oznaka: g.variantSku ?? g.id,
+        ...(izrez ? { izrez } : {}),
       })
     }
     img.onerror = () => { if (alive) setTekstura(null) }
     img.src = g.filePath.replace(/^public/, '')
     return () => { alive = false }
-  }, [izbiraGradiva])
+  }, [izbiraGradiva, slot.tip])
 
   // ── nalaganje fotografije ──
   useEffect(() => {
@@ -807,22 +837,35 @@ export default function FotoReplaceModule () {
   // R518: tudi RAZMIK pride iz tech (razmakDeskMm — npr. »5–30 (priporočeno)« →
   // sredina obsega), saj POLNE ograje niso brez rež: tech jih priporoča 5–30 mm
   // in uporabnik vidi resničen razmik iz kataloga namesto splošne 20 mm.
+  // R520: FASADE in TERASE — mere iz uradnih virov roksal.com (enak vir kot
+  // tech.vir): KUBO 80×42 SAMO navpično, razmik poljuben (privzeto 20 mm je
+  // izmerjen z namestitvenih fotografij); terasna deska 150×25 iz IMENA
+  // izdelka, reža 5–6 mm po uradnem FAQ (privzeto 6 mm).
   function izberiIzdelek (pid: string): void {
     const p = ograjaProducts.find((x) => x.id === pid) ?? null
-    const sirina = p ? lameleIzTecha(p.tech) : null
+    const sirina = p ? lameleIzTecha(p.tech) ?? sirinaIzImena(p.name) : null
     const razmik = p ? rezaIzTecha(p.tech) : null
+    const jeFasada = p?.family.code === 'FASADA'
+    const jeTerasa = p?.family.code === 'TERASA'
     updateSlot((s) => ({
       ...s,
       productId: pid,
       variantId: p?.variants[0]?.id ?? '',
-      tip: p?.family.code === 'OGRAJA_PRECNA' ? 'PRECNA' : 'POKOCNA',
+      tip: jeFasada ? 'FASADA' : jeTerasa ? 'TERASA'
+        : p?.family.code === 'OGRAJA_PRECNA' ? 'PRECNA' : 'POKOCNA',
       ...(p ? {
-        heightCmS: String(Math.round((visinaIzTecha(p.tech) ?? 1100) / 10)),
+        heightCmS: String(Math.round((visinaIzTecha(p.tech) ?? (jeFasada ? 250 : jeTerasa ? 400 : 1100)) / 10)),
         ...(sirina != null ? {
           lamelaMmS: String(sirina),
-          deskaMmS: String(sirina), // prečna: višina deske = širina istega profila
+          deskaMmS: String(sirina), // prečna/terasna: višina deske = širina istega profila
         } : {}),
         ...(razmik != null ? { rezaMmS: String(razmik) } : {}),
+        // R520 uradni privzeti razmik, KADER ga katalog nima: KUBO (poljuben)
+        // → izmerjenih 20 mm; terasa (FAQ 5–6 mm) → 6 mm.
+        ...(jeFasada && razmik == null ? { rezaMmS: String(FASADA_REZA_MM) } : {}),
+        ...(jeTerasa && razmik == null ? { rezaMmS: String(TERASA_REZA_MM) } : {}),
+        // KUBO nima mere v tech ne v imenu → uradna 80 mm.
+        ...(jeFasada && sirina == null ? { lamelaMmS: String(FASADA_SIRINA_MM) } : {}),
       } : {}),
     }))
   }
@@ -1453,7 +1496,7 @@ export default function FotoReplaceModule () {
                   <Select value={slot.productId || 'none'} onValueChange={izberiIzdelek}>
                     <SelectTrigger id="pv-izdelek" className="h-11"><SelectValue placeholder="Izberite izdelek" /></SelectTrigger>
                     <SelectContent>
-                      {ograjaProducts.length === 0 ? <SelectItem value="none" disabled>Ni ograjnih izdelkov</SelectItem> : null}
+                      {ograjaProducts.length === 0 ? <SelectItem value="none" disabled>Ni izdelkov (ograje/fasade/terase)</SelectItem> : null}
                       {ograjaProducts.map((p) => (
                         <SelectItem key={p.id} value={p.id}>{p.name} ({p.sku})</SelectItem>
                       ))}
@@ -1483,6 +1526,16 @@ export default function FotoReplaceModule () {
 
               {product ? (
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {jePovrsina ? (
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-semibold">Površina</Label>
+                      <p className="rounded-lg border bg-muted/40 px-3 py-2.5 text-xs text-muted-foreground" aria-live="polite">
+                        {slot.tip === 'FASADA'
+                          ? 'Fasada — navpične KUBO letvice (uradno: profil 80×42, samo navpična montaža, pritrditev zadaj).'
+                          : 'Terasa — deske ležijo vzdolž spodnjega roba območja; reža med deskami po uradnem priporočilu 5–6 mm.'}
+                      </p>
+                    </div>
+                  ) : (
                   <div className="space-y-1.5">
                     <Label htmlFor="pv-tip" className="text-xs font-semibold">Polnilo</Label>
                     <Select value={slot.tip} onValueChange={(v) => updateSlot((s) => ({ ...s, tip: v as TipPolnila }))}>
@@ -1494,34 +1547,41 @@ export default function FotoReplaceModule () {
                       </SelectContent>
                     </Select>
                   </div>
+                  )}
                   <div className="space-y-1.5">
-                    <Label htmlFor="pv-len" className="text-xs font-semibold">Prikazna dolžina (cm)</Label>
+                    <Label htmlFor="pv-len" className="text-xs font-semibold">
+                      {slot.tip === 'FASADA' ? 'Širina območja (cm)' : slot.tip === 'TERASA' ? 'Dolžina vzdolž desk (cm)' : 'Prikazna dolžina (cm)'}
+                    </Label>
                     <Input id="pv-len" className="h-11" type="number" min="20" max="6000" step="any" inputMode="decimal" value={slot.lengthCmS} onChange={(e) => updateSlot((s) => ({ ...s, lengthCmS: e.target.value }))} />
                   </div>
                   <div className="space-y-1.5">
-                    <Label htmlFor="pv-vis" className="text-xs font-semibold">Višina (cm)</Label>
-                    <Input id="pv-vis" className="h-11" type="number" min="20" max="400" step="any" inputMode="decimal" value={slot.heightCmS} onChange={(e) => updateSlot((s) => ({ ...s, heightCmS: e.target.value }))} />
+                    <Label htmlFor="pv-vis" className="text-xs font-semibold">
+                      {slot.tip === 'FASADA' ? 'Višina območja (cm)' : slot.tip === 'TERASA' ? 'Globina terase (cm)' : 'Višina (cm)'}
+                    </Label>
+                    <Input id="pv-vis" className="h-11" type="number" min="20" max={maxVisina} step="any" inputMode="decimal" value={slot.heightCmS} onChange={(e) => updateSlot((s) => ({ ...s, heightCmS: e.target.value }))} />
                   </div>
+                  {!jePovrsina ? (
                   <div className="space-y-1.5">
                     <Label htmlFor="pv-posts" className="text-xs font-semibold">Število stebrov</Label>
                     <Input id="pv-posts" className="h-11" type="number" min="1" max="40" value={slot.postsS} onChange={(e) => updateSlot((s) => ({ ...s, postsS: e.target.value }))} />
                   </div>
-                  {slot.tip === 'POKOCNA' ? (
+                  ) : null}
+                  {slot.tip === 'POKOCNA' || slot.tip === 'FASADA' ? (
                     <>
                       <div className="space-y-1.5">
-                        <Label htmlFor="pv-lamela" className="text-xs font-semibold">Širina lamele (mm)</Label>
+                        <Label htmlFor="pv-lamela" className="text-xs font-semibold">{slot.tip === 'FASADA' ? 'Širina letvice (mm)' : 'Širina lamele (mm)'}</Label>
                         <Input id="pv-lamela" className="h-11" type="number" min="10" max="300" value={slot.lamelaMmS} onChange={(e) => updateSlot((s) => ({ ...s, lamelaMmS: e.target.value }))} />
                       </div>
                       <div className="space-y-1.5">
-                        <Label htmlFor="pv-reza" className="text-xs font-semibold">Razmik med palicami (mm)</Label>
+                        <Label htmlFor="pv-reza" className="text-xs font-semibold">{slot.tip === 'FASADA' ? 'Razmik med letvicami (mm)' : 'Razmik med palicami (mm)'}</Label>
                         <Input id="pv-reza" className="h-11" type="number" min="0" max="300" value={slot.rezaMmS} onChange={(e) => updateSlot((s) => ({ ...s, rezaMmS: e.target.value }))} />
                       </div>
                     </>
                   ) : null}
-                  {slot.tip === 'PRECNA' ? (
+                  {slot.tip === 'PRECNA' || slot.tip === 'TERASA' ? (
                     <>
                       <div className="space-y-1.5">
-                        <Label htmlFor="pv-deska" className="text-xs font-semibold">Višina deske (mm)</Label>
+                        <Label htmlFor="pv-deska" className="text-xs font-semibold">{slot.tip === 'TERASA' ? 'Širina deske (mm)' : 'Višina deske (mm)'}</Label>
                         <Input id="pv-deska" className="h-11" type="number" min="40" max="400" value={slot.deskaMmS} onChange={(e) => updateSlot((s) => ({ ...s, deskaMmS: e.target.value }))} />
                       </div>
                       <div className="space-y-1.5">
@@ -1530,6 +1590,8 @@ export default function FotoReplaceModule () {
                       </div>
                     </>
                   ) : null}
+                  {!jePovrsina ? (
+                  <>
                   <div className="space-y-1.5">
                     <Label htmlFor="pv-pritrditev" className="text-xs font-semibold">Pritrditev</Label>
                     <Select value={slot.pritrditev} onValueChange={(v) => updateSlot((s) => ({ ...s, pritrditev: v as NacinPritrditve }))}>
@@ -1549,8 +1611,10 @@ export default function FotoReplaceModule () {
                     <Label htmlFor="pv-vijaki" className="text-xs font-medium">Vidni vijaki (§5)</Label>
                     <Switch id="pv-vijaki" checked={slot.vijaki} onCheckedChange={(v) => updateSlot((s) => ({ ...s, vijaki: v }))} />
                   </div>
+                  </>
+                  ) : null}
                   <div className="flex items-center justify-between gap-2 rounded-lg border p-2.5">
-                    <Label htmlFor="pv-prekrij" className="text-xs font-medium">Prekrij staro ograjo</Label>
+                    <Label htmlFor="pv-prekrij" className="text-xs font-medium">Prekrij staro {jePovrsina ? (slot.tip === 'FASADA' ? 'oblogo' : 'tla') : 'ograjo'}</Label>
                     <Switch id="pv-prekrij" checked={prekrij} onCheckedChange={setPrekrij} />
                   </div>
                 </div>
@@ -1558,10 +1622,15 @@ export default function FotoReplaceModule () {
 
               {razporedInfo ? (
                 <p className="text-xs text-muted-foreground">
-                  Razpored: <span className="font-medium text-foreground">{razporedInfo.posts.length} stebrov</span>
-                  {razporedInfo.palice.length > 0 ? ` · ${razporedInfo.palice.length} palic (${slot.lamelaMmS} mm + ${slot.rezaMmS} mm razmik)` : ''}
-                  {razporedInfo.deske.length > 0 ? ` · ${razporedInfo.deske.length} desk (${slot.deskaMmS} mm)` : ''}
-                  {razporedInfo.vijaki.length > 0 ? ` · ${razporedInfo.vijaki.length} vijakov` : ''} — iz konfiguracije, ne po občutku.
+                  {jePovrsina
+                    ? <>Razpored: <span className="font-medium text-foreground">{razporedInfo.palice.length > 0
+                        ? `${razporedInfo.palice.length} letvic (${slot.lamelaMmS} mm + ${slot.rezaMmS} mm razmik)`
+                        : `${razporedInfo.deske.length} desk (${slot.deskaMmS} mm + ${slot.rezaMmS} mm reža)`}</span>
+                      — iz konfiguracije, ne po občutku.</>
+                    : <>Razpored: <span className="font-medium text-foreground">{razporedInfo.posts.length} stebrov</span>
+                      {razporedInfo.palice.length > 0 ? ` · ${razporedInfo.palice.length} palic (${slot.lamelaMmS} mm + ${slot.rezaMmS} mm razmik)` : ''}
+                      {razporedInfo.deske.length > 0 ? ` · ${razporedInfo.deske.length} desk (${slot.deskaMmS} mm)` : ''}
+                      {razporedInfo.vijaki.length > 0 ? ` · ${razporedInfo.vijaki.length} vijakov` : ''} — iz konfiguracije, ne po občutku.</>}
                 </p>
               ) : null}
 
@@ -1571,7 +1640,7 @@ export default function FotoReplaceModule () {
                   <canvas ref={previewRef} className="block h-auto w-full rounded-lg border" role="img" aria-label="Predogled nove ograje na fotografiji" />
                 </figure>
               ) : (
-                <EmptyState title="Manjka označitev ali referenca" desc="Vrnite se na korak Označi ograjo." icon={Pencil} />
+                <EmptyState title="Manjka označitev ali referenca" desc="Vrnite se na korak Označi območje." icon={Pencil} />
               )}
             </div>
           ) : null}

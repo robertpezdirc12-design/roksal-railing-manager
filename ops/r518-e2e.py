@@ -177,8 +177,8 @@ def main ():
         ok(f'fotografija naložena in prikazana ({zadnja.split(":", 1)[1]} bajtov)')
 
         # ── 6) Označi: 4 vogali + prednji plan + referenca ──
-        print('── 6) Označi ograjo: 4 vogali + prednji plan + referenca ──')
-        if not klik_elem('button', 'Naprej — Označi ograjo', delni=True):
+        print('── 6) Označi območje: 4 vogali + prednji plan + referenca ──')
+        if not klik_elem('button', 'Naprej — Označi območje', delni=True):
             bad('Naprej (Označi) ni kliknjen')
             sys.exit(1)
         if not pocekaj_besedilo('Kliknite točko 1 od 4', 15):

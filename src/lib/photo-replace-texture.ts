@@ -225,6 +225,12 @@ export interface VirTeksture {
   doklad: string
   /** kratka oznaka za zaslon (npr. SKU variante) */
   oznaka: string
+  /**
+   * R520: izrez vira v PX (cela slika privzeto). Za scenične namestitvene
+   * fotografije KUBO fasade ga postavi izmeriIzrezNavpicnePalice — vrstica
+   * IZREZ ENE deske, da se na letvico ne stiska cela hiša.
+   */
+  izrez?: Pravokotnik
 }
 
 export interface TeksturaOpcije {
@@ -262,7 +268,11 @@ export function vzorciTeksturo (
 ): void {
   const moc = Math.max(0, Math.min(1, opcije.moc ?? 0.5))
   if (moc <= 0) return
-  const izvor = izrezVira(vir.sirinaPx, vir.visinaPx, opcije.pas)
+  // R520: če je vir izrezan na eno desko, je izrez vir (celotna višina —
+  // letnica teče vzdolž profila); sicer vertikalni pas kot doslej.
+  const izvor = vir.izrez && vir.izrez.w > 0 && vir.izrez.h > 0
+    ? vir.izrez
+    : izrezVira(vir.sirinaPx, vir.visinaPx, opcije.pas)
   if (izvor.w <= 0 || izvor.h <= 0) return
   const celice = razdeliMrežo(P, izvor, opcije.celiceU ?? 12, opcije.celiceV ?? 3)
   ctx.save()
@@ -291,4 +301,96 @@ export function celiceZaElement (dolzinaPx: number, visinaPx: number): { celiceU
     celiceU: Math.max(1, Math.min(64, Math.round(Math.max(1, dolzinaPx) / 26))),
     celiceV: Math.max(1, Math.min(24, Math.round(Math.max(1, visinaPx) / 26))),
   }
+}
+
+// ── R520: izrez ENE navpične palice iz scenične fotografije (KUBO fasada) ────
+
+/**
+ * Iz slike z NAVPIČNIMI deskami (namestitvena fotografija KUBO fasade) izmeri
+ * korak med deskami in vrne izrez ene deske: celotna višina slike × širina
+ * enega profila. Deterministično (mediana gladilo + pragovi, enaka metoda kot
+ * ops/r520-izmeri.mjs, samo po eni prerezu).
+ *
+ * `beriPiksel(x, y)` vrne svetlost 0..1 (odjemalec poda getImageData bralca).
+ * Vrne null, kadar ni vsaj 4 zaporednih desk z doslednim korakom — takrat je
+ * slika verjetno posnetek ENE deske (DETAJL) in se uporabi cela (fail-closed
+ * na obstoječe obnašanje, brez naključnega rezanja).
+ */
+export function izmeriIzrezNavpicnePalice (
+  beriPiksel: (x: number, y: number) => number,
+  sirinaPx: number,
+  visinaPx: number
+): Pravokotnik | null {
+  if (sirinaPx < 40 || visinaPx < 40) return null
+  // več prereznih črt (0.35 … 0.8) — scena ima pogosto nebo/okna čez sredino;
+  // vzamemo NAJBOLJŠO izmero (najširša mediana desk ≥ 4 desk z režami)
+  let najboljsa: Pravokotnik | null = null
+  let najboljsaMediana = 0
+  for (const yd of [0.35, 0.5, 0.65, 0.8]) {
+    const izrez = izmeriPoPrerezu(beriPiksel, sirinaPx, visinaPx, Math.round(visinaPx * yd))
+    if (!izrez) continue
+    if (izrez.w > najboljsaMediana) { najboljsaMediana = izrez.w; najboljsa = izrez }
+  }
+  return najboljsa
+}
+
+/** Ena prerezna črta — vrne izrez ene deske ali null (premalo dokazov). */
+function izmeriPoPrerezu (
+  beriPiksel: (x: number, y: number) => number,
+  sirinaPx: number,
+  visinaPx: number,
+  y: number
+): Pravokotnik | null {
+  const pas: number[] = []
+  for (let x = 0; x < sirinaPx; x++) pas.push(beriPiksel(x, y))
+  // gladilo (mediana 5)
+  const g = pas.map((_, i) => {
+    const okno = pas.slice(Math.max(0, i - 2), i + 3).sort((a, b) => a - b)
+    return okno[Math.floor(okno.length / 2)]
+  })
+  // svetlo = deska, temno = reža/rob — prag relativno na sredino pasu
+  const sred = g.reduce((a, b) => a + b, 0) / g.length
+  const svetlo = g.map((v) => v > sred * 1.06)
+  const odseki: { tek: boolean; od: number; dol: number }[] = []
+  let tek = svetlo[0], od = 0
+  for (let i = 1; i < svetlo.length; i++) {
+    if (svetlo[i] === tek) continue
+    odseki.push({ tek, od, dol: i - od }); tek = svetlo[i]; od = i
+  }
+  odseki.push({ tek, od, dol: svetlo.length - od })
+  // počisti šum (< 3 px se pripiše sosedu)
+  const cisti: { tek: boolean; od: number; dol: number }[] = []
+  for (const o of odseki) {
+    if (o.dol < 3 && cisti.length > 0) cisti[cisti.length - 1].dol += o.dol
+    else cisti.push({ ...o })
+  }
+  const deske = cisti.filter((o) => o.tek && o.dol >= 8).map((o) => ({ od: o.od, dol: o.dol }))
+  const reze = cisti.filter((o) => !o.tek).map((o) => ({ od: o.od, dol: o.dol }))
+  if (deske.length < 4 || reze.length < 3) return null
+  const sortirane = [...deske.map((d) => d.dol)].sort((a, b) => a - b)
+  const medianaD = sortirane[Math.floor(sortirane.length / 2)]
+  if (medianaD < 6) return null // preozki »deski« — verjetno rebrasta površina
+  // doslednost: vsaj 60 % desk znotraj ±35 % mediane
+  const skladne = deske.filter((d) => Math.abs(d.dol - medianaD) <= medianaD * 0.35).length
+  if (skladne < Math.max(4, Math.ceil(deske.length * 0.6))) return null
+  // reže so lahko ozke (sencen rob) ali široke (namestitev z razmakom) —
+  // vendar mora vsaka veljavna reža biti ožja od deske
+  const veljavneReze = reze.filter((r) => r.dol > 0 && r.dol < medianaD)
+  if (veljavneReze.length < 3) return null
+  // izberi DESKO najbliže sredini slike, ki ima na obeh straneh veljavno režo
+  const sredina = sirinaPx / 2
+  const kandidati = deske.filter((d) => {
+    const levo = veljavneReze.some((r) => r.od + r.dol <= d.od + 1 && r.od + r.dol > d.od - medianaD)
+    const desno = veljavneReze.some((r) => r.od >= d.od + d.dol - 1 && r.od < d.od + d.dol + medianaD)
+    return levo && desno
+  })
+  const izbrana = kandidati.length
+    ? kandidati.reduce((a, b) => (Math.abs(a.od + a.dol / 2 - sredina) < Math.abs(b.od + b.dol / 2 - sredina) ? a : b))
+    : null
+  if (!izbrana) return null
+  // rahlo odštej notranji rob (svetla kantica profila na robu posnetka)
+  const rez = Math.max(0, Math.round(izbrana.dol * 0.06))
+  const w = izbrana.dol - rez * 2
+  if (w < 4) return null
+  return { x: izbrana.od + rez, y: 0, w, h: visinaPx }
 }

@@ -3405,3 +3405,86 @@ Stage Summary:
   nič več na GitLab strani.
 - Dopolnitev: tudi cevovod samega R519 commita (f286dbf, main) je ZELEN —
   sinhronizacija in dokazi so zaključeni na obeh straneh.
+
+---
+Task ID: R520
+Agent: glavni agent (nadaljevalna seja)
+Task: Issue #14 — FASADE in TERASE v fotomontaži (po lastnikovem vrstnem redu za tem, ko so dokazane vse ograje)
+
+Work Log:
+- RAZISKAVA URADNIH VIROV (branje spleta — ENAK vir, ki ga navaja tech.vir):
+  roksal.com wpc-facade-boards: KUBO fasadna deska »80 x 42 x 5800 mm« (5000
+  samo AMW/RWA), montira se SAMO NAVPIČNO, pritrditev ZADAJ (skrita);
+  montaza-wpc-deske: »razmak med letvicami je poljuben«; wpc-deske-za-teraso
+  (FAQ): »Med deskami je razmak 5-6mm«; KLASIK/RUSTIC dimenzije 150×25×4000.
+- DETERMINISTIČNA IZMERA (ops/r520-izmeri.mjs, @napi-rs/canvas, ista metoda
+  kot R518): KUBO namestitveni fotografiji (VLM določil regije desk) → reža
+  ≈ 21 mm (b6cd) oz. ≈ 15 mm (3a7c) → privzeti 20 mm (uradno poljuben).
+  Ugotovitev POŠTENOSTI: izmera terasne reže pri KLASIK ni zanesljiva
+  (rebrasta površina dela lažne prehode) → vir je URADNI FAQ (5–6 mm), ne piksli.
+- JEDRO (photo-replace-core.ts): TipPolnila += FASADA|TERASA; konstante z viri
+  (FASADA_SIRINA_MM=80, FASADA_REZA_MM=20, TERASA_REZA_MM=6); sirinaIzImena
+  (mera IZ IMENA izdelka »150×25« → 150 mm, meje 40..300); generirajRazpored:
+  FASADA = navpične letvice čez CELO območje (0 do length, 0 do height, brez
+  stebrov/ročnika/vijakov — KUBO pritrditev zadaj, uradno), TERASA = vodoravne
+  deske čez celo globino; izrisiOgrajo: površini BREZ vržene/kontaktne sence,
+  brez stebrov/ročnika/vijakov; preveriConfig: višina/globina do 2000 cm za
+  površini, posts ni obvezen (ograjam ostane).
+- TEKSTURE (photo-restry-texture.ts): VirTeksture.izrez + izmeriIzrezNavpicnePalice
+  — KUBO »DETAJL« sredstva so SCENIČNE fotografije (cela hiša!), ne posnetki
+  površine: izmera koraka desk po prerezu (4 prerezne črte, robustna mediana,
+  ≥4 deske z doslednim korakom sicer null) → izrez ENE deske (celotna višina,
+  letnica vzdolž profila). Rebrasta površina/DETAJL ene deske → null (fail-closed,
+  cela slika). TERASA DETAJL posnetki (1920×1080 posnetek ene deske) ostanejo celi.
+- UI (foto-replace.tsx): izdelki FASADA+TERASA družin v izbirniku; izberiIzdelek
+  nastavi tip + URADNE privzete vrednosti (KUBO 80/20 če tech nima; terasa iz
+  imena 150 + reža 6); pogojna konfiguracija (površini nimajo polnila/stebrov/
+  pritrditve/ročnika/vijakov — namesto tega poštena razlaga površine); oznake
+  prilagojene (globina terase, širina območja, prekrij staro oblogo/tla);
+  gradiva prek SPLOSNO orientacije (KUBO/terasa DETAJL so SPLOSNO/SPREDAJ).
+- MANIFEST: 2 nova vnosa s sha256 — kubo-fasada-hisa-levo (b6cd18418118.jpg,
+  stena levo od vhoda, ref 245 cm) in hotel-bazen-terasa-tla (0573714678e7.jpg,
+  talna površina, ref 480 cm, 3 prednje maske za ležalnike); pricakovano
+  vrednosti izračunane z istimi moduli (r504 zdaj 216 ✓ / 0 ✗).
+- DOKAZNI IZRISI (ops/r520-render.mjs, zrcali UI cevovod): F KUBO · Rustic oak
+  (UPORABLJENO r495-20240208_140526-1, izrez 1 palec); F2 KUBO · Oak wood
+  (izrez 13 px palec); T RUSTIC · Rustic oak (UPORABLJENO zel-detajl, 150+6);
+  T2 KLASIK · Burma teak (UPORABLJENO burma-terasa); T3 ALU · Antracit
+  (NI_PREVERJENO — 0 gradiv, pošteni barvni približek). VLM potrdil: F/F2 lesna
+  tekstura na letvicah + enakomerne reže; T/T2 deske + ležalniki PRED teraso;
+  T3 levo les/desno antracit v primerjavi. POŠTENA OMEJITEV: KUBO tekstura iz
+  namestitvenih fotografij ima le 8–16 px na desko — na povečavi je zamegljena
+  (katalog NIMA DETAJL posnetka površine KUBO — težava #6 oskrba).
+- TESTI tests/r520.py: 83 ✓ / 0 ✗ (A uradni podatki, B sirinaIzImena, C razpored
+  + regresija POKOCNA, D preveriConfig, E izmera izreza na sintetiki, F manifest,
+  G živi katalog, H žičenje, I artefakti 14 PNG, J živi API krog TERASA 150/6 +
+  maska prednji + idempotentno čiščenje). Registriran v tests/ci-matrix.sh IN
+  .github/workflows/ci.yml.
+- E2E SKOZI PRAVO APLIKACIJO (ops/r520-e2e.py, 14 ✓ / 0 ✗): prijava → nalaganje
+  hotel-bazen → označitev TALNE površine (4 vogali) + PREDNJI plan (ležalnik —
+  odkritje: kliki maske RABIJO zamike med seboj, sicer vsak klik odpre novo
+  obliko — 4 točke = 4 oblike × 1 točka) + ref ROCNO 480 cm → RUSTIC + Rustic
+  oak → KLJUČNA TRDITEV: reža 6 mm (uradni FAQ) + deska 150 mm (IZ IMENA) →
+  PREJ/POTEM → SHRANI → baza: tip TERASA · 150/6 · maska prednji 1 oblika ·
+  trdnja gradiva pot+sha256 → počiščeno. Ugotovitve E2E: radix Select opcije
+  je treba klikniti prek DOM (ref-klik prekrije focus-div); gumb Shrani je
+  lahko pod pregibom zaslona → DOM-klik; posnetek potrebuje scrollIntoView.
+- REGRESIJA: r504 216 ✓ / 0 ✗ (manifest razširjen); r518 E2E prirejen za novo
+  oznako koraka (»Označi območje«); RELEJNI PAS: ✓ zeleno — 8 statičnih korakov
+  + 36 skupin, 0 ✗ (ops/ci-dokaz-R520.out, EXIT 0); tsc 0 napak; eslint 0
+  napak / 2 stari opozorili.
+
+Stage Summary:
+- KLJUČNA ZMOŽNOST: fotomontaža zdaj pokriva OGRAJE (R517/R518) + FASADE
+  (KUBO 80×42, samo navpično, uradno) + TERASE (150×25 iz imena, reža 5–6 mm
+  po uradnem FAQ) — mere IZ KATALOGA/URADNIH VIROV, nikoli izmišljene.
+- Nova poštena metoda: izrez ENE deske iz scenične namestitvene fotografije
+  (deterministična izmera koraka) — brez tega bi se na letvico stisla cela hiša.
+- Dokazano z originalnimi teksturami: KUBO Rustic oak + Oak wood (izrez palec),
+  RUSTIC Rustic oak, KLASIK Burma teak; ALU antracit pošteno brez teksture.
+- Issue #14 OSTAJA ODPRT: manjkajoči DETAJL posnetki površine KUBO (8–16 px na
+  desko v namestitvenih fotografijah) in ostanki iz R507 poročila so težava #6
+  oskrba — aplikacija zdaj izriše vse tri tipe površin z originalnimi gradivi,
+  ki jih katalog ima.
+- Dokazi: ops/r520-{F,F2,T,T2,T3}-{potem,primerjava,zoom}.png +
+  ops/r520-ui-1..6.png + ops/ci-dokaz-R520.out (36 skupin, 0 ✗).

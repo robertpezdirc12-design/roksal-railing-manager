@@ -155,6 +155,22 @@ export function lameleIzTecha (tech: string | null | undefined): number | null {
 }
 
 /**
+ * R520 (issue #14): širina deske v mm iz IMENA izdelka. Roksalova terasna
+ * deska nosi mero v imenu: »WoodCore WPC terasna deska KLASIK 150×25« →
+ * 150 mm širine × 25 mm debeline (uradno tudi na roksal.com: »Dimenzije:
+ * 150 x 25 x 4000 ali 2200 mm«). Vrača SAMO smiselne širine 40..300 mm.
+ */
+export function sirinaIzImena (ime: string | null | undefined): number | null {
+  if (typeof ime !== 'string') return null
+  const m = /(\d{2,3})\s*[×x]\s*\d{1,3}/.exec(ime)
+  if (m) {
+    const w = Number(m[1])
+    if (Number.isFinite(w) && w >= 40 && w <= 300) return w
+  }
+  return null
+}
+
+/**
  * R518 (issue #14): razmik (reža) med deskami/palicami v mm iz tech JSON.
  * Roksalovi tech podatki nosijo »razmakDeskMm« kot število ali kot obseg —
  * npr. POLNA DESKA 128/100: »5–30 (priporočeno)«. Pri obsegu vzamemo
@@ -209,8 +225,32 @@ export function visinaIzTecha (tech: string | null | undefined): number | null {
 
 export interface Tocka { x: number; y: number }
 
-export type TipPolnila = 'POKOCNA' | 'PRECNA' | 'STEKLO'
+export type TipPolnila = 'POKOCNA' | 'PRECNA' | 'STEKLO' | 'FASADA' | 'TERASA'
 export type NacinPritrditve = 'TALNA' | 'STEBRI_V_BETON' | 'BOCNA_NA_STENO'
+
+// ── R520 (issue #14): FASADE in TERASE — uradni ROKSAL podatki (roksal.com) ──
+//
+// Viri (prebrani 2026-10-15 z branjem spleta, enak vir ki ga navaja tech.vir):
+//  • KUBO fasadna deska: »80 x 42 x 5800 mm ali 80 x 42 x 5000 mm (samo
+//    Amazon Wood in Rustic Walnut)« — https://roksal.com/en/woodcore-wpc-boards/wpc-facade-boards
+//  • KUBO se na fasadi montira SAMO NAVPIČNO: »The kubo profile can only be
+//    mounted vertically« — isti vir. Pritrditev je ZADAJ (skrita), ne vidna.
+//  • Razmik KUBO letvic je PO LJUBNEM: »Letvice se pritrjujejo na horizontalno
+//    nameščene, prašno barvane alu cevi, razmak med letvicami je poljuben« —
+//    https://roksal.com/woodcore-wpc-deske/montaza-wpc-deske. Privzeti 20 mm
+//    je IZMERJEN z dveh VERIFIED namestitvenih fotografij (b6cd18418118 ≈ 21 mm,
+//    3a7bccebb297 ≈ 15 mm — ops/r520-izmeri.mjs); uporabnik ga lahko spremeni.
+//  • Terasna reža: »Med deskami je razmak 5-6mm« — uradni FAQ
+//    https://roksal.com/woodcore-wpc-deske/wpc-deske-za-teraso/ → privzeto 6 mm
+//    (zgornja meja uradnega obsega). Programska izmera s fotografij pri KLASIK
+//    ni zanesljiva (rebrasta površina dela lažne prehode — dokumentirano v
+//    ops/r520-izmeri.mjs), zato je vir URADNI podatek, ne piksli.
+/** širina KUBO fasadne deske v mm (uradno 80 × 42). */
+export const FASADA_SIRINA_MM = 80
+/** privzeti razmik KUBO letvic v mm (uradno: poljuben; izmerjeno 15–21 mm). */
+export const FASADA_REZA_MM = 20
+/** privzeta terasna reža v mm (uradni FAQ: 5–6 mm → zgornja meja). */
+export const TERASA_REZA_MM = 6
 
 export interface VizConfig {
   tip: TipPolnila
@@ -344,17 +384,22 @@ export function preveriConfig (cfg: unknown): { napake: ValidacijskaNapaka[]; co
     return { napake: [{ polje: 'config', sporocilo: 'Manjka konfiguracija vizualizacije.' }], config: null }
   }
   const c = cfg as Record<string, unknown>
-  const tip: TipPolnila = c.tip === 'PRECNA' || c.tip === 'STEKLO' ? c.tip : 'POKOCNA'
+  const tip: TipPolnila =
+    c.tip === 'PRECNA' || c.tip === 'STEKLO' ? c.tip
+      : c.tip === 'FASADA' || c.tip === 'TERASA' ? c.tip : 'POKOCNA'
   const pritrditev: NacinPritrditve =
     c.pritrditev === 'STEBRI_V_BETON' || c.pritrditev === 'BOCNA_NA_STENO' ? c.pritrditev : 'TALNA'
   const stevilo = (v: unknown, min: number, max: number, fb: number): number => {
     const n = typeof v === 'number' && Number.isFinite(v) ? v : fb
     return Math.min(max, Math.max(min, n))
   }
+  // R520: višina FASADE (odsek stene) in globina TERASE (razpon čez tla) smejeta
+  // biti precej večja od višine ograje — terasa je lahko globoka tudi 15 m.
+  const maxVisina = tip === 'FASADA' || tip === 'TERASA' ? 2000 : 400
   const config: VizConfig = {
     tip,
     lengthCm: stevilo(c.lengthCm, 20, 6000, 400),
-    heightCm: stevilo(c.heightCm, 20, 400, 110),
+    heightCm: stevilo(c.heightCm, 20, maxVisina, 110),
     posts: Math.round(stevilo(c.posts, 1, 40, 5)),
     handrail: typeof c.handrail === 'boolean' ? c.handrail : true,
     lamelaMm: Math.round(stevilo(c.lamelaMm, 10, 300, 70)),
@@ -366,10 +411,12 @@ export function preveriConfig (cfg: unknown): { napake: ValidacijskaNapaka[]; co
   if (typeof c.lengthCm !== 'number' || !Number.isFinite(c.lengthCm) || c.lengthCm < 20 || c.lengthCm > 6000) {
     napake.push({ polje: 'config.lengthCm', sporocilo: 'Dolžina mora biti med 20 in 6000 cm.' })
   }
-  if (typeof c.heightCm !== 'number' || !Number.isFinite(c.heightCm) || c.heightCm < 20 || c.heightCm > 400) {
-    napake.push({ polje: 'config.heightCm', sporocilo: 'Višina mora biti med 20 in 400 cm.' })
+  if (typeof c.heightCm !== 'number' || !Number.isFinite(c.heightCm) || c.heightCm < 20 || c.heightCm > maxVisina) {
+    napake.push({ polje: 'config.heightCm', sporocilo: `Višina/globina mora biti med 20 in ${maxVisina} cm.` })
   }
-  if (typeof c.posts !== 'number' || !Number.isFinite(c.posts) || c.posts < 1 || c.posts > 40) {
+  // R520: stebri so za FASADO/TERASO brezpredmetni — ne zahtevamo jih.
+  if (tip !== 'FASADA' && tip !== 'TERASA' &&
+      (typeof c.posts !== 'number' || !Number.isFinite(c.posts) || c.posts < 1 || c.posts > 40)) {
     napake.push({ polje: 'config.posts', sporocilo: 'Število stebrov mora biti med 1 in 40.' })
   }
   return { napake, config: napake.length > 0 ? null : config }
@@ -561,6 +608,36 @@ export function generirajRazpored (cfg: VizConfig): Razpored {
   const posts: ElementPost[] = []
   const n = Math.max(2, Math.min(40, Math.round(cfg.posts)))
   const postSirinaCm = 9 // 90 mm ALU steber (standard ROKSAL profila)
+
+  // R520: FASADA in TERASA nimata stebrov, ročnika niti vidnih vijakov —
+  // KUBO letvica se pritrjuje ZADAJ na horizontalne alu cevi (uradno),
+  // terasna deska pa leži na podkonstrukciji. Razpored je čisto raster
+  // desk/palic čez CELO označeno območje (brez robov za stebre/ročnik).
+  if (cfg.tip === 'FASADA') {
+    const palice: ElementPalica[] = []
+    const lamelaCm = Math.max(1, cfg.lamelaMm / 10)
+    const rezaCm = Math.max(0, cfg.rezaMm / 10)
+    const korak = lamelaCm + rezaCm
+    if (korak > 0) {
+      for (let x = 0; x + lamelaCm <= cfg.lengthCm + 0.01; x += korak) {
+        palice.push({ xCm: x, sirinaCm: lamelaCm })
+      }
+    }
+    return { posts, palice, deske: [], vijaki: [], rocnikVisinaCm: cfg.heightCm }
+  }
+  if (cfg.tip === 'TERASA') {
+    const deske: ElementDeska[] = []
+    const deskaCm = Math.max(4, cfg.deskaMm / 10)
+    const rezaCm = Math.max(0, cfg.rezaMm / 10)
+    const korak = deskaCm + rezaCm
+    if (korak > 0) {
+      for (let y = 0; y + deskaCm <= cfg.heightCm + 0.01; y += korak) {
+        deske.push({ yCm: y, visinaCm: deskaCm })
+      }
+    }
+    return { posts, palice: [], deske, vijaki: [], rocnikVisinaCm: cfg.heightCm }
+  }
+
   for (let i = 0; i < n; i++) {
     posts.push({ xCm: (cfg.lengthCm * i) / (n - 1), sirinaCm: postSirinaCm })
   }
@@ -672,6 +749,9 @@ export function izrisiOgrajo (
   }
   const cfg = params.config
   const razpored = generirajRazpored(cfg)
+  // R520: FASADA (stena) in TERASA (tla) nista ograji — nimata ne vržene sence
+  // ne kontaktne sence ob tleh. Obnova ozadja (§1/§2) ostane enaka.
+  const jePovrsina = cfg.tip === 'FASADA' || cfg.tip === 'TERASA'
 
   // preslikava ravnine (cm) → slika: u = x/len, v = 1 - y/height (y navzgor)
   const P = (xCm: number, yCm: number): Tocka =>
@@ -743,6 +823,7 @@ export function izrisiOgrajo (
   }
 
   // ── 2. SENCA (kontakt s tlemi + vržeča senca v smeri svetlobe) ─────────────
+  if (!jePovrsina) {
   const sencaMoc = opcije.senca ?? 0.35 + (1 - svetloba.svetlost) * 0.35
   const dY = Math.max(3, H * 0.012) // odmik vržene sence
   const dX = -svetloba.smer * dY * 0.8 // leva svetloba → senca desno
@@ -772,6 +853,7 @@ export function izrisiOgrajo (
   )
   ctx.fill()
   ctx.restore()
+  } // konec if (!jePovrsina)
 
   // ── materialni odtenki (svetloba prizora prilagodi barvo) ──────────────────
   const exposure = 0.82 + svetloba.svetlost * 0.36 // temen prizor → temnejša ograja
@@ -806,7 +888,7 @@ export function izrisiOgrajo (
   }
 
   // ── 3. STEBRI (§6: število/pozicije iz konfiguracije) ──────────────────────
-  for (const [i, post] of razpored.posts.entries()) {
+  for (const [i, post] of (jePovrsina ? [] : razpored.posts.entries())) {
     const xLevo = post.xCm - post.sirinaCm / 2
     const xDesno = post.xCm + post.sirinaCm / 2
     const a = P(xLevo, 0)
@@ -862,7 +944,56 @@ export function izrisiOgrajo (
   }
 
   // ── 4. POLNILO (§4: dejanski vzorec — širine/razmiki/orientacija) ──────────
-  if (cfg.tip === 'POKOCNA') {
+  if (cfg.tip === 'FASADA') {
+    // R520: KUBO letvice čez CELO označeno območje stene — navpične, brez
+    // stebrov in ročnika (uradno: »kubo profile can only be mounted
+    // vertically«, pritrditev zadaj). Tekstura gre po celotni letvici.
+    for (const palica of razpored.palice) {
+      const a = P(palica.xCm, 0)
+      const b = P(palica.xCm + palica.sirinaCm, 0)
+      const c = P(palica.xCm + palica.sirinaCm, cfg.heightCm)
+      const d = P(palica.xCm, cfg.heightCm)
+      const v = 1 + (rnd() - 0.5) * 0.05
+      ctx.fillStyle = prelivVert(a.x, a.y, d.x, d.y)
+      potQuad(ctx, a, b, c, d)
+      ctx.fill()
+      // svetla kantica ob robu profila (odsev svetlobe)
+      if (Math.abs(b.x - a.x) > 2.2) {
+        ctx.strokeStyle = rgba(svetla, 0.4 * v)
+        ctx.lineWidth = 0.7
+        ctx.beginPath()
+        ctx.moveTo(a.x + (b.x - a.x) * 0.32, a.y)
+        ctx.lineTo(d.x + (c.x - d.x) * 0.32, d.y)
+        ctx.stroke()
+      }
+      struktura(palica.xCm, 0, palica.xCm + palica.sirinaCm, cfg.heightCm)
+    }
+  } else if (cfg.tip === 'TERASA') {
+    // R520: terasne deske ležijo po CELI globini označenega območja — vsaka
+    // je pas čez celo širino; perspektivo tal ponese homografija (enotski
+    // kvadrat čez 4 vogale). Referenca umerja SPODNJI rob (vzdolž desk).
+    for (const deska of razpored.deske) {
+      const a = P(0, deska.yCm)
+      const b = P(cfg.lengthCm, deska.yCm)
+      const c = P(cfg.lengthCm, deska.yCm + deska.visinaCm)
+      const d = P(0, deska.yCm + deska.visinaCm)
+      const g = ctx.createLinearGradient(0, Math.min(a.y, d.y), 0, Math.max(a.y, d.y))
+      g.addColorStop(0, svetla)
+      g.addColorStop(0.45, osnovna)
+      g.addColorStop(1, temna)
+      ctx.fillStyle = g
+      potQuad(ctx, a, b, c, d)
+      ctx.fill()
+      // sprednja (bližja) kantica deske ulovi svetlobo
+      ctx.strokeStyle = rgba(svetla, 0.45)
+      ctx.lineWidth = 0.8
+      ctx.beginPath()
+      ctx.moveTo(a.x, a.y)
+      ctx.lineTo(b.x, b.y)
+      ctx.stroke()
+      struktura(0, deska.yCm, cfg.lengthCm, deska.yCm + deska.visinaCm)
+    }
+  } else if (cfg.tip === 'POKOCNA') {
     for (const palica of razpored.palice) {
       const a = P(palica.xCm, 0)
       const b = P(palica.xCm + palica.sirinaCm, 0)
@@ -932,7 +1063,7 @@ export function izrisiOgrajo (
   }
 
   // ── 5. ROČNIK (zgoraj, zaokrožen profil z odsevom) ─────────────────────────
-  if (cfg.handrail) {
+  if (cfg.handrail && !jePovrsina) {
     const rh = 5 // višina ročnika v cm
     const a = P(0, cfg.heightCm)
     const b = P(cfg.lengthCm, cfg.heightCm)
