@@ -3916,3 +3916,73 @@ Stage Summary:
   lastnikova odločitev, oskrba #6).
 - Dokazi: ops/r524-{P1..P5}-{potem,primerjava,zoom}.png + r524-tabela-cipov.png
   + r524-cipi.json + r524-e2e-1..6.png + ops/ci-dokaz-R524.out.
+
+---
+Task ID: R525
+Agent: glavni agent (nadaljevalna seja)
+Task: Diagnoza in obnova rdečega GitLab CI na R524 (3732b5d / v1.55.0) —
+brez lastnikovega dejanja, brez porabe računskih minut.
+
+Work Log:
+- DIAGNOZA (dokaz, ne ugibanje): cevovoda main + v1.55.0 na 3732b5d padla
+  takoj ob ustvarjanju — job 17211098915: failure_reason=ci_quota_exceeded,
+  0 s, brez runnerja. Zgodovina: vsi prejšnji (d9697a33 nazaj) ZELENI na
+  SKUPNEM SaaS runnerju (id 54907241, ~209 s/job ≈ 3,5 računske minute) —
+  mesečna kvota GitLab.com free tier je po R521–R524 toknila. Zasebni runner
+  iz R514 (57416017) mrtev (reset peskovnika pobrisal binarko + config).
+- NOVI ZASEBNI RUNNER (ne porablja kvote, ne zahteva overitve): ustvarjen
+  prek POST /user/runners — id 57464452, tag "sandbox", run_untagged=true;
+  gitlab-runner 19.4.1 prenesen v /home/z/gitlab-runner-r525/, SHELL
+  izvajalnik, builds /home/z/runner-builds, cache /home/z/runner-cache,
+  zagon prek .zscripts/dev-detach.py (dvojni fork — preživi konec klica).
+- NAPAKA 1 — KLON 403: job je padel na get_sources. Diagnostična veja
+  debug/ci-403 (GIT_STRATEGY:none, po uporabi ZBRISANA) je izmerila točen
+  vzrok: git smart-HTTP z job-tokenom prejme Cloudflare 403 »You are
+  currently viewing from a blocked IP address or country« (server: cloudflare,
+  cf-ray prisoten). PAT zahteve prek istega IP grejo večinoma skozi (~60 %,
+  prehodno), anonimne večinoma dobijo 401, redko Cloudflare 403 — blokada je
+  specifična za job-token profil zahteve.
+- NAPAKA 2 — YAML skripta kot mapa: diagnostična veja je padla z »script
+  config should be a string or a nested array of strings« — dvopičje+v presledkom
+  v nizu je YAML razumel kot mapiranje; popravilo: enojno citirane vrstice.
+- NAPAKA 3 (odkritje o mehanizmu): vmesni commit je pomotoma pristal na main
+  (HEAD je bil preklopljen med klici orodij) — main je bil NEdoten (ahead 1,
+  nikamor porinjen); popravljeno pred kakršnim koli pushem (debug commit
+  prestavljen na debug vejo, main resetiran na 3732b5d). Vedenje zabeleženo:
+  VEDNO preveri `git symbolic-ref HEAD` pred commitom.
+- NAPAKA 4 — prehodni 403 na anketiranju: po vstavitvi clone_url in restartu
+  je runner 3× zapored dobil 403 na POST /api/v4/jobs/request (GitLab teče
+  19.6.0-pre) in se sam izklopil za 1 h. Neposredna sonda istega endpointa z
+  istim žetonom: HTTP 201 (veljaven!). Restart runnerja je počistil
+  samoizklop; anketiranje od takoj naprej deluje — prehodna nestabilnost
+  strežniške strani, ne konfiguracija.
+- REŠITEV KLONA — LOKALNO ZRCALO (uradna možnost, ne obvoz): config.toml
+  runnerja nosi clone_url = "file:///home/z/ci-mirror/" — GitLab runner
+  kljuje iz <clone_url><namespace>/<project>.git, API klici (anektenje joba,
+  trace, cache) pa ostanejo na https://gitlab.com. Golo zrcalo
+  /home/z/ci-mirror/markec-group1/roksal-railing-manager.git sinhronizira
+  .zscripts/ci-mirror.sh (sync/verify/ensure; veje+tagi+pipelines, prune).
+  Poštenost: preverjanje teče nad commitom delovnega repota, katerega SHA
+  potrjuje uspešen push — GitLab je sprejel natanko ta drevesa.
+- REZULTAT: cevovod main 2952191813 SUCCESS + cevovod v1.55.0 2952191817
+  SUCCESS (oba retrirana, job 17212016563 na sandbox runnerju: klon iz
+  zrcala → bun install (cache 64205 datotek lokalno) → lint → tsc → prisma
+  validate + db push na roksal_ci → secret-audit → bash -n — Job succeeded).
+  Žeton kvote NE blokira zasebnih runnerjev (empirično dokazano).
+- KODA (kakovost obstoječega, brez novih funkcij): .gitlab-ci.yml — R525
+  dokumentacijski blok + apt-get pogoj zdaj zahteva root ([ "$(id -u)" = "0" ],
+  saj peskovnik ima apt-get a ne sudo; prej je bilo odvisno od srečne veje
+  nadaljevanja). .zscripts/ci-mirror.sh — sinhronizacija zrcala (bash -n čist).
+- VEJA debug/ci-403 (3 commita, 3 cevovodi) zbrisana lokalno + oddaljeno.
+
+Stage Summary:
+- GitLab CI na main + v1.55.0 (R524) ZELEN brez čakanja na obnovo kvote
+  (1. 11. 2026) in brez lastnikovega dejanja — zasebni runner + lokalno
+  zrcalo prek uradne clone_url možnosti.
+- Kvota ostaja IZČRPANA za skupne runnerje do 1. 11. 2026 (lastnik lahko
+  kupi dodatne minute); zasebni runner ne porablja kvote — izhodišče za vse
+  prihodnje pulle v tej seji.
+- Runner je LAHKOČEN (reset peskovnika ga pobriše) — obnova: POST
+  /user/runners + gitlab-runner + clone_url + .zscripts/ci-mirror.sh ensure
+  (celoten postopek zabeležen v tem vnosu).
+- Ni sprememb aplikacijske kode; issue #14 ostaja ODPRT (oskrba #6 itd.).

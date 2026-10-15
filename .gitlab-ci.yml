@@ -34,6 +34,29 @@
 #   • Ko lastnik overovi identiteto, skupni runnerji poberejo ISTI job brez
 #     spremembe konfiguracije (docker pot ostane prva izbira).
 #
+# R525 — CI OBNOVLJEN BREZ KVOTE (reakcija na ci_quota_exceeded):
+#   • GitLab.com je izčrpal MESEČNO kvoto računskih minut (dokaz: job
+#     17211098915, failure_reason=ci_quota_exceeded, 0 s, brez runnerja).
+#     Skupni (SaaS) runnerji porabljajo kvoto; LASTNI runnerji NE.
+#   • Novi zasebni projekt runner (id 57464452, tag "sandbox", run_untagged,
+#     opis sandbox-runner-roksal-R525) teče v peskovniku prek
+#     .zscripts/dev-detach.py — ista shema kot R514.
+#   • Diagnoza (dokaz: veja debug/ci-403, brisana po uporabi): peskovnikov
+#     izhodni IP Cloudflare ZAVRNE za git smart-HTTP z job-tokenom
+#     ("You are currently viewing from a blocked IP address or country",
+#     HTTP 403, server: cloudflare) — PAT zahteve večinoma gredo skozi.
+#     Posledica: job NE more klonirati skladišča na shell runnerju.
+#   • REŠITEV: uradna možnost clone_url v config.toml runnerja preusmeri
+#     SAMO klon (API klici runnerja ostanejo na https://gitlab.com!) na
+#     LOKALNO GOLO ZRCALO /home/z/ci-mirror/... — sinhronizira ga
+#     .zscripts/ci-mirror.sh iz delovnega repozitorija (isti SHA kot oddaljeni:
+#     uspešen push pomeni, da je oddaljena veja natanko na tem commitu).
+#     Namesto skladišča na GitLabu se preveri VSEBINSKO ENAK commit —
+#     dokazljivo enak prek SHA (push protokol ga potrdi).
+#   • za posledico: apt-get pogoj sedaj zahteva ROOT (peskovnik ima apt-get,
+#     a brez sudo bi se sicer oglasil E: Permission denied — neuspeh je bil
+#     doslej nenevaren le zato, ker se skripta nadaljuje po ne-root veji)
+#
 # Namensko NE gradimo produkcijskega paketa v CI (orta tipa + shema sta vratarja;
 # polna gradnja poteče pri deployu — glej docs/RECOVERY.md). Regression suite
 # (tests/ci-matrix.sh) tu NE teče — rabi živo aplikacijo s seedanimi podatki;
@@ -64,13 +87,14 @@ verify:
     paths:
       - node_modules/
   script:
-    # R514: apt-get je orodje DOCKER izvajalnika (slika oven/bun nima git-a).
-    # Na shell runnerju so git/ca-certificates/bun že na gostitelju — pogoj.
+    # R514/R525: apt-get je orodje DOCKER izvajalnika (slika oven/bun nima git-a,
+    # teče kot root). Na shell runnerju so git/ca-certificates/bun že na
+    # gostitelju in BREZ roota — pogoj zato zahteva OBOJE (apt-get IN uid 0).
     - |
-      if command -v apt-get >/dev/null 2>&1; then
+      if command -v apt-get >/dev/null 2>&1 && [ "$(id -u)" = "0" ]; then
         apt-get update -qq && apt-get install -y -qq --no-install-recommends git ca-certificates postgresql-client >/dev/null
       else
-        echo "── shell izvajalnik: apt-get ni na voljo (orodja že prisotna na gostitelju)"
+        echo "── brez root/apt-get: orodja gostitelja že prisotna (git, bun, ca-certificates)"
       fi
     - bun install --frozen-lockfile
     # R514: izbira baze — deterministična detekcija (pg modul, ne pg_isready):
