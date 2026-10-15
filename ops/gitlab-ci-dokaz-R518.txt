@@ -1,0 +1,211 @@
+2026-10-15T10:47:29.597101Z 00O [0KRunning with gitlab-runner 19.5.0~pre.2316.g3c07c5b0 (3c07c5b0)[0;m
+2026-10-15T10:47:29.597121Z 00O [0K  on k8s.saas-linux-small-amd64.runners-manager.gitlab.com/default nezyxEJex, system ID: r_s0n3uko213SH[0;m
+2026-10-15T10:47:29.597124Z 00O [0K  UUID: 019fd6c6-56c4-78a2-8961-bbb53e204387[0;m
+2026-10-15T10:47:29.597134Z 00O [0K  feature flags: FF_USE_GIT_PROACTIVE_AUTH:true, FF_HASH_CACHE_KEYS:true, FF_USE_JOB_ROUTER:true, FF_MACHINE_OPTIONS_EXPAND_ENV:true, FF_DOCKER_MACHINE_JSON_OUTPUT:true[0;m
+2026-10-15T10:47:29.597174Z 00O section_start:1792061249:prepare_executor[0K
+2026-10-15T10:47:29.597178Z 00O+[0K[36;1mPreparing the "docker+machine" executor[0;m[0;m
+2026-10-15T10:47:29.671717Z 00O [0KUsing Docker executor with image oven/bun:1 ...[0;m
+2026-10-15T10:47:29.671757Z 00O [0KUsing helper image:  registry.gitlab.com/gitlab-org/gitlab-runner/gitlab-runner-helper:x86_64-3c07c5b0  (overridden, default would be  registry.gitlab.com/gitlab-org/gitlab-runner/gitlab-runner-helper:x86_64-v19.5.0 )[0;m
+2026-10-15T10:47:29.671765Z 00O [0KUsing effective pull policy of [always] for container registry.gitlab.com/gitlab-org/gitlab-runner/gitlab-runner-helper:x86_64-3c07c5b0[0;m
+2026-10-15T10:47:29.672398Z 00O [0KAuthenticating with credentials from job payload (GitLab Registry)[0;m
+2026-10-15T10:47:29.672406Z 00O [0KPulling docker image registry.gitlab.com/gitlab-org/gitlab-runner/gitlab-runner-helper:x86_64-3c07c5b0 ...[0;m
+2026-10-15T10:47:31.628185Z 00O [0KUsing docker image sha256:652d11c53dc5dee9295dde4944709c29f26da1fa2e74ff92419292051a588f68 for registry.gitlab.com/gitlab-org/gitlab-runner/gitlab-runner-helper:x86_64-3c07c5b0 with digest registry.gitlab.com/gitlab-org/gitlab-runner/gitlab-runner-helper@sha256:fed86d4463d47c3bf1395b99bc3e1e4b5a3893853dd0b279e11781e5b4cfba6e ...[0;m
+2026-10-15T10:47:33.518443Z 00O [0KStarting service postgres:16-alpine...[0;m
+2026-10-15T10:47:33.518457Z 00O [0KUsing effective pull policy of [always] for container postgres:16-alpine[0;m
+2026-10-15T10:47:33.519124Z 00O [0KPulling docker image postgres:16-alpine ...[0;m
+2026-10-15T10:47:39.438203Z 00O [0KUsing docker image sha256:81bd698b4594e751a3269e4dcd3e03a4a0ec0daf7b72e7aa1abd43cce9887542 for postgres:16-alpine with digest postgres@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea ...[0;m
+2026-10-15T10:47:41.699544Z 00O [0;33mWARNING: Skipping alias "postgres" for service "postgres:16-alpine" (services[0]): alias is already in use by another service.[0;m
+2026-10-15T10:47:41.699578Z 00O [0KWaiting for services to be up and running (timeout 30 seconds)...[0;m
+2026-10-15T10:47:41.699609Z 00O [0KUsing helper image:  registry.gitlab.com/gitlab-org/gitlab-runner/gitlab-runner-helper:x86_64-3c07c5b0  (overridden, default would be  registry.gitlab.com/gitlab-org/gitlab-runner/gitlab-runner-helper:x86_64-v19.5.0 )[0;m
+2026-10-15T10:47:41.699626Z 00O [0KUsing effective pull policy of [always] for container registry.gitlab.com/gitlab-org/gitlab-runner/gitlab-runner-helper:x86_64-3c07c5b0[0;m
+2026-10-15T10:47:41.700640Z 00O [0KUsing docker image sha256:652d11c53dc5dee9295dde4944709c29f26da1fa2e74ff92419292051a588f68 for registry.gitlab.com/gitlab-org/gitlab-runner/gitlab-runner-helper:x86_64-3c07c5b0 with digest registry.gitlab.com/gitlab-org/gitlab-runner/gitlab-runner-helper@sha256:fed86d4463d47c3bf1395b99bc3e1e4b5a3893853dd0b279e11781e5b4cfba6e ...[0;m
+2026-10-15T10:47:43.546066Z 00O [0KUsing helper image:  registry.gitlab.com/gitlab-org/gitlab-runner/gitlab-runner-helper:x86_64-3c07c5b0  (overridden, default would be  registry.gitlab.com/gitlab-org/gitlab-runner/gitlab-runner-helper:x86_64-v19.5.0 )[0;m
+2026-10-15T10:47:43.546076Z 00O [0KUsing effective pull policy of [always] for container registry.gitlab.com/gitlab-org/gitlab-runner/gitlab-runner-helper:x86_64-3c07c5b0[0;m
+2026-10-15T10:47:43.547039Z 00O [0KUsing docker image sha256:652d11c53dc5dee9295dde4944709c29f26da1fa2e74ff92419292051a588f68 for registry.gitlab.com/gitlab-org/gitlab-runner/gitlab-runner-helper:x86_64-3c07c5b0 with digest registry.gitlab.com/gitlab-org/gitlab-runner/gitlab-runner-helper@sha256:fed86d4463d47c3bf1395b99bc3e1e4b5a3893853dd0b279e11781e5b4cfba6e ...[0;m
+2026-10-15T10:47:43.547046Z 00O [0KUsing effective pull policy of [always] for container oven/bun:1[0;m
+2026-10-15T10:47:43.547556Z 00O [0KPulling docker image oven/bun:1 ...[0;m
+2026-10-15T10:47:49.088106Z 00O [0KUsing docker image sha256:88fe237a77256495f2d42776dc4fa2377b1fd64e6b87bb0a942d571f56f4652e for oven/bun:1 with digest oven/bun@sha256:ec06c3b6cea04192ae6770c434f668ca41d343ad19fa6472216c7b48be39c598 ...[0;m
+2026-10-15T10:47:49.088180Z 00O section_end:1792061269:prepare_executor[0K
+2026-10-15T10:47:49.088284Z 00O+section_start:1792061269:prepare_script[0K
+2026-10-15T10:47:49.088288Z 00O+[0K[36;1mPreparing environment[0;m[0;m
+2026-10-15T10:47:49.088315Z 00O [0KUsing helper image:  registry.gitlab.com/gitlab-org/gitlab-runner/gitlab-runner-helper:x86_64-3c07c5b0  (overridden, default would be  registry.gitlab.com/gitlab-org/gitlab-runner/gitlab-runner-helper:x86_64-v19.5.0 )[0;m
+2026-10-15T10:47:49.088323Z 00O [0KUsing effective pull policy of [always] for container registry.gitlab.com/gitlab-org/gitlab-runner/gitlab-runner-helper:x86_64-3c07c5b0[0;m
+2026-10-15T10:47:49.089148Z 00O [0KUsing docker image sha256:652d11c53dc5dee9295dde4944709c29f26da1fa2e74ff92419292051a588f68 for registry.gitlab.com/gitlab-org/gitlab-runner/gitlab-runner-helper:x86_64-3c07c5b0 with digest registry.gitlab.com/gitlab-org/gitlab-runner/gitlab-runner-helper@sha256:fed86d4463d47c3bf1395b99bc3e1e4b5a3893853dd0b279e11781e5b4cfba6e ...[0;m
+2026-10-15T10:47:49.089157Z 00O [0KUsing effective pull policy of [always] for container sha256:652d11c53dc5dee9295dde4944709c29f26da1fa2e74ff92419292051a588f68[0;m
+2026-10-15T10:47:50.960768Z 01O Running on runner-nezyxejex-project-87474527-concurrent-0 via runner-nezyxejex-s-l-s-amd64-1792061203-f4ed5551...
+2026-10-15T10:47:50.963660Z 01O Running on CPU: INTEL(R) XEON(R) PLATINUM 8581C CPU @ 2.10GHz (avx, avx2, avx512f)
+2026-10-15T10:47:51.130607Z 00O section_end:1792061271:prepare_script[0K
+2026-10-15T10:47:51.130977Z 00O+section_start:1792061271:get_sources[0K
+2026-10-15T10:47:51.130981Z 00O+[0K[36;1mGetting source from Git repository[0;m[0;m
+2026-10-15T10:47:51.520817Z 01O [32;1mGitaly correlation ID: b8ba9d101ac841589715669445d0b62d[0;m
+2026-10-15T10:47:51.527511Z 01O [32;1mFetching changes with git depth set to 20...[0;m
+2026-10-15T10:47:51.530966Z 01O Initialized empty Git repository in /builds/markec-group1/roksal-railing-manager/.git/
+2026-10-15T10:47:51.533137Z 01O [32;1mCreated fresh repository.[0;m
+2026-10-15T10:47:57.768591Z 01O [32;1mChecking out cbb65024 as detached HEAD (ref is main)...[0;m
+2026-10-15T10:47:58.198870Z 01O 
+2026-10-15T10:47:58.198987Z 01O [32;1mSkipping Git submodules setup[0;m
+2026-10-15T10:47:58.199051Z 01O [32;1m$ git remote set-url origin "${CI_REPOSITORY_URL}" || echo 'Not a git repository; skipping'[0;m
+2026-10-15T10:47:58.774227Z 00O section_end:1792061278:get_sources[0K
+2026-10-15T10:47:58.869341Z 00O+section_start:1792061278:restore_cache[0K
+2026-10-15T10:47:58.869349Z 00O+[0K[36;1mRestoring cache[0;m[0;m
+2026-10-15T10:47:59.307376Z 01O [32;1mChecking cache for 0_bun-d9ade359afe2f9a09686e526d489e97202b2934c-protected...[0;m
+2026-10-15T10:47:59.359638Z 01E Using presigned URL for cache download            [0;m 
+2026-10-15T10:47:59.429754Z 01E Selecting primary cache URL                       [0;m  alternate_modified[0;m=0001-01-01 00:00:00 +0000 UTC alternate_url[0;m=https://storage.googleapis.com/gitlab-com-runners-cache/project/87474527/0_bun-d9ade359afe2f9a09686e526d489e97202b2934c-protected primary_modified[0;m=0001-01-01 00:00:00 +0000 UTC primary_url[0;m=https://storage.googleapis.com/gitlab-com-runners-cache/project/87474527/e6/e687f9799a882390cd383910fc7c25a228327085b9b04552d6a7e4620cc27fce
+2026-10-15T10:47:59.476492Z 01E [0;33mWARNING: file does not exist                      [0;m 
+2026-10-15T10:47:59.478180Z 01O [0;33mFailed to extract cache[0;m
+2026-10-15T10:47:59.645231Z 00O section_end:1792061279:restore_cache[0K
+2026-10-15T10:47:59.645679Z 00O+section_start:1792061279:step_script[0K
+2026-10-15T10:47:59.645685Z 00O+[0K[36;1mExecuting "step_script" stage of the job script[0;m[0;m
+2026-10-15T10:47:59.645693Z 00O [0KUsing effective pull policy of [always] for container oven/bun:1[0;m
+2026-10-15T10:47:59.646713Z 00O [0KUsing docker image sha256:88fe237a77256495f2d42776dc4fa2377b1fd64e6b87bb0a942d571f56f4652e for oven/bun:1 with digest oven/bun@sha256:ec06c3b6cea04192ae6770c434f668ca41d343ad19fa6472216c7b48be39c598 ...[0;m
+2026-10-15T10:48:00.033259Z 01O [32;1m$ if command -v apt-get >/dev/null 2>&1; then # collapsed multi-line command[0;m
+2026-10-15T10:48:04.382373Z 01E debconf: unable to initialize frontend: Dialog
+2026-10-15T10:48:04.382375Z 01E debconf: (TERM is not set, so the dialog frontend is not usable.)
+2026-10-15T10:48:04.382376Z 01E debconf: falling back to frontend: Readline
+2026-10-15T10:48:04.382647Z 01E debconf: unable to initialize frontend: Readline
+2026-10-15T10:48:04.382648Z 01E debconf: (Can't locate Term/ReadLine.pm in @INC (you may need to install the Term::ReadLine module) (@INC entries checked: /etc/perl /usr/local/lib/x86_64-linux-gnu/perl/5.40.1 /usr/local/share/perl/5.40.1 /usr/lib/x86_64-linux-gnu/perl5/5.40 /usr/share/perl5 /usr/lib/x86_64-linux-gnu/perl-base /usr/lib/x86_64-linux-gnu/perl/5.40 /usr/share/perl/5.40 /usr/local/lib/site_perl) at /usr/share/perl5/Debconf/FrontEnd/Readline.pm line 8, <STDIN> line 41.)
+2026-10-15T10:48:04.382649Z 01E debconf: falling back to frontend: Teletype
+2026-10-15T10:48:04.387466Z 01E debconf: unable to initialize frontend: Teletype
+2026-10-15T10:48:04.387469Z 01E debconf: (This frontend requires a controlling tty.)
+2026-10-15T10:48:04.387469Z 01E debconf: falling back to frontend: Noninteractive
+2026-10-15T10:48:10.261559Z 01O [32;1m$ bun install --frozen-lockfile[0;m
+2026-10-15T10:48:10.264246Z 01O bun install v1.4.3 (c6da4a4d3)
+2026-10-15T10:48:30.256167Z 01O 
+2026-10-15T10:48:30.256172Z 01O + @napi-rs/canvas@1.0.11
+2026-10-15T10:48:30.256173Z 01O + @tailwindcss/postcss@4.1.18
+2026-10-15T10:48:30.256174Z 01O + @types/react@19.2.8
+2026-10-15T10:48:30.256174Z 01O + @types/react-dom@19.2.3
+2026-10-15T10:48:30.256175Z 01O + bun-types@1.3.6
+2026-10-15T10:48:30.256175Z 01O + embedded-postgres@18.4.0-beta.17
+2026-10-15T10:48:30.256176Z 01O + eslint@9.39.2
+2026-10-15T10:48:30.256176Z 01O + eslint-config-next@16.1.3
+2026-10-15T10:48:30.256177Z 01O + tailwindcss@4.1.18
+2026-10-15T10:48:30.256178Z 01O + tw-animate-css@1.4.0
+2026-10-15T10:48:30.256178Z 01O + typescript@5.9.3
+2026-10-15T10:48:30.256179Z 01O + @dnd-kit/core@6.3.1
+2026-10-15T10:48:30.256179Z 01O + @dnd-kit/sortable@10.0.0
+2026-10-15T10:48:30.256180Z 01O + @dnd-kit/utilities@3.2.2
+2026-10-15T10:48:30.256180Z 01O + @hookform/resolvers@5.2.2
+2026-10-15T10:48:30.256181Z 01O + @mdxeditor/editor@3.52.3
+2026-10-15T10:48:30.256181Z 01O + @prisma/client@6.19.2
+2026-10-15T10:48:30.256182Z 01O + @radix-ui/react-accordion@1.2.12
+2026-10-15T10:48:30.256182Z 01O + @radix-ui/react-alert-dialog@1.1.15
+2026-10-15T10:48:30.256183Z 01O + @radix-ui/react-aspect-ratio@1.1.8
+2026-10-15T10:48:30.256183Z 01O + @radix-ui/react-avatar@1.1.11
+2026-10-15T10:48:30.256184Z 01O + @radix-ui/react-checkbox@1.3.3
+2026-10-15T10:48:30.256184Z 01O + @radix-ui/react-collapsible@1.1.12
+2026-10-15T10:48:30.256185Z 01O + @radix-ui/react-context-menu@2.2.16
+2026-10-15T10:48:30.256185Z 01O + @radix-ui/react-dialog@1.1.15
+2026-10-15T10:48:30.256186Z 01O + @radix-ui/react-dropdown-menu@2.1.16
+2026-10-15T10:48:30.256186Z 01O + @radix-ui/react-hover-card@1.1.15
+2026-10-15T10:48:30.256187Z 01O + @radix-ui/react-label@2.1.8
+2026-10-15T10:48:30.256187Z 01O + @radix-ui/react-menubar@1.1.16
+2026-10-15T10:48:30.256188Z 01O + @radix-ui/react-navigation-menu@1.2.14
+2026-10-15T10:48:30.256189Z 01O + @radix-ui/react-popover@1.1.15
+2026-10-15T10:48:30.256189Z 01O + @radix-ui/react-progress@1.1.8
+2026-10-15T10:48:30.256190Z 01O + @radix-ui/react-radio-group@1.3.8
+2026-10-15T10:48:30.256190Z 01O + @radix-ui/react-scroll-area@1.2.10
+2026-10-15T10:48:30.256191Z 01O + @radix-ui/react-select@2.2.6
+2026-10-15T10:48:30.256191Z 01O + @radix-ui/react-separator@1.1.8
+2026-10-15T10:48:30.256192Z 01O + @radix-ui/react-slider@1.3.6
+2026-10-15T10:48:30.256193Z 01O + @radix-ui/react-slot@1.2.4
+2026-10-15T10:48:30.256193Z 01O + @radix-ui/react-switch@1.2.6
+2026-10-15T10:48:30.256194Z 01O + @radix-ui/react-tabs@1.1.13
+2026-10-15T10:48:30.256194Z 01O + @radix-ui/react-toast@1.2.15
+2026-10-15T10:48:30.256195Z 01O + @radix-ui/react-toggle@1.1.10
+2026-10-15T10:48:30.256195Z 01O + @radix-ui/react-toggle-group@1.1.11
+2026-10-15T10:48:30.256196Z 01O + @radix-ui/react-tooltip@1.2.8
+2026-10-15T10:48:30.256196Z 01O + @reactuses/core@6.1.9
+2026-10-15T10:48:30.256197Z 01O + @tanstack/react-query@5.90.19
+2026-10-15T10:48:30.256197Z 01O + @tanstack/react-table@8.21.3
+2026-10-15T10:48:30.256198Z 01O + class-variance-authority@0.7.1
+2026-10-15T10:48:30.256198Z 01O + clsx@2.1.1
+2026-10-15T10:48:30.256199Z 01O + cmdk@1.1.1
+2026-10-15T10:48:30.256199Z 01O + date-fns@4.1.0
+2026-10-15T10:48:30.256200Z 01O + embla-carousel-react@8.6.0
+2026-10-15T10:48:30.256200Z 01O + framer-motion@12.26.2
+2026-10-15T10:48:30.256201Z 01O + input-otp@1.4.2
+2026-10-15T10:48:30.256201Z 01O + lucide-react@0.525.0
+2026-10-15T10:48:30.256202Z 01O + next@16.1.3
+2026-10-15T10:48:30.256202Z 01O + next-auth@4.24.13
+2026-10-15T10:48:30.256202Z 01O + next-intl@4.7.0
+2026-10-15T10:48:30.256203Z 01O + next-themes@0.4.6
+2026-10-15T10:48:30.256203Z 01O + prisma@6.19.2
+2026-10-15T10:48:30.256204Z 01O + react@19.2.3
+2026-10-15T10:48:30.256204Z 01O + react-day-picker@9.13.0
+2026-10-15T10:48:30.256205Z 01O + react-dom@19.2.3
+2026-10-15T10:48:30.256205Z 01O + react-hook-form@7.71.1
+2026-10-15T10:48:30.256206Z 01O + react-markdown@10.1.0
+2026-10-15T10:48:30.256206Z 01O + react-resizable-panels@3.0.6
+2026-10-15T10:48:30.256243Z 01O + react-syntax-highlighter@15.6.6
+2026-10-15T10:48:30.256243Z 01O + recharts@2.15.4
+2026-10-15T10:48:30.256244Z 01O + sharp@0.34.5
+2026-10-15T10:48:30.256244Z 01O + sonner@2.0.7
+2026-10-15T10:48:30.256245Z 01O + tailwind-merge@3.4.0
+2026-10-15T10:48:30.256245Z 01O + tailwindcss-animate@1.0.7
+2026-10-15T10:48:30.256246Z 01O + uuid@11.1.0
+2026-10-15T10:48:30.256246Z 01O + vaul@1.1.2
+2026-10-15T10:48:30.256247Z 01O + z-ai-web-dev-sdk@0.0.18
+2026-10-15T10:48:30.256247Z 01O + zod@4.3.5
+2026-10-15T10:48:30.256263Z 01O + zustand@5.0.10
+2026-10-15T10:48:30.256264Z 01O 
+2026-10-15T10:48:30.256264Z 01O 846 packages installed [19.99s]
+2026-10-15T10:48:30.259166Z 01O [32;1m$ cat > /tmp/ci-db.mjs <<'DBEOF' # collapsed multi-line command[0;m
+2026-10-15T10:48:30.539661Z 01O ── DATABASE_URL=postgresql://roksal:roksal@postgres:5432/roksal
+2026-10-15T10:48:30.539667Z 01O [32;1m$ bun run lint[0;m
+2026-10-15T10:48:30.541695Z 01E $ eslint .
+2026-10-15T10:49:01.711353Z 01O 
+2026-10-15T10:49:01.711355Z 01O /builds/markec-group1/roksal-railing-manager/ops/r517-render.mjs
+2026-10-15T10:49:01.711356Z 01O   174:59  warning  Expected an assignment or function call and instead saw an expression  @typescript-eslint/no-unused-expressions
+2026-10-15T10:49:01.711357Z 01O   190:58  warning  Expected an assignment or function call and instead saw an expression  @typescript-eslint/no-unused-expressions
+2026-10-15T10:49:01.711357Z 01O 
+2026-10-15T10:49:01.711357Z 01O ✖ 2 problems (0 errors, 2 warnings)
+2026-10-15T10:49:01.711358Z 01O 
+2026-10-15T10:49:07.618758Z 01O [32;1m$ bunx tsc --noEmit -p tsconfig.ci.json[0;m
+2026-10-15T10:49:44.891863Z 01O [32;1m$ bunx prisma validate[0;m
+2026-10-15T10:49:46.146530Z 01O Prisma schema loaded from prisma/schema.prisma
+2026-10-15T10:49:46.316787Z 01E ┌─────────────────────────────────────────────────────────┐
+2026-10-15T10:49:46.316795Z 01E │  Update available 6.19.2 -> 8.0.0-rc.23                 │
+2026-10-15T10:49:46.316796Z 01E │                                                         │
+2026-10-15T10:49:46.316797Z 01E │  This is a major update - please follow the guide at    │
+2026-10-15T10:49:46.316798Z 01E │  https://pris.ly/d/major-version-upgrade                │
+2026-10-15T10:49:46.316798Z 01E │                                                         │
+2026-10-15T10:49:46.316799Z 01E │  Run the following to update                            │
+2026-10-15T10:49:46.316799Z 01E │    npm i --save-dev prisma@latest                       │
+2026-10-15T10:49:46.316800Z 01E │    npm i @prisma/client@latest                          │
+2026-10-15T10:49:46.316800Z 01E └─────────────────────────────────────────────────────────┘
+2026-10-15T10:49:46.316807Z 01O The schema at prisma/schema.prisma is valid 🚀
+2026-10-15T10:49:46.324832Z 01O [32;1m$ bunx prisma db push --skip-generate[0;m
+2026-10-15T10:49:47.598630Z 01O Prisma schema loaded from prisma/schema.prisma
+2026-10-15T10:49:47.613147Z 01O Datasource "db": PostgreSQL database "roksal", schema "public" at "postgres:5432"
+2026-10-15T10:49:49.182786Z 01O 
+2026-10-15T10:49:49.182790Z 01O 🚀  Your database is now in sync with your Prisma schema. Done in 1.50s
+2026-10-15T10:49:49.183228Z 01O 
+2026-10-15T10:49:49.192740Z 01O [32;1m$ bash ops/secret-audit.sh[0;m
+2026-10-15T10:49:49.197147Z 01O == 1/4 Higiena .gitignore (občutljive datoteke morajo biti prezrte) ==
+2026-10-15T10:49:49.198736Z 01O   OK  .env (prezrto)
+2026-10-15T10:49:49.200370Z 01O   OK  .env.recovery (prezrto)
+2026-10-15T10:49:49.201888Z 01O   OK  db/custom.db (prezrto)
+2026-10-15T10:49:49.203316Z 01O   OK  dev.log (prezrto)
+2026-10-15T10:49:49.203317Z 01O == 2/4 Sledena vsebina ne vsebuje občutljivih imen datotek ==
+2026-10-15T10:49:49.205562Z 01O   OK  med sledenimi datotekami ni .env/.pem/.key/.db
+2026-10-15T10:49:49.205564Z 01O == 3/4 Vzorci skrivnosti v delovni kopiji (sledene datoteke) ==
+2026-10-15T10:49:49.820082Z 01O   OK  0 zadetkov v delovni kopiji
+2026-10-15T10:49:49.820090Z 01O == 4/4 Vzorci skrivnosti v celotni git zgodovini ==
+2026-10-15T10:49:50.516430Z 01O   OK  0 zadetkov v zgodovini (26 commitov)
+2026-10-15T10:49:50.516433Z 01O 
+2026-10-15T10:49:50.516443Z 01O SKRIVNOSTNI PREGLED: ČISTO ✓
+2026-10-15T10:49:50.519597Z 01O [32;1m$ bash -n ops/*.sh[0;m
+2026-10-15T10:49:50.848509Z 00O section_end:1792061390:step_script[0K
+2026-10-15T10:49:50.900502Z 00O+section_start:1792061390:archive_cache[0K
+2026-10-15T10:49:50.900509Z 00O+[0K[36;1mSaving cache for successful job[0;m[0;m
+2026-10-15T10:49:51.323297Z 01O [32;1mCreating cache 0_bun-d9ade359afe2f9a09686e526d489e97202b2934c-protected...[0;m
+2026-10-15T10:49:51.858941Z 01E node_modules/: found 64205 matching artifact files and directories[0;m 
+2026-10-15T10:50:06.223173Z 01E Using presigned URL for cache upload              [0;m 
+2026-10-15T10:50:06.223186Z 01E Uploading cache.zip to https://storage.googleapis.com/gitlab-com-runners-cache/project/87474527/e6/e687f9799a882390cd383910fc7c25a228327085b9b04552d6a7e4620cc27fce[0;m 
+2026-10-15T10:50:09.998438Z 01O [32;1mCreated cache[0;m
+2026-10-15T10:50:10.823853Z 00O section_end:1792061410:archive_cache[0K
+2026-10-15T10:50:10.824296Z 00O+section_start:1792061410:cleanup_file_variables[0K
+2026-10-15T10:50:10.824301Z 00O+[0K[36;1mCleaning up project directory and file based variables[0;m[0;m
+2026-10-15T10:50:11.402370Z 00O section_end:1792061411:cleanup_file_variables[0K
+2026-10-15T10:50:13.396008Z 00O [32;1mJob succeeded[0;m
