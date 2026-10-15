@@ -19,8 +19,9 @@ resnične pasti, ki jih je izvedba odkrila:
      (→ 18 mm), POLNA-57 in DESKA-150 ga nimata (null → uporabnikovo polje),
      ALU OGR-K-002 ANT ima RAL 7016 → #383e42.
   D) stanja gradiv (izberiGradivo nad realnim katalogom) za VSE dokazane primer:
-     A UPORABLJENO (burma128-2), B UPORABLJENO (57-32 salon), B2 SAMO_DRUZINA
-     (družinska tekstura — manjka odtenek, pošteno), D UPORABLJENO (Domzale-4),
+     A UPORABLJENO (DETAJL čip R524), B UPORABLJENO (DETAJL čip R524), B2
+     UPORABLJENO (čip R524 — v R518 SAMO_DRUZINA, zdaj uradni čip lestvice),
+     D UPORABLJENO (DETAJL čip R524),
      E NI_PREVERJENO (ALU brez gradiv — pošteni barvni približek brez teksture).
   E) žičenje: UI (foto-replace.tsx) ob izbiri izdelka prednastavi rezaMmS iz
      tech; dokazni render uporablja rezaIzTecha.
@@ -245,12 +246,11 @@ console.log(JSON.stringify(out))
 await db.$disconnect()
 ''')
 a, b, b2, d, e = D.get('A') or {}, D.get('B') or {}, D.get('B2') or {}, D.get('D') or {}, D.get('E') or {}
-chk(a.get('stanje') == 'UPORABLJENO' and 'burma128-2' in (a.get('datoteka') or ''), f'A: POLNA-128 Burma teak → UPORABLJENO ({a.get("datoteka")})')
-chk(b.get('stanje') == 'UPORABLJENO' and 'Polna-deska-57-32_salon1' in (b.get('datoteka') or ''), f'B: POLNA-57 Oak wood → UPORABLJENO ({b.get("datoteka")})')
-chk(b2.get('stanje') == 'SAMO_DRUZINA' and (b2.get('datoteka') or '').startswith('c4a3c06d3e1b'),
-    f'B2: POLNA-57 Rustic walnut → SAMO_DRUZINA — družinska tekstura brez odtenka ({b2.get("datoteka")}) [R523: ROAK odstranjen — namenska lestvica 57/32 ima 3 barve]')
-chk(any('odtenk' in m for m in (b2.get('manjkajo') or [])), f'B2: manjka izrecno naveden (pošteno): {b2.get("manjkajo")}')
-chk(d.get('stanje') == 'UPORABLJENO' and 'Domzale-4' in (d.get('datoteka') or ''), f'D: POLNA-100 White → UPORABLJENO ({d.get("datoteka")})')
+chk(a.get('stanje') == 'UPORABLJENO' and 'polna128-cip-but' in (a.get('datoteka') or ''), f'A: POLNA-128 Burma teak → UPORABLJENO z DETAJL čipom R524 ({a.get("datoteka")})')
+chk(b.get('stanje') == 'UPORABLJENO' and 'polna57-cip-okw' in (b.get('datoteka') or ''), f'B: POLNA-57 Oak wood → UPORABLJENO z DETAJL čipom R524 ({b.get("datoteka")})')
+chk(b2.get('stanje') == 'UPORABLJENO' and 'polna57-cip-rwa' in (b2.get('datoteka') or ''),
+    f'B2: POLNA-57 Rustic walnut → UPORABLJENO z DETAJL čipom R524 ({b2.get("datoteka")}) [R518: SAMO_DRUZINA → R524: čip uradne lestvice 57/32]')
+chk(d.get('stanje') == 'UPORABLJENO' and 'polna100-cip-wht' in (d.get('datoteka') or ''), f'D: POLNA-100 White → UPORABLJENO z DETAJL čipom R524 ({d.get("datoteka")})')
 chk(e.get('stanje') == 'NI_PREVERJENO' and e.get('datoteka') is None and any('površina variante' in m for m in (e.get('manjkajo') or [])),
     f'E: ALU antracit → NI_PREVERJENO brez gradiva (pošteni približek): manjka {e.get("manjkajo")}')
 

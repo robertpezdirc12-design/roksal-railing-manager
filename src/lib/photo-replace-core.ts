@@ -28,7 +28,11 @@ import {
 // ─── Verzija engine-a (§13 revizija: katera verzija je izrisala sliko) ──────
 // R523 (1.2.0): DETAJL pred FOTO_IZDELEK v izbiri gradiva + množica izrezov
 // (vsaka letvica fasade dobi svojo desko) + čipi uradne lestvice KUBO.
-export const ENGINE_VERSION = '1.2.0'
+// R524 (1.3.0): čipi uradnih lestvic za OGRAJE (POLNA 57/100/128 + ROMB 67;
+// 24 DETAJL gradiv po varianti) — mreža celic kot doslej (izoliran poskus:
+// 9/10 proti 6/10 za podizrez+zrcalo), UI pa vir rotira po izmeri smeri
+// vlaken (izmeriSmerVlaken), da vlakna tečejo VZDOLŽ palice/deskе.
+export const ENGINE_VERSION = '1.3.0'
 
 /** §15: obvezni žig na vsaki POTEM sliki in zaslonu. */
 export const VIZ_ZIG = 'VIZUALIZACIJA ZA PREDSTAVITEV'
@@ -1025,6 +1029,11 @@ export function izrisiOgrajo (
       struktura(0, deska.yCm, cfg.lengthCm, deska.yCm + deska.visinaCm)
     }
   } else if (cfg.tip === 'POKOCNA') {
+    // R524: DETAJL čipi uradnih lestvic se preslikajo z NAVADNO mrežo celic
+    // (enako kot scenični viri — dokazano z izoliranim poskusom: cela slika v
+    // mreži 9/10 proti podizrezu+zrcalu 6/10 pri ozkih palicah; perspektiva
+    // posamezne palice + svetloba že dasta naravno variacijo). UI vir po
+    // potrebi ZAROTIRA (izmera smeri vlaken), da vlakna tečejo vzdolž palice.
     for (const palica of razpored.palice) {
       const a = P(palica.xCm, 0)
       const b = P(palica.xCm + palica.sirinaCm, 0)
@@ -1046,6 +1055,8 @@ export function izrisiOgrajo (
       struktura(palica.xCm, 0, palica.xCm + palica.sirinaCm, cfg.heightCm - 4)
     }
   } else if (cfg.tip === 'PRECNA') {
+    // R524: enaka mreža celic kot POKOCNA (zgoraj) — DETAJL čip uradne lestvice
+    // se preslika cel, UI pa ga rotira, da vlakna tečejo VZDOLŽ deskе.
     for (const deska of razpored.deske) {
       const a = P(0.6, deska.yCm)
       const b = P(cfg.lengthCm - 0.6, deska.yCm)

@@ -846,5 +846,285 @@
   "virUrl": "https://roksal.com/wp-content/uploads/2024/09/BARVNA_LESTVICA_5-kubo4.png",
   "sha256": "8699b594e00e16c6742bf62047143e607f097a0892fb43aea53ee25bf5e42e81",
   "bytes": 68824
+ },
+ {
+  "file": "roksal-barvna-lestvica-polna-128-full.png",
+  "kategorija": "barvna-lestvica",
+  "opis": "ROK-OG-POLNA-128 | URADNA lestvica POLNA 128 v izvirni ločljivosti (2560×683 izvirnik namesto 1024 px sličice), vir DETAJL čipov R524",
+  "source": "Roksal d.o.o. (roksal.com) — neposreden prenos iz uradne medijske knjižnice (wp-content/uploads), R524",
+  "cdnUrl": null,
+  "virUrl": "https://roksal.com/wp-content/uploads/2024/09/BARVNA_LESTVICA_4-polna-128-4.png",
+  "sha256": "bdb399e78029248454e810c33ac031402b9d369b794840d893c8324c29300f50",
+  "bytes": 452512
+ },
+ {
+  "file": "roksal-barvna-lestvica-polna-100-full.png",
+  "kategorija": "barvna-lestvica",
+  "opis": "ROK-OGP-POLNA-100 | URADNA lestvica POLNA 100 v izvirni ločljivosti (2560×600 izvirnik namesto 1024 px sličice), vir DETAJL čipov R524",
+  "source": "Roksal d.o.o. (roksal.com) — neposreden prenos iz uradne medijske knjižnice (wp-content/uploads), R524",
+  "cdnUrl": null,
+  "virUrl": "https://roksal.com/wp-content/uploads/2024/10/BARVNA_LESTVICA_2_polna.png",
+  "sha256": "9e0bb499a6f858b2ded4c65775f819d17785dbb3aac4c4f8b5ae7eb9b456c1b8",
+  "bytes": 446136
+ },
+ {
+  "file": "roksal-barvna-lestvica-romb-67-full.png",
+  "kategorija": "barvna-lestvica",
+  "opis": "ROK-OG-ROMB-67 | URADNA lestvica ROMB 67 v izvirni ločljivosti (2560×669 izvirnik namesto 1024 px sličice), vir DETAJL čipov R524",
+  "source": "Roksal d.o.o. (roksal.com) — neposreden prenos iz uradne medijske knjižnice (wp-content/uploads), R524",
+  "cdnUrl": null,
+  "virUrl": "https://roksal.com/wp-content/uploads/2024/09/BARVNA_LESTVICA_3-rombi4.png",
+  "sha256": "98081871ff40a57feeda5cd08ad4cd7e06f1cfb5a25675a01e0122b5092a3fed",
+  "bytes": 493484
+ },
+ {
+  "file": "roksal-barvna-lestvica-terasa-150-full.png",
+  "kategorija": "barvna-lestvica",
+  "opis": "ROK-OG-DESKA-150 + ROK-TER-KLASIK + ROK-TER-RUSTIC | URADNA lestvica TERASA/DESKA 150 v izvirni ločljivosti (2560×680 izvirnik namesto 1024 px sličice); NAMENOMERNO BREZ DETAJL čipov: lestvica kaže žlebičasto (namestitveno) stran terasne deskе, ograja DESKA 150 pa kaže gladko stran (VLM dokaz na uradni scenični fotografiji) — vir površine za DESKA-150 ostajajo scenične fotografije",
+  "source": "Roksal d.o.o. (roksal.com) — neposreden prenos iz uradne medijske knjižnice (wp-content/uploads), R524",
+  "cdnUrl": null,
+  "virUrl": "https://roksal.com/wp-content/uploads/2024/09/BARVNA_LESTVICA_1-terasa4.png",
+  "sha256": "e6f1d5c8b2ba2079c747aa8e131008cf0e1db6f42006dfe6ea9dd317d894431f",
+  "bytes": 444957
+ },
+ {
+  "file": "roksal-polna57-cip-amw.png",
+  "kategorija": "detajl-barva",
+  "opis": "ROK-OGP-POLNA-57-AMW — Amazon wood | Čip površine iz uradne barvne lestvice (deterministični izrez: največji neprosojni kvadrat znotraj čipa, vlakna rotirana navpično po izmeri anizotropije; revizija: ops/r524-cipi.json)",
+  "source": "Roksal d.o.o. (roksal.com) — neposreden prenos iz uradne medijske knjižnice (wp-content/uploads), R524",
+  "cdnUrl": null,
+  "virUrl": "https://roksal.com/wp-content/uploads/2026/02/BARVNA_LESTVICA_5-polna-deska-57-32_3.png",
+  "sha256": "9d4717084dc3d092a975c44d9105d97a5873d0fd75cfa12f4122554dcc5bac8a",
+  "bytes": 97612
+ },
+ {
+  "file": "roksal-polna57-cip-okw.png",
+  "kategorija": "detajl-barva",
+  "opis": "ROK-OGP-POLNA-57-OKW — Oak wood | Čip površine iz uradne barvne lestvice (deterministični izrez: največji neprosojni kvadrat znotraj čipa, vlakna rotirana navpično po izmeri anizotropije; revizija: ops/r524-cipi.json)",
+  "source": "Roksal d.o.o. (roksal.com) — neposreden prenos iz uradne medijske knjižnice (wp-content/uploads), R524",
+  "cdnUrl": null,
+  "virUrl": "https://roksal.com/wp-content/uploads/2026/02/BARVNA_LESTVICA_5-polna-deska-57-32_3.png",
+  "sha256": "7a4c8c2b74cd5bc51c495d467f118d2c193a44359d8513b5642d4da1c2dc636c",
+  "bytes": 86266
+ },
+ {
+  "file": "roksal-polna57-cip-rwa.png",
+  "kategorija": "detajl-barva",
+  "opis": "ROK-OGP-POLNA-57-RWA — Rustic walnut | Čip površine iz uradne barvne lestvice (deterministični izrez: največji neprosojni kvadrat znotraj čipa, vlakna rotirana navpično po izmeri anizotropije; revizija: ops/r524-cipi.json)",
+  "source": "Roksal d.o.o. (roksal.com) — neposreden prenos iz uradne medijske knjižnice (wp-content/uploads), R524",
+  "cdnUrl": null,
+  "virUrl": "https://roksal.com/wp-content/uploads/2026/02/BARVNA_LESTVICA_5-polna-deska-57-32_3.png",
+  "sha256": "e458206716b64ad96404daefcaa662ab878427267a3e9e373cb1bfa1069ec973",
+  "bytes": 93595
+ },
+ {
+  "file": "roksal-polna128-cip-amw.png",
+  "kategorija": "detajl-barva",
+  "opis": "ROK-OG-POLNA-128-AMW — Amazon wood | Čip površine iz uradne barvne lestvice (deterministični izrez: največji neprosojni kvadrat znotraj čipa, vlakna rotirana navpično po izmeri anizotropije; revizija: ops/r524-cipi.json)",
+  "source": "Roksal d.o.o. (roksal.com) — neposreden prenos iz uradne medijske knjižnice (wp-content/uploads), R524",
+  "cdnUrl": null,
+  "virUrl": "https://roksal.com/wp-content/uploads/2024/09/BARVNA_LESTVICA_4-polna-128-4.png",
+  "sha256": "3750eada13a79e78b6957fcb8d360c1d18ddd47195dc18383394980d838bfc25",
+  "bytes": 75932
+ },
+ {
+  "file": "roksal-polna128-cip-ash.png",
+  "kategorija": "detajl-barva",
+  "opis": "ROK-OG-POLNA-128-ASH — Ash wood | Čip površine iz uradne barvne lestvice (deterministični izrez: največji neprosojni kvadrat znotraj čipa, vlakna rotirana navpično po izmeri anizotropije; revizija: ops/r524-cipi.json)",
+  "source": "Roksal d.o.o. (roksal.com) — neposreden prenos iz uradne medijske knjižnice (wp-content/uploads), R524",
+  "cdnUrl": null,
+  "virUrl": "https://roksal.com/wp-content/uploads/2024/09/BARVNA_LESTVICA_4-polna-128-4.png",
+  "sha256": "0d5e53d3be77ee29348b4ef52ad21bfb80782a59b135a99d186d31c539806471",
+  "bytes": 65117
+ },
+ {
+  "file": "roksal-polna128-cip-but.png",
+  "kategorija": "detajl-barva",
+  "opis": "ROK-OG-POLNA-128-BUT — Burma teak | Čip površine iz uradne barvne lestvice (deterministični izrez: največji neprosojni kvadrat znotraj čipa, vlakna rotirana navpično po izmeri anizotropije; revizija: ops/r524-cipi.json)",
+  "source": "Roksal d.o.o. (roksal.com) — neposreden prenos iz uradne medijske knjižnice (wp-content/uploads), R524",
+  "cdnUrl": null,
+  "virUrl": "https://roksal.com/wp-content/uploads/2024/09/BARVNA_LESTVICA_4-polna-128-4.png",
+  "sha256": "bdd50847f40fe4b55d7f5ac691f2f0fae69c1c015dc29b90667e42fb3f190d3f",
+  "bytes": 73707
+ },
+ {
+  "file": "roksal-polna128-cip-okw.png",
+  "kategorija": "detajl-barva",
+  "opis": "ROK-OG-POLNA-128-OKW — Oak wood | Čip površine iz uradne barvne lestvice (deterministični izrez: največji neprosojni kvadrat znotraj čipa, vlakna rotirana navpično po izmeri anizotropije; revizija: ops/r524-cipi.json)",
+  "source": "Roksal d.o.o. (roksal.com) — neposreden prenos iz uradne medijske knjižnice (wp-content/uploads), R524",
+  "cdnUrl": null,
+  "virUrl": "https://roksal.com/wp-content/uploads/2024/09/BARVNA_LESTVICA_4-polna-128-4.png",
+  "sha256": "b39fec365af7b92678d80ab04f87c042ee8f0e59a0fa8dfe5bf9d4bd3d24b42b",
+  "bytes": 65175
+ },
+ {
+  "file": "roksal-polna128-cip-roak.png",
+  "kategorija": "detajl-barva",
+  "opis": "ROK-OG-POLNA-128-ROAK — Rustic oak | Čip površine iz uradne barvne lestvice (deterministični izrez: največji neprosojni kvadrat znotraj čipa, vlakna rotirana navpično po izmeri anizotropije; revizija: ops/r524-cipi.json)",
+  "source": "Roksal d.o.o. (roksal.com) — neposreden prenos iz uradne medijske knjižnice (wp-content/uploads), R524",
+  "cdnUrl": null,
+  "virUrl": "https://roksal.com/wp-content/uploads/2024/09/BARVNA_LESTVICA_4-polna-128-4.png",
+  "sha256": "ea65b75e92ee4e3733dc007f6f7b62c5c7fce28ee5e3ec020fb518f0f7370d8a",
+  "bytes": 64213
+ },
+ {
+  "file": "roksal-polna128-cip-rwa.png",
+  "kategorija": "detajl-barva",
+  "opis": "ROK-OG-POLNA-128-RWA — Rustic walnut | Čip površine iz uradne barvne lestvice (deterministični izrez: največji neprosojni kvadrat znotraj čipa, vlakna rotirana navpično po izmeri anizotropije; revizija: ops/r524-cipi.json)",
+  "source": "Roksal d.o.o. (roksal.com) — neposreden prenos iz uradne medijske knjižnice (wp-content/uploads), R524",
+  "cdnUrl": null,
+  "virUrl": "https://roksal.com/wp-content/uploads/2024/09/BARVNA_LESTVICA_4-polna-128-4.png",
+  "sha256": "597aadc764e919fb1df9949c4c1d135aa078eea9e5ffaca836d111638da91993",
+  "bytes": 48344
+ },
+ {
+  "file": "roksal-polna100-cip-amw.png",
+  "kategorija": "detajl-barva",
+  "opis": "ROK-OGP-POLNA-100-AMW — Amazon wood | Čip površine iz uradne barvne lestvice (deterministični izrez: največji neprosojni kvadrat znotraj čipa, vlakna rotirana navpično po izmeri anizotropije; revizija: ops/r524-cipi.json)",
+  "source": "Roksal d.o.o. (roksal.com) — neposreden prenos iz uradne medijske knjižnice (wp-content/uploads), R524",
+  "cdnUrl": null,
+  "virUrl": "https://roksal.com/wp-content/uploads/2024/10/BARVNA_LESTVICA_2_polna.png",
+  "sha256": "597497c36ffbbf9ed2afe9197f8b4cfa1c09dfd331ec527678436b660bf6cc12",
+  "bytes": 54748
+ },
+ {
+  "file": "roksal-polna100-cip-ash.png",
+  "kategorija": "detajl-barva",
+  "opis": "ROK-OGP-POLNA-100-ASH — Ash wood | Čip površine iz uradne barvne lestvice (deterministični izrez: največji neprosojni kvadrat znotraj čipa, vlakna rotirana navpično po izmeri anizotropije; revizija: ops/r524-cipi.json)",
+  "source": "Roksal d.o.o. (roksal.com) — neposreden prenos iz uradne medijske knjižnice (wp-content/uploads), R524",
+  "cdnUrl": null,
+  "virUrl": "https://roksal.com/wp-content/uploads/2024/10/BARVNA_LESTVICA_2_polna.png",
+  "sha256": "d3b47883b8c34db97c855a820371f9e84c56c399e1fac028bbfc910052a0741e",
+  "bytes": 53807
+ },
+ {
+  "file": "roksal-polna100-cip-glt.png",
+  "kategorija": "detajl-barva",
+  "opis": "ROK-OGP-POLNA-100-GLT — Golden teak | Čip površine iz uradne barvne lestvice (deterministični izrez: največji neprosojni kvadrat znotraj čipa, vlakna rotirana navpično po izmeri anizotropije; revizija: ops/r524-cipi.json)",
+  "source": "Roksal d.o.o. (roksal.com) — neposreden prenos iz uradne medijske knjižnice (wp-content/uploads), R524",
+  "cdnUrl": null,
+  "virUrl": "https://roksal.com/wp-content/uploads/2024/10/BARVNA_LESTVICA_2_polna.png",
+  "sha256": "516c9c6e6eaa2961f9d9c1ae193e1c7f5c65a76ef2000bdc5d03332ca028c37e",
+  "bytes": 57658
+ },
+ {
+  "file": "roksal-polna100-cip-but.png",
+  "kategorija": "detajl-barva",
+  "opis": "ROK-OGP-POLNA-100-BUT — Burma teak | Čip površine iz uradne barvne lestvice (deterministični izrez: največji neprosojni kvadrat znotraj čipa, vlakna rotirana navpično po izmeri anizotropije; revizija: ops/r524-cipi.json)",
+  "source": "Roksal d.o.o. (roksal.com) — neposreden prenos iz uradne medijske knjižnice (wp-content/uploads), R524",
+  "cdnUrl": null,
+  "virUrl": "https://roksal.com/wp-content/uploads/2024/10/BARVNA_LESTVICA_2_polna.png",
+  "sha256": "9e647deeec51a598b603de98b379342c8a34d8bdff6fb84a43ceb2f208958c69",
+  "bytes": 44699
+ },
+ {
+  "file": "roksal-polna100-cip-okw.png",
+  "kategorija": "detajl-barva",
+  "opis": "ROK-OGP-POLNA-100-OKW — Oak wood | Čip površine iz uradne barvne lestvice (deterministični izrez: največji neprosojni kvadrat znotraj čipa, vlakna rotirana navpično po izmeri anizotropije; revizija: ops/r524-cipi.json)",
+  "source": "Roksal d.o.o. (roksal.com) — neposreden prenos iz uradne medijske knjižnice (wp-content/uploads), R524",
+  "cdnUrl": null,
+  "virUrl": "https://roksal.com/wp-content/uploads/2024/10/BARVNA_LESTVICA_2_polna.png",
+  "sha256": "f8bb081698ca529830154ab83988bd1f2ec2517fd5f978f9abcfd0eff6815967",
+  "bytes": 66355
+ },
+ {
+  "file": "roksal-polna100-cip-wht.png",
+  "kategorija": "detajl-barva",
+  "opis": "ROK-OGP-POLNA-100-WHT — White | Čip površine iz uradne barvne lestvice (deterministični izrez: največji neprosojni kvadrat znotraj čipa, vlakna rotirana navpično po izmeri anizotropije; revizija: ops/r524-cipi.json)",
+  "source": "Roksal d.o.o. (roksal.com) — neposreden prenos iz uradne medijske knjižnice (wp-content/uploads), R524",
+  "cdnUrl": null,
+  "virUrl": "https://roksal.com/wp-content/uploads/2024/10/BARVNA_LESTVICA_2_polna.png",
+  "sha256": "10642a4752c3b93bd4614e65fafffd3d9b6bb7bb0103bc01fe4ec52d97d67cbe",
+  "bytes": 33928
+ },
+ {
+  "file": "roksal-polna100-cip-roak.png",
+  "kategorija": "detajl-barva",
+  "opis": "ROK-OGP-POLNA-100-ROAK — Rustic oak | Čip površine iz uradne barvne lestvice (deterministični izrez: največji neprosojni kvadrat znotraj čipa, vlakna rotirana navpično po izmeri anizotropije; revizija: ops/r524-cipi.json)",
+  "source": "Roksal d.o.o. (roksal.com) — neposreden prenos iz uradne medijske knjižnice (wp-content/uploads), R524",
+  "cdnUrl": null,
+  "virUrl": "https://roksal.com/wp-content/uploads/2024/10/BARVNA_LESTVICA_2_polna.png",
+  "sha256": "a78f46c8d7d353c9a927a9aeb420beb7c2deb3ddf24df6702e7f797f2318e0ba",
+  "bytes": 49658
+ },
+ {
+  "file": "roksal-polna100-cip-rwa.png",
+  "kategorija": "detajl-barva",
+  "opis": "ROK-OGP-POLNA-100-RWA — Rustic walnut | Čip površine iz uradne barvne lestvice (deterministični izrez: največji neprosojni kvadrat znotraj čipa, vlakna rotirana navpično po izmeri anizotropije; revizija: ops/r524-cipi.json)",
+  "source": "Roksal d.o.o. (roksal.com) — neposreden prenos iz uradne medijske knjižnice (wp-content/uploads), R524",
+  "cdnUrl": null,
+  "virUrl": "https://roksal.com/wp-content/uploads/2024/10/BARVNA_LESTVICA_2_polna.png",
+  "sha256": "1f36bda6d7ad924a33047764e6bc6f9f640f62b4a55d50df88b88f1f609af930",
+  "bytes": 44152
+ },
+ {
+  "file": "roksal-romb67-cip-amw.png",
+  "kategorija": "detajl-barva",
+  "opis": "ROK-OG-ROMB-67-AMW — Amazon wood | Čip površine iz uradne barvne lestvice (deterministični izrez: največji neprosojni kvadrat znotraj čipa, vlakna rotirana navpično po izmeri anizotropije; revizija: ops/r524-cipi.json)",
+  "source": "Roksal d.o.o. (roksal.com) — neposreden prenos iz uradne medijske knjižnice (wp-content/uploads), R524",
+  "cdnUrl": null,
+  "virUrl": "https://roksal.com/wp-content/uploads/2024/09/BARVNA_LESTVICA_3-rombi4.png",
+  "sha256": "f97b1d166c55acfed5b8a876f07d544c87b4e3aa3037cd1536d52ff3dd9694fb",
+  "bytes": 72495
+ },
+ {
+  "file": "roksal-romb67-cip-ash.png",
+  "kategorija": "detajl-barva",
+  "opis": "ROK-OG-ROMB-67-ASH — Ash wood | Čip površine iz uradne barvne lestvice (deterministični izrez: največji neprosojni kvadrat znotraj čipa, vlakna rotirana navpično po izmeri anizotropije; revizija: ops/r524-cipi.json)",
+  "source": "Roksal d.o.o. (roksal.com) — neposreden prenos iz uradne medijske knjižnice (wp-content/uploads), R524",
+  "cdnUrl": null,
+  "virUrl": "https://roksal.com/wp-content/uploads/2024/09/BARVNA_LESTVICA_3-rombi4.png",
+  "sha256": "2858894771f9e9ff1dcb50c3ca123cfebfd41cb4f94b8310a14c0e6a68c52e59",
+  "bytes": 58441
+ },
+ {
+  "file": "roksal-romb67-cip-glt.png",
+  "kategorija": "detajl-barva",
+  "opis": "ROK-OG-ROMB-67-GLT — Golden teak | Čip površine iz uradne barvne lestvice (deterministični izrez: največji neprosojni kvadrat znotraj čipa, vlakna rotirana navpično po izmeri anizotropije; revizija: ops/r524-cipi.json)",
+  "source": "Roksal d.o.o. (roksal.com) — neposreden prenos iz uradne medijske knjižnice (wp-content/uploads), R524",
+  "cdnUrl": null,
+  "virUrl": "https://roksal.com/wp-content/uploads/2024/09/BARVNA_LESTVICA_3-rombi4.png",
+  "sha256": "22bd45f62a55103eed05f6261b2466c4bc5ec87d97fb17b506afcae7963e571b",
+  "bytes": 70384
+ },
+ {
+  "file": "roksal-romb67-cip-but.png",
+  "kategorija": "detajl-barva",
+  "opis": "ROK-OG-ROMB-67-BUT — Burma teak | Čip površine iz uradne barvne lestvice (deterministični izrez: največji neprosojni kvadrat znotraj čipa, vlakna rotirana navpično po izmeri anizotropije; revizija: ops/r524-cipi.json)",
+  "source": "Roksal d.o.o. (roksal.com) — neposreden prenos iz uradne medijske knjižnice (wp-content/uploads), R524",
+  "cdnUrl": null,
+  "virUrl": "https://roksal.com/wp-content/uploads/2024/09/BARVNA_LESTVICA_3-rombi4.png",
+  "sha256": "7a62d967c8e3237fe53650d416687850c18d12c089d45ec7112f697ed6c40a03",
+  "bytes": 56677
+ },
+ {
+  "file": "roksal-romb67-cip-okw.png",
+  "kategorija": "detajl-barva",
+  "opis": "ROK-OG-ROMB-67-OKW — Oak wood | Čip površine iz uradne barvne lestvice (deterministični izrez: največji neprosojni kvadrat znotraj čipa, vlakna rotirana navpično po izmeri anizotropije; revizija: ops/r524-cipi.json)",
+  "source": "Roksal d.o.o. (roksal.com) — neposreden prenos iz uradne medijske knjižnice (wp-content/uploads), R524",
+  "cdnUrl": null,
+  "virUrl": "https://roksal.com/wp-content/uploads/2024/09/BARVNA_LESTVICA_3-rombi4.png",
+  "sha256": "835441757c20d42aec41c2d43c78584121f65a4430dea8e955e2d62e03f974dc",
+  "bytes": 60368
+ },
+ {
+  "file": "roksal-romb67-cip-roak.png",
+  "kategorija": "detajl-barva",
+  "opis": "ROK-OG-ROMB-67-ROAK — Rustic oak | Čip površine iz uradne barvne lestvice (deterministični izrez: največji neprosojni kvadrat znotraj čipa, vlakna rotirana navpično po izmeri anizotropije; revizija: ops/r524-cipi.json)",
+  "source": "Roksal d.o.o. (roksal.com) — neposreden prenos iz uradne medijske knjižnice (wp-content/uploads), R524",
+  "cdnUrl": null,
+  "virUrl": "https://roksal.com/wp-content/uploads/2024/09/BARVNA_LESTVICA_3-rombi4.png",
+  "sha256": "a48028d9c32f2e5f62574694e3cdb57f64349cc7598059d50c954cd01578575e",
+  "bytes": 73791
+ },
+ {
+  "file": "roksal-romb67-cip-rwa.png",
+  "kategorija": "detajl-barva",
+  "opis": "ROK-OG-ROMB-67-RWA — Rustic walnut | Čip površine iz uradne barvne lestvice (deterministični izrez: največji neprosojni kvadrat znotraj čipa, vlakna rotirana navpično po izmeri anizotropije; revizija: ops/r524-cipi.json)",
+  "source": "Roksal d.o.o. (roksal.com) — neposreden prenos iz uradne medijske knjižnice (wp-content/uploads), R524",
+  "cdnUrl": null,
+  "virUrl": "https://roksal.com/wp-content/uploads/2024/09/BARVNA_LESTVICA_3-rombi4.png",
+  "sha256": "d0d8110e839944f1c4e8d7d73da600ebf0a0b0c9511c6c800b84c351ce065c43",
+  "bytes": 53273
  }
 ]

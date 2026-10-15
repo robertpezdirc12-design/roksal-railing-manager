@@ -160,7 +160,7 @@ chk('barva: {a.colorName} (potrjena)' in kat or '(potrjena)' in kat, 'UI katalog
 
 # ── 9. API: product-assets vrača podatke ──
 s, d = callj('GET', '/api/product-assets?status=VERIFIED', tok_adm)
-chk(s == 200 and len(d.get('data', [])) == 91, f'91 VERIFIED gradiv skupaj z r523 (dejansko: {len(d.get("data", []))})')
+chk(s == 200 and len(d.get('data', [])) == 115, f'115 VERIFIED gradiv skupaj z r524 (dejansko: {len(d.get("data", []))})')
 s, d = callj('GET', '/api/product-assets', tok_mon)
 chk(s == 200, 'monter lahko bere gradiva (_read)')
 
@@ -179,7 +179,7 @@ console.log(JSON.stringify({ assets: await db.productAsset.count(), verified: aw
 await db.$disconnect();
 """)
 st = rows[0]
-chk(st['assets'] == 91 and st['verified'] == 91, f'skupaj 91 gradiv VERIFIED po r523 (dejansko: {st["assets"]}/{st["verified"]})')
+chk(st['assets'] == 115 and st['verified'] == 115, f'skupaj 115 gradiv VERIFIED po r524 (dejansko: {st["assets"]}/{st["verified"]})')
 chk(st['vars'] == 49, f'49 ROK variant (dejansko: {st["vars"]}) — R523: POLNA-57 brez ROAK')
 
 # ── 11. regresija temeljev ──

@@ -172,7 +172,8 @@ r = subprocess.run(['node', 'prisma/seed-r494.cjs'], cwd=REPO, capture_output=Tr
 chk(r.returncode == 0 and 'KONEC: 5 lestvic VERIFIED' in r.stdout, 'seed-r494 idemponten: 5 lestvic, brez podvajanj')
 s, d = callj('GET', '/api/product-assets?status=VERIFIED', tok_adm)
 # R523: seed-r494 pobriše le ROK-VRT izdelke (cascade 10 r495 gradiv pohištva) → 91−10 = 81
-chk(len(d.get('data', [])) == 81, f'po ponovnem seedu: 81 VERIFIED (91 − 10 ROK-VRT; r523 gradiva preživijo; dejansko: {len(d.get("data", []))})')
+# R524: + 24 DETAJL čipov ograj → 115−10 = 105
+chk(len(d.get('data', [])) == 105, f'po ponovnem seedu: 105 VERIFIED (115 − 10 ROK-VRT; r523/r524 gradiva preživijo; dejansko: {len(d.get("data", []))})')
 s, d = callj('GET', '/api/products?family=all&q=ROK-', tok_adm)
 chk(len(d.get('data', [])) == 18, 'po ponovnem seedu: 18 izdelkov')
 chk(len([v for p in d.get('data', []) for v in p.get('variants', [])]) == 49, 'po ponovnem seedu: 49 variant (46 r494 + 3× 57/32 iz r495/r523 — ROAK ostaja odstranjen; r494 POLNA-57 variant ne ustvarja)', )
@@ -184,8 +185,11 @@ chk(r.returncode == 0 and '50 povezav' in r.stdout, 'obnova stanja: seed-r495 po
 # (r520/r523) drugače vidijo stanje BREZ čipov
 r = subprocess.run(['node', 'prisma/seed-r523.cjs'], cwd=REPO, capture_output=True, text=True, timeout=180, env=subenv)
 chk(r.returncode == 0 and 'KUBO DETAJL ×4' in r.stdout, 'obnova stanja: seed-r523 po r494 preverbi (čipi KUBO)')
+# R524: veriga se konča s seed-r524 (24 DETAJL čipov ograj + lestvice izvirniki)
+r = subprocess.run(['node', 'prisma/seed-r524.cjs'], cwd=REPO, capture_output=True, text=True, timeout=180, env=subenv)
+chk(r.returncode == 0 and 'DETAJL čipov' in r.stdout, 'obnova stanja: seed-r524 po r494 preverbi (čipi ograj)')
 s, d = callj('GET', '/api/product-assets?status=VERIFIED', tok_adm)
-chk(len(d.get('data', [])) == 91, f'obnova stanja: 91 VERIFIED po r523 (dejansko: {len(d.get("data", []))})')
+chk(len(d.get('data', [])) == 115, f'obnova stanja: 115 VERIFIED po r524 (91 r523 + 24 čipov R524; dejansko: {len(d.get("data", []))})')
 s, d = callj('GET', '/api/products?family=all&q=ROK-', tok_adm)
 chk(len([v for p in d.get('data', []) for v in p.get('variants', [])]) == 49, 'obnova stanja: 49 variant (R523)')
 

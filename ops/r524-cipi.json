@@ -1,0 +1,676 @@
+{
+  "referenca": {
+    "slika": "r495-deske-za-ograje-wpc-pokoncna_384.jpg",
+    "anizotropija": 0.735
+  },
+  "lestvice": [
+    {
+      "sku": "ROK-OGP-POLNA-57",
+      "lestvica": {
+        "file": "roksal-barvna-lestvica-polna-57.png",
+        "W": 2217,
+        "H": 675,
+        "vir": "https://roksal.com/wp-content/uploads/2026/02/BARVNA_LESTVICA_5-polna-deska-57-32_3.png"
+      },
+      "cipi": [
+        {
+          "sku": "ROK-OGP-POLNA-57-AMW",
+          "odtenek": "Amazon wood",
+          "hex": "#5e5e61",
+          "file": "roksal-polna57-cip-amw.png",
+          "izrez": {
+            "x": 411,
+            "y": 276,
+            "w": 222,
+            "h": 222
+          },
+          "premerCipa": 332,
+          "rob": 0.669,
+          "avgRgb": {
+            "r": 95.3,
+            "g": 94.6,
+            "b": 97.4
+          },
+          "barvnaRazdalja": 1.5,
+          "najblizjiDrugi": {
+            "koda": "RWA",
+            "razdalja": 20.4
+          },
+          "anizotropija": 3.04,
+          "rotirano": true
+        },
+        {
+          "sku": "ROK-OGP-POLNA-57-OKW",
+          "odtenek": "Oak wood",
+          "hex": "#b0917c",
+          "file": "roksal-polna57-cip-okw.png",
+          "izrez": {
+            "x": 818,
+            "y": 290,
+            "w": 190,
+            "h": 190
+          },
+          "premerCipa": 324,
+          "rob": 0.586,
+          "avgRgb": {
+            "r": 176,
+            "g": 145.9,
+            "b": 124.3
+          },
+          "barvnaRazdalja": 1,
+          "najblizjiDrugi": {
+            "koda": "GLT",
+            "razdalja": 25.1
+          },
+          "anizotropija": 3.207,
+          "rotirano": true
+        },
+        {
+          "sku": "ROK-OGP-POLNA-57-RWA",
+          "odtenek": "Rustic walnut",
+          "hex": "#71675c",
+          "file": "roksal-polna57-cip-rwa.png",
+          "izrez": {
+            "x": 1522,
+            "y": 281,
+            "w": 208,
+            "h": 208
+          },
+          "premerCipa": 330,
+          "rob": 0.63,
+          "avgRgb": {
+            "r": 111,
+            "g": 100.2,
+            "b": 90.4
+          },
+          "barvnaRazdalja": 3.8,
+          "najblizjiDrugi": {
+            "koda": "AMW",
+            "razdalja": 19.3
+          },
+          "anizotropija": 1.782,
+          "rotirano": true
+        }
+      ]
+    },
+    {
+      "sku": "ROK-OG-POLNA-128",
+      "lestvica": {
+        "file": "roksal-barvna-lestvica-polna-128-full.png",
+        "W": 2560,
+        "H": 683,
+        "vir": "https://roksal.com/wp-content/uploads/2024/09/BARVNA_LESTVICA_4-polna-128-4.png"
+      },
+      "cipi": [
+        {
+          "sku": "ROK-OG-POLNA-128-AMW",
+          "odtenek": "Amazon wood",
+          "hex": "#5e5e61",
+          "file": "roksal-polna128-cip-amw.png",
+          "izrez": {
+            "x": 266,
+            "y": 285,
+            "w": 226,
+            "h": 226
+          },
+          "premerCipa": 329,
+          "rob": 0.687,
+          "avgRgb": {
+            "r": 94.9,
+            "g": 94.3,
+            "b": 97.3
+          },
+          "barvnaRazdalja": 1,
+          "najblizjiDrugi": {
+            "koda": "RWA",
+            "razdalja": 20.7
+          },
+          "anizotropija": 3.209,
+          "rotirano": true
+        },
+        {
+          "sku": "ROK-OG-POLNA-128-ASH",
+          "odtenek": "Ash wood",
+          "hex": "#8f8f91",
+          "file": "roksal-polna128-cip-ash.png",
+          "izrez": {
+            "x": 611,
+            "y": 297,
+            "w": 202,
+            "h": 202
+          },
+          "premerCipa": 324,
+          "rob": 0.623,
+          "avgRgb": {
+            "r": 145.1,
+            "g": 144.1,
+            "b": 144.6
+          },
+          "barvnaRazdalja": 2.4,
+          "najblizjiDrugi": {
+            "koda": "GLT",
+            "razdalja": 36.4
+          },
+          "anizotropija": 3.318,
+          "rotirano": true
+        },
+        {
+          "sku": "ROK-OG-POLNA-128-BUT",
+          "odtenek": "Burma teak",
+          "hex": "#8d756d",
+          "file": "roksal-polna128-cip-but.png",
+          "izrez": {
+            "x": 980,
+            "y": 290,
+            "w": 218,
+            "h": 218
+          },
+          "premerCipa": 325,
+          "rob": 0.671,
+          "avgRgb": {
+            "r": 142.2,
+            "g": 118.1,
+            "b": 109.5
+          },
+          "barvnaRazdalja": 1.7,
+          "najblizjiDrugi": {
+            "koda": "ROAK",
+            "razdalja": 21.1
+          },
+          "anizotropija": 3.577,
+          "rotirano": true
+        },
+        {
+          "sku": "ROK-OG-POLNA-128-OKW",
+          "odtenek": "Oak wood",
+          "hex": "#b0917c",
+          "file": "roksal-polna128-cip-okw.png",
+          "izrez": {
+            "x": 1332,
+            "y": 301,
+            "w": 194,
+            "h": 194
+          },
+          "premerCipa": 323,
+          "rob": 0.601,
+          "avgRgb": {
+            "r": 176,
+            "g": 146.5,
+            "b": 124.4
+          },
+          "barvnaRazdalja": 1.5,
+          "najblizjiDrugi": {
+            "koda": "GLT",
+            "razdalja": 25.6
+          },
+          "anizotropija": 3.452,
+          "rotirano": true
+        },
+        {
+          "sku": "ROK-OG-POLNA-128-ROAK",
+          "odtenek": "Rustic oak",
+          "hex": "#9c8061",
+          "file": "roksal-polna128-cip-roak.png",
+          "izrez": {
+            "x": 1751,
+            "y": 299,
+            "w": 200,
+            "h": 200
+          },
+          "premerCipa": 323,
+          "rob": 0.619,
+          "avgRgb": {
+            "r": 157.1,
+            "g": 129.2,
+            "b": 98.7
+          },
+          "barvnaRazdalja": 2.3,
+          "najblizjiDrugi": {
+            "koda": "GLT",
+            "razdalja": 20.2
+          },
+          "anizotropija": 3.033,
+          "rotirano": true
+        },
+        {
+          "sku": "ROK-OG-POLNA-128-RWA",
+          "odtenek": "Rustic walnut",
+          "hex": "#71675c",
+          "file": "roksal-polna128-cip-rwa.png",
+          "izrez": {
+            "x": 2043,
+            "y": 314,
+            "w": 170,
+            "h": 170
+          },
+          "premerCipa": 311,
+          "rob": 0.547,
+          "avgRgb": {
+            "r": 112.5,
+            "g": 101.5,
+            "b": 91.7
+          },
+          "barvnaRazdalja": 1.6,
+          "najblizjiDrugi": {
+            "koda": "AMW",
+            "razdalja": 20.7
+          },
+          "anizotropija": 1.81,
+          "rotirano": true
+        }
+      ]
+    },
+    {
+      "sku": "ROK-OGP-POLNA-100",
+      "lestvica": {
+        "file": "roksal-barvna-lestvica-polna-100-full.png",
+        "W": 2560,
+        "H": 600,
+        "vir": "https://roksal.com/wp-content/uploads/2024/10/BARVNA_LESTVICA_2_polna.png"
+      },
+      "cipi": [
+        {
+          "sku": "ROK-OGP-POLNA-100-AMW",
+          "odtenek": "Amazon wood",
+          "hex": "#5e5e61",
+          "file": "roksal-polna100-cip-amw.png",
+          "izrez": {
+            "x": 67,
+            "y": 251,
+            "w": 198,
+            "h": 198
+          },
+          "premerCipa": 289,
+          "rob": 0.685,
+          "avgRgb": {
+            "r": 94.9,
+            "g": 94.3,
+            "b": 97.2
+          },
+          "barvnaRazdalja": 0.9,
+          "najblizjiDrugi": {
+            "koda": "RWA",
+            "razdalja": 20.8
+          },
+          "anizotropija": 3.199,
+          "rotirano": true
+        },
+        {
+          "sku": "ROK-OGP-POLNA-100-ASH",
+          "odtenek": "Ash wood",
+          "hex": "#8f8f91",
+          "file": "roksal-polna100-cip-ash.png",
+          "izrez": {
+            "x": 371,
+            "y": 260,
+            "w": 180,
+            "h": 180
+          },
+          "premerCipa": 285,
+          "rob": 0.632,
+          "avgRgb": {
+            "r": 145.4,
+            "g": 144.3,
+            "b": 144.6
+          },
+          "barvnaRazdalja": 2.8,
+          "najblizjiDrugi": {
+            "koda": "GLT",
+            "razdalja": 36.3
+          },
+          "anizotropija": 3.336,
+          "rotirano": true
+        },
+        {
+          "sku": "ROK-OGP-POLNA-100-GLT",
+          "odtenek": "Golden teak",
+          "hex": "#a27e76",
+          "file": "roksal-polna100-cip-glt.png",
+          "izrez": {
+            "x": 720,
+            "y": 257,
+            "w": 186,
+            "h": 186
+          },
+          "premerCipa": 287,
+          "rob": 0.648,
+          "avgRgb": {
+            "r": 163.1,
+            "g": 125.3,
+            "b": 116.8
+          },
+          "barvnaRazdalja": 1.7,
+          "najblizjiDrugi": {
+            "koda": "ROAK",
+            "razdalja": 21.2
+          },
+          "anizotropija": 2.918,
+          "rotirano": true
+        },
+        {
+          "sku": "ROK-OGP-POLNA-100-BUT",
+          "odtenek": "Burma teak",
+          "hex": "#8d756d",
+          "file": "roksal-polna100-cip-but.png",
+          "izrez": {
+            "x": 1061,
+            "y": 266,
+            "w": 168,
+            "h": 168
+          },
+          "premerCipa": 281,
+          "rob": 0.598,
+          "avgRgb": {
+            "r": 144.5,
+            "g": 119.8,
+            "b": 111.2
+          },
+          "barvnaRazdalja": 5,
+          "najblizjiDrugi": {
+            "koda": "GLT",
+            "razdalja": 19.8
+          },
+          "anizotropija": 3.639,
+          "rotirano": true
+        },
+        {
+          "sku": "ROK-OGP-POLNA-100-OKW",
+          "odtenek": "Oak wood",
+          "hex": "#b0917c",
+          "file": "roksal-polna100-cip-okw.png",
+          "izrez": {
+            "x": 1339,
+            "y": 252,
+            "w": 196,
+            "h": 196
+          },
+          "premerCipa": 289,
+          "rob": 0.678,
+          "avgRgb": {
+            "r": 176.9,
+            "g": 147.8,
+            "b": 125.7
+          },
+          "barvnaRazdalja": 3.4,
+          "najblizjiDrugi": {
+            "koda": "GLT",
+            "razdalja": 27.5
+          },
+          "anizotropija": 3.342,
+          "rotirano": true
+        },
+        {
+          "sku": "ROK-OGP-POLNA-100-WHT",
+          "odtenek": "White",
+          "hex": "#c4c3c2",
+          "file": "roksal-polna100-cip-wht.png",
+          "izrez": {
+            "x": 1669,
+            "y": 259,
+            "w": 182,
+            "h": 182
+          },
+          "premerCipa": 285,
+          "rob": 0.639,
+          "avgRgb": {
+            "r": 199.3,
+            "g": 198.6,
+            "b": 197.2
+          },
+          "barvnaRazdalja": 5.8,
+          "najblizjiDrugi": {
+            "koda": "OKW",
+            "razdalja": 93.7
+          },
+          "anizotropija": 4.277,
+          "rotirano": true
+        },
+        {
+          "sku": "ROK-OGP-POLNA-100-ROAK",
+          "odtenek": "Rustic oak",
+          "hex": "#9c8061",
+          "file": "roksal-polna100-cip-roak.png",
+          "izrez": {
+            "x": 1947,
+            "y": 260,
+            "w": 180,
+            "h": 180
+          },
+          "premerCipa": 285,
+          "rob": 0.632,
+          "avgRgb": {
+            "r": 153.5,
+            "g": 126.7,
+            "b": 97.3
+          },
+          "barvnaRazdalja": 2.8,
+          "najblizjiDrugi": {
+            "koda": "BUT",
+            "razdalja": 19.7
+          },
+          "anizotropija": 2.774,
+          "rotirano": true
+        },
+        {
+          "sku": "ROK-OGP-POLNA-100-RWA",
+          "odtenek": "Rustic walnut",
+          "hex": "#71675c",
+          "file": "roksal-polna100-cip-rwa.png",
+          "izrez": {
+            "x": 2254,
+            "y": 268,
+            "w": 164,
+            "h": 164
+          },
+          "premerCipa": 280,
+          "rob": 0.586,
+          "avgRgb": {
+            "r": 112,
+            "g": 100.8,
+            "b": 90.9
+          },
+          "barvnaRazdalja": 2.6,
+          "najblizjiDrugi": {
+            "koda": "AMW",
+            "razdalja": 20.2
+          },
+          "anizotropija": 1.823,
+          "rotirano": true
+        }
+      ]
+    },
+    {
+      "sku": "ROK-OG-ROMB-67",
+      "lestvica": {
+        "file": "roksal-barvna-lestvica-romb-67-full.png",
+        "W": 2560,
+        "H": 669,
+        "vir": "https://roksal.com/wp-content/uploads/2024/09/BARVNA_LESTVICA_3-rombi4.png"
+      },
+      "cipi": [
+        {
+          "sku": "ROK-OG-ROMB-67-AMW",
+          "odtenek": "Amazon wood",
+          "hex": "#5e5e61",
+          "file": "roksal-romb67-cip-amw.png",
+          "izrez": {
+            "x": 76,
+            "y": 271,
+            "w": 226,
+            "h": 226
+          },
+          "premerCipa": 329,
+          "rob": 0.687,
+          "avgRgb": {
+            "r": 94.9,
+            "g": 94.3,
+            "b": 97.3
+          },
+          "barvnaRazdalja": 1,
+          "najblizjiDrugi": {
+            "koda": "RWA",
+            "razdalja": 20.7
+          },
+          "anizotropija": 3.246,
+          "rotirano": true
+        },
+        {
+          "sku": "ROK-OG-ROMB-67-ASH",
+          "odtenek": "Ash wood",
+          "hex": "#8f8f91",
+          "file": "roksal-romb67-cip-ash.png",
+          "izrez": {
+            "x": 418,
+            "y": 290,
+            "w": 188,
+            "h": 188
+          },
+          "premerCipa": 319,
+          "rob": 0.589,
+          "avgRgb": {
+            "r": 144.5,
+            "g": 143.6,
+            "b": 144.2
+          },
+          "barvnaRazdalja": 1.8,
+          "najblizjiDrugi": {
+            "koda": "GLT",
+            "razdalja": 36.1
+          },
+          "anizotropija": 3.337,
+          "rotirano": true
+        },
+        {
+          "sku": "ROK-OG-ROMB-67-GLT",
+          "odtenek": "Golden teak",
+          "hex": "#a27e76",
+          "file": "roksal-romb67-cip-glt.png",
+          "izrez": {
+            "x": 821,
+            "y": 278,
+            "w": 212,
+            "h": 212
+          },
+          "premerCipa": 327,
+          "rob": 0.648,
+          "avgRgb": {
+            "r": 163,
+            "g": 125.4,
+            "b": 116.8
+          },
+          "barvnaRazdalja": 1.7,
+          "najblizjiDrugi": {
+            "koda": "ROAK",
+            "razdalja": 21.2
+          },
+          "anizotropija": 2.903,
+          "rotirano": true
+        },
+        {
+          "sku": "ROK-OG-ROMB-67-BUT",
+          "odtenek": "Burma teak",
+          "hex": "#8d756d",
+          "file": "roksal-romb67-cip-but.png",
+          "izrez": {
+            "x": 1209,
+            "y": 288,
+            "w": 192,
+            "h": 192
+          },
+          "premerCipa": 321,
+          "rob": 0.598,
+          "avgRgb": {
+            "r": 144.3,
+            "g": 119.9,
+            "b": 111.2
+          },
+          "barvnaRazdalja": 4.9,
+          "najblizjiDrugi": {
+            "koda": "GLT",
+            "razdalja": 19.9
+          },
+          "anizotropija": 3.608,
+          "rotirano": true
+        },
+        {
+          "sku": "ROK-OG-ROMB-67-OKW",
+          "odtenek": "Oak wood",
+          "hex": "#b0917c",
+          "file": "roksal-romb67-cip-okw.png",
+          "izrez": {
+            "x": 1497,
+            "y": 290,
+            "w": 190,
+            "h": 190
+          },
+          "premerCipa": 320,
+          "rob": 0.594,
+          "avgRgb": {
+            "r": 175.9,
+            "g": 146.4,
+            "b": 124.2
+          },
+          "barvnaRazdalja": 1.4,
+          "najblizjiDrugi": {
+            "koda": "GLT",
+            "razdalja": 25.4
+          },
+          "anizotropija": 3.479,
+          "rotirano": true
+        },
+        {
+          "sku": "ROK-OG-ROMB-67-ROAK",
+          "odtenek": "Rustic oak",
+          "hex": "#9c8061",
+          "file": "roksal-romb67-cip-roak.png",
+          "izrez": {
+            "x": 1864,
+            "y": 273,
+            "w": 222,
+            "h": 222
+          },
+          "premerCipa": 329,
+          "rob": 0.675,
+          "avgRgb": {
+            "r": 155.6,
+            "g": 128,
+            "b": 98.1
+          },
+          "barvnaRazdalja": 1.2,
+          "najblizjiDrugi": {
+            "koda": "GLT",
+            "razdalja": 21
+          },
+          "anizotropija": 2.9,
+          "rotirano": true
+        },
+        {
+          "sku": "ROK-OG-ROMB-67-RWA",
+          "odtenek": "Rustic walnut",
+          "hex": "#71675c",
+          "file": "roksal-romb67-cip-rwa.png",
+          "izrez": {
+            "x": 2216,
+            "y": 291,
+            "w": 190,
+            "h": 190
+          },
+          "premerCipa": 317,
+          "rob": 0.599,
+          "avgRgb": {
+            "r": 111.8,
+            "g": 100.5,
+            "b": 90.6
+          },
+          "barvnaRazdalja": 3.1,
+          "najblizjiDrugi": {
+            "koda": "AMW",
+            "razdalja": 20
+          },
+          "anizotropija": 1.843,
+          "rotirano": true
+        }
+      ]
+    }
+  ]
+}

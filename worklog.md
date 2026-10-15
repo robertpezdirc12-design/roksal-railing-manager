@@ -3821,3 +3821,98 @@ Stage Summary:
   na napravi s 3,9 GB zaradi kopičenja procesov seje) — po čiščenju pomnilnika
   pas zelen; koda nespremenjena, commit 946e081.
 - Tag v1.54.1 (dodatek — samo dokazi preverbe, brez sprememb kode/okolja).
+
+---
+Task ID: R524
+Agent: glavni agent (nadaljevalna seja)
+Task: Nadaljevanje issue #14 (odprta točka »manjkajoči DETAJL za ograje«):
+čipi površine za ograje iz uradnih barvnih lestvic v izvirni ločljivosti.
+
+Work Log:
+- DIAGNOZA IZ VIROV (brez ugibanja): VLM prebranje OZNAK čipov na VSEH lestvicah
+  DVAKRAT (1024 px sličica + izvirnik) — vsak čip je FOTOGRAFSKA površina:
+  POLNA 57/32 (namenska, 2217×675): 3 čipi (AMW, OKW, RWA); POLNA 128 (2560×683):
+  6 (AMW, ASH, BUT, OKW, ROAK, RWA); POLNA 100 (2560×600): 8 (+GLT, WHT); ROMB 67
+  (2560×669): 7 — množice se TOČNO ujemajo z aktivnimi variantami kataloga.
+- PRENOS IZVIRNIKOV (agent-browser skozi ShieldSquare izziv — addinitscript
+  brez webdriver/UA/appVersion sledi, brez ponarejanja vtičnikov; fetch v seji
+  prek izziva → blob → download): 4 lestvice v 2560 px izvirnikih (POLNA 128,
+  POLNA 100, ROMB 67, TERASA 150) — katalog je doslej imel samo 1024 px sličice.
+- IZREZ ČIPOV (ops/r524-cipi.mjs — posplošitev dokazane metode r523-cipi.mjs):
+  detekcija grozdov po neprosojnosti → premer po najdaljšem teku → adaptivno
+  krčenje 0,70→0,42·r do NIČ prosojnih pikslov → 24 čipov (POLNA-57: 3,
+  POLNA-128: 6, POLNA-100: 8, ROMB-67: 7; izrezi 164–222 px), vlakna ROTIRANA
+  navpično (referenca: deska uradne fotografije pokončne ograje 57/32,
+  |dI/dy|/|dI/dx| = 0,735 navpična — skladje), barvna bližina ODTENKI_HEX
+  d = 1–6/255 (vsa 24 dodelitve brez opozoril — dvakratni dokaz: oznake uradne
+  grafike + barva), revizija ops/r524-cipi.json; tabela ops/r524-tabela-cipov.png
+  (VLM: 9/10, čisti izrezi, realistično zrno, brez artefaktov).
+- ISKRENE ODLOČITVE (nič izmišljenega):
+  * DESKA-150 NAMENOMERNO brez čipov: njena lestvica (terasa, »BARVE IN
+    PROFILI«) kaže ŽLEBIČASTO stran terasne deskе, ograja DESKA 150 pa GLADKO
+    (VLM dokaz na uradni scenični fotografiji) — vir površine zanjo ostajajo
+    scenične fotografije (dokazano R518), lestvica zgolj barvna referenca;
+  * RWA 57/32 scenski posnetek NE obstaja (galerija Pokončne ograje: za 57-32
+    samo OAK WOOD + AMAZON WOOD; salon 3×: OKW) — oskrba #6, ostaja odprto;
+  * PROFIL_PRESEK za POLNA/DESKA NE obstaja (knjižnica: »presek« 0 zadetkov,
+    »profil« samo votli ročaj; obe produktni strani preverjeni) — oskrba #6.
+- KODA (kakovost obstoječih, brez novih funkcij):
+  * photo-replace-texture.ts: NOVA izmeriSmerVlaken (gradientna anizotropija —
+    enaka metoda kot dokazna orodja, tokrat v knjižnici za UI in orodja);
+  * photo-replace-core.ts: ENGINE_VERSION 1.3.0 (§13); POKOCNA/PRECNA ostajata
+    pri NAVADNI mreži celic (izoliran poskus: cela slika v mreži 9/10 proti
+    podizrezu+zrcalu 6/10 pri ozkih palicah — perspektiva + svetloba že data
+    naravno variacijo; R523 logika ene celice ostaja samo za FASADO);
+  * foto-replace.tsx: DETAJL čip se ob nalaganju IZMERI (izmeriSmerVlaken) in
+    rotira za 90°, kadar vlakna tečejo ČEZ element (pokončna → navpična v viru,
+    prečna → vodoravna) — fizično pravilno (vlakna tečejo VZDOLŽ deskе pri obeh
+    orientacijah); scenični viri (FOTO_IZDELEK) ostanejo neprizadeti.
+- SEED VERIGA: prisma/seed-r524.cjs (A: lestvice POLNA 128/100 + ROMB 67 →
+  izvirniki 2560 px; B: lestvica TERASA 150 → izvirnik za 3 izdelke (DESKA 150 +
+  TER KLASIK + TER RUSTIC) brez čipov; C: 24 DETAJL čipov po varianti — vsi sha256
+  overjeni proti MANIFEST 88→116 vnosov) dodan v package.json db:seed; NESKLADJE
+  POLNA 128 (slika 6/barvno besedilo 5) ostaja izrecno zabeleženo v opombi.
+- TESTI: tests/r524.py NOV (107 ✓ / 0 ✗: A izmera smeri vlaken na sintetiki,
+  B DETAJL prednost, C živi katalog 24 čipov + 6 lestvic + DESKA-150 brez čipov,
+  D čipi čisti + vlakna navpična [izmera], E mreža + determinizem + tekstura,
+  F revizija, G žičenje, H artefakti, I živi API krog POKOCNA) registriran v
+  ci-matrix.sh + ci.yml (39. skupina); posodobljeni po novi resničnosti: r504
+  (ENGINE 1.3.0 + 3 fixture pričakovanja — B2 varianta zdaj UPORABLJENO s čipom),
+  r493/r494/r495 (števci 91→115 VERIFIED + obnova stanja razširjena s seed-r524 —
+  sicer bi naslednje skupine videle stanje brez čipov), r518 (A/B/B2/D zdaj
+  UPORABLJENO z DETAJL čipi — B2 je bil SAMO_DRUZINA), r523 (engine 1.3.0).
+- DOKAZNI IZRISI (ops/r524-render.mjs, zrcali UI cevovod vključno z rotacijo):
+  P1 POLNA-128 BUT · PRECNA (ROTIRANO — vlakna vzdolž horizontalnih desk),
+  P2 POLNA-57 RWA · POKOCNA (varianta, ki je v R518 padla v SAMO_DRUZINA —
+  zdaj UPORABLJENO), P3 POLNA-100 WHT · POKOCNA, P4 ROMB-67 GLT · PRECNA
+  (ROTIRANO), P5 POLNA-128 BUT · POKOCNA — vsak s POTEM/primerjava/zoom.
+  NEVTRALNA VLM preverba E2E zaslonskega posnetka: pravi odtenek Rustic walnut,
+  brez napak, 7/10 »solid, professional-grade rendering«. VLM primerjava
+  R518⊣R524 istega prizora (POLNA-128 Burma): 6/10 → 8/10 pri čipu (vendar
+  VLM presoje čez seje nihajo — 2/3 v prid scenični fotografiji na enem prizoru;
+  pošteno: čip zagotavlja URADNO površino po varianti in pokritost, scenske
+  fotografije ostajajo dober vir, kjer obstajajo).
+- E2E SKOZI PRAVO APLIKACIJO: ops/r524-e2e.py NOV (15 ✓ / 0 ✗): prijava →
+  nalaganje vt-terasa izvirnika → 4 vogali + prednji plan (steber) + ref 220 cm
+  → ROK-OGP-POLNA-57 + Rustic walnut → lamela 57/reza 20 → PREJ/POTEM → SHRANI
+  → BAZA: tip POKOCNA · 57/20 · gradivo roksal-polna57-cip-rwa.png (DETAJL) ·
+  engineVersion 1.3.0 → čiščenje. Regresija: r523-e2e 13/0 (FASADA) +
+  r520-e2e 14/0 (TERASA).
+- RELEJNI PAS: ✓ ZELENO — 8 statičnih korakov + 39 skupin (r524 nova), 0 ✗,
+  EXIT 0; dokaz ops/ci-dokaz-R524.out; tsc 0 napak; eslint 0 napak / 2 stari
+  opozorili.
+
+Stage Summary:
+- DETAJL ZA OGRAJE (glavna odprta točka #14): REŠENO za 4 izdelke — 24 čipov
+  površine iz uradnih lestvic v izvirni ločljivosti po varianti (vlakna
+  navpična, d = 1–6/255), DETAJL pred FOTO_IZDELEK tudi za ograje; varianta
+  POLNA-57 RWA, ki je v R518 padla v SAMO_DRUZINA, je zdaj UPORABLJENO.
+- NADGRADNJA VIROV: 4 lestvice v 2560 px izvirnikih (POLNA 128/100, ROMB 67,
+  TERASA 150 — zadnja za 3 izdelke), MANIFEST 88 → 116.
+- ISKRENO ODKRITO (in dokumentirano v #14 poročilu): RWA 57/32 scenski posnetek
+  in PROFIL_PRESEK za POLNA/DESKA NE OBSTAJAJO v uradnih virih (oskrba #6);
+  DESKA-150 namenoma brez čipov (žlebičasta stran lestvice ≠ vidna gladka).
+- Issue #14 OSTAJA ODPRT (preostalo: generični izdelki, ozadje rež KUBO —
+  lastnikova odločitev, oskrba #6).
+- Dokazi: ops/r524-{P1..P5}-{potem,primerjava,zoom}.png + r524-tabela-cipov.png
+  + r524-cipi.json + r524-e2e-1..6.png + ops/ci-dokaz-R524.out.

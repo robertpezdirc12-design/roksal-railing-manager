@@ -108,7 +108,7 @@
    },
    "pricakovano": {
     "stanje": "UPORABLJENO",
-    "assetDatoteka": "public/assets/roksal/src/r495-pokoncna-ograjam-burma128-2.jpg",
+    "assetDatoteka": "public/assets/roksal/src/roksal-polna128-cip-but.png",
     "smeUporabiti": true,
     "manjkajo": [
      "profilni presek"
@@ -120,7 +120,7 @@
     "ploscinaIzpusti": 0.0,
     "delezOgraje": 0.04507,
     "delezPrednjega": 0.15148,
-    "razlaga": "Za Burma teak obstaja preverjena originalna fotografija → površina SE sme uporabiti. Profilnega preseka za POLNA 128 v katalogu ni, zato to manjka in je tudi povedano. Stranska robova kvada sta zelo različno dolga (perspektiva vzdolž ograje) → Ravnina_POSEVNA."
+    "razlaga": "Za Burma teak obstaja DETAJL čip uradne lestvice (R524) → površina SE sme uporabiti (prednost DETAJL pred FOTO_IZDELEK). Profilnega preseka za POLNA 128 v katalogu ni, zato to manjka in je tudi povedano. Stranska robova kvada sta zelo različno dolga (perspektiva vzdolž ograje) → Ravnina_POSEVNA."
    }
   },
   {
@@ -228,19 +228,18 @@
     "orientacija": "POKOCNA"
    },
    "pricakovano": {
-    "stanje": "SAMO_DRUZINA",
-    "assetDatoteka": "public/assets/roksal/src/c4a3c06d3e1b.jpg",
+    "stanje": "UPORABLJENO",
+    "assetDatoteka": "public/assets/roksal/src/roksal-polna57-cip-rwa.png",
     "smeUporabiti": true,
     "manjkajo": [
-     "profilni presek",
-     "originalna površina te barve/odtenka"
+     "profilni presek"
     ],
     "opozorila": [],
     "ploscinaOgraja": 0.03939,
     "ploscinaIzpusti": 0.00543,
     "delezOgraje": 0.03839,
     "delezPrednjega": 0.0043,
-    "razlaga": "ROAK (Rustic oak) nima preverjene fotografije — izdelek ima sicer preverjeno površino (brez variante), zato se sme uporabiti SAMO njena struktura, barva pa iz kataloga. Izpust (koruza nad daljnim delom panelov) je ZNOTRAJ kvada in zmanjša obnovljeno območje za ~14 %."
+    "razlaga": "RWA (Rustic walnut) ima DETAJL čip uradne namenske lestvice 57/32 (R524) → površina SE sme uporabiti (v R518 je ta varianta padla v SAMO_DRUZINA — zdaj UPORABLJENO). Profilnega preseka za POLNA 57 v katalogu ni (oskrba #6). Izpust (koruza nad daljnim delom panelov) je ZNOTRAJ kvada in zmanjša obnovljeno območje za ~14 %."
    }
   },
   {
@@ -349,7 +348,7 @@
    },
    "pricakovano": {
     "stanje": "UPORABLJENO",
-    "assetDatoteka": "public/assets/roksal/src/r495-wpc-woodcore-romb-golden-precna-ograja-gasper1.jpg",
+    "assetDatoteka": "public/assets/roksal/src/roksal-romb67-cip-glt.png",
     "smeUporabiti": true,
     "manjkajo": [],
     "opozorila": [],
@@ -357,7 +356,7 @@
     "ploscinaIzpusti": 0.00196,
     "delezOgraje": 0.01657,
     "delezPrednjega": 0.00612,
-    "razlaga": "ROMB 67 ima za Golden teak preverjeno fotografijo, preverjeno barvno lestvico IN profilni presek → nič ne manjka. Ta primer namenoma ima masko, ki SE DOTIKA roba slike (x = 0) — rasterizacija mora ostati znotraj platna."
+    "razlaga": "ROMB 67 ima za Golden teak DETAJL čip uradne lestvice (R524 — prednost pred FOTO_IZDELEK), preverjeno barvno lestvico IN profilni presek → nič ne manjka. Ta primer namenoma ima masko, ki SE DOTIKA roba slike (x = 0) — rasterizacija mora ostati znotraj platna."
    }
   },
   {

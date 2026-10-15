@@ -413,6 +413,31 @@ const izreziMedian = (izrezi: Pravokotnik[]): number => {
 }
 
 /**
+ * R524: smer vlaken v sliki — gradientna anizotropija |dI/dy|/|dI/dx|.
+ * Vrednost < 1 pomeni NAVPIČNA vlakna (svetlost se spreminja prek vlaken,
+ * vodoravno), > 1 pa VODORAVNA vlakna. Enaka metoda kot v dokaznih orodjih
+ * (ops/r523-cipi.mjs, ops/r524-cipi.mjs) — tokrat v knjižnici, da jo UI in
+ * orodja delijo. Namembnost: vir ENE površine (DETAJL čip) se rotira za 90°,
+ * kadar njegova vlakna ne tečejo VZDOLŽ elementa (primer: pokončna ograja →
+ * navpična vlakna v viru; prečna → vodoravna).
+ */
+export function izmeriSmerVlaken (
+  beriPiksel: (x: number, y: number) => number,
+  sirinaPx: number,
+  visinaPx: number
+): number {
+  let gx = 0, gy = 0
+  for (let y = 0; y < visinaPx; y++) {
+    for (let x = 0; x < sirinaPx; x++) {
+      const v = beriPiksel(x, y)
+      if (x + 1 < sirinaPx) gx += Math.abs(beriPiksel(x + 1, y) - v)
+      if (y + 1 < visinaPx) gy += Math.abs(beriPiksel(x, y + 1) - v)
+    }
+  }
+  return gy / Math.max(1, gx)
+}
+
+/**
  * Iz slike z NAVPIČNIMI deskami (namestitvena fotografija KUBO fasade) izmeri
  * korak med deskami in vrne izrez ene deske: celotna višina slike × širina
  * enega profila. Deterministično (mediana gladilo + pragovi, enaka metoda kot

@@ -48,7 +48,7 @@ import {
   slojObnove, slojPrednjega, MAX_OBLIK, MAX_TOCK, type Maska, type Oblika,
 } from '@/lib/photo-replace-mask'
 import {
-  celiceZaElement, izberiGradivo, izmeriIzrezeNavpicnihPalic, projekcijaIzRavnine, vzorciTeksturo,
+  celiceZaElement, izberiGradivo, izmeriIzrezeNavpicnihPalic, izmeriSmerVlaken, projekcijaIzRavnine, vzorciTeksturo,
   type GradivoDTO, type IzbiraGradiva, type VirTeksture,
 } from '@/lib/photo-replace-texture'
 import { cn } from '@/lib/utils'
@@ -517,8 +517,48 @@ export default function FotoReplaceModule () {
           }
         } catch { /* izrez ni nujen — cela slika kot doslej */ }
       }
+      // R524: vlakna VZDOLŽ elementa — vir ENE površine (DETAJL čip uradne
+      // lestvice) se ob nalaganju IZMERI (izmeriSmerVlaken — enaka metoda kot
+      // dokazna orodja) in rotira za 90°, kadar njegova vlakna tečejo ČEZ
+      // element (pokončna ograja → navpična vlakna v viru; prečna → vodoravna).
+      // FASADA/TERASA imata že prav obrnjena gradiva (KUBO čipi navpično,
+      // terasni posnetki vzdolžno) — brez spremembe.
+      const jeDetajl = g.kind === 'DETAJL'
+      let slikaVir: CanvasImageSource = img
+      let sirinaPx = img.naturalWidth
+      let visinaPx = img.naturalHeight
+      if (jeDetajl && (slot.tip === 'POKOCNA' || slot.tip === 'PRECNA')) {
+        try {
+          const mc = document.createElement('canvas')
+          mc.width = img.naturalWidth; mc.height = img.naturalHeight
+          const mctx = mc.getContext('2d', { willReadFrequently: true })
+          if (mctx) {
+            mctx.drawImage(img, 0, 0)
+            const dd = mctx.getImageData(0, 0, img.naturalWidth, img.naturalHeight).data
+            const smer = izmeriSmerVlaken((x, y) => {
+              const i = (y * img.naturalWidth + x) * 4
+              return (dd[i] * 0.299 + dd[i + 1] * 0.587 + dd[i + 2] * 0.114) / 255
+            }, img.naturalWidth, img.naturalHeight)
+            const hocemoNavpicno = slot.tip === 'POKOCNA'
+            const imaNavpicno = smer <= 1
+            if (hocemoNavpicno !== imaNavpicno) {
+              const rc = document.createElement('canvas')
+              rc.width = img.naturalHeight; rc.height = img.naturalWidth
+              const rctx = rc.getContext('2d')
+              if (rctx) {
+                rctx.translate(rc.width / 2, rc.height / 2)
+                rctx.rotate(Math.PI / 2)
+                rctx.drawImage(img, -img.naturalWidth / 2, -img.naturalHeight / 2)
+                slikaVir = rc
+                sirinaPx = img.naturalHeight
+                visinaPx = img.naturalWidth
+              }
+            }
+          }
+        } catch { /* izmera ni uspela — vir nerotiran, kot je */ }
+      }
       setTekstura({
-        slika: img, sirinaPx: img.naturalWidth, visinaPx: img.naturalHeight,
+        slika: slikaVir, sirinaPx, visinaPx,
         doklad: izbiraGradiva?.doklad ?? g.filePath ?? '',
         oznaka: g.variantSku ?? g.id,
         ...(izrez ? { izrez } : {}),

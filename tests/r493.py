@@ -82,7 +82,7 @@ s, d = callj('GET', '/api/product-assets?status=VERIFIED', tok_adm)
 chk(s == 200, 'GET /api/product-assets?status=VERIFIED → 200')
 assets = d.get('data', [])
 # R523: 91 = 85 (r494+r495) + 6 novih (4 čipi KUBO + PROFIL_PRESEK + produktni posnetek 57/32)
-chk(len(assets) == 91, f'91 preverjenih gradiv — 27 fotografij + 8 lestvic + 50 galerijskih + 6 r523 (dejansko: {len(assets)})')
+chk(len(assets) == 115, f'115 preverjenih gradiv — 27 fotografij + 8 lestvic + 50 galerijskih + 6 r523 + 24 r524 (dejansko: {len(assets)})')
 manjkajoce_datoteke = [a for a in assets if not a.get('filePath')]
 chk(len(manjkajoce_datoteke) == 0, 'vse VERIFIED gradive imajo filePath')
 # preveri 3 vzorčne datoteke po sha256
@@ -179,8 +179,12 @@ chk(len(d.get('data', [])) == 85, f'obnova stanja: 85 VERIFIED (dejansko: {len(d
 # brez tega koraka bi naslednje skupine (r520/r523) videle stanje BREZ r523 gradiv
 r = subprocess.run(['node', 'prisma/seed-r523.cjs'], cwd=REPO, capture_output=True, text=True, timeout=180, env=subenv)
 chk(r.returncode == 0 and 'KUBO DETAJL ×4' in r.stdout, 'obnova stanja: seed-r523 (čipi KUBO + lestvici + 3 variante 57/32)')
+# R524: veriga se konča s seed-r524 (24 DETAJL čipov ograj + lestvice izvirniki) —
+# brez tega koraka bi naslednje skupine (r518/r524) videle stanje BREZ čipov R524
+r = subprocess.run(['node', 'prisma/seed-r524.cjs'], cwd=REPO, capture_output=True, text=True, timeout=180, env=subenv)
+chk(r.returncode == 0 and 'DETAJL čipov' in r.stdout, 'obnova stanja: seed-r524 (čipi ograj + lestvice izvirniki)')
 s, d = callj('GET', '/api/product-assets?status=VERIFIED', tok_adm)
-chk(len(d.get('data', [])) == 91, f'obnova stanja: 91 VERIFIED po r523 (dejansko: {len(d.get("data", []))})')
+chk(len(d.get('data', [])) == 115, f'obnova stanja: 115 VERIFIED po r524 (91 r523 + 24 R524; dejansko: {len(d.get("data", []))})')
 
 # ── 12. regresija temeljev ──
 s, d = callj('GET', '/api/guide', tok_mon)

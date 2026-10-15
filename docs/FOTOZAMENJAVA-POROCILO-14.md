@@ -97,20 +97,31 @@ E2E skozi pravo aplikacijo (prijava → nalaganje → maska → referenca → iz
 PREJ/POTEM → SHRANI → preverba zapisa v bazi → čiščenje): `ops/r517-ui-*`,
 `ops/r518-e2e.py` (14 ✓ / 0 ✗), `ops/r520-e2e.py` (14 ✓ / 0 ✗), **`ops/r523-e2e.py`
 (13 ✓ / 0 ✗ — FASADA: tip FASADA · letvica 80 mm · razmik 20 mm · gradivo
-roksal-kubo-cip-roak.png (DETAJL) · engine 1.2.0)**.
+roksal-kubo-cip-roak.png (DETAJL) · engine 1.3.0), **`ops/r524-e2e.py` (15 ✓ /
+0 ✗ — OGRAJA: tip POKOCNA · lamela 57 mm · razmik 20 mm · gradivo
+roksal-polna57-cip-rwa.png (DETAJL — varianta, ki je v R518 padla v
+SAMO_DRUZINA) · engine 1.3.0)**.
 
 ## 5. Kaj je treba še pridobiti (težava #6 — oskrba, ne aplikacija)
 
-1. `DETAJL` (makro posnetek površine) za **ograje** (POLNA 128/100/57, DESKA 150, ROMB 67) —
-   trenutno se uporabljajo produktne fotografije FOTO_IZDELEK, kar je dokazano dovolj za
-   razmerja/barvo, makro pa bi dvignil verodostojnost površine.
+1. ~~`DETAJL` (makro posnetek površine) za **ograje**~~ — **REŠENO v R524**: 24 čipov
+   površine iz uradnih barvnih lestvic v izvirni ločljivosti (POLNA-57: 3, POLNA-128: 6,
+   POLNA-100: 8, ROMB-67: 7; izrezi 164–222 px, vlakna navpična po izmeri anizotropije,
+   barvna bližina d=1–6/255). DESKA-150 NAMENOMERNO brez čipov: njena lestvica (terasa,
+   »BARVE IN PROFILI«) kaže žlebičasto stran terasne deskе, ograja DESKA 150 pa gladko
+   (VLM dokaz) — vir površine zanjo ostajajo scenične fotografije (dokazano R518).
 2. ~~`DETAJL` za KUBO fasado~~ — **REŠENO v R523**: čipi uradne lestvice v izvirni
    ločljivosti (4 odtenki, 184–210 px na površino, vlakna navpično).
-3. `FOTO_IZDELEK` za manjkajoče variante: `ROK-OGP-POLNA-57-RWA` (ograja; AMW/OKW imata
-   slike), terasne variante brez lastne slike (KLASIK in RUSTIC imata slike/DETAJL le za del
-   variant; preostale delujejo prek DETAJL/GALERIJA na nivoju izdelka — pošteno stanje
-   `SAMO_DRUZINA`).
-4. `PROFIL_PRESEK` za POLNA 128/100/57 in DESKA 150 (trenutno ROMB 67 in KUBO).
+3. `FOTO_IZDELEK` za manjkajoče variante: `ROK-OGP-POLNA-57-RWA` — R524 je preveril
+   uradno galerijo Pokončne ograje (za 57-32 obstajata samo OAK WOOD in AMAZON WOOD
+   zapisa; salon: OKW) in salonske fotografije — scenski posnetek RWA 57/32 NE obstaja;
+   varianta ima zdaj DETAJL čip uradne lestvice (UPORABLJENO), scenska slika pa ostaja
+   odprta oskrbovalna težava. Terasne variante brez lastne slike delujejo prek
+   DETAJL/GALERIJA na nivoju izdelka — pošteno stanje `SAMO_DRUZINA`.
+4. `PROFIL_PRESEK` za POLNA 128/100/57 in DESKA 150 — R524 je preveril uradno medijsko
+   knjižnica (iskanje »presek«: 0 zadetkov; »profil«: samo votli ročaj, ne polna deska) in
+   obe produktni strani (prečna + pokončna): tehnični posnetek preseka NE obstaja
+   (trenutno ROMB 67 in KUBO).
 5. Gradiva (ali izrecna oznaka »generični izdelek, ni ROKSALOV original«) za
    OGR-K-001/002, OGR-P-001/002, TER-WPC-001/002, TER-ALU-001, FAS-L-001, FAS-K-002.
 6. Ozadje za KUBO fasado: reže med letvicami prikazujejo pošteno šrafuro nedokončane

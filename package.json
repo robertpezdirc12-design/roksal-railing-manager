@@ -17,7 +17,7 @@
     "db:push": "echo '[db:push] OPOZORILO: prisma db push --accept-data-loss je RAZVOJNO/RECOVERY orodje — produkcija uporablja db:migrate:deploy. Za nadaljevanje poženi: bunx prisma db push --accept-data-loss' && exit 1",
     "db:push:force": "prisma db push --accept-data-loss",
     "db:generate": "prisma generate",
-    "db:seed": "node prisma/seed.cjs && node prisma/seed-r437.cjs && node prisma/seed-r442.cjs && node prisma/seed-r445.cjs && node prisma/seed-r446.cjs && node prisma/seed-r447.cjs && node prisma/seed-r449.cjs && node prisma/seed-r475.cjs && node prisma/seed-r493.cjs && node prisma/seed-r494.cjs && node prisma/seed-r495.cjs && node prisma/seed-r523.cjs",
+    "db:seed": "node prisma/seed.cjs && node prisma/seed-r437.cjs && node prisma/seed-r442.cjs && node prisma/seed-r445.cjs && node prisma/seed-r446.cjs && node prisma/seed-r447.cjs && node prisma/seed-r449.cjs && node prisma/seed-r475.cjs && node prisma/seed-r493.cjs && node prisma/seed-r494.cjs && node prisma/seed-r495.cjs && node prisma/seed-r523.cjs && node prisma/seed-r524.cjs",
     "db:seed:test": "node prisma/seed-test.cjs",
     "db:reset": "prisma migrate reset"
   },
