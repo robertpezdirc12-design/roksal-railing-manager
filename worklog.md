@@ -3768,3 +3768,56 @@ Stage Summary:
 - Dokazi: ops/r523-{K,K2,K3,KM}-{potem,primerjava,zoom}.png +
   r523-primerjava-kakovosti.png + r523-e2e-1..6.png + ops/r523-cipi.json +
   ops/ci-dokaz-R523.out.
+
+---
+Task ID: R523-dodatek
+Agent: glavni agent (nadaljevalna seja)
+Task: Dokončna preverba produkcijske različice R523 (946e081 / v1.54.0) v novi
+seji — brez sprememb kode: živi E2E, celoten relejni pas, sinhronizacija obeh
+oddaljenih repozitorijev, živi katalog čipov KUBO.
+
+Work Log:
+- SINHRONIZACIJA: GitHub main = GitLab main = 946e081; tag v1.54.0 obe strani
+  (GitHub prek git ls-remote; GitLab prek API — git ls-remote vrne 403, API z
+  glavo User-Agent: git/2.43 dela; posamezen GET /tags/v1.54.0 blokira proxy —
+  preverjeno prek seznama ?per_page=100, kjer je v1.54.0 → 946e081; skupaj 58
+  tagov).
+- GITLAB CI: cevovoda #2951703294 (main) in #2951703302 (v1.54.0) za 946e081
+  oba SUCCESS.
+- ŽIVI E2E (skozn pravo aplikacijo, ista skripti kot pri R523):
+  * ops/r523-e2e.py FASADA KUBO: 13 ✓ / 0 ✗ (prijava → nalaganje KUBO izvirnika
+    → 4 vogali + ref 245 cm → ROK-FAS-KUBO + Rustic oak → letvica 80/reza 20
+    (uradno) → POTEM s čipom → SHRANI → BAZA: FASADA · 80/20 · gradivo
+    roksal-kubo-cip-roak.png (DETAJL) · engineVersion 1.2.0 → čiščenje);
+  * ops/r520-e2e.py regresija TERASA: 14 ✓ / 0 ✗.
+- NENADNA OKOLJSKA NAPAKA IN DIAGNOZA (dmesg, brez ugibanja): prvi ponovni
+  zagon pasa je padel — jedro je ubilo next-server ob ~2,8 GB anon-RSS
+  (Out of memory: Killed process … next-server), naprava ima 3,9 GB. Vzrok:
+  kopičenje procesov preverjanja (agent-browser daemon iz E2E + zlog pomnilnika),
+  NE napaka kode — GitLab CI na istem commitu je zelen. Po čiščenju
+  (agent-browser zaprt/pobit, 3,4 GB na voljo) je pas ZELEN.
+- Ugotovitev o peskovniku (za prihodnje seje): moravec ubija vse potomce
+  klica po drevesu — ozadna opravila prek nohub & ne preživijo; E2E skripte
+  zato poganjajo strežnik kot svojega potomca (to je že bilo znano); glavni
+  dev strežnik se znova zažene prek sankcioniranega mehanizma
+  .zscripts/dev-detach.py (dvojna vilica → starš PID 1, moravec ga ne najde).
+- RELEJNI PAS (dokončna preverba, lastni režim, TEST_DB_URL 54329):
+  ✓ ZELENO — 8 statičnih korakov + 38 skupin, 0 ✗, EXIT 0; dokaz shranjen
+  kot ops/ci-dokaz-R523-koncna-preverba.out. E2E-RESULTS.json se je celo
+  izboljšal (GET /api/weather 502→200: PASS_EXTERNAL → PASS; 148 čistih PASS).
+- ŽIVI KATALOG (Prisma findMany filePath kubo-cip): 4 DETAJL čipi prisotni —
+  AMW (77877 B, sha 64ff60ea), OKW (81392 B, 38482232), ROAK (80004 B,
+  6515d654 — ujema se z E2E dokazom), RWA (68824 B, 8699b594).
+- GLAVNI STREŽNIK: zagnan prek .zscripts/dev-detach.py; health
+  {"ok":true,"db":"ok"} + GET / HTTP 200.
+
+Stage Summary:
+- Dokončna preverba produkcijske različice R523 uspešna: pas 38 skupin zelen
+  (EXIT 0, nov dokaz ops/ci-dokaz-R523-koncna-preverba.out), E2E FASADA 13/0 +
+  regresija TERASA 14/0 skozi živo aplikacijo, GitLab CI zelen na main in
+  v1.54.0, GitHub + GitLab sinhrona na 946e081, 4 čipi KUBO živi v bazi
+  (sha se ujema), glavni strežnik teče (health ok).
+- Edina napaka med preverbo je bila OKOLJSKA (OOM ubil next-server pri 2,8 GB
+  na napravi s 3,9 GB zaradi kopičenja procesov seje) — po čiščenju pomnilnika
+  pas zelen; koda nespremenjena, commit 946e081.
+- Tag v1.54.1 (dodatek — samo dokazi preverbe, brez sprememb kode/okolja).

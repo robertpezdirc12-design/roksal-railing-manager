@@ -3277,8 +3277,8 @@
       "note": "allow=201 dobil=409"
     },
     "GET /api/weather": {
-      "status": "PASS_EXTERNAL",
-      "http": 502,
+      "status": "PASS",
+      "http": 200,
       "permission": "nalog.read",
       "roles": [
         "ADMIN",
@@ -3286,7 +3286,7 @@
         "MONTER",
         "PROIZVODNJA"
       ],
-      "note": "allow=200 dobil=502"
+      "note": ""
     },
     "PATCH /api/webhooks/:id": {
       "status": "PASS_VALIDATION",
@@ -9169,11 +9169,10 @@
   "summary": {
     "endpoints": 297,
     "smoke": {
-      "PASS": 147,
+      "PASS": 148,
       "SKIPPED_SAFE": 9,
       "PASS_VALIDATION": 122,
-      "NO_FIXTURE": 18,
-      "PASS_EXTERNAL": 1
+      "NO_FIXTURE": 18
     },
     "rbacChecks": 645,
     "rbacFailures": 0,
