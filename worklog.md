@@ -4049,3 +4049,80 @@ Stage Summary:
   scope-a) — zabeleženo za prihodnje seje.
 - Brez sprememb aplikacijske kode; issue #14 ostaja ODPRT (odprte točke so
   izključno oskrbovalne #6 — lastnikova stran).
+
+---
+Task ID: R527
+Agent: glavni agent (nadaljevalna seja)
+Task: Izrecna oznaka generičnih demo izdelkov (issue #14 §5, alternativa b) —
+zadnja aplikacijsko izvedljiva točka fotomontaže; izdaja v1.55.2.
+
+Work Log:
+- KONTEKST: uporabnik »odlično nadaljuj, posodobi readme, pushaj github in
+  nadaljuj« — README + GitHub push iz R526 sta bila že potrjena sveža
+  (GitHub = GitLab = lokalno = 3257116, tag v1.55.1 na obeh). Nadaljevanje:
+  edina aplikacijsko izvedljiva točka issue #14 — §5 poročila dovoljuje za
+  9 generičnih demo izdelkov (OGR-K-001/002, OGR-P-001/002, TER-WPC-001/002,
+  TER-ALU-001, FAS-L-001, FAS-K-002) gradiva ALI izrecno oznako; gradiva so
+  lastnikova oskrba (težava #6), oznaka pa naša.
+- PRAVILO IDENTITETE: nova knjižnica src/lib/katalog-original.ts —
+  jeOriginalIzdelek/jeGenericniIzdelek (ROK- predpona kot DOGMA kataloga) +
+  OZNAKA_GENERIKA z besedilom poročila (»Generični izdelek, ni ROKSALOV
+  original«). Živi katalog potrdil TOČNOST klasifikatorja: 17 izdelkov v 4
+  fotomontažnih družinah = 9 generičnih (VSI z 0 ProductAsset) + 8 originalov
+  (VSI z ≥ 1) — predponsko pravilo ≡ prisotnost gradiv.
+- OZNAKA NA PETIH mestih (foto-replace.tsx + foto-replace-links.tsx):
+  1) izbira izdelka: dopolnilo »— generični« ob vsaki generični opciji +
+     razlaga pod izbiro (»demo izdelki brez preverjenih gradiv — njihov
+     izris je barvni približek«);
+  2) korak IZDELEK: jantar opozorilo po izbiri (data-testid
+     genericni-izdelek-opozorilo, OZNAKA + razlaga + napotek na ROK- izdelek);
+  3) izbira gradiva (korak OZNAČI, diagnostični panel): vrstica oznake;
+  4) rezultat POTEM: oznaka ob samem izrisu (data-testid
+     genericni-izdelek-potem) — dodana, ker korak POTEM prej NI imel
+     prikaza stanja gradiva;
+  5) seznam shranjenih vizualizacij »(generični)« + javni pregled povezav
+     (vidi ga STRANKA).
+- TEHNIČNA PAST (zabeležena): JSX besedilo iz dveh vozlov
+  ({OZNAKA} — dobesedno) iskalnikom besedila ne ujame — oznake v ENEM
+  izrazu ({OZNAKA + ' …'}).
+- TESTI: tests/r527.py NOV — 19 ✓ / 0 ✗ (A pravilo + robni primeri, B živi
+  katalog: pravilo ≡ gradiva + točno 9 generičnih iz poročila, C žičenje
+  vseh 5 mest, D živi API) registriran kot 40. skupina v ci-matrix.sh +
+  .github/workflows/ci.yml (sinhronost 40 = 40 preverjena).
+- E2E SKOZI PRAVO APLIKACIJO: ops/r527-e2e.py — 21 ✓ / 0 ✗ (prijava →
+  vt-terasa izvirnik → 4 vogali + prednji plan + ref 220 → opcija OGR-K-001
+  nosi dopolnilo + negativna kontrola ROK- brez + točno 9/9 opcij →
+  opozorilo → POTEM oznaka + poštena razlaga → SHRANI → seznam »(generični)«
+  → BAZA: OGR-K-001 · BREZ gradiva v dokazni verigi · engine 1.3.0 ·
+  POKOCNA → čiščenje).
+- METODA E2E UTRJENA (past hidracije): fill pred priklopom Reacta se ob
+  priklopu POČISTI — prijava zdaj PREVERI vrednosti po napolnitvi in klik
+  vozi v zanki do »Danes«; trditve o opcijah izračuna v brskalniku (objekt,
+  ne JSON niz — naveden izpis); regex pretvorba true/false/null.
+- RELEJNI PAS: prvi zagon RDEČ (2 napaki — pravilno odkriti): igla v
+  C-bloku je nosila staro besedilo po spremembi v enoizrazno vozlišče +
+  r527 manjkal v .github/workflows/ci.yml (matrika je EDINI vir resnice,
+  a pas preverja sinhronost). Po popravilih DRUGI zagon: ✓ ZELENO — 8
+  statičnih korakov + 40 skupin, EXIT 0; dokaz ops/ci-dokaz-R527.out.
+- BRSKALNIŠKA PREVERBA (agent-browser): prijava + foto modul + izbira
+  projekta (Naprej omogočen) + noga naravno porinjena na konec vsebine
+  (footerBottom = scrollHeight — brez prekrivanja) + mobilna širina 390 px
+  brez vodoravnega scrolla; zaslonski dokazi ops/r527-final-1..4.
+- DOKUMENTACIJA: poročilo #14 §5 točka 5 prečrtana + REŠENO (alternativa b,
+  gradiva ostajajo odprta oskrba); izdaja v poročilu R523 → R527; README
+  odprte točke usklajene (oznaka namesto »potrebujejo oznako«); verzija
+  1.55.1 → 1.55.2.
+- IZDAJA: commit 80bef55 + tag v1.55.2; push GitHub + GitLab (prvi poskus
+  oba) + zrcalo sync; GitLab CI: cevovoda main (2952729580) in v1.55.2
+  (2952729582) ZELENA na zasebnem runnerju (joba 17215202728/17215202738,
+  ~114/112 s, build checkout TOČNO 80bef55 iz zrcala).
+
+Stage Summary:
+- Issue #14 §5: zadnja aplikacijsko izvedljiva točka REŠENA — generični
+  demo izdelki so IZRECNO označeni na vseh mestih, kjer jih uporabnik ali
+  stranka vidi; katalog pošteno razlikuje ROKSALOVE originale od demov.
+- Preostalo iz #14 je IZKLJUČNO oskrba (težava #6 — lastnikova stran):
+  scenski posnetek RWA 57/32, PROFIL_PRESEK POLNA/DESKA, gradiva za
+  generične, ozadje rež KUBO (lastnikova odločitev).
+- Pas 40 skupin zelen; E2E 21✓/0✗; CI zelen na GitLab (main + tag);
+  GitHub = GitLab = zrcalo = 80bef55; verzija 1.55.2.
