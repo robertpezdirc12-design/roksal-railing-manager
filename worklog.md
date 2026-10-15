@@ -3536,3 +3536,18 @@ Stage Summary:
   povezava na širši tok #3 pa je odprta kot vedno.
 - Dokazi: izmera kataloga (68 variant), posodobljeno poročilo v repu,
   komentar na issueju.
+
+---
+Task ID: R521-dodatek
+Agent: glavni agent
+Task: Dokaz uspeha R521 sinhronizacije
+
+Work Log:
+- Komentar na issue #14 objavljen:
+  https://github.com/robertpezdirc12-design/roksal-railing-manager/issues/14#issuecomment-6192106170
+- GitLab CI pipeline za main 2569f219 (R521): SUCCESS (verify: bun install,
+  lint, tsc, prisma validate+push, secret-audit 0).
+- GitHub = GitLab = 2569f21; delovno drevo čisto.
+
+Stage Summary:
+- R521 zaključen: poročilo na issue #14 + osvežena dokumentacija + zelen CI.
