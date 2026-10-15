@@ -3640,3 +3640,18 @@ Stage Summary:
 - Dokazi: ops/r522-ui-1..6.png (6 ključnih PNG) + ops/ci-dokaz-R522.out.
 - Issue #7 ostaja odprt: fizične naprave (terenski test), izbira med
   različicami ob razhajanju (migracija — lastnikovo dejanje) ostajajo.
+
+---
+Task ID: R522-dodatek
+Agent: glavni agent
+Task: Dokaz sinhronizacije R522 + tag
+
+Work Log:
+- Poročilo na issue #7 objavljeno:
+  https://github.com/robertpezdirc12-design/roksal-railing-manager/issues/7#issuecomment-6193427771
+- GitLab CI pipeline za main c6adcea (R522): SUCCESS.
+- Tag v1.53.0 (zmožnostni release — dokumentacijske slike detajlov).
+
+Stage Summary:
+- R522 zaključen: koda + testi 54/0 + E2E 15/0 + pas 37 skupin + poročilo
+  na #7 + zelen GitLab CI + tag v1.53.0 obe strani.
