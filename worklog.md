@@ -3488,3 +3488,51 @@ Stage Summary:
   ki jih katalog ima.
 - Dokazi: ops/r520-{F,F2,T,T2,T3}-{potem,primerjava,zoom}.png +
   ops/r520-ui-1..6.png + ops/ci-dokaz-R520.out (36 skupin, 0 ✗).
+
+---
+Task ID: R521
+Agent: glavni agent (nadaljevalna seja)
+Task: Poročanje R517+R518+R520 na GitHub issue #14 + osvežitev poročila
+docs/FOTOZAMENJAVA-POROCILO-14.md (zastarelo od R507, 14.10.)
+
+Work Log:
+- UGOTOVITEV STANJA po prekinitvi seje: R520 (fasade+terase) je bil že
+  zaključen in sinhroniziran (main 07165a4 + tag v1.52.0 OBE strani;
+  GitLab CI zelen za main IN tag; delovno drevo čisto; worklog vnos
+  popolen; dokazi 20 PNG + ci-dokaz-R520.out 36 skupin 0 ✗). Dev
+  strežnik je bil padel → ponovno zagnan (health 200).
+- VRZEL V POROČANJU odkrita: faze R517 (ROMB 67 Golden teak — prvi
+  dokazani primer), R518 (reza iz kataloga, vsi tipi ograj) in R520
+  (fasade KUBO + terase) NISO bile poročane na GitHub issue #14 (edini
+  komentar tam je R507 iz 14.10.), dokumentacija pa je ostala na
+  R507 stanju. Praksa doslej (R484–R516) je bila poročati vsako fazo.
+- IZMERA STANJA KATALOGA (ops/tmp-katalog-pregled.mjs, pobrisan po
+  uporabi; dev baza): 85 VERIFIED sredstev; 4 fotomontažne družine
+  (OGRAJA_PRECNA 5 izdelkov, OGRAJA_POKOCNA 4, FASADA 3, TERASA 5) =
+  17 izdelkov, 68 variant; 34 variant z lastnim FOTO_IZDELEK;
+  68/68 z barvo (color); 5 variant z lastnim DETAJL (terase: RUSTIC
+  ROAK/RWA, KLASIK ASH/BUT/OKW); ROMB-67 edini s PROFIL_PRESEK in
+  KOMPONENTA. SPREMEMBA proti R507: DETAJL zdaj OBSTOJA (tedaj za
+  niti en izdelek ni), katalog razširjen na FASADO in TERASI.
+- OSVEŽITEV docs/FOTOZAMENJAVA-POROCILO-14.md (izdaja R521): glava z
+  novimi viri in številkami; §1 nove vrstice (mere iz uradnih virov,
+  barva WPC iz lestvic, izrez iz sceničnih fotografij); §3 pokritost
+  IZMERJENA (tabela 17 izdelkov namesto 9; variantna pokritost); NOVA
+  §4 dokazani primeri (R517 + R518 A/B/B2/C/D/E + R520 F/F2/T/T2/T3 s
+  stanji gradiva UPORABLJENO/SAMO_DRUZINA/NI_PREVERJENO); §5 osveženi
+  manjkaji (DETAJL za ograje in KUBO; POLNA-57 ROAK/RWA; PROFIL_PRESEK;
+  generični izdelki); §6 meje dokaza z žigom §15. Vse navedene dokazne
+  datoteke preverjene prisotne (r517-1..5, r518-A..E, r520-F..T3,
+  ci-dokazi R517/R518/R520).
+- KOMENTAR NA GITHUB issue #14 (po pushu, da se sklicuje na commit):
+  pošteno poročilo o R517/R518/R520 z dokazi, merjenimi številkami
+  kataloga in seznamom, kaj čaka lastnika (#6 oskrba).
+
+Stage Summary:
+- Poročilo issue #14 je zdaj sinhrono z dejanskim stanjem kode in
+  kataloga; lastnik vidi celotno sliko (ograje + fasade + terase, 12
+  dokazanih primerov, 2 E2E poti skozi aplikacijo).
+- Issue #14 OSTAJA ODPRT: manjkajoča gradiva so težava #6 (oskrba),
+  povezava na širši tok #3 pa je odprta kot vedno.
+- Dokazi: izmera kataloga (68 variant), posodobljeno poročilo v repu,
+  komentar na issueju.
