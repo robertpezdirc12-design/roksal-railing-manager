@@ -3339,3 +3339,26 @@ Stage Summary:
   težava #6 oskrba. Fasade in terase po lastnikovem vrstnem redu za tem.
 - Dokazi: ops/r518-{A,B,B2,C,D,E}-{potem,primerjava,zoom}.png +
   ops/r518-ui-1..6.png + ops/ci-dokaz-R518.out (35 skupin, 0 ✗).
+
+---
+Task ID: R518-dodatek
+Agent: glavni agent (nadaljevalna seja)
+Task: Ugotovitve oddaljenih CI sistemov po potisku R518 + popravek sklica na hash
+
+Work Log:
+- GitHub Actions: VSI zgodovinski zagoni failure — vzrok NI koda: naloga se
+  sploh ne zažene zaradi stanja računa (»recent account payments have failed
+  or your spending limit needs to be increased« — Billing & plans). Zunanja
+  odvisnost, lastnikovo dejanje; enaka kategorija kot GitLab blokadi.
+- GitLab: žeton preklican (invalid_token — revoked). Lastnikovo dejanje.
+- Lokalni relejni pas (tests/ci-local.sh) ostaja edini zeleni kvalitetni
+  prag — to je v skladu z dosedanjo prakso vseh prejšnjih release-ov (R514+).
+- Commit 417f619 po vključitvi workloga amendiran → 55dc65d; sklic v R518
+  vnosu popravljen; dodatek potiskan kot 1464bcb.
+
+Stage Summary:
+- R518 (55dc65d + tag v1.51.0) je na GitHubu; delovno drevo čisto.
+- Oba oddaljena CI (GitHub Actions, GitLab CI) sta blokirana z lastnikovimi
+  računskimi dejanji (plačilna metoda/meja; preklican žeton) — koda NI vzrok.
+- Za nadaljevanje sinhronizacije na GitLab lastnik preskrbi nov žeton;
+  za GitHub Actions uredi Billing & plans.
