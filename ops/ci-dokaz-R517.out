@@ -1,0 +1,57 @@
+── CI matrika usklajena z .github/workflows/ci.yml
+── AUTH_RATE_MAX=100000 (lokalno; v produkciji je privzeto 30/min/IP)
+── harness: brez backtick ukazov
+   ✓
+── avtorji commitov (Vercel)
+   ✓
+── razčlenitev Python suite-ov
+   ✓
+── typecheck
+   ✓
+── lint
+   ✓
+── prisma generate
+   ✓
+── migrate deploy
+   ✓
+── db:seed
+   ✓
+── aplikacija pripravljena: http://localhost:3000
+  ✓ r437-r445              ═══ r437-r445: 6 ✓ / 0 ✗ / 2 preskočenih
+  ✓ r446-r452              ═══ r446-r452: 7 ✓ / 0 ✗
+  ✓ r454-r458              ═══ r454-r458: 5 ✓ / 0 ✗
+  ✓ r459-r462              ═══ r459-r462: 4 ✓ / 0 ✗
+  ✓ r464                   ═══ r464: 2 ✓ / 0 ✗
+  ⏸ r464-notifications: dev strežnik na http://localhost:3000 začasno ustavljen (Next dev blokada)
+  ✓ r464-notifications     ═══ r464-notifications: 1 ✓ / 0 ✗
+  ✓ r465-r474              ═══ r465-r474: 8 ✓ / 0 ✗
+  ✓ r475-r478              ═══ r475-r478: 4 ✓ / 0 ✗
+  ✓ r479                   ═══ r479: 1 ✓ / 0 ✗
+  ✓ r480                   ═══ r480: 1 ✓ / 0 ✗
+  ✓ r481                   ═══ r481: 1 ✓ / 0 ✗
+  ✓ r483                   ═══ r483: 1 ✓ / 0 ✗
+  ✓ r484                   ═══ r484: 1 ✓ / 0 ✗
+  ✓ r485                   ═══ r485: 1 ✓ / 0 ✗
+  ✓ r486                   ═══ r486: 1 ✓ / 0 ✗
+  ✓ r487                   ═══ r487: 1 ✓ / 0 ✗
+  ✓ r488                   ═══ r488: 1 ✓ / 0 ✗
+  ✓ r489                   ═══ r489: 1 ✓ / 0 ✗
+  ✓ r490                   ═══ r490: 1 ✓ / 0 ✗
+  ✓ r493                   ═══ r493: 1 ✓ / 0 ✗
+  ✓ r494                   ═══ r494: 1 ✓ / 0 ✗
+  ✓ r495                   ═══ r495: 1 ✓ / 0 ✗
+  ✓ r500                   ═══ r500: 1 ✓ / 0 ✗
+  ✓ r501                   ═══ r501: 1 ✓ / 0 ✗
+  ✓ r502                   ═══ r502: 1 ✓ / 0 ✗
+  ✓ r503                   ═══ r503: 1 ✓ / 0 ✗
+  ✓ r504                   ═══ r504: 1 ✓ / 0 ✗
+  ✓ r508                   ═══ r508: 1 ✓ / 0 ✗
+  ✓ r509                   ═══ r509: 1 ✓ / 0 ✗
+  ✓ r510                   ═══ r510: 1 ✓ / 0 ✗
+  ✓ r511                   ═══ r511: 1 ✓ / 0 ✗
+  ✓ r513                   ═══ r513: 1 ✓ / 0 ✗
+  ✓ r516                   ═══ r516: 1 ✓ / 0 ✗
+  ✓ r517                   ═══ r517: 1 ✓ / 0 ✗
+
+════ RELEJNI PAS: ✓ zeleno (8 statičnih korakov, 34 skupin) ════
+Logi: .ci-local-logs/

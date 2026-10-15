@@ -3193,3 +3193,96 @@ Stage Summary:
 - Odprto za lastnika ostaja SAMO vsebina cen (katere številke) in potrditev cenovnega jedra — mehanizem ne potrebuje nobene lastnikove odločitve več
 - Faza 6 #15: povezava mere → kosovnica obstaja (R508–R511), cene imajo zdaj vhodni kanal; Faza 7 (fizično izmerjen nabor ≥5 montažerjev) ostaja odprta — zahteva resnične meritve
 - CI: r516 v obeh matrikah; lokalni pas zelen; GitLab CI še vedno čaka overitev identitete računa (preizkušeno to sejo: HTTP 400/403)
+
+---
+Task ID: R517
+Agent: main (Z.ai Code)
+Task: DOKONČAN EN PRIMER FOTOMONTAŽE OD ZAČETKA DO KONCA (issue #14, po
+lastnikovem naročilu): uporabnik fotografira hišo, označi obstoječo ograjo,
+izbere Roksalov model in barvo, vidi novo ograjo z originalno teksturo,
+pravimi razmerji/razmiki in perspektivo; okolica ostane nespremenjena;
+odstranitev stare ograje pošteno poroča; PREJ/POTEM primerjava, popravek
+maske in shranjevanje. Brez generativnega AI, brez plačljivih storitev.
+
+Work Log:
+- PREDHODNI PREGLED (zahteva naročila): foto-replace.tsx (1750 vrstic),
+  photo-replace-core/-texture/-mask/-engine prebrani v celoti; tests/r504
+  (196/0) in r459 (81/1 → glej spodaj) pognani; fixture manifest
+  tests/fixtures/foto-montaza (4 primeri z ROČNO označenimi maskami);
+  katalog preverjen (85 VERIFIED sredstev s filePath, 41 s variantSku);
+  issue #14 pridoblj z GitHub API vključno z vsemi kriteriji sprejema.
+- NAJDENA IN POPRAVLJENA 2 RESNA DEFEKTA v povezavi IZDELEK→PROFIL→BARVA:
+  (1) ŠIRINA PROFILA: lameleIzTecha je gledala samo lameleMm/lamele ključe —
+  Roksalovi WPC izdelki pa nosijo širino V IMENU profila (tech.profil:
+  »ROMB 67«, »POLNA DESKA 128«, »POLNA DESKA 57/32«, »KLASIK 150×25«).
+  POLNA 128 bi risala 70 mm deske (≈2× preveč desk — napačna razmerja).
+  Popravek: regex na prvo številko imena profila + varnostni obseg 40..300 mm
+  (debelina 25 mm se NE vzame kot širina), lameleMm/lamele ostajata prednost.
+  (2) BARVA WPC: variante WPC nimajo RAL (samo color ime) → izris je vzel
+  temno-sivi RAL fallback #383e42 — uporabnik je izbral »Golden teak« in
+  videl SIVO ograjo. Popravek: ODTENKI_HEX (8 odtenkov) + odtenekHex +
+  barvaVariante — heksi so IZRAČUNANI iz uradnih preverjenih barvnih lestvic
+  v repozitoriju (roksal-barvna-lestvica-*.png, mediane vzorcev, postavitev
+  prebrana z VLM), ne izmišljeni. UI: izrisna barva, pika izbirnika variant
+  in predfill (lamelaMm + deskaMm za PRECNA) gredo zdaj čez katalog.
+- GLAVNI-BREZ DOKAZ IZRISA (ops/r517-render.mjs, .mjs KER app typecheck
+  pokriva *.ts): zrcali TOČNO UI cevovod (pokrij → obnoviOzadje → slojObnove →
+  slojPrednjega → oceniSvetlobo → izrisiOgrajo/izrisiPrimerjavo z
+  gradivo/ozadjem/prednjim) na primeru kupska-patio (fixture:
+  7d47a11b864e.jpg, ROK-OG-ROMB-67 / GLT Golden teak, VERIFIED tekstura
+  r495-wpc-woodcore-romb-golden-precna-ograja-gasper1.jpg, referenca 90 cm).
+  Izhod: original + maska + POTEM (s §15 žigom) + PREJ/POTEM primerjava +
+  zoom teksture (ops/r517-1..5). Obnova ozadja: 8 % NEDOKONČANO → pošteno
+  opozorilo OZADJE_NEDOKONCANO + jantarna šrafura (ne lažna odstranitev).
+  Zagon: TEST_DB_URL=… bun ops/r517-render.mjs (katalog iz dev baze).
+- VLM SAMO-PREVERBA DOKAZNIH SLIK (branje, ne generiranje): POTEM = nova
+  ograja z vodoravnimi deskami, lesna tekstura, golden-teak barva, okolica
+  nespremenjena; primerjava = ločevalna črta, levo stara žična ograja, desno
+  nova lesena, žig §15; zoom = enakomerni razmiki, letnica, prednji steber
+  ohranjen, jantarna šrafura nedokončanega vidna.
+- E2E SKOZI PRavo APLIKACIJO (agent-browser, dev strežnik, admin): prijava →
+  Foto vizualizacija → projekt P-2026-006 → nalaganje izvirnika (1693×1270 —
+  ugotovitev: agent-browser upload ukraz ob večjih datotekah obesi CDP,
+  programski DataTransfer upload deluje, APLIKACIJA pa oba obvlada) →
+  označitev: 4 vogali kvada (±2 px od fixture) + izpust (travnati pas) +
+  prednji plan (jeklen steber) + referenca ROCNO 90 cm → izdelek ROMB 67 +
+  Golden teak → konfiguracija 90×117 cm, 2 stebra, deska 67 mm, reza 8 mm,
+  skrito vijačenje (iz tech!) → PREJ/POTEM drsnik (VLM potrdil: levo stara,
+  desno nova golden-teak ograja) → SHRANI varianto A → 201; v bazi:
+  renderParams (maska 1+1+1, config 67/8/67) + verzija z dokazom
+  dokaz.gradivo (assetId + pot + sha256 — preverjeno enako sha datoteke).
+  Zaslonski dokazi: ops/r517-ui-2..6 (nalaganje, označitev, izdelek,
+  primerjava, shranjeno). E2E zapis po testu počiščen (r459 discipline).
+- TESTI: NOV tests/r517.py (66 ✓ / 0 ✗ z živim strežnikom; brez strežnika
+  54 ✓ — blok G se pošteno preskoči): A odtenki (8, hex, meje, fail-closed),
+  B barvaVariante (RAL prednost, WPC, fallback), C profil parse (11 trditev
+  nad realnimi imeni profilov + prednost lameleMm + neveljaven JSON),
+  D živi katalog (ROMB 67 → 67 mm; GLT → Golden teak → #a27e76; VERIFIED
+  gradivo obstaja), E žičenje UI, F dokazni artefakti (izris uporablja iste
+  module; slike obstajajo; žig §15), G API krog (201; 67 mm + maska + trdnja
+  preživijo; idempotentno čiščenje ×2). Registriran v tests/ci-matrix.sh
+  (GRUPE + CLANI) IN .github/workflows/ci.yml (r517) — obeh mest, kot zahteva
+  disciplina matrike. Ujet in popravljen hrošč V TESTU: dvojni JSON.parse na
+  verziji.data.meta (meta je že objekt) → sedaj enojen.
+- REGRESIJA: r459 je po E2E padel na 80/1 (N=1) — vzrok: MOJA shranjena E2E
+  vizualizacija (ne koda); po čiščenju 81/0. r504 196/0 tudi po spremembah
+  jedra. tsc --noEmit (CELOTEN repo) exit 0; eslint 0 napak / 2 opozorili
+  (isti stari a11y opozorili iz R507, ne iz novih vrstic).
+
+Stage Summary:
+- Kriterij issue #14 »Vsaj en dejanski ROKSAL profil je prikazan z originalno
+  teksturo/površino, pravimi proporci in potrjeno barvno izvedbo« je zdaj
+  DEJANSKO izpolnjen za en primer (ROMB 67 · Golden teak na kuški patii) —
+  prej današnjih popravkov NI bil (70 mm namesto 67, siva namesto golden teak),
+  kljub zelenim testom R507: testi so šteli piksle, ne razmerja iz kataloga.
+- Poštenost: kaj JE dokazano (tekstura VERIFIED s sha-256, perspektiva,
+  prednji plan, okolica, PREJ/POTEM, shranjevanje z verigo dokaza) in kaj
+  MANJKA (iz dokumentiranega R507 poročila še vedno: PROFIL_PRESEK za POLNA
+  128/100/57 in DESKA 150, DETAJL za vse tipe, BARVNA_LESTVICA z colorName po
+  variantah, FOTO za POLNA-57-ROAK/-RWA, sredstva za OGR-K-001/002 in
+  OGR-P-001/002 — težava #6 oskrba, ne aplikacija).
+- Issue #14 OSTAJA ODPRT (ne zapira se z buildom): dokazan je 1 od 5 tipov
+  ograj; naslednji korak so ostali modeli/barve (enaka metoda), fasade in
+  terase pa po lastnikovem vrstnem redu za tem.
+- Dokazi: ops/r517-1..5 (izris) + ops/r517-ui-2..6 (uporabniški tok) +
+  ops/ci-dokaz-R517.out (relejni pas, po uspehu tega zagona).

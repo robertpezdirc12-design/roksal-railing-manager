@@ -188,6 +188,10 @@ jobs:
           # cenovni del: cene ostanejo PODATEK, uvoz pa odpravi ročno tipkanje.
           # Nova skupina MORA biti tudi v tests/ci-matrix.sh.
           - grupa: r516
+          # R517: povezava izdelek→profil→barva + dokončan primer fotomontaže
+          # (issue #14): odtenki iz uradnih lestvic + širina profila iz imena.
+          # Nova skupina MORA biti tudi v tests/ci-matrix.sh.
+          - grupa: r517
     services:
       postgres:
         image: postgres:16

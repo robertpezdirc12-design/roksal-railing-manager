@@ -37,7 +37,7 @@ import { hasPerm } from '@/lib/permissions-core'
 // R480 (issue #9 §10): javna povezava vizualizatorja + zgodovina izborov stranke
 import { VizLinksPanel } from '@/components/roksal/modules/foto-replace-links'
 import {
-  VIZ_ZIG, generirajRazpored, izrisiOgrajo, izrisiPrimerjavo, lameleIzTecha,
+  VIZ_ZIG, barvaVariante, generirajRazpored, izrisiOgrajo, izrisiPrimerjavo, lameleIzTecha,
   materialIzTecha, maskaZaIzris, oceniKakovost, oceniSvetlobo, ralHex, visinaIzTecha,
   type NacinPritrditve, type Opozorilo, type OzadjeSloj, type RenderParams, type Tocka, type TipPolnila,
 } from '@/lib/photo-replace-core'
@@ -400,7 +400,10 @@ export default function FotoReplaceModule () {
     }
   }, [slot.quad, slot.refTip, slot.refOpis, refCm, cfg, maskaStanje])
 
-  const barva = variant?.ral ? ralHex(variant.ral) : '#383e42'
+  // R517: WPC variante nimajo RAL — barva gre čez odtenek iz URADNE lestvice
+  // (ODTENKI_HEX), ne čez temno-sivi RAL fallback, ki je prej pobarval vse
+  // lesene ograje v sivo ne glede na izbrani odtenek.
+  const barva = barvaVariante(variant ? { ral: variant.ral, color: variant.color } : null)
   const material = useMemo(() => materialIzTecha(product?.tech ?? null), [product?.tech])
 
   // ── opozorila kakovosti (§1/§15) ──
@@ -799,8 +802,11 @@ export default function FotoReplaceModule () {
   }
 
   // ── izbira izdelka: prednastavi tip/višino/lamele iz produktnih podatkov ──
+  // R517: širina profila pride IZ IMENA (ROMB 67 → 67 mm, POLNA 128 → 128 mm),
+  // zato ima prečna ograja pravilo število desk in pokončna pravilno širino lamel.
   function izberiIzdelek (pid: string): void {
     const p = ograjaProducts.find((x) => x.id === pid) ?? null
+    const sirina = p ? lameleIzTecha(p.tech) : null
     updateSlot((s) => ({
       ...s,
       productId: pid,
@@ -808,7 +814,10 @@ export default function FotoReplaceModule () {
       tip: p?.family.code === 'OGRAJA_PRECNA' ? 'PRECNA' : 'POKOCNA',
       ...(p ? {
         heightCmS: String(Math.round((visinaIzTecha(p.tech) ?? 1100) / 10)),
-        ...(lameleIzTecha(p.tech) != null ? { lamelaMmS: String(lameleIzTecha(p.tech)) } : {}),
+        ...(sirina != null ? {
+          lamelaMmS: String(sirina),
+          deskaMmS: String(sirina), // prečna: višina deske = širina istega profila
+        } : {}),
       } : {}),
     }))
   }
@@ -1456,7 +1465,7 @@ export default function FotoReplaceModule () {
                       {(product?.variants ?? []).map((v) => (
                         <SelectItem key={v.id} value={v.id}>
                           <span className="flex items-center gap-2">
-                            <span aria-hidden className="inline-block size-3 rounded-full border" style={{ background: v.ral ? ralHex(v.ral) : '#9aa2ab' }} />
+                            <span aria-hidden className="inline-block size-3 rounded-full border" style={{ background: v.ral ? ralHex(v.ral) : v.color ? barvaVariante({ ral: null, color: v.color }, '#9aa2ab') : '#9aa2ab' }} />
                             {v.name}{v.ral ? ` — ${v.ral}` : ''}
                           </span>
                         </SelectItem>

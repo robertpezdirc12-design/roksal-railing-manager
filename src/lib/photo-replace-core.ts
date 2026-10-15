@@ -51,6 +51,44 @@ export function ralHex (ral: string | null | undefined, fallback = '#383e42'): s
   return RAL_HEX[ral.trim().toUpperCase()] ?? fallback
 }
 
+// ─── R517 (issue #14 §3): WPC odtenki IZ URADNIH ROKSALOVIH BARVNIH LESTVIC ──
+//
+// Zakaj: WPC ograje (OGRAJA_PRECNA/OGRAJA_POKOCNA) nimajo RAL kode — varianta
+// nosi samo IME odtenka (npr. »Golden teak«). Doslej je izris zato vzel RAL
+// fallback #383e42 (temno siva), ne glede na izbrano barvo — uporabnik je
+// izbral »Golden teak« in videl sivo ograjo.
+//
+// Hex vrednosti niso izmišljene: izračunane so kot MEDIANA vzorcev vseh
+// preverjenih uradnih lestvic v repozitoriju
+// (public/assets/roksal/src/roksal-barvna-lestvica-*.png — ProductAsset kind
+// BARVNA_LESTVICA, status VERIFIED), poimenovanje pa je enako `colorName` na
+// preverjenih variantnih gradivih. Kot pri RAL_HEX gre za približek
+// (zaslonska vzorca niso kolorimetrična), vendar iz KATALOGA, ne po občutku.
+
+export const ODTENKI_HEX: Record<string, string> = {
+  'Amazon wood': '#5e5e61',
+  'Ash wood': '#8f8f91',
+  'Burma teak': '#8d756d',
+  'Golden teak': '#a27e76',
+  'Oak wood': '#b0917c',
+  'Rustic oak': '#9c8061',
+  'Rustic walnut': '#71675c',
+  'White': '#c4c3c2',
+}
+
+/** Ime odtenka iz kataloga (varianta.color) → hex; neznano → fallback. */
+export function odtenekHex (color: string | null | undefined, fallback = '#383e42'): string {
+  if (!color) return fallback
+  return ODTENKI_HEX[color.trim()] ?? fallback
+}
+
+/** Barva variante: RAL ima prednost, sicer odtenek iz uradne lestvice. */
+export function barvaVariante (variant: { ral?: string | null; color?: string | null } | null | undefined, fallback = '#383e42'): string {
+  if (!variant) return fallback
+  if (variant.ral) return ralHex(variant.ral, fallback)
+  return odtenekHex(variant.color, fallback)
+}
+
 // ─── Materiali izdelka (§3: ALU/INOX/les + mat/sijaj/struktura) ──────────────
 
 export type MaterialVrsta = 'ALU' | 'INOX' | 'WPC' | 'LES' | 'KOVO'
@@ -85,7 +123,14 @@ export function materialIzTecha (tech: string | null | undefined): MaterialInfo 
   return MATERIALI.ALU
 }
 
-/** Širina lamel v mm iz tech JSON (npr. {"lamele":"70 mm"} ali {"lameleMm":70}). */
+/**
+ * Širina lamel/desk v mm iz tech JSON izdelka. R517: poleg eksplicitnih ključev
+ * (lameleMm / lamele) se širina prebere IZ IMENA PROFILA — Roksalovi profili
+ * nosijo širino v imenu (»ROMB 67« = 67 mm, »POLNA DESKA 128« = 128 mm,
+ * »POLNA DESKA 57/32« = 57 mm širine / 32 mm debeline, »KLASIK 150×25« =
+ * 150 mm × 25 mm). Doslej je izris za vse te izdelke vzel privzeti 70 mm —
+ * POLNA 128 bi tako dobila skoraj dvakrat preveč desk (napačna razmerja).
+ */
 export function lameleIzTecha (tech: string | null | undefined): number | null {
   let raw: Record<string, unknown> = {}
   try {
@@ -95,6 +140,16 @@ export function lameleIzTecha (tech: string | null | undefined): number | null {
   if (typeof raw.lamele === 'string') {
     const m = /(\d{2,3})/.exec(raw.lamele)
     if (m) return Number(m[1])
+  }
+  // R517: širina iz imena profila — PRVA številka je širina v mm.
+  // »ROMB 67« → 67; »POLNA DESKA 128« → 128; »57/32« → 57 (širina/debelina);
+  // »KLASIK 150×25« → 150. Vrača SAMO smiselne širine 40..300 mm.
+  if (typeof raw.profil === 'string') {
+    const m = /(\d{2,3})\s*(?:[×x/]\s*\d{1,3})?/.exec(raw.profil)
+    if (m) {
+      const w = Number(m[1])
+      if (Number.isFinite(w) && w >= 40 && w <= 300) return w
+    }
   }
   return null
 }
