@@ -38,7 +38,7 @@ import { hasPerm } from '@/lib/permissions-core'
 import { VizLinksPanel } from '@/components/roksal/modules/foto-replace-links'
 import {
   VIZ_ZIG, barvaVariante, generirajRazpored, izrisiOgrajo, izrisiPrimerjavo, lameleIzTecha,
-  materialIzTecha, maskaZaIzris, oceniKakovost, oceniSvetlobo, ralHex, visinaIzTecha,
+  materialIzTecha, maskaZaIzris, oceniKakovost, oceniSvetlobo, ralHex, rezaIzTecha, visinaIzTecha,
   type NacinPritrditve, type Opozorilo, type OzadjeSloj, type RenderParams, type Tocka, type TipPolnila,
 } from '@/lib/photo-replace-core'
 // R507 (issue #14 §1–§4): lastna maska + obnova ozadja iz robov + originalna gradiva
@@ -804,9 +804,13 @@ export default function FotoReplaceModule () {
   // ── izbira izdelka: prednastavi tip/višino/lamele iz produktnih podatkov ──
   // R517: širina profila pride IZ IMENA (ROMB 67 → 67 mm, POLNA 128 → 128 mm),
   // zato ima prečna ograja pravilo število desk in pokončna pravilno širino lamel.
+  // R518: tudi RAZMIK pride iz tech (razmakDeskMm — npr. »5–30 (priporočeno)« →
+  // sredina obsega), saj POLNE ograje niso brez rež: tech jih priporoča 5–30 mm
+  // in uporabnik vidi resničen razmik iz kataloga namesto splošne 20 mm.
   function izberiIzdelek (pid: string): void {
     const p = ograjaProducts.find((x) => x.id === pid) ?? null
     const sirina = p ? lameleIzTecha(p.tech) : null
+    const razmik = p ? rezaIzTecha(p.tech) : null
     updateSlot((s) => ({
       ...s,
       productId: pid,
@@ -818,6 +822,7 @@ export default function FotoReplaceModule () {
           lamelaMmS: String(sirina),
           deskaMmS: String(sirina), // prečna: višina deske = širina istega profila
         } : {}),
+        ...(razmik != null ? { rezaMmS: String(razmik) } : {}),
       } : {}),
     }))
   }

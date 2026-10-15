@@ -3286,3 +3286,55 @@ Stage Summary:
   terase pa po lastnikovem vrstnem redu za tem.
 - Dokazi: ops/r517-1..5 (izris) + ops/r517-ui-2..6 (uporabniški tok) +
   ops/ci-dokaz-R517.out (relejni pas, po uspehu tega zagona).
+
+---
+Task ID: R518
+Agent: glavni agent (nadaljevalna seja)
+Task: Issue #14 — ostali modeli/barve fotomontaže (POLNA 128/100/57, DESKA 150, ALU) z razmakom IZ kataloga; dokončanje in ureditev nedokončanega dela prejšnje seje
+
+Work Log:
+- UGOTOVITEV STANJA: prejšnja seja je R518 delo opravila in ga založila v DVA
+  commita z UUID sporočiloma (a835b77, a02dfc4) — seja je ugasnila pred
+  urejanjem sporočil in vnosom v worklog. Vsi artefakti (izrisi A/B/B2/C/D/E,
+  ui-1..5, tests/r518.py 69/0, ci-dokaz) so bili prisotni, MANJKAL je le
+  dokaz koraka SHRANI (ui-6) — E2E se je prejšnjo sejo ustavil pri njem.
+- PONOVNI ZAGON E2E (ops/r518-e2e.py) je razkril 2 hrošča V SKRIPTI:
+  (1) brala je polji #pv-reza/#pv-lamela, ki sta vidni samo pri POKONČNEM
+  polnilu — POLNA DESKA 128 se prednastavi kot PREČNA, torej pravi polji sta
+  #pv-reza2 in #pv-deska; (2) tipkarska napaka »Shrani variantu« — gumb se
+  imenuje »Shrani varianto«. Oba popravljena; E2E zdaj 14 ✓ / 0 ✗ vključno s
+  korakom 9 SHRANI (201), preverbo zapisa v bazi (reza 18 · deska 128 ·
+  stebri 5 · maska prednjega 1 · trdnja gradiva pot+sha256 burma128-2) in
+  počiščenjem (r459 disciplina). Nov dokaz: ops/r518-ui-6-shranjeno.png.
+- RELEJNI PAS (TEST_DB_URL=…54329/roksal): ✓ zeleno — 8 statičnih korakov +
+  35 skupin, 0 ✗ (ops/ci-dokaz-R518.out, svež zagon po vseh popravkih;
+  r518.log 69 ✓ / 0 ✗ z živim strežnikom, blok G vključen). Ugotovitev
+  peskovnika: nohup ozadnji CI podrejeni proces umre brez flusha stdouta —
+  dokaz se zanesljivo posname le zagnan v prvem planu z preusmeritvijo.
+- UREDITEV ZGODOVINE: git reset --soft e5a51ff → EN sam commit 417f619 z
+  urejenim sporočilom (prej: 2 UUID commita). Delovno drevo čisto; vsebuje
+  src/lib/photo-replace-core.ts (+37 rezaIzTecha), foto-replace.tsx (+7
+  prednastavitev rezaMmS), tests/r518.py, ops/r518-* (render, e2e, analize,
+  izmere, 21 PNG), matrika tests/ci-matrix.sh + .github/workflows/ci.yml.
+- SINHRONIZACIJA: GitHub origin/main bil na e5a51ff (R517) — potiskan 417f619
+  + tag v1.51.0 (53 → 54 tagov). GITLAB BLOKIRAN: žeton glpat-… preklican
+  (»Token was revoked. You have to re-authorize from the user.« — API in git
+  push odbita). Zunanja odvisnost, zahteva LASTNIKOVO dejanje (nov žeton);
+  enako že dokumentirani blokadi overitve identitete GitLab CI.
+
+Stage Summary:
+- KLJUČNA R518 ZMOŽNOST: razmik (reža) med deskami/palicami ZDAJ prihaja iz
+  kataloga — rezaIzTecha iz tech.razmakDeskMm (»5–30 (priporočeno)« → sredina
+  18 mm, fail-closed 0..80, smeti → null). POLNE ograje niso brez rež.
+- DOKAZANI PRIMERI (vsak z originalno teksturo kjer obstaja, sicer pošteno
+  stanje): A POLNA 128 · Burma teak (UPORABLJENO); B POLNA 57 · Oak wood
+  (UPORABLJENO); B2 POLNA 57 · Rustic oak (SAMO_DRUZINA — manjka odtenek,
+  izrecno); C DESKA 150 · Rustic oak (reza 30 mm iz izmere produktnih
+  fotografij); D POLNA 100 · White (UPORABLJENO); E ALU antracit
+  (NI_PREVERJENO — 0 gradiv, barvni približek RAL 7016 → #383e42 brez
+  izmišljene teksture).
+- Issue #14 OSTAJA ODPRT (disciplina: ne zapira se z buildom): dokazani vsi
+  tipi ograj z materiali, ki jih katalog ima; manjkajoči odtenki/gradiva so
+  težava #6 oskrba. Fasade in terase po lastnikovem vrstnem redu za tem.
+- Dokazi: ops/r518-{A,B,B2,C,D,E}-{potem,primerjava,zoom}.png +
+  ops/r518-ui-1..6.png + ops/ci-dokaz-R518.out (35 skupin, 0 ✗).

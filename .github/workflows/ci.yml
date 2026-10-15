@@ -192,6 +192,10 @@ jobs:
           # (issue #14): odtenki iz uradnih lestvic + širina profila iz imena.
           # Nova skupina MORA biti tudi v tests/ci-matrix.sh.
           - grupa: r517
+          # R518: ostali modeli/barve — 5 dokazanih primerov fotomontaže
+          # (POLNA 128/100/57 · DESKA 150 · ALU) + razmik iz tech.razmakDeskMm.
+          # Nova skupina MORA biti tudi v tests/ci-matrix.sh.
+          - grupa: r518
     services:
       postgres:
         image: postgres:16

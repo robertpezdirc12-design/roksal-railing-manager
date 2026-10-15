@@ -154,6 +154,43 @@ export function lameleIzTecha (tech: string | null | undefined): number | null {
   return null
 }
 
+/**
+ * R518 (issue #14): razmik (reža) med deskami/palicami v mm iz tech JSON.
+ * Roksalovi tech podatki nosijo »razmakDeskMm« kot število ali kot obseg —
+ * npr. POLNA DESKA 128/100: »5–30 (priporočeno)«. Pri obsegu vzamemo
+ * SREDINO (zaokroženo), ker je to edina vrednost, ki jo katalog zagovarja za
+ * celoten priporočen obseg. Vrača SAMO smiselne razmike 0..80 mm; drugače
+ * null (UI ohrani svojo privzeto vrednost, ki jo uporabnik lahko spremeni).
+ */
+export function rezaIzTecha (tech: string | null | undefined): number | null {
+  let raw: Record<string, unknown> = {}
+  try {
+    if (tech) raw = JSON.parse(tech) as Record<string, unknown>
+  } catch { return null }
+  const v = raw.razmakDeskMm
+  if (typeof v === 'number' && Number.isFinite(v)) {
+    const r = Math.round(v)
+    return r >= 0 && r <= 80 ? r : null
+  }
+  if (typeof v === 'string') {
+    // obseg »5–30« / »5-30« MORA biti prej kot enojno število (drugače bi
+    // enojni regex vzel prvo številko obsega)
+    const ms = /(\d{1,2})\s*[–—-]\s*(\d{1,2})/.exec(v)
+    if (ms) {
+      const a = Number(ms[1]), b = Number(ms[2])
+      if (Number.isFinite(a) && Number.isFinite(b) && b >= a && a >= 0 && b <= 80) {
+        return Math.round((a + b) / 2)
+      }
+    }
+    const m = /(\d{1,2})/.exec(v)
+    if (m) {
+      const r = Number(m[1])
+      return r >= 0 && r <= 80 ? r : null
+    }
+  }
+  return null
+}
+
 /** Višina ograje v mm iz tech JSON (npr. {"visina":"1000 mm"}). */
 export function visinaIzTecha (tech: string | null | undefined): number | null {
   let raw: Record<string, unknown> = {}
