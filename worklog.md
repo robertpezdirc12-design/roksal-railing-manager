@@ -3403,3 +3403,5 @@ Stage Summary:
   delujejo na skupnem izvajalniku; dokaz: ops/gitlab-ci-dokaz-R518.txt.
 - Odprte zunanje odvisnosti (lastnikova dejanja): GitHub Actions Billing;
   nič več na GitLab strani.
+- Dopolnitev: tudi cevovod samega R519 commita (f286dbf, main) je ZELEN —
+  sinhronizacija in dokazi so zaključeni na obeh straneh.
