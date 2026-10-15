@@ -16,6 +16,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useToast } from '@/hooks/use-toast'
+// R527 (issue #14 §5): izrecna oznaka generičnih demo izdelkov tudi v javnem pregledu
+import { jeGenericniIzdelek } from '@/lib/katalog-original'
 import { useAppStore } from '@/lib/store'
 import { apiDelete, apiPost, fmtDate, fmtDateTime, useApi } from '@/lib/api-client'
 import { ErrorBox, LoadingRows } from '@/components/roksal/ui-bits'
@@ -238,7 +240,9 @@ export function VizLinksPanel ({ projectId, projectCode }: { projectId: string; 
                       <TableCell className="p-2 text-xs">
                         <span className="font-semibold">Varianta {c.variantLabel}</span>
                         {c.visualization?.product ? (
-                          <span className="block max-w-44 truncate text-[11px] text-muted-foreground">{c.visualization.product.name}</span>
+                          <span className="block max-w-44 truncate text-[11px] text-muted-foreground">
+                            {c.visualization.product.name}{jeGenericniIzdelek(c.visualization.product.sku) ? ' (generični)' : ''}
+                          </span>
                         ) : null}
                       </TableCell>
                       <TableCell className="p-2 text-xs">{rtLabel(c.requestType)}</TableCell>

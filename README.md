@@ -153,8 +153,10 @@ ImageMagick, poppler) — podrobno v `tests/ci-local.sh` glavi.
 - **Issue #14 (fotomontaža)** — aplikacijska stran zaključena; odprto ostaja
   **oskrba** (težava #6 — lastnikova stran): scenski posnetek RWA 57/32 in
   `PROFIL_PRESEK` za POLNA/DESKA v uradnih virih **ne obstajata** (preverjeno
-  R524), generični demo izdelki potrebujejo gradiva ali izrecno oznako, ozadje
-  rež KUBO je lastnikova odločitev. Seznam v
+  R524); generični demo izdelki so **izrecno označeni** (R527 — »generični
+  izdelek, ni ROKSALOV original« v izbiri, opozorilu, rezultatu POTEM, seznamu
+  shranjenih in javnem pregledu stranke); ozadje rež KUBO je lastnikova
+  odločitev. Seznam v
   [`docs/FOTOZAMENJAVA-POROCILO-14.md`](docs/FOTOZAMENJAVA-POROCILO-14.md) §5.
 
 ## Tehnologija

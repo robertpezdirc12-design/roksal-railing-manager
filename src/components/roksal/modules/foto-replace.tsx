@@ -51,6 +51,8 @@ import {
   celiceZaElement, izberiGradivo, izmeriIzrezeNavpicnihPalic, izmeriSmerVlaken, projekcijaIzRavnine, vzorciTeksturo,
   type GradivoDTO, type IzbiraGradiva, type VirTeksture,
 } from '@/lib/photo-replace-texture'
+// R527 (issue #14 §5): izrecna oznaka generičnih demo izdelkov — niso ROKSALOVI originali
+import { jeGenericniIzdelek, OZNAKA_GENERIKA } from '@/lib/katalog-original'
 import { cn } from '@/lib/utils'
 
 // ─── Koraki ──────────────────────────────────────────────────────────────────
@@ -1459,6 +1461,9 @@ export default function FotoReplaceModule () {
                       <p className={cn('font-semibold', izbiraGradiva.smeUporabiti ? 'text-foreground' : 'text-muted-foreground')}>
                         Gradivo površine: {izbiraGradiva.napis}
                       </p>
+                      {product && jeGenericniIzdelek(product.sku) ? (
+                        <p className="mt-1 font-medium text-amber-800 dark:text-amber-300">{OZNAKA_GENERIKA + ' — izris je barvni približek.'}</p>
+                      ) : null}
                       {izbiraGradiva.manjkajo.length > 0 ? (
                         <p className="mt-1 text-muted-foreground">Manjka: {izbiraGradiva.manjkajo.join(', ')}.</p>
                       ) : null}
@@ -1549,11 +1554,11 @@ export default function FotoReplaceModule () {
                     <SelectContent>
                       {ograjaProducts.length === 0 ? <SelectItem value="none" disabled>Ni izdelkov (ograje/fasade/terase)</SelectItem> : null}
                       {ograjaProducts.map((p) => (
-                        <SelectItem key={p.id} value={p.id}>{p.name} ({p.sku})</SelectItem>
+                        <SelectItem key={p.id} value={p.id}>{p.name} ({p.sku}){jeGenericniIzdelek(p.sku) ? ' — generični' : ''}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                  <p className="text-xs text-muted-foreground">Videz izključno iz ROKSAL kataloga — brez generičnih modelov (§2).</p>
+                  <p className="text-xs text-muted-foreground">Videz izključno iz ROKSAL kataloga — brez generičnih modelov (§2). Izdelki z dopolnilom »— generični« so demo izdelki brez preverjenih gradiv — njihov izris je barvni približek.</p>
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="pv-varianta" className="text-sm font-semibold">Barva / varianta (RAL)</Label>
@@ -1574,6 +1579,17 @@ export default function FotoReplaceModule () {
                   {variant?.ral ? <p className="text-xs text-muted-foreground">{variant.ral} · {variant.name}</p> : null}
                 </div>
               </div>
+
+              {product && jeGenericniIzdelek(product.sku) ? (
+                <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-2.5 text-xs" data-testid="genericni-izdelek-opozorilo">
+                  <p className="font-semibold text-amber-800 dark:text-amber-300">{OZNAKA_GENERIKA}.</p>
+                  <p className="mt-1 text-muted-foreground">
+                    Ta izdelek nima preverjenih ROKSALOVIH gradiv (barvna lestvica, produktni posnetek) — izris bo
+                    barvni približek iz kataloške barve/RAL, ne originalna površina. Za prikaz prave površine izberite
+                    ROKSALOV izdelek (ROK-…).
+                  </p>
+                </div>
+              ) : null}
 
               {product ? (
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -1730,6 +1746,14 @@ export default function FotoReplaceModule () {
                     <span className="pointer-events-none absolute left-2 top-2 rounded bg-background/85 px-2 py-0.5 text-xs font-bold">PREJ</span>
                     <span className="pointer-events-none absolute right-2 top-2 rounded bg-background/85 px-2 py-0.5 text-xs font-bold">POTEM</span>
                   </div>
+                  {/* R527 (issue #14 §5): izrecna oznaka ob samem rezultatu — uporabnik
+                      vidi, da je prikaz generičnega demo izdelka barvni približek */}
+                  {product && jeGenericniIzdelek(product.sku) ? (
+                    <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-2.5 text-xs" data-testid="genericni-izdelek-potem">
+                      <p className="font-semibold text-amber-800 dark:text-amber-300">{OZNAKA_GENERIKA + '.'}</p>
+                      <p className="mt-1 text-muted-foreground">{'Brez preverjenih ROKSALOVIH gradiv — izris je barvni približek iz kataloške barve/RAL, ne originalna površina.'}</p>
+                    </div>
+                  ) : null}
                   <div className="space-y-1.5">
                     <Label htmlFor="pv-slider" className="flex items-center justify-between text-xs font-semibold">
                       <span>PREJ / POTEM</span>
@@ -1810,7 +1834,7 @@ export default function FotoReplaceModule () {
                               <span className="text-xs font-normal text-muted-foreground">v{r._count.versions} · {fmtDate(r.updatedAt)}</span>
                             </p>
                             <p className="truncate text-xs text-muted-foreground">
-                              {r.product?.name ?? r.productId}{r.variant ? ` · ${r.variant.name}${r.variant.ral ? ` (${r.variant.ral})` : ''}` : ''}
+                              {r.product?.name ?? r.productId}{r.product && jeGenericniIzdelek(r.product.sku) ? ' (generični)' : ''}{r.variant ? ` · ${r.variant.name}${r.variant.ral ? ` (${r.variant.ral})` : ''}` : ''}
                               {r.measurementId ? ` · meritev v${r.measurementVersion ?? 1}` : ''} · {r.author?.name ?? '—'}
                             </p>
                           </div>

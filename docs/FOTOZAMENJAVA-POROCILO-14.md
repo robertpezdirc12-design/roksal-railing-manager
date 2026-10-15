@@ -1,8 +1,9 @@
 # Poročilo fotozamenjave (issue #14) — kaj je dejansko fotorealistično, kje je potreben ročni poseg in katera originalna gradiva manjkajo
 
-Izdaja: R523, 2026-10-15 (posodobitev izdaje R521: kakovost teksture KUBO iz uradne
+Izdaja: R527, 2026-10-15 (posodobitev izdaje R523: kakovost teksture KUBO iz uradne
 lestvice v izvirni ločljivosti, manjkajoči uradni materiali, ureditev variant po
-namenski lestvici POLNA 57/32).
+namenski lestvici POLNA 57/32; R524: DETAJL čipi za ograje; R527: izrecna oznaka
+generičnih demo izdelkov po alternativi (b) iz §5).
 Viri teh trditev: koda (`src/lib/photo-replace-{mask,texture,core,engine}.ts`,
 `sirinaIzTecha`/`rezaIzTecha`/`sirinaIzImena` v jedru), suite `tests/r504.py` (216 trditev),
 `tests/r517.py` (66), `tests/r518.py` (69), `tests/r520.py` (83), `tests/r523.py` (66)
@@ -122,8 +123,17 @@ SAMO_DRUZINA) · engine 1.3.0)**.
    knjižnica (iskanje »presek«: 0 zadetkov; »profil«: samo votli ročaj, ne polna deska) in
    obe produktni strani (prečna + pokončna): tehnični posnetek preseka NE obstaja
    (trenutno ROMB 67 in KUBO).
-5. Gradiva (ali izrecna oznaka »generični izdelek, ni ROKSALOV original«) za
-   OGR-K-001/002, OGR-P-001/002, TER-WPC-001/002, TER-ALU-001, FAS-L-001, FAS-K-002.
+5. ~~Gradiva (ali izrecna oznaka »generični izdelek, ni ROKSALOV original«) za
+   OGR-K-001/002, OGR-P-001/002, TER-WPC-001/002, TER-ALU-001, FAS-L-001, FAS-K-002.~~ —
+   **REŠENO v R527 po alternativi (b) — izrecna oznaka** (gradiva ostajajo odprta
+   oskrbovalna točka, težava #6): pravilo identitete v `src/lib/katalog-original.ts`
+   (ROK- predpona — točen klasifikator: 9 generičnih IMA 0 preverjenih gradiv,
+   8 originalov ≥ 1), oznaka na PETIH mestih: dopolnilo »— generični« v izbiri izdelka
+   (+ razlaga pod njo), jantar opozorilo po izbiri, oznaka ob samem rezultatu POTEM
+   (data-testid), »(generični)« v seznamu shranjenih vizualizacij in v javnem
+   pregledu povezav (vidi ga stranka). Dokaz: `tests/r527.py` (19✓/0✗) +
+   `ops/r527-e2e.py` (21✓/0✗ skozi pravo aplikacijo — OGR-K-001: brez gradiva v
+   dokazni verigi, engine 1.3.0, pošten napis barvnega približka).
 6. Ozadje za KUBO fasado: reže med letvicami prikazujejo pošteno šrafuro nedokončane
    obnove (R507 §2). Realna KUBO namestitev ima v režah temno podkonstrukcijo — barvo
    bi bilo mogoče izpeljati iz lastnih pikslov rež na izvirni fotografiji (dokazljiv vir);

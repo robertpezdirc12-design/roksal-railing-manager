@@ -209,6 +209,12 @@ jobs:
           - grupa: r522
           - grupa: r523
           - grupa: r524
+          # R527 (issue #14 §5): izrecna oznaka generičnih demo izdelkov —
+          # ROK- predpona kot točen klasifikator (9 generičnih brez gradiv,
+          # 8 originalov z gradivi), oznaka na 5 mestih UI (izbira, opozorilo,
+          # rezultat POTEM, shranjene, javni pregled).
+          # Nova skupina MORA biti tudi v tests/ci-matrix.sh.
+          - grupa: r527
     services:
       postgres:
         image: postgres:16
