@@ -3311,8 +3311,9 @@ Work Log:
   r518.log 69 ✓ / 0 ✗ z živim strežnikom, blok G vključen). Ugotovitev
   peskovnika: nohup ozadnji CI podrejeni proces umre brez flusha stdouta —
   dokaz se zanesljivo posname le zagnan v prvem planu z preusmeritvijo.
-- UREDITEV ZGODOVINE: git reset --soft e5a51ff → EN sam commit 417f619 z
-  urejenim sporočilom (prej: 2 UUID commita). Delovno drevo čisto; vsebuje
+- UREDITEV ZGODOVINE: git reset --soft e5a51ff → EN sam commit z urejenim
+  sporočilom (417f619, nato amendiran na 55dc65d po vključitvi tega worklog
+  vnosa — disciplina release commita iz R517). Delovno drevo čisto; vsebuje
   src/lib/photo-replace-core.ts (+37 rezaIzTecha), foto-replace.tsx (+7
   prednastavitev rezaMmS), tests/r518.py, ops/r518-* (render, e2e, analize,
   izmere, 21 PNG), matrika tests/ci-matrix.sh + .github/workflows/ci.yml.
