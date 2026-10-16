@@ -28,6 +28,10 @@ function fotoSvg (label, post, accent, posts, handrail) {
 }
 
 async function main () {
+  // R534 (issue #21 §1): fail-closed varovalo PRED prvim deleteMany — varuje
+  // tudi neposreden klic `node prisma/seed.cjs` (ne le verigo db:seed).
+  const { assertSeedAllowed } = require('./seed-guard.cjs')
+  await assertSeedAllowed()
   console.log('[seed] brišem obstoječe podatke …')
   // R497: SEZNAM IZBRISOV MORA POKRITI VESE, kar veriga seeded piše (seed.cjs in
   // seed-r437 … seed-r495). Stari seznam je imel 38 tabel, veriga jih piše 58 →
@@ -105,6 +109,15 @@ async function main () {
     db.user.create({ data: { email: 'proizvodnja@roksal.si', passwordHash: hashPassword('Proizvodnja123!'), name: 'Ana Kos', role: 'PROIZVODNJA' } })
   ])
   const [admin, vodja, monter, skladisce, proizvodnja] = users
+  // R534 (issue #21 §3): zahteva začetne namestitve — demom baza z uporabniki je
+  // »namestitev zaključena« tudi če uporabniki kasneje izpadejo (wipe brez semena
+  // ne SME ponovno odpreti javne vrat /api/setup). Ista vrstica je atomska
+  // zahteva v POST /api/setup (Setting.key je PK — sovpad je nemogoč).
+  await db.setting.upsert({
+    where: { key: 'system.setup.completedAt' },
+    update: {},
+    create: { key: 'system.setup.completedAt', value: new Date().toISOString() },
+  })
 
   console.log('[seed] naseljujem stranke …')
   const cs = await Promise.all([

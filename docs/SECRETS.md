@@ -10,9 +10,9 @@
 |---|---|---|---|---|
 | 1 | `ROKSAL_BACKUP_PASSPHRASE` | upravitelj gesel lastnika (izven peskovnice) + `.env.recovery` (gitignored) | dešifriranje varnostnih kopij | 7. 10. 2026 (ustvarjena, R441) |
 | 2 | `GITLAB_TOKEN` (PAT) | `.env.recovery` (gitignored) + `.git/config` remote URL (lokalno, ni v repu) | `api` + `write_repository` (GitLab) | 7. 10. 2026 (ustvarjen pred R441) |
-| 3 | `DATABASE_URL` | okolje procesa (peskovnica ga vbrizga; NI `.env` datoteke v repu) | SQLite datoteka | n. p. (brez gesla v peskovnici) |
+| 3 | `DATABASE_URL` | okolje procesa (peskovnica/CI; `.env` lokalno, gitignored) | PostgreSQL — peskovnik: lokalni vsebnik :54329 (roksal/roksal); produkcija: Neon (Vercel env) | ob incidentu 10/2026 (Neon rotirano) |
 | 4 | Gesla uporabnikov (admin/monter/…) | baza — `User.passwordHash` (scrypt + sol) | prijava v aplikacijo | glej aplikacijo (Profil → geslo) |
-| 5 | Žetoni sej | baza — `Session.token`; API preverja `Authorization: Bearer` | prijavljene seje (30 dni) | samodejno (potek/odjava/preklic) |
+| 5 | Žetoni sej | baza — `Session.token` hrani SAMO SHA-256 zgoščeno obliko (R534); API preverja `Authorization: Bearer` | prijavljene seje (**7 dni** od prijave — R534 uskladitev s kodo) | samodejno (potek/odjava/preklic ob spremembi gesla) |
 | 6 | Žetoni portala strank | baza — `PortalLink.token` (javne povezave, časovno omejene) | javni dostop do projekta | samodejno (potek 7–30 dni / preklic) |
 | 7 | Vercel/Neon/Blob (produkcija) | Vercel dashboard (env var) + upravitelj gesel | deploy + baza + datoteke | ob incidentu 10/2026 rotirano (deploy hook) |
 

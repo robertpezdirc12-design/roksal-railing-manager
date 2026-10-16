@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { getSessionUser, hashPassword, jsonError, verifyPassword } from '@/lib/auth'
+import { getSessionUser, hashPassword, jsonError, sessionTokenHash, verifyPassword } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
 
 // /api/auth/password — sprememba lastnega gesla (route-map: POST /api/auth/password)
@@ -26,8 +26,11 @@ export async function POST (req: NextRequest) {
   const currentToken = header.slice(7).trim()
 
   await db.user.update({ where: { id: user.id }, data: { passwordHash: hashPassword(next) } })
-  // preklic vseh ostalih sej (varnost: geslo se je spremenilo)
-  const removed = await db.session.deleteMany({ where: { userId: user.id, NOT: { token: currentToken } } })
+  // preklic vseh ostalih sej (varnost: geslo se je spremenilo); trenutna se
+  // obvaruje v OBEH oblikah (zgoščena + zgodovinska surova — R534 #21 §4)
+  const removed = await db.session.deleteMany({
+    where: { userId: user.id, NOT: { token: { in: [sessionTokenHash(currentToken), currentToken] } } },
+  })
   await writeAudit({ userId: user.id, action: 'PASSWORD_CHANGE', entity: 'user', entityId: user.id, detail: { sessionsRevoked: removed.count } })
 
   return NextResponse.json({ ok: true, sessionsRevoked: removed.count })

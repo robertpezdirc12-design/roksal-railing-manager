@@ -101,7 +101,9 @@ fi
 log "število uporabnikov v bazi: $USERS"
 if [ "$USERS" = "0" ]; then
         log "prazna baza — poganjam celotno seed verigo (seed + r437…r495)"
-        bun run db:seed || { log "seed je PADel — prekinjam zagon"; exit 1; }
+        # R534 (issue #21 §1): izrecna potrditev destruktivnega semena (varovalo
+        # prisma/seed-guard.cjs zavrne brez nje)
+        SEED_CONFIRM=YES_DEMO_DATA bun run db:seed || { log "seed je PADel — prekinjam zagon"; exit 1; }
 else
         log "baza ima podatke — seed PRESKOČEN (ohranjanje lokalnega dela)"
 fi

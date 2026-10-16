@@ -81,7 +81,31 @@ plan in referenco (220 cm) → izbere Roksalov izdelek in odtenek → **PREJ/POT
   bazo → **skrivnostni pregled delovne kopije in celotne zgodovine**
   (`ops/secret-audit.sh`) → sintaksa ops skript.
 - **Varnostne glave** (HSTS, X-Frame-Options, Referrer-Policy, …), omejitev
-  prijav na IP, žetoni seje pepper + prstni odtis naprave.
+  prijav na IP, seje kot nosilni žetoni `Authorization: Bearer` — v bazi je
+  shranjena SAMO SHA-256 zgoščena oblika, veljavnost **7 dni**, preklic z
+  odjavo/spremembo gesla/pregledom sej; stara (nezgoščena) zapisa se ob
+  prvem branju samodejno nadgradijo (R534, issue #21).
+
+### Zaščita produkcijskih podatkov (R534, issue #21)
+
+- **Destruktivni demo-seed ima večplastno varovalo** (`prisma/seed-guard.cjs`):
+  zavrne (1) `NODE_ENV=production`, (2) ne-lokalnega gostitelja iz
+  `DATABASE_URL` (Neon/Supabase/RDS …; prehod zavednega interne testne baze:
+  `SEED_ALLOW_REMOTE=YES_I_ACCEPT_REMOTE_SEED`), (3) manjkajočo izrecno
+  potrditev `SEED_CONFIRM=YES_DEMO_DATA`, (4) **oznako produkcije v sami
+  bazi** — vrstica `Setting 'system.production'`, ki jo lastnik postavi z
+  `PRODUCTION_MARK=YES DATABASE_URL=<produkcija> bun run db:mark-production`;
+  napačno okolje je ne more odstraniti. Varnost velja za `db:seed`,
+  `db:seed:test` in `db:reset`.
+- **Prva namestitev je atomarna:** `POST /api/setup` prevzame administracijo v
+  eni transakciji — `Setting` vrstica s primarnim ključem je zahteva
+  lastništva; dve hkratni zahtevi ne moreta ustvariti dveh adminov (zmagovalka
+  commita, druga prejme 403). Demo-seed zapiše isto vrstico — delno pobrisana
+  baza ne more ponovno odpreti javnih vrat.
+- **Query-dnevnik Prisma je privzeto IZKLOPLJEN** (samo `error`+`warn`);
+  diagnostika je opt-in (`PRISMA_LOG_QUERIES=1`), časovno omejena (privzeto
+  15 min, `PRISMA_LOG_QUERIES_MS`) in izpisuje SAMO SQL-besedilo in trajanje —
+  nikoli vrednosti parametrov.
 
 ## Zagon
 
@@ -90,12 +114,15 @@ bun install
 bun run db:up                # lokalni PostgreSQL (embedded-postgres, :54329)
 source env.sh                # DATABASE_URL (brez njega: privzeta zgoraj)
 bunx prisma migrate deploy   # SHEMA samo prek migracij
-bun run db:seed              # demo podatki (uporabniki, stranke, katalog, gradiva)
+SEED_CONFIRM=YES_DEMO_DATA bun run db:seed   # demo podatki (izrecna potrditev — varovalo R534)
 bun run dev                  # http://localhost:3000
 ```
 
-Začetna namestitev se pokaže sama, če v bazi ni uporabnikov. Demo računi (gesla
-NISO v README — glej `prisma/seed.cjs`): `admin@roksal.si`, `vodja@roksal.si`,
+Začetna namestitev se pokaže sama, če v bazi ni uporabnikov (atomarna —
+razdelek Varnost zgoraj). Demo računi (gesla NISO v README — glej
+`prisma/seed.cjs`; namenjeni SAMO razvojnemu/testnemu okolju — na produkciji
+lastnik prevzame prvo administracijo z lastnim močnim geslom, demo prijava pa
+je onemogočena brez `DEMO_ACCESS=on`): `admin@roksal.si`, `vodja@roksal.si`,
 `monter@roksal.si`, `skladisce@roksal.si`, `proizvodnja@roksal.si`. Gumbi za
 hitro demo prijavo se izrišejo samo z `DEMO_ACCESS=on`.
 

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { getSessionUser, jsonError } from '@/lib/auth'
+import { findSessionByToken, getSessionUser, jsonError } from '@/lib/auth'
 import { permissionsForRole } from '@/lib/permissions-core'
 
 // /api/auth/sessions — seznam sej (route-map: GET /api/auth/sessions)
@@ -27,7 +27,9 @@ export async function GET (req: NextRequest) {
     take: 100,
   })
 
-  const current = await db.session.findUnique({ where: { token: currentToken }, select: { id: true } })
+  // R534 (#21 §4): trenutno sejo poiščemo po pomočniku (zgoščeno + zgodovinsko
+  // surovo z nadgradnjo na mestu) — žetonov NE izdajamo, samo oznaka »current«
+  const current = await findSessionByToken(currentToken)
   return NextResponse.json({
     data: sessions.map((s) => ({ ...s, current: s.id === current?.id })),
     all,

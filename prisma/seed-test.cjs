@@ -53,6 +53,10 @@ const TEMPLATE_KEY = 'test:fixture' // marker QA točk (vir: testni kompleti)
 const NOW = new Date()
 
 async function main () {
+  // R534 (issue #21 §1): fail-closed varovalo (enako kot seed.cjs) — tudi
+  // testni seed briše svoje zapise in ustvarja demo račune z znanimi gesli.
+  const { assertSeedAllowed } = require('./seed-guard.cjs')
+  await assertSeedAllowed()
   console.log('[seed-test] … testni uporabniki')
   // ── 1. UPORABNIKI (upsert po e-pošti) ────────────────────────────────────────
   const USERS = [

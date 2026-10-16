@@ -5,12 +5,31 @@
 //   if (auth instanceof NextResponse) return auth
 //   // auth.user, auth.perms
 
-import { randomUUID, scryptSync, timingSafeEqual } from 'crypto'
+import { createHash, randomUUID, scryptSync, timingSafeEqual } from 'crypto'
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { permissionsForRole, type Permission } from '@/lib/permissions-core'
 
 const SESSION_DAYS = 7
+
+// ─── Sejna pogodba (R534, issue #21 §4 — pregled + uskladitev) ───────────────
+// ŽIVLJENJSKA DOBA: 7 dni od prijave (SESSION_DAYS zgoraj). Dokumentacija
+// (SECRETS.md/README) je bila neusklajena (30 dni / pepper+prstni odtis) —
+// usklajena na to resnico; koda NI omehčana (7 < 30).
+// SHRANJEVANJE: nosilec žetona je odjemalec; baza hrani SAMO SHA-256
+// (sessionTokenHash). Izluščitev baze TAKO NE razkrije uporabnih žetonov.
+// ZGODOVINSKE VRSTICE: stare seje s surovim žetonom (vsebuje piko) ostanejo
+// veljavne — ob prvem uspešnem branju se NA MESTU nadgradijo v zgoščeno
+// obliko (brezizpadni prehod; nobena seja ni preklicana).
+// PREKLIC: odjava (trenutna), sprememba gesla (vse ostale), Varnost → Seje
+// (posamično po id), potek (čistilna naloga jobs.ts) in onemogočen uporabnik
+// (active=false blokira preverjanje ne glede na vrstico).
+// ROTACIJA: ni potrebna — nova prijava izda nov žeton; stari poteče/prekliče se.
+
+/** Zgoščevanje žetona seje za shranjevanje v bazi (SHA-256, hex). */
+export function sessionTokenHash (token: string): string {
+  return createHash('sha256').update(token).digest('hex')
+}
 
 export function hashPassword (password: string): string {
   const salt = randomUUID().replace(/-/g, '')
@@ -41,18 +60,35 @@ export function toSessionUser (u: { id: string; email: string; name: string; rol
 export async function createSession (userId: string): Promise<string> {
   const token = randomUUID() + '.' + randomUUID()
   const expiresAt = new Date(Date.now() + SESSION_DAYS * 86400000)
-  await db.session.create({ data: { token, userId, expiresAt } })
+  // v bazi LE zgoščeno obliko — surov žeton pozna samo odjemalec (R534 #21 §4)
+  await db.session.create({ data: { token: sessionTokenHash(token), userId, expiresAt } })
   return token
+}
+
+/** Poišče sejo po surovem žetonu: najprej zgoščeno, nato (zgodovinsko) surovo
+ *  — ob zadetku surove vrstice jo NA MESTU nadgradi v zgoščeno (brezizpadni prehod). */
+export async function findSessionByToken (token: string) {
+  const hashed = sessionTokenHash(token)
+  const session = await db.session.findUnique({ where: { token: hashed }, include: { user: true } })
+  if (session) return session
+  if (!token.includes('.')) return null // novejši žetoni vedno vsebujejo piko — ni zgodovinske vrstice
+  const legacy = await db.session.findUnique({ where: { token }, include: { user: true } })
+  if (!legacy) return null
+  await db.session.updateMany({ where: { token }, data: { token: hashed } })
+  return { ...legacy, token: hashed }
+}
+
+/** Prekliče sejo po surovem žetonu (pokrije zgoščeno IN zgodovinsko surovo vrstico). */
+export async function deleteSessionsByToken (token: string): Promise<number> {
+  const r = await db.session.deleteMany({ where: { token: { in: [sessionTokenHash(token), token] } } })
+  return r.count
 }
 
 export async function getSessionUser (req: NextRequest): Promise<SessionUser | null> {
   const header = req.headers.get('authorization') ?? ''
   const token = header.startsWith('Bearer ') ? header.slice(7).trim() : null
   if (!token) return null
-  const session = await db.session.findUnique({
-    where: { token },
-    include: { user: true },
-  })
+  const session = await findSessionByToken(token)
   if (!session || session.expiresAt < new Date() || !session.user.active) return null
   return toSessionUser(session.user)
 }

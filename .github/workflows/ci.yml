@@ -105,6 +105,8 @@ jobs:
         run: bun run db:seed
         env:
           DATABASE_URL: postgresql://ci:ci@localhost:5432/roksal
+          # R534 (issue #21 §1): izrecna potrditev destruktivnega semena (varovalo)
+          SEED_CONFIRM: YES_DEMO_DATA
 
   regression:
     name: Regresija (${{ matrix.grupa }})
@@ -221,6 +223,9 @@ jobs:
           - grupa: r527
           - grupa: r532
           - grupa: r533
+          # R534 (issue #21): zaščita produkcijskih podatkov — varovalo semena,
+          # atomarna namestitev, query-dnevnik, zgoščeni žetoni sej.
+          - grupa: r534
     services:
       postgres:
         image: postgres:16
@@ -255,6 +260,9 @@ jobs:
         run: |
           bunx prisma migrate deploy
           bun run db:seed
+        env:
+          # R534 (issue #21 §1): izrecna potrditev destruktivnega semena (varovalo)
+          SEED_CONFIRM: YES_DEMO_DATA
       - name: sistemski paketi (poppler-utils — pdftotext za teste PDF)
         run: sudo apt-get update -qq && sudo apt-get install -y -qq poppler-utils
       - name: zagon aplikacije

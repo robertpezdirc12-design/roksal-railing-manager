@@ -182,6 +182,9 @@ if [ "$SKIP_DB" != 1 ]; then
     echo "     (bash ops/dev-serve.sh stop) in ponovite pas. To NI napaka kode."
   fi
   korak "migrate deploy" "${PRISMA[@]}" migrate deploy
+  # R534 (issue #21 §1): db:seed zahteva izrecno potrditev — v pasu je VIDNA
+  # (ni skrita privzeta vrednost), ker je seed destruktiven za ciljno bazo.
+  export SEED_CONFIRM=YES_DEMO_DATA
   korak "db:seed" "${RUNNER[@]}" db:seed
 fi
 
