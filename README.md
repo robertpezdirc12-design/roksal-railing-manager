@@ -4,8 +4,8 @@ Poslovno-operativni sistem za Roksal — od prvega voda do zaključene montaže 
 fasad in teras: CRM, ponudbe s podpisom, proizvodnja, teren (tudi brez signala),
 računi in **fotomontaža PREJ/POTEM** iz uradnih Roksalovih gradiv.
 
-> **Stanje:** rekonstrukcija zaključena in presežena · izdaja **v1.56.0** ·
-> **42 testnih skupin + E2E skozi pravo aplikacijo** · GitHub je kanonični vir
+> **Stanje:** rekonstrukcija zaključena in presežena · izdaja **v1.58.0** ·
+> **43 testnih skupin + E2E skozi pravo aplikacijo** · GitHub je kanonični vir
 > (zadeve + release vrata), GitLab zrcalo, sinhronizacija po SHA (`ops/sync-check.sh`) ·
 > [docs/](docs/) vsebuje poročila za vsako fazo.
 
@@ -21,8 +21,10 @@ računi in **fotomontaža PREJ/POTEM** iz uradnih Roksalovih gradiv.
 3. **Rekonstrukcija** (R431–R439): funkcionalna izgradnja iz blueprinta —
    vsi moduli, RBAC, terenski tok, offline PWA, portal stranke (dogodbeno
    `README-REKONSTRUKCIJA.md` iz tega obdobja).
-4. **Nadaljnji razvoj** (R440–R525): kakovost, varnost, fotomontaža (GitLab
-   issue #14), relejni pas 41 skupin (R532: harmonizacija barv), obnovitev CI po izčrpani kvoti (R525).
+4. **Nadaljnji razvoj** (R440–R534): kakovost, varnost, fotomontaža (GitLab
+   issue #14), harmonizacija barv (R532), enoten vir kode po SHA (GitHub #20,
+   R533), varnostna utrditev pred produkcijo (GitHub #21, R534: seed-varovalo,
+   atomska namestitev, SHA-256 seje, izklop query-dnevnika) — relejni pas 43 skupin.
 
 ## Kaj aplikacija počne
 
@@ -159,7 +161,7 @@ ImageMagick, poppler) — podrobno v `tests/ci-local.sh` glavi.
   smart-HTTP z job-tokenom). Zasebni runner kvote **ne** porablja.
 - **Release vrata (obvezna pred vsako izdajo):** relejni pas
   `bash tests/ci-local.sh` na TOČNO tistem commitu, ki se izdaja (8 statičnih
-  korakov + vseh 42 skupin, EXIT 0), nato `bash ops/sync-check.sh` = OK na
+  korakov + vseh 43 skupin, EXIT 0), nato `bash ops/sync-check.sh` = OK na
   obeh sistemih, šele nato oznaka + push. GitLab pipeline (`verify`) je
   drugotna potrditev istega SHA — ne nadomestilo pasu.
 - **Vercel (produkcija) — pošteno:** iz peskovnika NI dostopa do Vercel API-ja
@@ -194,7 +196,7 @@ ImageMagick, poppler) — podrobno v `tests/ci-local.sh` glavi.
 | `src/lib/` | 72 knjižnic: photo-replace-{mask,texture,core,engine}, permissions-core, nav-registry, audit, … |
 | `prisma/` | shema + 12 migracij + semenske skripte (`db:seed` veriga) |
 | `public/assets/roksal/src/` | uradni Roksalovi viri, `MANIFEST.json` s SHA-256 |
-| `tests/` | 42 skupin + `ci-local.sh` / `ci-matrix.sh` + fixtures |
+| `tests/` | 43 skupin + `ci-local.sh` / `ci-matrix.sh` + fixtures |
 | `ops/` | E2E skripte, izrisi-dokazi, backup/restore/drill, secret-audit |
 | `docs/` | poročila po fazah (RECOVERY, FOTOZAMENJAVA, E2E, …) |
 | `.zscripts/` | vzdrževanje peskovnika: dev-detach, git-retry, ci-mirror |

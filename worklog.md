@@ -4280,3 +4280,21 @@ Stage Summary:
 Task ID: R533-dodatek (izdaja v1.57.0 po vratih #20)
 Agent: main (Z.ai Code)
 Task: Izdaja v1.57.0 — relejni pas ZELEN na točno izdajnem SHA (461e6bc: 8 statičnih + 42 skupin, EXIT 0, ops/r533-pas.out) → verzija 1.57.0 → oznaka → dvojni push → ops/sync-check.sh OK na obeh sistemih (post-push potrditev); poročila objavljena na vseh 5 zadevah (#16–#20, komentarji 6211938196/6211945853/6211946134/6211955333/6211955659); GitLab cevovod potrditev istega SHA; VERCEL: lastnikovo dejanje (brez žetona v peskovniku — postopek v README)
+
+---
+Task ID: R534-dodatek
+Agent: main (Z.ai Code)
+Task: Zaključek objave R534 (zadeva #21) po prekinitvi seje + izdaja v1.58.0
+
+Work Log:
+- Prejšnja seja izvedla celoto #21 (5098a09, +1072) a prekinila PRED objavo; rekonstrukcija: vsebina preverjena, pas 8+43 EXIT 0 (ops/r534-pas.out)
+- Žetoni: GitHub PAT prejšnje seje pretekel (401) → lastnik posredoval novega (vgrajen v origin; API 200, fetch OK); GitLab žeton iz R533 še veljaven
+- Commit-sporočilo UUID → pošten R534 opis (amend ee38494; drevo bajtno identično pas-dokazanemu)
+- Push varnostne vsebine: GitHub 7af05ce..ee38494 EXIT 0; GitLab EXIT 0 (prvi poskus)
+- Orodna plast peskovnika v tej seji izjemno nestanovitna (okna po 1 klic, izpadi 10 min–2 h) — objava po prioriteti: push vsebine najprej
+- README usklajen z izdajo: glava v1.58.0, 43 testnih skupin, zgodovina razširjena na R440–R534 (#20 sinhronizacija po SHA, #21 varnostna utrditev), release vrata 43 skupin, struktura
+- Izdaja v1.58.0: bump package.json 1.57.0→1.58.0 + bun.lock, oznaka na izdajnem commitu, dvojni push, ops/sync-check.sh po pushu (post-push potrditev)
+
+Stage Summary:
+- v1.58.0 = R534: zaščita produkcijskih podatkov (seed-guard 4 plasti, db:mark-production, atomska namestitev, SHA-256 seje, query-dnevnik privzeto izklop) + usklajen README
+- Poročilo na zadevi #21 objavljeno v istem ciklu; lastnikove korake ob pravi namestitvi zabeležene
