@@ -80,6 +80,8 @@ model Session {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
   expiresAt DateTime
+
+  @@index([userId])
 }
 
 // ─── CRM ────────────────────────────────────────────────────────────────────
@@ -174,6 +176,8 @@ model Project {
   vizLinks         VizLink[] // R480: javne povezave vizualizatorja (issue #9 §10)
   vizChoices       VisualizationChoice[] // R480: strankini izbori variant — append-only (issue #9 §10)
   handoverReports  HandoverReport[] // R489: verzionirana primopredajna poročila (issue #12)
+
+  @@index([customerId])
 }
 
 model Quote {
@@ -206,6 +210,10 @@ model Quote {
 
   lines   QuoteLine[]
   invoices Invoice[]
+
+  @@index([projectId])
+  @@index([customerId])
+  @@index([packageId])
 }
 
 model QuoteLine {
@@ -235,6 +243,9 @@ model Invoice {
   createdAt DateTime  @default(now())
 
   payments Payment[]
+
+  @@index([projectId])
+  @@index([quoteId])
 }
 
 model Payment {
@@ -245,6 +256,8 @@ model Payment {
   method    String   @default("NAKAZNICA") // NAKAZNICA | GOTOVINA | KARTICA
   reference String?
   createdAt DateTime @default(now())
+
+  @@index([invoiceId])
 }
 
 // ─── Nalogi (terenski tok) ──────────────────────────────────────────────────
@@ -282,6 +295,9 @@ model WorkOrder {
   montazaChecks     MontazaCheck[]
   montazaDeviations MontazaDeviation[]
   handoverReports   HandoverReport[]
+
+  @@index([projectId])
+  @@index([assigneeId])
 }
 
 model WorkOrderEvent {
@@ -293,6 +309,8 @@ model WorkOrderEvent {
   type        String // DODELJEN | ZACETEK | ZAJEM | PREVERITEV | ZAKLJUCEK | KOMENTAR | OPOMBA | TEZAVA (R439: sync; R444: TEZAVA — težave na terenu)
   note        String?
   createdAt   DateTime   @default(now())
+
+  @@index([workOrderId])
 }
 
 // ─── Zajem (meritve, foto) ──────────────────────────────────────────────────
@@ -325,11 +343,17 @@ model Measurement {
   note        String?
   // R437 (issue #2): javna deljena povezava meritve (žeton /m/[token] izvirnika → /api/public/measure?token=)
   shareToken  String?     @unique
+  // R535: rok veljavnosti deljene povezave (30 dni od deljenja); null = stare
+  // povezave (pred R535) — veljajo do preklica. Preverja /api/public/measure.
+  shareExpiresAt DateTime?
   createdAt   DateTime    @default(now())
 
   versions    MeasurementVersion[]
   packages    ProjectPackage[] @relation("packageMeasurements") // R442: paketi, vezani na to izmero
   fenceRuns   FenceRun[] @relation("fenceRunMeasurements") // R460: tekači, potrjeni v to meritev (issue #15)
+
+  @@index([projectId])
+  @@index([workOrderId])
 }
 
 // Zgodovina verzij meritev — posnetek stanja ob vsaki spremembi (issue #1: zgodovina verzij)
@@ -413,6 +437,8 @@ model StockLot {
   unitCost    Decimal @db.Decimal(12,2) @default(0)
   supplierId  String?
   deliveredAt DateTime @default(now())
+
+  @@index([itemId])
 }
 
 model Supplier {
@@ -461,6 +487,8 @@ model EquipmentCheckout {
   outAt       DateTime  @default(now())
   inAt        DateTime? // null = še izposojeno
   note        String?
+
+  @@index([equipmentId])
 }
 
 // ─── Proizvodnja ────────────────────────────────────────────────────────────
@@ -522,6 +550,8 @@ model QcCheck {
   userId            String?
   user              User?           @relation("qcUser", fields: [userId], references: [id])
   createdAt         DateTime        @default(now())
+
+  @@index([productionOrderId])
 }
 
 // ─── Garancija (R434 — vir: /api/warranty iz ROUTE-MAP) ─────────────────────
@@ -539,6 +569,8 @@ model Warranty {
   visits WarrantyVisit[]
   claims Claim[] // R446: reklamacije pod to garancijo (issue #7 §10)
   serviceCases ServiceCase[] // R446: servisni primeri, ki jih garancija pokriva
+
+  @@index([projectId])
 }
 
 model WarrantyVisit {
@@ -649,6 +681,12 @@ model AuditLog {
   projectId String? // null = sistemski dogodek (R428: globalni pregled)
   detail    String? // JSON
   createdAt DateTime @default(now())
+
+  // R535: prilagajoča se tabela — brez teh indeksov je vsak pregled revizije
+  // (po uporabniku/projektu) polno pregledovanje cele tabele.
+  @@index([userId, createdAt])
+  @@index([projectId, createdAt])
+  @@index([entity, entityId])
 }
 
 model Notification {
@@ -903,6 +941,8 @@ model Product {
   photoViz      PhotoVisualization[] @relation("photoVizProduct") // R459: foto-vizualizacije tega izdelka
   fenceRuns     FenceRun[] // R460: ograjni tekači v tem izdelku (issue #15)
   assets        ProductAsset[] // R493: originalna produktna gradiva (issue #6)
+
+  @@index([familyId])
 }
 
 // ─── Originalno produktno gradivo ROKSAL (R493, issue #6 §2) ───────────────
@@ -967,6 +1007,8 @@ model ProductVariant {
   boms     Bom[]
   photoViz PhotoVisualization[] @relation("photoVizVariant") // R459: foto-vizualizacije v tej varianti
   fenceRuns FenceRun[] // R460: ograjni tekači v tej varianti (issue #15)
+
+  @@index([productId])
 }
 
 // ─── Komponenta produkta (BOM PREDLOGA; issue #7 §2) ────────────────────────
@@ -993,6 +1035,9 @@ model ProductComponent {
   // POLNILO_M → m na m segmenta, POLNILO_M2 → m² na m² polnila.
   // Null = predloga × količina (obnašanje do R474, nespremenjeno).
   segmentRole String? // STEBER | ROCNIK | POLNILO_M | POLNILO_M2
+
+  @@index([productId])
+  @@index([itemId])
 }
 
 // ─── Kosovnica (generirana BOM; issue #7 §2 + §5) ───────────────────────────
@@ -1019,6 +1064,8 @@ model Bom {
   // R443: skladiščni tok vezan na kosovnico
   reservations StockReservation[] @relation("bomReservations")
   pickings     PickingList[]      @relation("bomPickings")
+
+  @@index([productId])
 }
 
 model BomLine {
@@ -1043,6 +1090,9 @@ model BomLine {
   // R475: ključ pravila/vnosa, iz katerega je količina izpeljana
   // (max_razdalja_stebrov | odpad_rez_pct | vnos:razmik) — revizijska sled.
   sourceRule String?
+
+  @@index([bomId])
+  @@index([itemId])
 }
 
 // ─── Ceniki (issue #7 §6: poslovne cene NISO hardcoded) ─────────────────────
@@ -1118,6 +1168,8 @@ model ProjectPackage {
   bom Bom?
   quotes Quote[] // R474: invalidacija ob spremembi obsega
   claims Claim[] // R446: reklamacije, ki se tičejo tega paketa (issue #7 §10)
+
+  @@index([projectId])
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

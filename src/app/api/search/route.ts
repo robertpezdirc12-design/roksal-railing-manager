@@ -3,6 +3,7 @@ import type { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 import { jsonError, readsAllData, requirePermission } from '@/lib/auth'
 import { hasPerm } from '@/lib/permissions-core'
+import { projectIdsZaUporabnika } from '@/lib/fence-run-access'
 
 // /api/search — globalno iskanje po entitetah (route-map: GET/POST /api/search)
 // Obseg rezultatov strogo po pravicah prijavljenega uporabnika (fail-closed).
@@ -27,10 +28,20 @@ export async function GET (req: NextRequest) {
   const q = (new URL(req.url).searchParams.get('q') ?? '').trim()
   if (q.length < 2) return NextResponse.json({ data: { groups: [] as { kind: string; label: string; hits: Hit[] }[], q } })
 
+  // R535 (revizija analize): projektni obseg za omejeno branje (MONTER) —
+  // isti vzorec kot /api/nalog in /api/quotes: monter vidi SAMO zadetke
+  // svojih projektov/nalogov. Projekti: njegovi projekti; stranke: stranke
+  // njegovih projektov; ponudbe: vezane na njegove projekte; nalogi: dodeljeni
+  // njemu. Fail-closed — prazna dodelitev = prazen rezultat, nikoli „vidi vse“.
+  const scopeIds = readsAllData(auth.user) ? null : await projectIdsZaUporabnika(auth.user)
+
   const groups: { kind: string; label: string; hits: Hit[] }[] = []
 
   const projects = await db.project.findMany({
-    where: { OR: [{ title: { contains: q, mode: 'insensitive' } }, { code: { contains: q, mode: 'insensitive' } }, { address: { contains: q, mode: 'insensitive' } }] },
+    where: {
+      ...(scopeIds ? { id: { in: scopeIds } } : {}),
+      OR: [{ title: { contains: q, mode: 'insensitive' } }, { code: { contains: q, mode: 'insensitive' } }, { address: { contains: q, mode: 'insensitive' } }],
+    },
     select: { id: true, code: true, title: true, status: true }, take: 5,
   })
   if (projects.length) groups.push({
@@ -40,7 +51,10 @@ export async function GET (req: NextRequest) {
 
   if (hasPerm(perms, 'customers.read')) {
     const customers = await db.customer.findMany({
-      where: { OR: [{ name: { contains: q, mode: 'insensitive' } }, { email: { contains: q, mode: 'insensitive' } }, { city: { contains: q, mode: 'insensitive' } }] },
+      where: {
+        ...(scopeIds ? { projects: { some: { id: { in: scopeIds } } } } : {}),
+        OR: [{ name: { contains: q, mode: 'insensitive' } }, { email: { contains: q, mode: 'insensitive' } }, { city: { contains: q, mode: 'insensitive' } }],
+      },
       select: { id: true, name: true, city: true }, take: 5,
     })
     if (customers.length) groups.push({
@@ -51,7 +65,10 @@ export async function GET (req: NextRequest) {
 
   if (hasPerm(perms, 'quotes.read')) {
     const quotes = await db.quote.findMany({
-      where: { OR: [{ code: { contains: q, mode: 'insensitive' } }, { note: { contains: q, mode: 'insensitive' } }] },
+      where: {
+        ...(scopeIds ? { projectId: { in: scopeIds } } : {}),
+        OR: [{ code: { contains: q, mode: 'insensitive' } }, { note: { contains: q, mode: 'insensitive' } }],
+      },
       select: { id: true, code: true, status: true, total: true, customer: { select: { name: true } } }, take: 5,
     })
     if (quotes.length) groups.push({
@@ -73,7 +90,11 @@ export async function GET (req: NextRequest) {
 
   if (hasPerm(perms, 'nalog.read')) {
     const wos = await db.workOrder.findMany({
-      where: { OR: [{ code: { contains: q, mode: 'insensitive' } }, { title: { contains: q, mode: 'insensitive' } }] },
+      where: {
+        // R535: monter vidi SAMO svoje naloge (enak filter kot /api/nalog)
+        ...(scopeIds ? { assigneeId: auth.user.id } : {}),
+        OR: [{ code: { contains: q, mode: 'insensitive' } }, { title: { contains: q, mode: 'insensitive' } }],
+      },
       select: { id: true, code: true, title: true, status: true }, take: 5,
     })
     if (wos.length) groups.push({

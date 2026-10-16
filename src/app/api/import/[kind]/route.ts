@@ -20,6 +20,7 @@
 // Revizija: BOM_IMPORT / QUOTE_IMPORT.
 
 import { NextRequest, NextResponse } from 'next/server'
+import type { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 import { jsonError, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
@@ -41,11 +42,12 @@ type Params = { params: Promise<{ kind: string }> }
 
 const MAX_FILE_BYTES = 2 * 1024 * 1024 // 2 MB
 
-/** Zaporedna koda PON-<leto>-<seq> (usklajeno z /api/quotes). */
-async function nextQuoteCode (): Promise<string> {
+/** Zaporedna koda PON-<leto>-<seq> (usklajeno z /api/quotes).
+ *  R535: sprejme tx — izračun teče znotraj transakcije (glej spodaj). */
+async function nextQuoteCode (tx: Prisma.TransactionClient = db): Promise<string> {
   const year = new Date().getFullYear()
   const prefix = `PON-${year}-`
-  const existing = await db.quote.findMany({ where: { code: { startsWith: prefix } }, select: { code: true } })
+  const existing = await tx.quote.findMany({ where: { code: { startsWith: prefix } }, select: { code: true } })
   const seqs = existing
     .map((c) => parseInt(c.code.slice(prefix.length), 10))
     .filter((n) => Number.isFinite(n))
@@ -364,27 +366,42 @@ async function importQuote (req: NextRequest, userId: string): Promise<NextRespo
     })
   }
 
-  const code = await nextQuoteCode()
-  const quote = await db.quote.create({
-    data: {
-      code,
-      status: 'OSNUTEK',
-      customerId,
-      projectId,
-      packageId: formPackageId !== '' ? formPackageId : null,
-      note: [parsed.note, `Uvoženo iz ${file.name} (izvorna koda ${parsed.code ?? '?'}).`].filter(Boolean).join(' — '),
-      discountPct: discountPct > 0 ? discountPct : null,
-      discount: totals.discount,
-      subtotal: totals.subtotal,
-      vat: totals.vat,
-      total: totals.total,
-      lines: {
-        create: parsed.lines.map((l) => ({
-          description: l.description, qty: l.qty, unitPrice: l.unitPrice, total: round2(l.qty * l.unitPrice),
-        })),
+  // R535: koda + zapis v transakciji, ob sočasnem P2002 do 3 poskusi
+  // (usklajeno z /api/quotes — read-then-create dirka zaprta).
+  const isCodeCollision = (e: unknown): boolean => (e as { code?: string } | null)?.code === 'P2002'
+  const buildWithCode = () => db.$transaction(async (tx) => {
+    const code = await nextQuoteCode(tx)
+    return tx.quote.create({
+      data: {
+        code,
+        status: 'OSNUTEK',
+        customerId,
+        projectId,
+        packageId: formPackageId !== '' ? formPackageId : null,
+        note: [parsed.note, `Uvoženo iz ${file.name} (izvorna koda ${parsed.code ?? '?'}).`].filter(Boolean).join(' — '),
+        discountPct: discountPct > 0 ? discountPct : null,
+        discount: totals.discount,
+        subtotal: totals.subtotal,
+        vat: totals.vat,
+        total: totals.total,
+        lines: {
+          create: parsed.lines.map((l) => ({
+            description: l.description, qty: l.qty, unitPrice: l.unitPrice, total: round2(l.qty * l.unitPrice),
+          })),
+        },
       },
-    },
+    })
   })
+  let quote: Awaited<ReturnType<typeof buildWithCode>>
+  for (let attempt = 1; ; attempt++) {
+    try {
+      quote = await buildWithCode()
+      break
+    } catch (err) {
+      if (isCodeCollision(err) && attempt < 3) continue
+      throw err
+    }
+  }
 
   await writeAudit({
     userId,

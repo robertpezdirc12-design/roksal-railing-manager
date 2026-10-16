@@ -4298,3 +4298,104 @@ Work Log:
 Stage Summary:
 - v1.58.0 = R534: zaščita produkcijskih podatkov (seed-guard 4 plasti, db:mark-production, atomska namestitev, SHA-256 seje, query-dnevnik privzeto izklop) + usklajen README
 - Poročilo na zadevi #21 objavljeno v istem ciklu; lastnikove korake ob pravi namestitvi zabeležene
+
+---
+Task ID: 3
+Agent: Explore (security)
+Task: Varnostna analiza repozitorija /tmp/roksal-railing-manager (Next.js 16 App Router, Prisma/PostgreSQL, Vercel) — samo raziskava, brez sprememb kode.
+
+Work Log:
+- Prebrani vsi zahtevani varnostni viri: src/lib/auth.ts, permissions-core.ts, rate-limit.ts, prisma/seed-guard.cjs, prisma/mark-production.cjs, src/app/api/setup/route.ts, next.config.ts, src/lib/webhook-sign.ts + webhook-core.ts, src/app/api/fence-run/route.ts + src/lib/fence-run-access.ts, docs/SECRETS.md, ops/secret-audit.sh.
+- Preskenirana celotna javna površina: /api/public/{health,version,viz,viz-choice,review,measure,portal}, /v/[token] stran, /api/auth/* (login, demo, password, session(s), logout), /api/setup, /api/health, /api/route.ts.
+- Sistematični pregled 195 API rut: 183 z requirePermission/getSessionUser/isCronRequest; brez avtentikacije samo 2 (health, hello-world boilerplate) + 15 javnih/avtentikacijskih — vse po zasnovi.
+- Preverjena RBAC/IDOR varovala: nalog (assignee filter), fence-run (fenceRunZaUporabnika fail-closed), measurements share scope, sync perms, quotes, search, export, pdf.
+- Preverjena entropija žetonov: seja = randomUUID×2 (~244 bitov, SHA-256 v bazi); javne povezave pt-/pv-/rv-/jm- = UUID v4 (~122 bitov); CRON_SECRET timingSafeEqual.
+- Pregled skrivnosti: git zgodovina preverjena z vzorci iz secret-audit.sh (0 zadetkov), .gitignore higiena OK, .env datotek ni v peskovniku; potrjen vzorec PAT v .git/config origin URL (lastnik ga posreduje v klepetu — worklog R534-dodatek to dokumentira).
+- Preverjena dokumentacijska odstopanja: SESSION_SECRET/API_KEY_PEPPER/ROKSAL_SETUP_TOKEN zapisani v ENV-VARS.md, a koda nikoli ne bere (potrjeno s sweep process.env); README trdi 38 pravic, koda ima 39; SECRETS.md trdi časovno omejene javne povezave, jm- (measure share) žetoni pa nikoli ne potečejo.
+- Preverjeni testi: tests/r534.py (suite A–F) in tests/r534-setup-race.mjs obstajajo (setup race pokrit).
+- Ničesar nisem spreminjal v repozitoriju (read-only analiza).
+
+Stage Summary:
+- SPLOŠNA OCENA: 8/10. Močna plat: fail-closed RBAC (39 pravic/5 vlog), seje samo kot SHA-256 zgoščene v bazi (7 dni, preklic ob spremembi gesla), atomska prva namestitev (PK claim + P2002→403, race-testirana), 4-plastni seed-guard z oznako system.production v bazi, SSRF-zavestni webhooki s HMAC-SHA256 + timestamp, skrivnostni pregled celotne git zgodovine v CI, GDPR consent vrata na javnih fotographijah, whitelist projekcije na vseh javnih poteh.
+- VERIFICIRANE ŠIBKOSTI: (1) rate-limit v pomnilniku procesa — na Vercelu ne zavora porazdeljenega brute-force (rate-limit.ts:63-72, iskreno dokumentirano); (2) /api/quotes GET in /api/search (projekti/stranke/ponudbe) brez MONTER obsega — monter vidi vse ponudbe z zneski (quotes/route.ts:31-50 vs. nalog/fence-run vzorec); (3) jm- deljeni žetoni meritev brez poteka (public/measure/route.ts, schema shareToken brez expiresAt) — odstopanje od SECRETS.md; (4) scrypt privzeti parametri N=16384 (auth.ts:36) pod OWASP priporočilom; (5) brez CSP (namenoma odloženo) + žeton v localStorage → XSS = kraja seje; (6) /api/health izpiše err.message baze; (7) GET /api/setup razkrije št. uporabnikov; (8) DEMO_ACCESS=on v produkciji omogoči prijavo brez gesla; (9) organizacijski vzorec PAT-v-klepetu/PAT-v-.git/config izven dosega secret-audit; (10) rate-limiter flush ob >1000 bucketih.
+- TOP 5 PRIPOROČIL: skupna shramba tempomata (Redis/WAF) + zaklepanje računa; obseg MONTER na quotes/search; potek jm- žetonov; CSP (report-only prvi korak) + višji scrypt parametri; higiena PAT (fine-grained, rok veljavnosti, brez lepljenja v klepet) + čiščenje odvečnih env spremenljivk (SESSION_SECRET, API_KEY_PEPPER, ROKSAL_SETUP_*).
+- Celotno poročilo v slovenščini predano naročniku (vse ugotovitve z file:line).
+
+---
+Task ID: 2-a
+Agent: Explore (frontend architecture)
+Task: Analiza frontend arhitekture /tmp/roksal-railing-manager (read-only).
+
+Work Log:
+- Prebrani: page.tsx, layout.tsx, v/[token], app-shell (655 vrstic), module-view, login-screen, nav-registry, store.ts, api-client.ts, offline.ts, PWA (sw.js, pwa-register), globals.css; vzorčni moduli dashboard/meritve/projekti/foto-replace/teren.
+
+Stage Summary:
+- Ocena 7/10. SPA na eni ruti / + 41 leno-naloženih modulov (memoizirani lazy wrapperji, Suspense); EN VIR nav-registry (11 sekcij, 41 zavihkov, zastareli komentar "29"); fail-closed RBAC na 3 nivojih; zustand persist + IndexedDB offline vrsta (idempotentni opId); ~15 neuporabljenih odvisnosti; mrtvi tailwind.config.ts; BREZ ErrorBoundary (največje tveganje); trije 2000+ vrstični "bogovi" (meritve-kamera 3021, ar 2215, foto-replace 1908); PWA shortcuts ne delujejo (ni useSearchParams); žeton v localStorage (XSS površina); iskanje Ctrl+K brez debounce.
+
+---
+Task ID: 2-b
+Agent: Explore (backend API)
+Task: Analiza backend API (195 rut, 297 handlerjev) in lib plasti (read-only).
+
+Work Log:
+- Popis 195 rut po domenah (nalog 13, capture-session 11, projects 9, fence-run 8, public 7, digital-twin 7, auth 7, webhooks 5, production 5...); prebrani reprezentativni nalog/quotes/sign/command/setup/public/webhooks; lib: db, jobs, cron, audit, webhook-core/-delivery/-sign.
+
+Stage Summary:
+- Ocena 8.5/10. 140 GET/105 POST/39 PATCH/13 DELETE; auth guard v ~191/195 (api/route.ts leftover scaffold); scrypt + timingSafeEqual; seje SHA-256; RBAC fail-closed + IDOR varovala; webhooki outbox + HMAC + SSRF klasifikacija + retry 1/5/30 min; audit v 123/195 rutah; jobs 6 + cron z CRON_SECRET. Šibkosti: BREZ zod (ročna validacija), delna transakcijskost (update+audit+emit ne-tx), nextQuoteCode read-then-create, 7 rut z raw error JSON, sync/route.ts 693 + import 669 vrstic, in-memory rate-limit na serverles, hardcoded demo dobavitelj v eslog.
+
+---
+Task ID: 2-c
+Agent: Explore (data model)
+Task: Analiza prisma/schema.prisma (2112 vrstic), 12 migracij, seed veriga (read-only).
+
+Work Log:
+- Katalogiziranih 92 modelov v 18 domenah; 0 Prisma enumov (~45 statusnih naborov v komentarjih); 156 FK, 96 indeksov (41 unikatnih); prebrane vse migracije r464→r501 in seed strategija (guard + 12 inkrementalnih).
+
+Stage Summary:
+- Ocena 7.5/10. Močno: 7 verzioniranih entitet (samo-dodajanje), idempotenca (opId/clientKey/eventKey), kaskadna disciplina (54 CASCADE/14 RESTRICT/88 SET NULL), Decimal(12,2) za denar, GDPR consent trojica, dokumentacija s sledljivostjo do težav. Šibkosti: ~40 nezaindeksiranih FK (Project.customerId, Quote.projectId, Invoice.quoteId, Session.userId, WorkOrderEvent.workOrderId...), AuditLog BREZ indeksov, brez CHECK/enum omejitev statusov, 4 verige verzij brez unique(…,version), redundantni ServiceCase.claimId idx, JSON v TEXT brez JSONB, mehke reference (Supplier brez relacij).
+
+---
+Task ID: 2-d
+Agent: Explore (photo-replace engine)
+Task: Analiza motorja fotomontaže PREJ/POTEM (photo-replace-*, katalog-original, viz-provenance; read-only).
+
+Work Log:
+- Prebrani: engine (259), core (1403), mask (503), texture (461), katalog-original (35), foto-replace.tsx (1908), FOTOZAMENJAVA-POROCILO-14.md; fotogrammetry-core in reality-r2p-engine na kratko.
+
+Stage Summary:
+- Ocena podsistema 8.5/10 (knjižnica 9/10, UI 7/10). Pipeline: quad+maska+referenca → izbira VERIFIED gradiva (SHA-256 MANIFEST 116) → mere izključno iz kataloga → obnova ozadja po ringih (šrafura nedosegljivih, zahtevaRočniPoseg >2%) → homografija (8×8 Gaus) → mreža celic z anizotropno usmerjenimi vlakni → prednji plan ZADNJI iz originala → žig "VIZUALIZACIJA ZA PREDSTAVITEV"; determinizem mulberry32 + FNV-1a seme; harmonizacija R532 (±22/kanal, jakost 0.35, nevtralen=identiteta); generiki označeni na 5 mestih. Najdene napake: mrtvi razteg v HARMONIZACIJA_MEJE (izračuna se, ne uporabi), mrtvi pogoj handrail (L776), seme se spremeni ob shranitvi (slot-A vs savedId), naslednjaOznaka brez transakcije, viz as unknown cast, fallback blur(7px) ne-portabilen.
+
+---
+Task ID: 4+5
+Agent: main (Z.ai Code)
+Task: Pregled testov/CI/dokumentacije + sinteza končne temeljite analize repozitorija roksal-railing-manager za uporabnika (read-only, /tmp/roksal-railing-manager).
+
+Work Log:
+- Preverjeno: 69 testnih datotek (43 aktivnih skupin v matriki ci-matrix.sh), E2E-RESULTS.json (9201 vrstic, 852 PASS/SKIP zadetkov), E2E-MATRIX.json (RBAC matrika 5 rol), DEPLOYMENTS.md (15 Vercel deploymentov), ROUTE-MAP.md, worklog.md repa (4300 vrstic).
+- Sinteza vseh 5 vzporednih analiz (2-a frontend, 2-b backend, 2-c podatkovni model, 2-d fotomontaža, 3 varnost) v končno poročilo uporabniku v slovenščini.
+
+Stage Summary:
+- Skupna ocena projekta: 7.9/10. Ključne ugotovitve: izjemen rekonstrukcijski projekt (R431–R534, 58 commitov, v1.58.0) z dosledno fail-closed filozofijo; 92 modelov, 195 rut, 41 modulov, 43 testnih skupin. Prioritete: ErrorBoundary, MONTER obseg na quotes/search, indeksi FK+AuditLog, zod validacija, transakcijskost, porazdeljeni tempomat, CSP+scrypt, higiena PAT (trenutni ghp_ žeton iz klepeta je v .git/config klona — priporočena rotacija po uporabi).
+
+
+---
+Task ID: R535
+Agent: main (Z.ai Code)
+Task: Nadaljevanje razvoja po temeljiti analizi (revizija v1.58.0) — izvedba najpomembnejših popravkov: odpornost renderja (ErrorBoundary), varnostni obseg MONTER na ponudbah/iskanju, potek deljenih meritev, dirka pri izdelavi kod ponudb, indeksi vročih FK + AuditLog.
+
+Work Log:
+- Peskovnik obnovljen iz GitHub v1.58.0 (repo prenesen v /home/z/my-project z .git; scaffold zamenjan; skills/ ostal, izključen prek .git/info/exclude; analiza seje spojena v ta worklog nad tem vnosom)
+- Zagon: bun install → .zscripts/dev.sh (embedded PG :54329 prek dev-detach dvojnega forka — moravec peskovnika ubija potomce klica po drevesu, pravnuk s staršem PID 1 preživi) → 13. migracija → seed preskočen (baza ima podatke) → next dev :3000, health OK
+- R535-a ODPORNOST RENDERJA: src/app/error.tsx (rute), src/app/global-error.tsx (koren, vgrajeni slogi), ModuleErrorBoundary v module-view.tsx nad Suspense (key=tab.id; gumb „Ponovno naloži modul“). Prej: ena neobdelana napaka = bela stran; sedaj: ostanki lupine živi. Typecheck odkril manjkajoči prop tabId — popravljen pred commitom.
+- R535-b OBSEG MONTER: /api/quotes GET + /api/search (projekti/stranke/ponudbe/nalogi) zdaj uporabljata projectIdsZaUporabnika (isti vzorec kot /api/nalog, /api/fence-run — fail-closed, prazna dodelitev = prazen seznam). Prej: monter je videl vse zneske vseh strank. Dokaz: admin 5 ponudb / monter 4 (PON-2026-003 izključena — monter nima naloga na P-2026-003; njegovi nalogi pokrivajo P-001/002/004/005/006); search PON: admin 5 zadetkov / monter 4.
+- R535-c POTEK DELJENIH MERITEV: Measurement.shareExpiresAt (DateTime?, migracija ALTER TABLE). POST share zapiše rok +30 dni in ga vrne (expiresAt); DELETE prekliče tudi rok; /api/public/measure zavrne z 404 „Povezava je potekla (30 dni od deljenja)“ po poteku. Stare povezave (null) veljajo do preklica — združljivost nazaj, brez uničenja. SECRETS.md: nova vrstica 8 inventarja. E2E dokaz: deljeno 200 → expirirano v preteklost → 404 s sporočilom → preklic → 404.
+- R535-d DIRKA KOD PONUDB: nextQuoteCode sprejme tx (Prisma.TransactionClient); izdelava (POST /api/quotes in uvoz kind=quote) teče v $transaction, ob sočasnem P2002 do 3 ponovni poskusi — read-then-create (dva sočasna POST sta lahko izračunala isto kodo) je zaprt. Revizija QUOTE_CREATE zdaj uporablja quote.code (koda znotraj tx).
+- R535-e INDEKSI: 29 novih indeksov po Prisma konvenciji imen (Model_polje_idx) — vroči FK (Session.userId, Project.customerId, Quote.projectId/customerId/packageId, Invoice.projectId/quoteId, Payment.invoiceId, WorkOrder.projectId/assigneeId, WorkOrderEvent.workOrderId, Measurement.projectId/workOrderId, StockLot.itemId, EquipmentCheckout.equipmentId, QcCheck.productionOrderId, Warranty.projectId, Product.familyId, ProductVariant.productId, ProductComponent.productId/itemId, Bom.productId, BomLine.bomId/itemId, ProjectPackage.projectId) + AuditLog BREZ indeksov popolnoma → 3 sestavljeni (userId+createdAt, projectId+createdAt, entity+entityId). Migracija 20261021000000_r535_scope_expiry_indexes uporabljena na živi bazi (migrate status: up to date). Shema (@@index) in SQL se ne razhajata.
+- Čiščenje: odstranjen src/app/api/route.ts (javni „Hello, world!“ leftover scaffold).
+- Preverbe: prisma validate ✓; typecheck ✓ (0 napak); lint 0 napak (2 predhodni opozorili v ops/r517-render.mjs, nista moji); migracija deploy ✓. Testne skupine po CI metodi (bash tests/…, BASE :3000): r448 49✓/0✗ (iskanje+IA), r437 119✓/0✗ (deljene meritve), r474 37✓/0✗ (invalidacija), r476 51✓/0✗ (tiers/popust — ustvarja ponudbe čez novo tx pot), r477 81✓/0✗ (izvoz/uvoz — uvoz ponudb čez novo tx pot), r440-smoke 645 RBAC preverjanj 0 spodletelih (E2E-RESULTS.json osvežen), r440.sh 154✓/0✗ (celoten E2E tok; ustvaril PON-2026-006 čez novo kodo). Skupaj 631+ preverjanj zelenih.
+- Brskalnik (agent-browser): prijava admin, modul Ponudbe se izrisuje s podatki; Ctrl+K iskanje deluje (skupina Ponudbe, zadetki s strankami in zneski); ni napak v konzoli; mobilna postavitev 390px (spodnja vrstica „Danes + Več sekcij“), namizna 1280px; noga se naravno poriva z vsebino (footerBottom 1393 pri scrollH 1393 — flex mt-auto krije kratek primer po obstoječem vzorcu lupine).
+- Celoten relejni pas (43 skupin) NI pognan v tej seji — pognane so prizadete skupine + r440 E2E; polni pas ostaja obvezna vrata pred naslednjo izdajo (po README). Tega commita NE spremlja oznaka/izdaja.
+
+Stage Summary:
+- R535 = varnostne in kakovostne utrditve po reviziji: ErrorBoundary (3 plasti), MONTER obseg na quotes/search (fail-closed, dokazan na meji P-2026-003), 30-dnevni potek jm- (združljiv nazaj), transakcijska koda ponudb s P2002 retry, 29 indeksov + AuditLog, odstranjen javni scaffold. 631+ preverjanj zelenih, 0 rdečih.
+- Ostaja za naslednje iteracije (po prioriteti iz analize): zod validacija, transakcijskost ostalih večkoraknih tokov, porazdeljeni tempomat prijave + zaklepanje računa, CSP Report-Only + scrypt N≥2^17 (potrebna prehodna pot za obstoječe hashe), razbitje velikih modulov, seme izrisa v renderParams (motor — tiho, dokazljivo), mrtvi razteg v HARMONIZACIJA_MEJE, unique(…,version) za 4 verige verzij, odstranitev mrtvega tailwind.config.ts + odvečnih paketov.

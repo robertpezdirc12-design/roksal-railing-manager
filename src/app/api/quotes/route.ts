@@ -2,16 +2,20 @@
 // Izračun: subtotal → [popust −] → DDV 22 % → total (R476: DDV iz osnove PO popustu).
 
 import { NextRequest, NextResponse } from 'next/server'
+import type { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 import { jsonError, requirePermission } from '@/lib/auth'
+import { projectIdsZaUporabnika } from '@/lib/fence-run-access'
 import { writeAudit } from '@/lib/audit'
 import { computeQuoteTotals, parseDiscountPct, round2 } from '@/lib/quote-core'
 
-/** Zaporedna koda PON-<leto>-<seq> — robustno glede na obstoječe kode istega leta. */
-async function nextQuoteCode (): Promise<string> {
+/** Zaporedna koda PON-<leto>-<seq> — robustno glede na obstoječe kode istega leta.
+ *  R535: izračun teče ZNOTRAJ transakcije (sprejme tx), s čimer je koda+zapis
+ *  enota; sočasnost rešuje ponovljen poskus ob P2002 (v POST). */
+async function nextQuoteCode (tx: Prisma.TransactionClient = db): Promise<string> {
   const year = new Date().getFullYear()
   const prefix = `PON-${year}-`
-  const existing = await db.quote.findMany({ where: { code: { startsWith: prefix } }, select: { code: true } })
+  const existing = await tx.quote.findMany({ where: { code: { startsWith: prefix } }, select: { code: true } })
   const seqs = existing
     .map((c) => parseInt(c.code.slice(prefix.length), 10))
     .filter((n) => Number.isFinite(n))
@@ -28,8 +32,15 @@ export async function GET (req: NextRequest) {
   const status = url.searchParams.get('status')
   const limit = Math.min(Math.max(Number(url.searchParams.get('limit') ?? 100) || 100, 1), 500)
 
+  // R535 (revizija analize): obseg MONTER — isti vzorec kot /api/nalog in
+  // /api/fence-run: uporabnik z omejenim branjem vidi SAMO ponudbe svojih
+  // projektov (nalog, dodeljenih njemu). Prazna dodelitev = prazen seznam
+  // (fail-closed), nikoli „vidi vse“ z zneski vseh strank.
+  const scopeIds = await projectIdsZaUporabnika(auth.user) // null = brez filtra (pisarna)
+
   const quotes = await db.quote.findMany({
     where: {
+      ...(scopeIds ? { projectId: { in: scopeIds } } : {}),
       ...(status ? { status } : {}),
       ...(q ? {
         OR: [
@@ -102,33 +113,48 @@ export async function POST (req: NextRequest) {
   }
 
   const totals = computeQuoteTotals(lines.map((l) => l.total), discountPct)
-  const code = await nextQuoteCode()
 
-  const quote = await db.quote.create({
-    data: {
-      code,
-      status: 'OSNUTEK',
-      customerId,
-      projectId,
-      packageId,
-      note: typeof body?.note === 'string' && body.note.trim() ? body.note.trim() : null,
-      discountPct: discountPct > 0 ? discountPct : null,
-      discount: totals.discount,
-      subtotal: totals.subtotal,
-      vat: totals.vat,
-      total: totals.total,
-      lines: { create: lines },
-    },
-    include: {
-      customer: { select: { name: true, city: true } },
-      project: { select: { code: true, title: true } },
-      _count: { select: { lines: true } },
-    },
+  // R535: koda + zapis v ENI transakciji, ob sočasnem P2002 (dva POST si
+  // izračunata isto kodo) do 3 poskusi — read-then-create dirka je s tem zaprta.
+  const isCodeCollision = (e: unknown): boolean => (e as { code?: string } | null)?.code === 'P2002'
+  const buildWithCode = () => db.$transaction(async (tx) => {
+    const code = await nextQuoteCode(tx)
+    return tx.quote.create({
+      data: {
+        code,
+        status: 'OSNUTEK',
+        customerId,
+        projectId,
+        packageId,
+        note: typeof body?.note === 'string' && body.note.trim() ? body.note.trim() : null,
+        discountPct: discountPct > 0 ? discountPct : null,
+        discount: totals.discount,
+        subtotal: totals.subtotal,
+        vat: totals.vat,
+        total: totals.total,
+        lines: { create: lines },
+      },
+      include: {
+        customer: { select: { name: true, city: true } },
+        project: { select: { code: true, title: true } },
+        _count: { select: { lines: true } },
+      },
+    })
   })
+  let quote: Awaited<ReturnType<typeof buildWithCode>>
+  for (let attempt = 1; ; attempt++) {
+    try {
+      quote = await buildWithCode()
+      break
+    } catch (err) {
+      if (isCodeCollision(err) && attempt < 3) continue // sočasni POST je vzel isto kodo → preberi ponovno
+      throw err
+    }
+  }
 
   await writeAudit({
     userId: auth.user.id, action: 'QUOTE_CREATE', entity: 'quote', entityId: quote.id, projectId,
-    detail: { code, customerId, packageId, lines: lines.length, ...totals },
+    detail: { code: quote.code, customerId, packageId, lines: lines.length, ...totals },
   })
   return NextResponse.json({ data: quote }, { status: 201 })
 }

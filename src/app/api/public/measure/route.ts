@@ -24,6 +24,7 @@ export async function GET (req: NextRequest) {
     select: {
       type: true, location: true, lengthCm: true, heightCm: true, posts: true,
       segments: true, slopeDeg: true, source: true, status: true, note: true, createdAt: true,
+      shareExpiresAt: true, // R535: potek deljene povezave
       project: {
         select: {
           code: true, title: true,
@@ -34,6 +35,12 @@ export async function GET (req: NextRequest) {
   })
   if (!m) {
     return NextResponse.json({ error: 'Povezava ne velja več (preklicana ali neveljavna).' }, { status: 404 })
+  }
+
+  // R535: potek deljene povezave (30 dni od delitenja). Povezave, ustvarjene
+  // pred R535 (brez shareExpiresAt), veljajo do preklica — združljivost nazaj.
+  if (m.shareExpiresAt && m.shareExpiresAt.getTime() <= Date.now()) {
+    return NextResponse.json({ error: 'Povezava je potekla (30 dni od deljenja). Prosite za novo povezavo.' }, { status: 404 })
   }
 
   // varni javni payload — brez avtorja, internih params in ID-jev.

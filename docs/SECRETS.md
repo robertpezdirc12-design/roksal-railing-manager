@@ -15,6 +15,7 @@
 | 5 | Žetoni sej | baza — `Session.token` hrani SAMO SHA-256 zgoščeno obliko (R534); API preverja `Authorization: Bearer` | prijavljene seje (**7 dni** od prijave — R534 uskladitev s kodo) | samodejno (potek/odjava/preklic ob spremembi gesla) |
 | 6 | Žetoni portala strank | baza — `PortalLink.token` (javne povezave, časovno omejene) | javni dostop do projekta | samodejno (potek 7–30 dni / preklic) |
 | 7 | Vercel/Neon/Blob (produkcija) | Vercel dashboard (env var) + upravitelj gesel | deploy + baza + datoteke | ob incidentu 10/2026 rotirano (deploy hook) |
+| 8 | Žetoni deljenih meritev (`jm-`) | baza — `Measurement.shareToken` (javna povezava) | javni dostop do meritve | R535: nove povezave potečejo po **30 dneh** (`shareExpiresAt`); stare (brez roka) veljajo do preklica |
 
 `.env.recovery` je namensko prezrt v `.gitignore` (vzorec `.env*`); preverja
 ga `ops/secret-audit.sh` (korak 1 — higiena) ob vsakem CI zagonu.
