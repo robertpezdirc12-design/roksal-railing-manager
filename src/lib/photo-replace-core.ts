@@ -38,6 +38,11 @@ import {
 // nevtralen prizor pusti barvo izdelka NEDOTIKNJENO, topel/hladen prizor pa
 // zamakne osnovni ton za največ HARMONIZACIJA_MEJE.zamik po kanalu (jakost 35 %).
 // Deterministično, brez AI; meje spodaj.
+// R536 (ostaja 1.4.0): seme izrisa se zapiše V renderParams (params.seme) —
+// izrisna funkcija za dane vhode (vključno s seme) je NESPREMENJENA, stari
+// zapisi brez semena se izrišejo bajtno identično (izpeljava iz savedId na
+// odjemalcu ostane kot vzporedna združljivost). Struktura zapisa se spremeni
+// (novo neobvezno polje), raster pa ne — zato verzija motorja ostaja 1.4.0.
 export const ENGINE_VERSION = '1.4.0'
 
 /** §15: obvezni žig na vsaki POTEM sliki in zaslonu. */
@@ -300,6 +305,17 @@ export interface RenderParams {
    * veljavne in se izrišejo enako kot prej).
    */
   maska?: Maska
+  /**
+   * R536: seme izrisa (zrno za mulberry32 `prng`) — celo število 0..2³²−1.
+   * Ob nastanku variante ga generira odjemalec (crypto naključje) in se
+   * SHRANI s parametri, da ponovni izris istega zapisa reproducira ISTI izris
+   * NEODVISNO od id-ja zapisa (prej je bilo seme izpeljano iz savedId: isti
+   * renderParams pod novim id-jem = drugačen izris).
+   * Odsotno (zapisi pred R536) = izpeljava na odjemalcu iz savedId kot doslej
+   * (bajtno identičen izris starih zapisov). Strežnik ga validira
+   * (preveriRenderParams); neveljavna vrednost se tiho izpusti (fail-closed).
+   */
+  seme?: number
 }
 
 /** Maska za izris: ročna, ali pa kvad kot doslej (en vir resnice za UI in test). */
@@ -579,22 +595,27 @@ export interface StatBarv {
  * Vezane meje harmonizacije (R532) — vsaka vrednost je namerno konservativna:
  * - zamik: največji zamik sredine kanala (0..255);
  * - jakost: delež izračunanega barvnega namiga, ki se dejansko uporabi;
- * - raztegMin/raztegMax: dovoljeno razmerje kontrasta po kanalu (za teksture);
- * - minStd: odstopanje vzorca pod tem je šum → kanal se ne razteguje;
  * - minVzorcev: manj vzorčenih pikslov → statistika NI ZANESLJIVA (null).
+ *
+ * R536: člena raztegMin/raztegMax (in varnostni prag minStd) sta ODSTRANJENA
+ * kot dokazljivo mrtva koda. Dokaz: razteg `s` se je izračunal v
+ * harmonizacijskaMapa, a ga NOBEN porabnik ni prebral — edini bralec preslikave
+ * je harmonizirajHex, ki bere SAMO zamik `d` (v′ = v + d); parameter `vir`, ki
+ * bi s poganjal, pa v edinem produkcijskem klicu (izrisiOgrajo →
+ * harmonizacijskaMapa(statPrizora)) nikoli ni bil podan, torej je bil izračun
+ * vedno konstanta 1. Izris se s tem ne spremeni niti za en bajt (mrtvi izračun
+ * nikoli ni vplival na izhod). Odstranitev raztega NE odnaša odmikov StatBarv
+ * (dr/dg/db) — ostajajo poštena statistika prizora (izvožena diagnosticna
+ * vrednost oceniBarvoPrizora), le več ne segajo v mrtvo vejo.
  */
 export const HARMONIZACIJA_MEJE = {
   zamik: 22,
   jakost: 0.35,
-  raztegMin: 0.85,
-  raztegMax: 1.18,
-  minStd: 4,
   minVzorcev: 8,
 } as const
 
-/** Vezana preslikava po kanalih: v′ = (v − m_v)·s + m_v + d. */
+/** Vezana preslikava po kanalih: v′ = v + d (zamik sredine kanala). */
 export interface HarmonizacijskaMapa {
-  s: [number, number, number]
   d: [number, number, number]
 }
 
@@ -650,16 +671,17 @@ function lumSredine (s: { r: number; g: number; b: number }): number {
 }
 
 /**
- * Izračunaj VEZANO harmonizacijsko preslikavo (R532):
- * - zamik `d` po kanalu = delež (jakost) barvnega odklona PRIZORA od njegove
- *   lastne svetlosti (kromatičnost osvetlitve) — zamik nebeškega/talnega pasu,
- *   NE primerjava z barvo izdelka: nevtralen prizor pusti izdelek pri miru,
- *   topel prizor zamakne vse kanale proti toplemu, cap ±MEJE.zamik;
- * - razteg `s` po kanalu = razmerje odmikov (samo kadar sta vzorca in prizor
- *   dovolj raznolika — sicer 1); za enobarvne tone je odmik 0 → s = 1.
- * Vrne `null`, če katerikoli podatek manjka.
+ * Izračunaj VEZANO harmonizacijsko preslikavo (R532): zamik `d` po kanalu =
+ * delež (jakost) barvnega odklona PRIZORA od njegove lastne svetlosti
+ * (kromatičnost osvetlitve) — zamik nebeškega/talnega pasu, NE primerjava z
+ * barvo izdelka: nevtralen prizor pusti izdelek pri miru, topel prizor zamakne
+ * vse kanale proti toplemu, cap ±MEJE.zamik.
+ * Vrne `null`, če statistika manjka.
+ *
+ * R536: parameter `vir` in razteg `s` odstranjena (mrtev izračun — nikoli
+ * prebran; dokaz v HARMONIZACIJA_MEJE zgoraj).
  */
-export function harmonizacijskaMapa (prizor: StatBarv | null, vir?: StatBarv | null): HarmonizacijskaMapa | null {
+export function harmonizacijskaMapa (prizor: StatBarv | null): HarmonizacijskaMapa | null {
   if (!prizor) return null
   const mp = [prizor.r, prizor.g, prizor.b]
   const lp = lumSredine(prizor)
@@ -667,14 +689,7 @@ export function harmonizacijskaMapa (prizor: StatBarv | null, vir?: StatBarv | n
     const kroma = (mp[k] - lp) * HARMONIZACIJA_MEJE.jakost
     return Math.max(-HARMONIZACIJA_MEJE.zamik, Math.min(HARMONIZACIJA_MEJE.zamik, kroma))
   }) as [number, number, number]
-  const sp = [prizor.dr, prizor.dg, prizor.db]
-  const sv = vir ? [vir.dr, vir.dg, vir.db] : null
-  const s = [0, 1, 2].map((k) => {
-    if (!sv || sv[k] < HARMONIZACIJA_MEJE.minStd || sp[k] < HARMONIZACIJA_MEJE.minStd) return 1
-    const raz = sp[k] / sv[k]
-    return Math.max(HARMONIZACIJA_MEJE.raztegMin, Math.min(HARMONIZACIJA_MEJE.raztegMax, raz))
-  }) as [number, number, number]
-  return { s, d }
+  return { d }
 }
 
 /** Uporabi preslikavo na eni barvi (hex → hex). Brez preslikave → nespremenjeno. */

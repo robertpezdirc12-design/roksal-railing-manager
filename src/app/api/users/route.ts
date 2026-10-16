@@ -32,7 +32,8 @@ export async function PATCH (req: NextRequest) {
     patch.role = body.role
   }
   if (typeof body.password === 'string' && body.password.length >= 8) {
-    patch.passwordHash = hashPassword(body.password)
+    // R536: hashPassword asinhrona (scrypt v2, N=2^17)
+    patch.passwordHash = await hashPassword(body.password)
   }
   if (Object.keys(patch).length === 0) return jsonError(400, 'Ni sprememb za izvedbo.')
 

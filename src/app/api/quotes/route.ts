@@ -3,11 +3,34 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import type { Prisma } from '@prisma/client'
+import { z } from 'zod'
 import { db } from '@/lib/db'
 import { jsonError, requirePermission } from '@/lib/auth'
 import { projectIdsZaUporabnika } from '@/lib/fence-run-access'
 import { writeAudit } from '@/lib/audit'
 import { computeQuoteTotals, parseDiscountPct, round2 } from '@/lib/quote-core'
+import { parseBody } from '@/lib/validate'
+
+// R536: zod shema za ustvarjanje ponudbe — zrcali prejšnjo ročno validacijo:
+//  • stranka/projekt/paket neobvezni (null ⇒ brez; obstoj se preverja v handlerju)
+//  • lines: vsaj ena pozicija; opis neprazen po trim; qty > 0; unitPrice ≥ 0
+//    (z.coerce sprejme tudi številske nize — kot Number() prej)
+//  • discountPct: število ali niz (dopusti decimalno vejico), 0..100 — meje
+//    ostaja preverjati parseDiscountPct (en vir resnice iz quote-core)
+//  • note: neobvezna (prazno ⇒ null)
+const QuoteLineSchema = z.object({
+  description: z.string().trim().min(1, 'opis je obvezen'),
+  qty: z.coerce.number().positive('količina mora biti večja od 0'),
+  unitPrice: z.coerce.number().nonnegative('cena na enoto ni veljavna'),
+})
+const QuoteCreateSchema = z.object({
+  customerId: z.string().nullish().transform((v) => v || null),
+  projectId: z.string().nullish().transform((v) => v || null),
+  packageId: z.string().nullish().transform((v) => v || null),
+  lines: z.array(QuoteLineSchema).min(1, 'Ponudba potrebuje vsaj eno pozicijo.'),
+  discountPct: z.union([z.number(), z.string()]).nullish(),
+  note: z.string().trim().nullish().transform((v) => v || null),
+})
 
 /** Zaporedna koda PON-<leto>-<seq> — robustno glede na obstoječe kode istega leta.
  *  R535: izračun teče ZNOTRAJ transakcije (sprejme tx), s čimer je koda+zapis
@@ -66,11 +89,12 @@ export async function POST (req: NextRequest) {
   const auth = await requirePermission(req, 'quotes.create')
   if (auth instanceof NextResponse) return auth
 
-  const body = await req.json().catch(() => null)
+  const parsed = await parseBody(req, QuoteCreateSchema)
+  if (!parsed.ok) return parsed.response
+  const data = parsed.data
 
   // stranka / projekt (opcijsko, a če sta podana — morata obstajati)
-  const customerId = typeof body?.customerId === 'string' && body.customerId ? body.customerId : null
-  const projectId = typeof body?.projectId === 'string' && body.projectId ? body.projectId : null
+  const { customerId, projectId } = data
   if (customerId) {
     const customer = await db.customer.findUnique({ where: { id: customerId } })
     if (!customer) return jsonError(404, 'Stranka ne obstaja.')
@@ -80,7 +104,7 @@ export async function POST (req: NextRequest) {
     if (!project) return jsonError(404, 'Projekt ne obstaja.')
   }
   // R474 (issue #9 §5): povezava na paket — omogoča invalidacijo ob spremembi obsega
-  const packageId = typeof body?.packageId === 'string' && body.packageId ? body.packageId : null
+  const packageId = data.packageId
   if (packageId) {
     const pkg = await db.projectPackage.findUnique({ where: { id: packageId }, select: { id: true, projectId: true } })
     if (!pkg) return jsonError(404, 'Paket ne obstaja.')
@@ -89,27 +113,15 @@ export async function POST (req: NextRequest) {
     }
   }
 
-  // pozicije
-  const rawLines: unknown[] = Array.isArray(body?.lines) ? body.lines : []
-  if (rawLines.length === 0) return jsonError(400, 'Ponudba potrebuje vsaj eno pozicijo.')
+  // pozicije: zneski pozicije izračuna strežnik (round2) — enostransko zaupanje
+  const lines = data.lines.map((l) => ({ description: l.description, qty: l.qty, unitPrice: l.unitPrice, total: round2(l.qty * l.unitPrice) }))
+
   // R476 (issue #9 §5): popust na celotno ponudbo (0..100 %) — neobvezen
-  const discountPct = body?.discountPct === undefined || body?.discountPct === null
+  const discountPct = data.discountPct === undefined || data.discountPct === null
     ? 0
-    : parseDiscountPct(body.discountPct)
+    : parseDiscountPct(data.discountPct)
   if (discountPct === null) {
     return jsonError(400, 'Popust mora biti število med 0 in 100 %.')
-  }
-
-  const lines: { description: string; qty: number; unitPrice: number; total: number }[] = []
-  for (const [i, l] of rawLines.entries()) {
-    const line = l as { description?: unknown; qty?: unknown; unitPrice?: unknown } | null
-    const description = typeof line?.description === 'string' ? line.description.trim() : ''
-    const qty = Number(line?.qty)
-    const unitPrice = Number(line?.unitPrice)
-    if (!description) return jsonError(400, `Pozicija ${i + 1}: opis je obvezen.`)
-    if (!Number.isFinite(qty) || qty <= 0) return jsonError(400, `Pozicija ${i + 1}: količina mora biti večja od 0.`)
-    if (!Number.isFinite(unitPrice) || unitPrice < 0) return jsonError(400, `Pozicija ${i + 1}: cena na enoto ni veljavna.`)
-    lines.push({ description, qty, unitPrice, total: round2(qty * unitPrice) })
   }
 
   const totals = computeQuoteTotals(lines.map((l) => l.total), discountPct)
@@ -126,7 +138,7 @@ export async function POST (req: NextRequest) {
         customerId,
         projectId,
         packageId,
-        note: typeof body?.note === 'string' && body.note.trim() ? body.note.trim() : null,
+        note: data.note,
         discountPct: discountPct > 0 ? discountPct : null,
         discount: totals.discount,
         subtotal: totals.subtotal,

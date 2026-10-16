@@ -109,7 +109,14 @@ else
 fi
 
 # ── 4. Next.js dev :3000 ───────────────────────────────────────────────────
-log "zagon next dev na :3000"
+# R536: OOM utrdba — peskovnik ima 4 GB; next dev ob kompilaciji vseh 195 rut
+# (RBAC sweep r440-smoke) zrase na ~3 GB anon-rss in ga jedrni OOM ubijalec
+# ustrelti sredi testnega pasu (izmerjeno 2×: dmesg "Killed process
+# next-server"). Omejitev V8 kopice prisili pogostejši GC — nekoliko
+# počasnejši dev, a pas preživi. Turbopack (Rust) del ostane, zato je
+# meja 1536 MB (skupaj z nativnim delom ≈ 2,5 GB vrh, pod pragom).
+export NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=1536}"
+log "zagon next dev na :3000 (NODE_OPTIONS=$NODE_OPTIONS)"
 python3 "$SCRIPT_DIR/dev-detach.py" "$PROJECT_DIR" bash -c 'exec bun run dev'
 
 if ! wait_http "http://localhost:3000/api/public/health" "Next.js dev" 180; then

@@ -61,6 +61,12 @@ trap 'rm -rf "$STAGE"' EXIT
 
 log "1/6 git bundle (cel repozitorij: zgodovina, veje, tagi)…"
 mkdir -p "$STAGE/git"
+# R536: LOG_FILE je bil NIKOLI definiran — pod set -u je to USODNO točno v veji
+# shallow klona (CI checkout fetch-depth:1, ročni --depth), ki jo R466 opisuje:
+# namesto unshallow poskusa je skripta padla z "unbound variable". Diagnoza gre
+# v /tmp — IZVEN JobRun poročila (git napaka lahko vsebuje URL z žetonom),
+# nikoli na stdout/manifest.
+LOG_FILE="${LOG_FILE:-/tmp/roksal-backup-fetch.log}"
 # R466: klon je lahko shallow (CI checkout fetch-depth:1, ročni kloni --depth) —
 # bundle iz shallow zgodovine je NEUPORABEN za obnovo (clone iz njega pada z
 # "remote did not send all necessary objects", ugotovitev R464). Pred bundle-jem

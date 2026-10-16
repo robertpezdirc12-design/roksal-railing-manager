@@ -16,6 +16,10 @@
 | 6 | Žetoni portala strank | baza — `PortalLink.token` (javne povezave, časovno omejene) | javni dostop do projekta | samodejno (potek 7–30 dni / preklic) |
 | 7 | Vercel/Neon/Blob (produkcija) | Vercel dashboard (env var) + upravitelj gesel | deploy + baza + datoteke | ob incidentu 10/2026 rotirano (deploy hook) |
 | 8 | Žetoni deljenih meritev (`jm-`) | baza — `Measurement.shareToken` (javna povezava) | javni dostop do meritve | R535: nove povezave potečejo po **30 dneh** (`shareExpiresAt`); stare (brez roka) veljajo do preklica |
+| 9 | Zaklep računa (R536) | baza — `User.failedLoginCount` / `User.lockedUntil` | zavora brute-force: **5 zaporednih neuspešnih prijav → 15 min zaklepa** (423); uspešna prijava števec resetira | R536 (uvedeno) |
+| 10 | Gesla — scrypt v2 (R536) | baza — `User.passwordHash` format `scrypt:131072:8:1:{sol}:{hash}` (N=2^17 po OWASP, sol brez pik) | prijava v aplikacijo | R536: stari format `sol:hash` (N=16384) ostane berljiv — **transparentna nadgradnja ob prvi uspešni prijavi** (brez prisilnega resetiranja gesel) |
+| 11 | Stanje tempomata (R536) | baza — `RateLimitEntry` (bucket + fiksno okno 60 s + števec; žetoni samo kot sha256 odseki, IP naslovi v celoti) | deljeno omejevanje hitrosti vseh instanc (prej pomnilnik enega procesa) | R536 (uvedeno); stare vrstice (> 5 min) briše janitor `seje-gc` |
+| 12 | CSP Report-Only (R536) | glava `Content-Security-Policy-Report-Only` (next.config.ts) + poročila na `/api/csp-report` | opazovanje kršitev politike BREZ blokiranja (prvi korak k izvršilni CSP) | R536 (uvedeno) |
 
 `.env.recovery` je namensko prezrt v `.gitignore` (vzorec `.env*`); preverja
 ga `ops/secret-audit.sh` (korak 1 — higiena) ob vsakem CI zagonu.

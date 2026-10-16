@@ -305,8 +305,10 @@ pub GET "$BASE/api/public/measure?token=testtoken123"
 req "$TOKEN" POST "$BASE/api/security/rate-limit" '{"action":"list"}'
 t "rate-limit list 200" 200 "$CODE"
 t "bucket prisoten (≥1)" true "$(echo "$BODY" | jq -r '.data.total >= 1')"
-MASK=$(echo "$BODY" | jq -r '[.data.items[] | select(.bucket | startswith("measure:test"))][0].bucket // empty')
-t "ključ prikrit (measure:testto…)" 1 $(grep -Eq 'measure:testto' <<<"$MASK" && echo 1 || echo 0)
+MASK=$(echo "$BODY" | jq -r '[.data.items[] | select(.bucket | startswith("measure:"))][0].bucket // empty')
+# R536: bucket vsebuje ZGOŠČENI odsek žetona (sha256, prvih 16 znakov) — surov
+# žeton ne pride več v bazo; prikrit ključ je 'measure:1a2b3c…' (predpona + 6 znakov)
+t "ključ prikrit (measure:xxxxxx… — zgoščeni odsek)" 1 $(grep -Eq '^measure:[0-9a-f]{6}…$' <<<"$MASK" && echo 1 || echo 0)
 t "prikrit ključ ne razkrije žetona" 1 $(grep -Eq 'testtoken123' <<<"$MASK" && echo 0 || echo 1)
 req "$TOKEN" POST "$BASE/api/security/rate-limit" "{\"action\":\"clear\",\"bucket\":\"$MASK\"}"
 t "clear specifičen bucket ≥1" true "$(echo "$BODY" | jq -r '.data.cleared >= 1')"

@@ -22,6 +22,7 @@ import {
   dokazMere, preberiDokaz, smeVizualizacijo,
   type RezultatGradiva, type VizDokaz,
 } from '@/lib/viz-provenance'
+import { retryOnUnique } from '@/lib/versioning'
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -136,13 +137,19 @@ export async function PATCH (req: NextRequest, { params }: Params) {
     update.renderParams = json
     update.engineVersion = ENGINE_VERSION
 
+    // dokaz PREJŠNJE verzije (R510: nova verzija ne sme tiho izgubiti potrjene
+    // trditve o gradivu) — eno branje, stabilno znotraj te zahteve.
+    // R536: ŠTEVILKA verzije se tu NE izračunava več — dirko (dva sočasna
+    // PATCH-a bi izračunala isto številko) zapira retried fn spodaj.
     const zadnja = await db.photoVisualizationVersion.findFirst({
       where: { visualizationId: id },
       orderBy: { version: 'desc' },
-      select: { version: true, data: true },
+      select: { data: true },
     })
-    novaVerzija = (zadnja?.version ?? 0) + 1
     dokazPrejsnje = preberiDokaz(zadnja?.data)
+    // oznaka „ustvarila se bo nova verzija“ — prava številka se zapiše po retried
+    // create spodaj (odgovor in revizija nosita DEJANSKO ustvarjeno številko)
+    novaVerzija = 1
   }
 
   // ── rendered (izrisana sličica) ────────────────────────────────────────────
@@ -231,18 +238,32 @@ export async function PATCH (req: NextRequest, { params }: Params) {
   // verzija posnetek
   if (novaVerzija > 0) {
     const renderParams = update.renderParams as string
-    await db.photoVisualizationVersion.create({
-      data: {
-        visualizationId: id,
-        version: novaVerzija,
-        data: JSON.stringify({
-          renderParams: JSON.parse(renderParams) as unknown,
-          meta: { opozorila: opozorilaKodi, engineVersion: ENGINE_VERSION, dokaz },
-        }),
-        userId: user.id,
-        note: typeof body.versionNote === 'string' && body.versionNote.trim() ? body.versionNote.trim().slice(0, 200) : 'Sprememba konfiguracije',
-      },
+    // R536: dirka verzij — branje zadnje verzije in izračun naslednje sta
+    // ZNOTRAJ retried fn (versioning.ts): ob sočasnem P2002 na
+    // @@unique([visualizationId, version]) se številka izračuna znova in
+    // poskus ponovi. `dokaz`/`opozorilaKodi` sta stabilna znotraj zahteve,
+    // zato je ponovitev varna; create NI v transakciji — razveljaviti ni
+    // treba ničesar (posnetek je dodaten zapis, vrstica pa je že posodobljena).
+    const verzija = await retryOnUnique(async () => {
+      const zadnja = await db.photoVisualizationVersion.findFirst({
+        where: { visualizationId: id },
+        orderBy: { version: 'desc' },
+        select: { version: true },
+      })
+      return db.photoVisualizationVersion.create({
+        data: {
+          visualizationId: id,
+          version: (zadnja?.version ?? 0) + 1,
+          data: JSON.stringify({
+            renderParams: JSON.parse(renderParams) as unknown,
+            meta: { opozorila: opozorilaKodi, engineVersion: ENGINE_VERSION, dokaz },
+          }),
+          userId: user.id,
+          note: typeof body.versionNote === 'string' && body.versionNote.trim() ? body.versionNote.trim().slice(0, 200) : 'Sprememba konfiguracije',
+        },
+      })
     })
+    novaVerzija = verzija.version
   }
 
   // IZBRANA → ostale variante projekta nazaj na OSNUTEK (en meaning: izbrana)

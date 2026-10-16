@@ -11,6 +11,7 @@ import {
   type ProductRules, type QualityResult, type RunCalibration, type RunNode,
   type SegmentCalc, type TerrainPoint, type ValidationIssue,
 } from '@/lib/fence-run-engine'
+import { retryOnUnique } from '@/lib/versioning'
 
 // ─── Kontekst tekača ────────────────────────────────────────────────────────
 
@@ -220,34 +221,46 @@ export function analyzeContext (ctx: RunContext): RunAnalysis {
 
 // ─── Verzije (§17: posnetek ob vsaki spremembi) ────────────────────────────
 
+/**
+ * Zapiše posnetek tekača kot naslednjo verzijo (nikoli prepis, §17).
+ *
+ * R536: dirka verzij — branje zadnje verzije + create sta ZNOTRAJ retried fn
+ * (versioning.ts): dvema sočasnima klicema (npr. PATCH tekača + confirm) baza
+ * zavrne drugega s P2002 na @@unique([fenceRunId, version]), poskus se ponovi
+ * z naslednjo številko. Posnetek (run/segmenti) se ob vsakem poskusu prebere
+ * znova, da zmagoviti zapis nosi sveže stanje. Create ni v transakciji —
+ * razveljavljanje ni potrebno. Run brez obstoja se NE zapiše (kot prej).
+ */
 export async function snapshotVersion (
   runId: string,
   userId: string,
   note: string
 ): Promise<number> {
-  const last = await db.fenceRunVersion.findFirst({
-    where: { fenceRunId: runId },
-    orderBy: { version: 'desc' },
-    select: { version: true },
+  return retryOnUnique(async () => {
+    const last = await db.fenceRunVersion.findFirst({
+      where: { fenceRunId: runId },
+      orderBy: { version: 'desc' },
+      select: { version: true },
+    })
+    const version = (last?.version ?? 0) + 1
+    const run = await db.fenceRun.findUnique({ where: { id: runId } })
+    if (!run) return version
+    const segments = await db.fenceSegment.findMany({
+      where: { fenceRunId: runId },
+      orderBy: { order: 'asc' },
+      select: { order: true, fromAtCm: true, toAtCm: true, lengthCm: true, slopeDeg: true, status: true, verifiedCm: true, version: true },
+    })
+    await db.fenceRunVersion.create({
+      data: {
+        fenceRunId: runId, version, userId, note,
+        data: JSON.stringify({
+          status: run.status, productId: run.productId, variantId: run.variantId,
+          nodes: run.nodes, terrain: run.terrain, calibration: run.calibration,
+          quality: run.quality, engineVersion: ENGINE_VERSION,
+          segments,
+        }),
+      },
+    })
+    return version
   })
-  const version = (last?.version ?? 0) + 1
-  const run = await db.fenceRun.findUnique({ where: { id: runId } })
-  if (!run) return version
-  const segments = await db.fenceSegment.findMany({
-    where: { fenceRunId: runId },
-    orderBy: { order: 'asc' },
-    select: { order: true, fromAtCm: true, toAtCm: true, lengthCm: true, slopeDeg: true, status: true, verifiedCm: true, version: true },
-  })
-  await db.fenceRunVersion.create({
-    data: {
-      fenceRunId: runId, version, userId, note,
-      data: JSON.stringify({
-        status: run.status, productId: run.productId, variantId: run.variantId,
-        nodes: run.nodes, terrain: run.terrain, calibration: run.calibration,
-        quality: run.quality, engineVersion: ENGINE_VERSION,
-        segments,
-      }),
-    },
-  })
-  return version
 }

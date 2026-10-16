@@ -195,8 +195,13 @@ orodje_ok () { # orodje_ok <ime> — 0 če je orodje ZARES uporabno
 orodja_za () { # orodja_za <datoteka> → orodja, ki jih ta suite res potrebuje
   case "$1" in
     r437.sh | r438.sh | r439.sh) echo jq ;;
-    r440.sh) echo "jq imagick" ;;
-    r441.sh) echo "jq sqlite3" ;;
+    # R536: popravek ZASTARELIH deklaracij — r440 ne uporablja imagick (samo
+    # curl/jq/python3), r441 ne sqlite3 (selitev na Prisma, R464). Napačni
+    # deklaraciji sta skupini TIHO izpuščali iz pasu (»Povzetek NI dokaz
+    # celotne matrike«) — dejanska uporaba preverjena z rg (curl/jq/python3
+    # [r440] + git [r441] so osnovna orodja, ne deklarirajo se).
+    r440.sh) echo jq ;;
+    r441.sh) echo jq ;;
     r477.py) echo "jq pdftotext" ;;
     r488.py) echo pdftotext ;;
   esac

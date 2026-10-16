@@ -17,7 +17,7 @@ export async function POST (req: NextRequest) {
   if (next.length < 8) return jsonError(400, 'Novo geslo mora imeti vsaj 8 znakov.')
 
   const dbUser = await db.user.findUnique({ where: { id: user.id }, select: { passwordHash: true } })
-  if (!dbUser || !verifyPassword(current, dbUser.passwordHash)) {
+  if (!dbUser || !await verifyPassword(current, dbUser.passwordHash)) {
     return jsonError(401, 'Trenutno geslo ni pravilno.')
   }
   if (current === next) return jsonError(400, 'Novo geslo mora biti različno od trenutnega.')
@@ -25,7 +25,8 @@ export async function POST (req: NextRequest) {
   const header = req.headers.get('authorization') ?? ''
   const currentToken = header.slice(7).trim()
 
-  await db.user.update({ where: { id: user.id }, data: { passwordHash: hashPassword(next) } })
+  // R536: novi hash je vedno scrypt v2 (N=2^17) — asinhrona izdelava
+  await db.user.update({ where: { id: user.id }, data: { passwordHash: await hashPassword(next) } })
   // preklic vseh ostalih sej (varnost: geslo se je spremenilo); trenutna se
   // obvaruje v OBEH oblikah (zgoščena + zgodovinska surova — R534 #21 §4)
   const removed = await db.session.deleteMany({

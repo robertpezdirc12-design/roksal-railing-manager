@@ -9,6 +9,8 @@ import { rateLimitClear, rateLimitList, RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_MS } f
 //           žetonov (samo prikriti ključi/števci)
 //   clear → reset vseh bucketov (brez bucket) ali točnega bucketa (prikrit ključ iz liste)
 // Tempomat je skupen za javne poti (portal:, measure:) — lib/rate-limit.ts.
+// R536: stanje živi v bazi (RateLimitEntry) — list/clear sta asinhrona; oblika
+// odgovora (total/items/limits) je NESPRENJENA, da UI modula Varnost ne pade.
 // Revizija SECURITY_RATELIMIT.
 
 export async function POST (req: NextRequest) {
@@ -21,7 +23,7 @@ export async function POST (req: NextRequest) {
   const bucket = typeof body?.bucket === 'string' && body.bucket.trim() ? body.bucket.trim() : null
 
   if (action === 'list') {
-    const state = rateLimitList()
+    const state = await rateLimitList()
     return NextResponse.json({
       data: {
         ...state,
@@ -31,7 +33,7 @@ export async function POST (req: NextRequest) {
   }
 
   if (action === 'clear') {
-    const cleared = rateLimitClear(bucket ?? undefined)
+    const cleared = await rateLimitClear(bucket ?? undefined)
     await writeAudit({
       userId: user.id,
       action: 'SECURITY_RATELIMIT',

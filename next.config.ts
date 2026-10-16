@@ -40,6 +40,17 @@ const nextConfig: NextConfig = {
         { key: "X-Frame-Options", value: "SAMEORIGIN" },
         { key: "Permissions-Policy", value: "camera=(self), geolocation=(self), microphone=()" },
         { key: "Strict-Transport-Security", value: "max-age=15552000; includeSubDomains" },
+        // R536: CSP v načinu REPORT-ONLY — prvi korak (glava opazuje, NE blokira).
+        // unsafe-inline/unsafe-eval sta nujna za Next.js (hidracija/injektirani
+        // slogi; dev strežnik uporablja eval), img-src data:/blob: pokriva
+        // podatkovne URL-je fotografij in Blob viz renderjev. Poročila tečejo
+        // na /api/csp-report (tempomat + zgoščena vrstica). Po obdobju
+        // opazovanja na produkciji politiko POOSTRO (odstrani unsafe-*) in
+        // preklopi na izvršilno Content-Security-Policy glavo.
+        {
+          key: "Content-Security-Policy-Report-Only",
+          value: "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; report-uri /api/csp-report",
+        },
       ],
     },
   ],

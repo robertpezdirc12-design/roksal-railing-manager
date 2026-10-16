@@ -20,6 +20,7 @@ import {
   calibrationToParams, computeGeometry, deriveProvenance, parseCalibration,
   parseEnginePoints, provenanceForParams, type GeometryResult,
 } from '@/lib/measure-engine'
+import { retryOnUnique } from '@/lib/versioning'
 
 const DEFAULT_MAX_SPAN_CM = 120
 
@@ -140,14 +141,24 @@ export async function POST (req: NextRequest) {
       },
     })
     savedId = saved.id
-    await db.measurementVersion.create({
-      data: {
-        measurementId: saved.id,
-        version: 1,
-        userId: user.id,
-        data: JSON.stringify({ lengthCm: layout.totalLengthCm, posts: layout.posts, segments: layout.segments.length, slopeDeg: layout.slopeDeg }),
-        note: 'Postavitev (layout) iz točk',
-      },
+    // R536: dirka verzij — P2002 → ponovni poskus (versioning.ts). Številka se
+    // izračuna iz zadnje verzije ZNOTRAJ retried fn; za sveže shranjeno meritev
+    // (nov id) je to vedno 1, vzorec pa je enoten z ostalimi mesti ustvarjanja verzij.
+    await retryOnUnique(async () => {
+      const last = await db.measurementVersion.findFirst({
+        where: { measurementId: saved.id },
+        orderBy: { version: 'desc' },
+        select: { version: true },
+      })
+      return db.measurementVersion.create({
+        data: {
+          measurementId: saved.id,
+          version: (last?.version ?? 0) + 1,
+          userId: user.id,
+          data: JSON.stringify({ lengthCm: layout.totalLengthCm, posts: layout.posts, segments: layout.segments.length, slopeDeg: layout.slopeDeg }),
+          note: 'Postavitev (layout) iz točk',
+        },
+      })
     })
     await writeAudit({
       userId: user.id,

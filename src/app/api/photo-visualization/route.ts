@@ -16,6 +16,7 @@ import {
   preveriRenderParams, preveriSourceFoto, preveriTrdnjenoGradivo, projektZaUporabnika,
 } from '@/lib/photo-replace-engine'
 import { dokazMere } from '@/lib/viz-provenance'
+import { retryOnUnique } from '@/lib/versioning'
 
 const LIST_SELECT = {
   id: true, projectId: true, variantLabel: true, status: true,
@@ -169,22 +170,33 @@ export async function POST (req: NextRequest) {
   })
 
   // verzija v1 — posnetek nastanka (§12: brez tihega prepisovanja)
-  await db.photoVisualizationVersion.create({
-    data: {
-      visualizationId: viz.id,
-      version: 1,
-      data: JSON.stringify({
-        renderParams: params.params,
-        meta: {
-          opozorila,
-          engineVersion: ENGINE_VERSION,
-          // R510: dokaz, NA KATERI MERI in KATEREM IZVIRNIKU gradiva slika stoji.
-          dokaz,
-        },
-      }),
-      userId: user.id,
-      note: 'Ustvarjena varianta',
-    },
+  // R536: dirka verzij — P2002 na @@unique([visualizationId, version]) → ponovni
+  // poskus (versioning.ts). Številka se izračuna iz zadnje verzije ZNOTRAJ
+  // retried fn; za sveže ustvarjeno vizualizacijo (nov id) je to vedno 1,
+  // vzorec read-then-create pa je enoten z ostalimi verigami verzij.
+  const v1 = await retryOnUnique(async () => {
+    const zadnja = await db.photoVisualizationVersion.findFirst({
+      where: { visualizationId: viz.id },
+      orderBy: { version: 'desc' },
+      select: { version: true },
+    })
+    return db.photoVisualizationVersion.create({
+      data: {
+        visualizationId: viz.id,
+        version: (zadnja?.version ?? 0) + 1,
+        data: JSON.stringify({
+          renderParams: params.params,
+          meta: {
+            opozorila,
+            engineVersion: ENGINE_VERSION,
+            // R510: dokaz, NA KATERI MERI in KATEREM IZVIRNIKU gradiva slika stoji.
+            dokaz,
+          },
+        }),
+        userId: user.id,
+        note: 'Ustvarjena varianta',
+      },
+    })
   })
 
   await writeAudit({
@@ -207,7 +219,7 @@ export async function POST (req: NextRequest) {
   return NextResponse.json({
     data: {
       id: viz.id, variantLabel: oznaka, status: viz.status,
-      version: 1, engineVersion: ENGINE_VERSION, opozorila, dokaz,
+      version: v1.version, engineVersion: ENGINE_VERSION, opozorila, dokaz,
     },
   }, { status: 201 })
 }

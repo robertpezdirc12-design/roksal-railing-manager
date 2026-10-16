@@ -23,7 +23,7 @@ export async function POST (req: NextRequest, { params }: Params) {
   const { user } = auth
   const { id } = await params
 
-  if (rateLimited(`webhook-test:${id}`, TEST_RATE_MAX)) {
+  if (await rateLimited(`webhook-test:${id}`, TEST_RATE_MAX)) {
     return jsonError(429, 'Preveč testnih pingov.', `Tempomat: ${TEST_RATE_MAX}/min na naročnino.`)
   }
 

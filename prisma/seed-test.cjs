@@ -35,10 +35,14 @@ if (!process.env.DATABASE_URL) {
 const { PrismaClient } = require('@prisma/client')
 const db = new PrismaClient()
 
+// R536: usklajeno z v2 formatom iz src/lib/auth.ts — `scrypt:N:r:p:{salt}:{hash}`
+// (N=2^17 po OWASP). scryptSync z maxmem 160 MiB je za SEJANJE v redu (enosnoven
+// proces, ne strežniški event loop); isto zgoščevanje preverja verifyPassword.
+const SCRYPT_N = 131072, SCRYPT_R = 8, SCRYPT_P = 1
 function hashPassword (password) {
   const salt = crypto.randomBytes(16).toString('hex')
-  const hash = crypto.scryptSync(password, salt, 64).toString('hex')
-  return `${salt}:${hash}`
+  const hash = crypto.scryptSync(password, salt, 64, { N: SCRYPT_N, r: SCRYPT_R, p: SCRYPT_P, maxmem: 160 * 1024 * 1024 }).toString('hex')
+  return `scrypt:${SCRYPT_N}:${SCRYPT_R}:${SCRYPT_P}:${salt}:${hash}`
 }
 
 // testna slika → dataURL (enak format kot foto modul: params.photo)

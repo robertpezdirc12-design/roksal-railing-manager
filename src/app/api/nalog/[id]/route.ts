@@ -1,10 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { db } from '@/lib/db'
 import { jsonError, managesAssignments, readsAllData, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
 import { emitEvent, fmtTermin } from '@/lib/notify'
+import { parseBody } from '@/lib/validate'
 
 type Params = { params: Promise<{ id: string }> }
+
+// R536: zod shema za urejanje naloga — delni PATCH (status gre IZKLJUČNO prek
+// /transition, termin prek /termin): prazen naslov se tiho preskoči (kot prej),
+// instructions/summary sprejemata null (počisti), projectId/assigneeId/crewId
+// neobvezni (null ⇒ odvzem vezave) — poslovna vrata ostajajo v handlerju.
+const WorkOrderPatchSchema = z.object({
+  title: z.string().trim().optional().transform((v) => v || undefined),
+  instructions: z.string().trim().nullish().transform((v) => (v === undefined ? undefined : v || null)),
+  summary: z.string().trim().nullish().transform((v) => (v === undefined ? undefined : v || null)),
+  projectId: z.string().nullish().transform((v) => v || null),
+  assigneeId: z.string().nullable().optional(),
+  crewId: z.string().nullable().optional(),
+})
 
 export async function GET (req: NextRequest, { params }: Params) {
   const auth = await requirePermission(req, 'nalog.read')
@@ -41,9 +56,9 @@ export async function PATCH (req: NextRequest, { params }: Params) {
   const { user } = auth
   const { id } = await params
 
-  const body = await req.json().catch(() => null) as {
-    title?: unknown; instructions?: unknown; projectId?: unknown; summary?: unknown; assigneeId?: unknown; crewId?: unknown
-  } | null
+  const parsed = await parseBody(req, WorkOrderPatchSchema)
+  if (!parsed.ok) return parsed.response
+  const data = parsed.data
 
   const order = await db.workOrder.findUnique({
     where: { id },
@@ -56,26 +71,22 @@ export async function PATCH (req: NextRequest, { params }: Params) {
   }
 
   const patch: Record<string, unknown> = {}
-  if (typeof body?.title === 'string' && body.title.trim()) patch.title = body.title.trim()
-  if (body?.instructions === null || typeof body?.instructions === 'string') {
-    patch.instructions = typeof body.instructions === 'string' && body.instructions.trim() ? body.instructions.trim() : null
-  }
-  if (body?.summary === null || typeof body?.summary === 'string') {
-    patch.summary = typeof body.summary === 'string' && body.summary.trim() ? body.summary.trim() : null
-  }
-  if (typeof body?.projectId === 'string' && body.projectId) {
-    const project = await db.project.findUnique({ where: { id: body.projectId }, select: { id: true } })
+  if (data.title !== undefined) patch.title = data.title
+  if (data.instructions !== undefined) patch.instructions = data.instructions
+  if (data.summary !== undefined) patch.summary = data.summary
+  if (data.projectId) {
+    const project = await db.project.findUnique({ where: { id: data.projectId }, select: { id: true } })
     if (!project) return jsonError(400, 'Projekt ne obstaja.')
     patch.projectId = project.id
   }
 
   // dodelitev (assigneeId): samo ADMIN/VODJA — enaka vrata kot POST (issue #1)
   let assigneeChanged = false
-  if (body?.assigneeId !== undefined) {
+  if (data.assigneeId !== undefined) {
     if (!managesAssignments(user)) {
       return jsonError(403, 'Dodelitve upravlja samo pisarna.', 'Spreminjanje assigneeId je dovoljeno roli ADMIN in VODJA.')
     }
-    const newId = typeof body.assigneeId === 'string' && body.assigneeId ? body.assigneeId : null
+    const newId = data.assigneeId || null
     if (newId) {
       const assignee = await db.user.findUnique({ where: { id: newId }, select: { id: true, active: true, name: true } })
       if (!assignee || !assignee.active) return jsonError(400, 'Izbrani monter ne obstaja ali ni aktiven.')
@@ -91,11 +102,11 @@ export async function PATCH (req: NextRequest, { params }: Params) {
   // VRATA: managesAssignments (ADMIN/VODJA) — enako kot assigneeId; monter sicer ima
   // nalog.write za svoj nalog, a dodeljevanje ekip/podizvajalcev je delo pisarne (fail-closed).
   let crewChanged = false
-  if (body?.crewId !== undefined) {
+  if (data.crewId !== undefined) {
     if (!managesAssignments(user)) {
       return jsonError(403, 'Dodelitve ekip upravlja samo pisarna.', 'Spreminjanje crewId je dovoljeno roli ADMIN in VODJA.')
     }
-    const newCrewId = typeof body.crewId === 'string' && body.crewId ? body.crewId : null
+    const newCrewId = data.crewId || null
     if (newCrewId) {
       const crew = await db.crew.findUnique({ where: { id: newCrewId }, select: { id: true, active: true, name: true } })
       if (!crew || !crew.active) return jsonError(400, 'Izbrana ekipa ne obstaja ali ni aktivna.')

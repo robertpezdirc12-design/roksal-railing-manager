@@ -2,11 +2,22 @@
 // POST { quoteId, projectId?, dueDate? } — prekopira zneske ponudbe, koda RA-<leto>-<seq>.
 
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { db } from '@/lib/db'
 import { jsonError, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
+import { parseBody } from '@/lib/validate'
 
 const ISSUABLE_QUOTE_STATUSES = ['SPREJET', 'ZAKLENJEN']
+
+// R536: zod shema za izdajo računa — quoteId obvezen; projectId/dueDate/note
+// neobvezni (privzeti: projekt ponudbe, rok +30 dni, brez opombe).
+const InvoiceIssueSchema = z.object({
+  quoteId: z.string().min(1, 'quoteId je obvezen.'),
+  projectId: z.string().nullish().transform((v) => v || null),
+  dueDate: z.string().nullish().transform((v) => v || null),
+  note: z.string().trim().nullish().transform((v) => v || null),
+})
 
 /** Zaporedna koda RA-<leto>-<seq> — robustno glede na obstoječe kode istega leta. */
 async function nextInvoiceCode (): Promise<string> {
@@ -56,9 +67,10 @@ export async function POST (req: NextRequest) {
   const auth = await requirePermission(req, 'invoices.issue')
   if (auth instanceof NextResponse) return auth
 
-  const body = await req.json().catch(() => null)
-  const quoteId = typeof body?.quoteId === 'string' ? body.quoteId : ''
-  if (!quoteId) return jsonError(400, 'quoteId je obvezen.', 'Račun se izda iz sprejete ponudbe.')
+  const parsed = await parseBody(req, InvoiceIssueSchema)
+  if (!parsed.ok) return parsed.response
+  const data = parsed.data
+  const quoteId = data.quoteId
 
   const quote = await db.quote.findUnique({ where: { id: quoteId } })
   if (!quote) return jsonError(404, 'Ponudba ne obstaja.')
@@ -66,17 +78,17 @@ export async function POST (req: NextRequest) {
     return jsonError(400, 'Račun je mogoče izdati samo iz sprejete ali zaklenjene ponudbe.', `Status ponudbe ${quote.code}: ${quote.status}.`)
   }
 
-  const projectId = typeof body?.projectId === 'string' && body.projectId ? body.projectId : quote.projectId
+  const projectId = data.projectId ?? quote.projectId
   if (projectId) {
     const project = await db.project.findUnique({ where: { id: projectId } })
     if (!project) return jsonError(404, 'Projekt ne obstaja.')
   }
 
   let dueDate: Date | null = null
-  if (typeof body?.dueDate === 'string' && body.dueDate) {
-    const parsed = new Date(body.dueDate)
-    if (Number.isNaN(parsed.getTime())) return jsonError(400, 'Rok plačila ni veljaven datum.')
-    dueDate = parsed
+  if (data.dueDate) {
+    const parsedDate = new Date(data.dueDate)
+    if (Number.isNaN(parsedDate.getTime())) return jsonError(400, 'Rok plačila ni veljaven datum.')
+    dueDate = parsedDate
   } else {
     dueDate = new Date(Date.now() + 30 * 86400000) // privzeto 30 dni
   }
@@ -97,7 +109,7 @@ export async function POST (req: NextRequest) {
       total: quote.total,
       paid: 0,
       dueDate,
-      note: typeof body?.note === 'string' && body.note.trim() ? body.note.trim() : null,
+      note: data.note,
     },
     include: {
       project: { select: { code: true, title: true, customer: { select: { name: true } } } },

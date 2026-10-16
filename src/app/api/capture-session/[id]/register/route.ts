@@ -11,6 +11,7 @@ import { writeAudit } from '@/lib/audit'
 import { parseRegPairs, register3Points } from '@/lib/reality-r2p-engine'
 import { captureSessionZaUporabnika } from '@/lib/capture-qa-access'
 import { geoContext } from '@/lib/reality-r2p-service'
+import { retryOnUnique } from '@/lib/versioning'
 
 export async function POST (req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requirePermission(req, 'measurements.write')
@@ -34,23 +35,30 @@ export async function POST (req: NextRequest, { params }: { params: Promise<{ id
 
   const result = register3Points(pairs)
 
-  const last = await db.registration.findFirst({
-    where: { sessionId: id },
-    orderBy: { version: 'desc' },
-    select: { version: true },
-  })
-  const version = (last?.version ?? 0) + 1
-
-  const reg = await db.registration.create({
-    data: {
-      sessionId: id, version,
-      points: JSON.stringify(pairs),
-      transform: JSON.stringify(result.transform),
-      rmsCm: Number.isFinite(result.rmsCm) ? result.rmsCm : 999999,
-      quality: result.quality,
-      userId: user.id,
-      note: typeof body.note === 'string' && body.note.trim() ? body.note.trim().slice(0, 300) : null,
-    },
+  // R536: dirka verzij — branje zadnje registracije + izračun naslednje verzije
+  // sta ZNOTRAJ retried fn (versioning.ts): ob sočasnem P2002 na
+  // @@unique([sessionId, version]) se številka izračuna znova in poskus ponovi.
+  // Verzioniranje ostane „nova vrstica, nikoli prepis“ (§3) — revizija in
+  // odgovor nosita ZMAGOVITO (končno) številko verzije.
+  const { reg, version } = await retryOnUnique(async () => {
+    const last = await db.registration.findFirst({
+      where: { sessionId: id },
+      orderBy: { version: 'desc' },
+      select: { version: true },
+    })
+    const version = (last?.version ?? 0) + 1
+    const reg = await db.registration.create({
+      data: {
+        sessionId: id, version,
+        points: JSON.stringify(pairs),
+        transform: JSON.stringify(result.transform),
+        rmsCm: Number.isFinite(result.rmsCm) ? result.rmsCm : 999999,
+        quality: result.quality,
+        userId: user.id,
+        note: typeof body.note === 'string' && body.note.trim() ? body.note.trim().slice(0, 300) : null,
+      },
+    })
+    return { reg, version }
   })
 
   await writeAudit({

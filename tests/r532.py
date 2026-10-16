@@ -14,8 +14,11 @@ primerjave z barvo izdelka — nevtralen prizor pusti barvo NEDOTIKNJENO.
 
 Kaj preverja ta suite (41. skupina):
   A) čiste funkcije: oceniBarvoPrizora (tople/nevtralno/prazno), vezana
-     harmonizacijskaMapa (smer, meje ±zamik, razteg [0.85, 1.18], varnostne
-     meje std, determinizem), harmonizirajHex (identiteta na nevtralnem);
+     harmonizacijskaMapa (smer, meje ±zamik, determinizem), harmonizirajHex
+     (identiteta na nevtralnem);
+     [R536: preverjanja raztega (s, vir, raztegMin/Max/minStd) odstranjena —
+     mrtva veja jedra odstranjena v R536 (vir nikoli podan produkcijsko, s je
+     bila vedno [1,1,1]; dokaz v worklogu R536-c)]
   B) žičenje v izrisiOgrajo (@napi-rs/canvas): topla fotografija → ogelata
      fasada toplejša kot na nevtralni (kanal r gor, b dol), determinizem
      (isti seme → isti izris, bajtno), opcija harmonizacija=false na
@@ -143,14 +146,9 @@ const mapa2x = lib.harmonizacijskaMapa(statTopli)
 const rdeca = scena(255, 0, 0)
 const mapaEkstrem = lib.harmonizacijskaMapa(lib.oceniBarvoPrizora(rdeca, W, H, quad))
 
-// razteg: vir z velikim odmikom proti prizoru z majhnim → s cap 0.85; obratno 1.18
-const virStd100 = { r: 128, g: 128, b: 128, dr: 100, dg: 100, db: 100 }
-const virStd3 = { r: 128, g: 128, b: 128, dr: 3, dg: 3, db: 3 }
-const prizorStd50 = { r: 128, g: 128, b: 128, dr: 50, dg: 50, db: 50 }
-const prizorStd200 = { r: 128, g: 128, b: 128, dr: 200, dg: 200, db: 200 }
-const sStisnjen = lib.harmonizacijskaMapa(prizorStd50, virStd100).s
-const sRaztegnjen = lib.harmonizacijskaMapa(prizorStd200, virStd100).s
-const sVarnost = lib.harmonizacijskaMapa(prizorStd200, virStd3).s
+// [R536: blok raztega (virStd*/prizorStd*/sStisnjen/sRaztegnjen/sVarnost)
+// odstranjen — harmonizacijskaMapa nima več parametra vir niti polja s
+// (mrtva veja: edini produkcijski klic ni podajal vir → s vedno [1,1,1])]
 
 const hexOsnova = '#8a7a66'
 const hexNevtr = lib.harmonizirajHex(hexOsnova, mapaNevtr)
@@ -165,7 +163,6 @@ console.log(JSON.stringify({
   mapaTopli, mapaNevtr, mapaNull: mapaNull === null,
   determinizem: JSON.stringify(mapaTopli) === JSON.stringify(mapa2x),
   ekstremCap: mapaEkstrem && Math.abs(mapaEkstrem.d[0]) <= 22 && Math.abs(mapaEkstrem.d[2]) <= 22,
-  sStisnjen, sRaztegnjen, sVarnost,
   hexNevtr, hexTopli, hexNull,
 }))
 ''')
@@ -184,12 +181,7 @@ chk(len(dT) == 3 and dT[0] > 5 and dT[2] < -5,
     f'topel prizor → zamik: r gor, b dol (dejansko {dT})')
 chk(all(-22.001 <= x <= 22.001 for x in dT), f'vezana meja ±22 po kanalu (dejansko {dT})')
 chk(A.get('ekstremCap') is True, 'ekstremen prizor (čista rdeča) → zamik cap 22')
-sSt = A.get('sStisnjen') or []
-sRa = A.get('sRaztegnjen') or []
-sVa = A.get('sVarnost') or []
-chk(len(sSt) == 3 and all(abs(x - 0.85) < 1e-9 for x in sSt), f'razteg stisnjen na mejo 0.85 (dejansko {sSt})')
-chk(len(sRa) == 3 and all(abs(x - 1.18) < 1e-9 for x in sRa), f'razteg raztegnjen na mejo 1.18 (dejansko {sRa})')
-chk(len(sVa) == 3 and all(x == 1 for x in sVa), f'vir z odmikom < minStd → razteg 1 (varnost, dejansko {sVa})')
+# [R536: trije chk-ji raztega odstranjeni skupaj z mrtvo vejo jedra]
 chk(A.get('determinizem') is True, 'preslikava deterministična (isti vhod → isti izhod)')
 chk(A.get('hexNevtr') == '#8a7a66', f'nevtralen prizok → hex NESPREMEMENJEN (dejansko {A.get("hexNevtr")})')
 chk(A.get('hexNull') == '#8a7a66', f'brez preslikave → hex nespremenjen (dejansko {A.get("hexNull")})')

@@ -125,6 +125,10 @@ interface SlotState {
   vijaki: boolean
   note: string
   savedId: string | null
+  /** R536: seme izrisa (uint32) — generirano ob nastanku, shranjeno V
+   *  renderParams; null = zapis BREZ semena (odprt stari zapis) → izris izpelje
+   *  iz savedId (bajtno identično prejšnjemu vedenju). */
+  seme: number | null
   /** R510: meritev tipa FOTO, iz katere izvira trenutna fotografija (null = naložena datoteka). */
   photoSourceId: string | null
 }
@@ -135,7 +139,7 @@ const prazenSlot = (): SlotState => ({
   productId: '', variantId: '', tip: 'POKOCNA', pritrditev: 'TALNA',
   lengthCmS: '400', heightCmS: '110', postsS: '5', handrail: true,
   lamelaMmS: '70', rezaMmS: '20', deskaMmS: '120', vijaki: true,
-  note: '', savedId: null, photoSourceId: null,
+  note: '', savedId: null, seme: novoSeme(), photoSourceId: null,
 })
 
 // ─── Pomočniki ───────────────────────────────────────────────────────────────
@@ -213,7 +217,8 @@ function fotoIzMeritve (params: string | null): string | null {
   }
 }
 
-/** Deterministično seme iz id-ja (zrno izrisa). */
+/** Deterministično seme iz id-ja (FNV-1a) — zrno izrisa za ZAPISE BREZ
+ *  zapisanega semena (pred R536) in za ne-shranjene zavihke. */
 function semeIzId (id: string): number {
   let h = 2166136261
   for (let i = 0; i < id.length; i++) {
@@ -221,6 +226,35 @@ function semeIzId (id: string): number {
     h = Math.imul(h, 16777619)
   }
   return h >>> 0
+}
+
+/** R536: sveže seme variante (uint32, crypto naključje; fallback Math.random).
+ *  Generira se OB NASTANKU variante (prazen slot) in se nato SHRANI v
+ *  renderParams — izris tako ostane reproducibilen tudi pod drugim id-jem
+ *  (prej: seme iz savedId → enaki parametri pod novim id-jem = drugačen izris). */
+function novoSeme (): number {
+  try {
+    const b = new Uint32Array(1)
+    crypto.getRandomValues(b)
+    return b[0]
+  } catch {
+    return Math.floor(Math.random() * 4_294_967_296) >>> 0
+  }
+}
+
+/**
+ * R536: seme za trenutni izris — veriga (vzporedna združljivost):
+ *  1. params.seme — zapisano V renderParams (zapisi od R536): isti zapis
+ *     reproducira isti izris NEODVISNO od id-ja;
+ *  2. semeIzId(savedId) — zapisi PRED R536 (brez semena): izpeljava iz
+ *     savedId, BAJTNO IDENTIČEN izris kot doslej;
+ *  3. semeIzId(`slot-<črka>`) — ne-shranjen zavihek, kot doslej.
+ */
+function semeIzrisa (p: RenderParams, savedId: string | null, active: VariantLabel): number {
+  if (typeof p.seme === 'number' && Number.isInteger(p.seme) && p.seme >= 0 && p.seme <= 4_294_967_295) {
+    return p.seme
+  }
+  return semeIzId(savedId ?? `slot-${active}`)
 }
 
 /** Katero vrsto oblike maska-trenutno rišemo (3. korak). */
@@ -407,8 +441,12 @@ export default function FotoReplaceModule () {
       config: cfg,
       // prazna maska se NE shrani kot ključ → stari zapis ostane bit-enak (§: nazaj združljivo)
       ...(m && !jePraznaMaska(m) ? { maska: m } : {}),
+      // R536: seme se SHRANI v parametre — ponovni izris istega zapisa je
+      // identičen neodvisno od id-ja. null (odprt stari zapis) se NE zapiše:
+      // ključ odsoten = izris pade na izpeljavo iz savedId kot doslej.
+      ...(slot.seme !== null ? { seme: slot.seme } : {}),
     }
-  }, [slot.quad, slot.refTip, slot.refOpis, refCm, cfg, maskaStanje])
+  }, [slot.quad, slot.refTip, slot.refOpis, refCm, cfg, maskaStanje, slot.seme])
 
   // R517: WPC variante nimajo RAL — barva gre čez odtenek iz URADNE lestvice
   // (ODTENKI_HEX), ne čez temno-sivi RAL fallback, ki je prej pobarval vse
@@ -853,7 +891,7 @@ export default function FotoReplaceModule () {
       canvas.width = W; canvas.height = H
       const ctx = canvas.getContext('2d')
       if (!ctx) return
-      zapisiOpozorila(drawPotem(ctx, W, H, params, { ghostAlpha: ghost ? ghostOpacity / 100 : 1, seme: semeIzId(slot.savedId ?? `slot-${active}`) }))
+      zapisiOpozorila(drawPotem(ctx, W, H, params, { ghostAlpha: ghost ? ghostOpacity / 100 : 1, seme: semeIzrisa(params, slot.savedId, active) }))
     }, 120)
     return () => clearTimeout(t)
   }, [step, params, photoImg, photoW, photoH, drawPotem, zapisiOpozorila, ghost, ghostOpacity, slot.savedId, active])
@@ -869,7 +907,7 @@ export default function FotoReplaceModule () {
       canvas.width = W; canvas.height = H
       const ctx = canvas.getContext('2d')
       if (!ctx) return
-      zapisiOpozorila(drawPotem(ctx, W, H, params, { meja: comparePos / 100, ghostAlpha: ghost ? ghostOpacity / 100 : 1, seme: semeIzId(slot.savedId ?? `slot-${active}`) }))
+      zapisiOpozorila(drawPotem(ctx, W, H, params, { meja: comparePos / 100, ghostAlpha: ghost ? ghostOpacity / 100 : 1, seme: semeIzrisa(params, slot.savedId, active) }))
     }, 60)
     return () => clearTimeout(t)
   }, [step, params, photoImg, photoW, photoH, drawPotem, zapisiOpozorila, comparePos, ghost, ghostOpacity, slot.savedId, active])
@@ -954,7 +992,7 @@ export default function FotoReplaceModule () {
     c.width = W; c.height = H
     const ctx = c.getContext('2d')
     if (!ctx) throw new Error('Canvas ni na voljo.')
-    drawPotem(ctx, W, H, params, { ...(meja !== undefined ? { meja } : {}), zig, ghostAlpha: 1, seme: semeIzId(slot.savedId ?? `slot-${active}`) })
+    drawPotem(ctx, W, H, params, { ...(meja !== undefined ? { meja } : {}), zig, ghostAlpha: 1, seme: semeIzrisa(params, slot.savedId, active) })
     return c.toDataURL('image/jpeg', 0.85)
   }
 
@@ -971,7 +1009,7 @@ export default function FotoReplaceModule () {
       if (!ctx) throw new Error('Canvas ni na voljo.')
       drawPotem(ctx, W, H, params, {
         ...(format === 'primerjava' ? { meja: comparePos / 100 } : {}),
-        zig: true, ghostAlpha: 1, seme: semeIzId(slot.savedId ?? `slot-${active}`),
+        zig: true, ghostAlpha: 1, seme: semeIzrisa(params, slot.savedId, active),
       })
       const blob = await new Promise<Blob | null>((res) => c.toBlob(res, 'image/png'))
       if (!blob) throw new Error('Izdelava PNG ni uspela.')
@@ -1095,6 +1133,7 @@ export default function FotoReplaceModule () {
       let rp: {
         quad?: Tocka[]; reference?: { tip?: string; cm?: number; opis?: string }; config?: Record<string, unknown>
         maska?: { ograja?: Tocka[][]; izpusti?: Tocka[][]; prednji?: Tocka[][] }
+        seme?: unknown
       } = {}
       try { rp = JSON.parse(d.renderParams) as typeof rp } catch { /* prazno */ }
       const oblike = (v: unknown): Oblika[] =>
@@ -1131,6 +1170,12 @@ export default function FotoReplaceModule () {
         vijaki: rp.config?.vijaki !== false,
         note: d.note ?? '',
         savedId: d.id,
+        // R536: seme PREBEREMO iz shranjenih parametrov — ponovni izris odprtega
+        // zapisa je identičen izrisu ob shranjevanju. Stari zapisi (brez semena)
+        // ostanejo brez njega: izris izpelje iz savedId (bajtno identično) in
+        // tudi naslednja shranitev NOVE verzije semena NE doda — odprtje samo
+        // po sebi ne naredi star zapis novim.
+        seme: typeof rp.seme === 'number' && Number.isInteger(rp.seme) && rp.seme >= 0 && rp.seme <= 4_294_967_295 ? rp.seme : null,
       }
       setSlots((prev) => ({ ...prev, [label]: nov }))
       setActive(label)

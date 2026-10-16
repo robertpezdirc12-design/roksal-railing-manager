@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { rateLimited } from '@/lib/rate-limit'
+import { rateLimited, tokenBucketKey } from '@/lib/rate-limit'
 import { MEASUREMENT_STATUS_LABELS, type MeasurementStatus } from '@/lib/measure-engine'
 
 // /api/public/measure — R437 (issue #2): JAVNA deljena meritev (route-map izvirnika: /m/[token])
@@ -15,7 +15,7 @@ export async function GET (req: NextRequest) {
   if (!token || token.length < 8 || token.length > 80) {
     return NextResponse.json({ error: 'Neveljavna povezava.' }, { status: 404 })
   }
-  if (rateLimited(`measure:${token}`)) {
+  if (await rateLimited(tokenBucketKey('measure', token))) {
     return NextResponse.json({ error: 'Preveč zahtev — poskusite kasneje.' }, { status: 429 })
   }
 

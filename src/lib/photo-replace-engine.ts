@@ -66,8 +66,20 @@ export function preveriRenderParams (v: unknown): { napaka: string } | { params:
   const mk = preveriMasko(o.maska)
   if (mk.napake.length > 0) return { napaka: mk.napake[0].sporocilo }
   const maska = jePraznaMaska(mk.maska) ? null : mk.maska
+  // R536: seme izrisa (uint32) — NEOBVEZNO, pride V renderParams, da je izris
+  // reproducibilen neodvisno od id-ja zapisa. Neveljavna vrednost se TIHO
+  // izpusti (fail-closed): zapis se obnaša kot prej (odjemalec izpelje seme iz
+  // savedId) in strežnik ne zavrača shranjevanja zaradi pomožnega polja.
+  const sem = o.seme
+  const seme = typeof sem === 'number' && Number.isInteger(sem) && sem >= 0 && sem <= 4_294_967_295 ? sem : null
   return {
-    params: maska ? { quad: q.quad, reference, config: c.config, maska } : { quad: q.quad, reference, config: c.config },
+    params: {
+      quad: q.quad,
+      reference,
+      config: c.config,
+      ...(maska ? { maska } : {}),
+      ...(seme !== null ? { seme } : {}),
+    },
     opozorila: [],
   }
 }

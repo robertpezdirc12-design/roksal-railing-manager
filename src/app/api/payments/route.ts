@@ -4,14 +4,26 @@
 //      → posodobi invoice.paid + status (PLACAN / DELNO_PLACAN), revizija PAYMENT_RECORD.
 
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { db } from '@/lib/db'
 import { jsonError, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
 import { emitEvent } from '@/lib/notify'
+import { parseBody } from '@/lib/validate'
 
 const METHODS = ['NAKAZNICA', 'GOTOVINA', 'KARTICA']
 
 const round2 = (n: number) => Math.round(n * 100) / 100
+
+// R536: zod shema za zapis plačila — invoiceId obvezen, znesek > 0 (z.coerce
+// sprejme tudi številske nize — kot Number() prej); method neobvezen s privzetim
+// NAKAZNICA (prazen niz ⇒ privzet, kot prej), dovoljene vrednosti preveri handler.
+const PaymentCreateSchema = z.object({
+  invoiceId: z.string().min(1, 'invoiceId je obvezen.'),
+  amount: z.coerce.number({ error: 'Znesek plačila mora biti večji od 0.' }).positive('Znesek plačila mora biti večji od 0.'),
+  method: z.string().nullish().transform((v) => v || 'NAKAZNICA'),
+  reference: z.string().trim().nullish().transform((v) => v || null),
+})
 
 export async function GET (req: NextRequest) {
   const auth = await requirePermission(req, 'payments.read')
@@ -41,13 +53,12 @@ export async function POST (req: NextRequest) {
   const auth = await requirePermission(req, 'payments.manage')
   if (auth instanceof NextResponse) return auth
 
-  const body = await req.json().catch(() => null)
-  const invoiceId = typeof body?.invoiceId === 'string' ? body.invoiceId : ''
-  const amount = Number(body?.amount)
-  const method = typeof body?.method === 'string' && body.method ? body.method : 'NAKAZNICA'
+  const parsed = await parseBody(req, PaymentCreateSchema)
+  if (!parsed.ok) return parsed.response
+  const data = parsed.data
+  const { invoiceId } = data
+  const method = data.method
 
-  if (!invoiceId) return jsonError(400, 'invoiceId je obvezen.')
-  if (!Number.isFinite(amount) || amount <= 0) return jsonError(400, 'Znesek plačila mora biti večji od 0.')
   if (!METHODS.includes(method)) return jsonError(400, 'Neveljaven način plačila.', `Dovoljeni: ${METHODS.join(', ')}.`)
 
   const invoice = await db.invoice.findUnique({ where: { id: invoiceId }, include: { payments: true } })
@@ -57,9 +68,9 @@ export async function POST (req: NextRequest) {
   const payment = await db.payment.create({
     data: {
       invoiceId,
-      amount: round2(amount),
+      amount: round2(data.amount),
       method,
-      reference: typeof body?.reference === 'string' && body.reference.trim() ? body.reference.trim() : null,
+      reference: data.reference,
     },
   })
 

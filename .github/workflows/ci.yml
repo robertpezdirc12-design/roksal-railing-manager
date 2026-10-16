@@ -226,6 +226,10 @@ jobs:
           # R534 (issue #21): zaščita produkcijskih podatkov — varovalo semena,
           # atomarna namestitev, query-dnevnik, zgoščeni žetoni sej.
           - grupa: r534
+          # R536: utrditev avtentikacije — porazdeljeni tempomat (baza),
+          # zaklepanje računa, scrypt N=2^17 + transparentna nadgradnja.
+          # Nova skupina MORA biti tudi v tests/ci-matrix.sh.
+          - grupa: r536
     services:
       postgres:
         image: postgres:16

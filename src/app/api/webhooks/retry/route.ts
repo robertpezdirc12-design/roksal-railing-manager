@@ -17,7 +17,7 @@ export async function POST (req: NextRequest) {
   if (auth instanceof NextResponse) return auth
   const { user } = auth
 
-  if (rateLimited(`webhook-retry:${user.id}`, RETRY_RATE_MAX)) {
+  if (await rateLimited(`webhook-retry:${user.id}`, RETRY_RATE_MAX)) {
     return jsonError(429, 'Preveč klicev ponovitve.', `Tempomat: ${RETRY_RATE_MAX}/min.`)
   }
 

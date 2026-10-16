@@ -32,8 +32,9 @@ export async function GET () {
 }
 
 export async function POST (req: NextRequest) {
-  // R496: okno namestitve je javno — omejimo poskuse na IP (first-comer prevzeme SYSTEM)
-  if (authRateLimited(req)) {
+  // R496: okno namestitve je javno — omejimo poskuse na IP (first-comer prevzeme SYSTEM);
+  // R536: tempomat je porazdeljen (baza) — await
+  if (await authRateLimited(req)) {
     return jsonError(429, 'Preveč poskusov.', 'Počakaj eno minuto in poskusi znova.')
   }
 
@@ -66,7 +67,8 @@ export async function POST (req: NextRequest) {
       })
 
       const created = await tx.user.create({
-        data: { email, passwordHash: hashPassword(password), name, role: 'ADMIN' },
+        // R536: hashPassword je asinhrona (scrypt N=2^17) — await ZNOTRAJ tx
+        data: { email, passwordHash: await hashPassword(password), name, role: 'ADMIN' },
       })
 
       // revizija V isti transakciji (writeAudit sprejema transakcijski klient —

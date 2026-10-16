@@ -19,7 +19,7 @@ export interface JobDef {
 
 /** Opravila po imenih izvirnika (cron jobs). */
 export const JOB_DEFS: JobDef[] = [
-  { job: 'seje-gc', label: 'Čiščenje sej', desc: 'Izbriše potekle prijavne seje (varnostna higiena).', cron: 'vsak dan 03:00 (izvirnik)' },
+  { job: 'seje-gc', label: 'Čiščenje sej', desc: 'Izbriše potekle prijavne seje in stare vrstice tempomata (varnostna higiena).', cron: 'vsak dan 03:00 (izvirnik)' },
   { job: 'portal-gc', label: 'Čiščenje portala', desc: 'Odstrani potekle/preklicane povezave portala strank po 30 dneh.', cron: 'vsak dan 03:30 (jobs/run — R496; izvirnik: viz/gc)' },
   { job: 'obvestila-gc', label: 'Čiščenje obvestil', desc: 'Izbriše prebrana obvestila, starejša od 30 dni.', cron: 'vsak dan 03:10 (izvirnik)' },
   { job: 'obvestila-retry', label: 'Ponovitev obvestil', desc: 'Ponovi neuspešne/čakajoče dostave obvestil (max 3 poskusi, varno pred podvajanjem).', cron: 'vsakih 15 min (issue #5)' },
@@ -60,8 +60,12 @@ export async function runJob (key: string, userId: string | null): Promise<RunJo
     const cutoff30 = new Date(Date.now() - 30 * 86400000)
     if (key === 'seje-gc') {
       const res = await db.session.deleteMany({ where: { expiresAt: { lt: startedAt } } })
-      affected = res.count
-      detail = { izbrisanih_sej: affected }
+      // R536: pometanje tempomata — vrstice RateLimitEntry izven aktivnega +
+      // prejšnjega okna (starejše od 5 min) niso več relevantne (list bere samo
+      // zadnji 2 okni); brez tega bi tabela rasla z vsakim oknom vsakega bucketa.
+      const rl = await db.rateLimitEntry.deleteMany({ where: { windowStart: { lt: new Date(Date.now() - 5 * 60000) } } })
+      affected = res.count + rl.count
+      detail = { izbrisanih_sej: res.count, izbrisanih_tempomat_vrstic: rl.count }
     } else if (key === 'portal-gc') {
       const res = await db.portalLink.deleteMany({
         where: { createdAt: { lt: cutoff30 }, OR: [{ revokedAt: { not: null } }, { expiresAt: { lt: startedAt } }] },

@@ -1,7 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { db } from '@/lib/db'
-import { jsonError, readsAllData, requirePermission } from '@/lib/auth'
+import { readsAllData, requirePermission } from '@/lib/auth'
 import { nextCodeFromList } from '@/lib/codes'
+import { parseBody } from '@/lib/validate'
+
+// R536: zod shema za ustvarjanje projekta — naslov obvezen (neprazno po trim),
+// status ima privzeto vrednost NACRT (kot prej, brez seznama dovoljenih),
+// customerId je neobvezen (null ⇒ brez stranke; UI pošilja null za „brez").
+const ProjectCreateSchema = z.object({
+  title: z.string().trim().min(1, 'Naslov projekta je obvezen.'),
+  status: z.string().nullish().transform((v) => v ?? 'NACRT'),
+  customerId: z.string().nullish().transform((v) => v || null),
+  address: z.string().nullish().transform((v) => v ?? null),
+  note: z.string().nullish().transform((v) => v ?? null),
+})
 
 export async function GET (req: NextRequest) {
   const auth = await requirePermission(req, 'projects.read')
@@ -31,9 +44,9 @@ export async function GET (req: NextRequest) {
 export async function POST (req: NextRequest) {
   const auth = await requirePermission(req, 'projects.write')
   if (auth instanceof NextResponse) return auth
-  const body = await req.json().catch(() => null)
-  const title = typeof body?.title === 'string' ? body.title.trim() : ''
-  if (!title) return jsonError(400, 'Naslov projekta je obvezen.')
+  const parsed = await parseBody(req, ProjectCreateSchema)
+  if (!parsed.ok) return parsed.response
+  const data = parsed.data
 
   // R439: koda glede na zasedene (count pade ob brisanju → unikatnost ni zagotovljena)
   const existingCodes = await db.project.findMany({ where: { code: { startsWith: 'P-' } }, select: { code: true } })
@@ -42,11 +55,11 @@ export async function POST (req: NextRequest) {
   const project = await db.project.create({
     data: {
       code,
-      title,
-      status: typeof body?.status === 'string' ? body.status : 'NACRT',
-      customerId: typeof body?.customerId === 'string' && body.customerId ? body.customerId : null,
-      address: typeof body?.address === 'string' ? body.address : null,
-      note: typeof body?.note === 'string' ? body.note : null,
+      title: data.title,
+      status: data.status,
+      customerId: data.customerId,
+      address: data.address,
+      note: data.note,
     },
     include: { customer: { select: { name: true, city: true } } },
   })

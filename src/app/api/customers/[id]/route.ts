@@ -1,11 +1,25 @@
 // API /api/customers/[id] — podrobnost s projekti/ponudbami + urejanje (customers.write)
 
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { db } from '@/lib/db'
 import { jsonError, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
+import { parseBody } from '@/lib/validate'
 
 type Params = { params: Promise<{ id: string }> }
+
+// R536: zod shema za urejanje stranke — vsa polja neobvezna (delni PATCH):
+// ime (če je podano) neprazno po trim; kontakti se prazni ⇒ null.
+const CustomerPatchSchema = z.object({
+  name: z.string().trim().min(1, 'Ime stranke ne sme biti prazno.').optional(),
+  email: z.string().trim().nullish().transform((v) => (v === undefined ? undefined : v || null)),
+  phone: z.string().trim().nullish().transform((v) => (v === undefined ? undefined : v || null)),
+  address: z.string().trim().nullish().transform((v) => (v === undefined ? undefined : v || null)),
+  city: z.string().trim().nullish().transform((v) => (v === undefined ? undefined : v || null)),
+  taxId: z.string().trim().nullish().transform((v) => (v === undefined ? undefined : v || null)),
+  note: z.string().trim().nullish().transform((v) => (v === undefined ? undefined : v || null)),
+})
 
 export async function GET (req: NextRequest, { params }: Params) {
   const auth = await requirePermission(req, 'customers.read')
@@ -35,18 +49,16 @@ export async function PATCH (req: NextRequest, { params }: Params) {
   if (auth instanceof NextResponse) return auth
   const { id } = await params
 
-  const body = await req.json().catch(() => null)
+  const parsed = await parseBody(req, CustomerPatchSchema)
+  if (!parsed.ok) return parsed.response
+  const data = parsed.data
   const existing = await db.customer.findUnique({ where: { id } })
   if (!existing) return jsonError(404, 'Stranka ne obstaja.')
 
   const patch: Record<string, unknown> = {}
-  if (typeof body?.name === 'string') {
-    const name = body.name.trim()
-    if (!name) return jsonError(400, 'Ime stranke ne sme biti prazno.')
-    patch.name = name
-  }
+  if (data.name !== undefined) patch.name = data.name
   for (const key of ['email', 'phone', 'address', 'city', 'taxId', 'note'] as const) {
-    if (typeof body?.[key] === 'string') patch[key] = body[key].trim() || null
+    if (data[key] !== undefined) patch[key] = data[key]
   }
   if (Object.keys(patch).length === 0) return jsonError(400, 'Ni sprememb za izvedbo.')
 

@@ -1,9 +1,24 @@
 // API /api/customers — seznam (customers.read) + ustvarjanje (customers.write)
 
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { db } from '@/lib/db'
-import { jsonError, requirePermission } from '@/lib/auth'
+import { requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
+import { parseBody } from '@/lib/validate'
+
+// R536: zod shema za ustvarjanje stranke — zrcali prejšnjo ročno validacijo:
+// ime obvezno (neprazno po trim), ostali kontakti neobvezni (prazno ⇒ null).
+const optionalContact = z.string().trim().nullish().transform((v) => v || null)
+const CustomerCreateSchema = z.object({
+  name: z.string().trim().min(1, 'Ime stranke je obvezen.'),
+  email: optionalContact,
+  phone: optionalContact,
+  address: optionalContact,
+  city: optionalContact,
+  taxId: optionalContact,
+  note: optionalContact,
+})
 
 export async function GET (req: NextRequest) {
   const auth = await requirePermission(req, 'customers.read')
@@ -34,19 +49,19 @@ export async function POST (req: NextRequest) {
   const auth = await requirePermission(req, 'customers.write')
   if (auth instanceof NextResponse) return auth
 
-  const body = await req.json().catch(() => null)
-  const name = typeof body?.name === 'string' ? body.name.trim() : ''
-  if (!name) return jsonError(400, 'Ime stranke je obvezno.')
+  const parsed = await parseBody(req, CustomerCreateSchema)
+  if (!parsed.ok) return parsed.response
+  const data = parsed.data
 
   const customer = await db.customer.create({
     data: {
-      name,
-      email: typeof body?.email === 'string' && body.email.trim() ? body.email.trim() : null,
-      phone: typeof body?.phone === 'string' && body.phone.trim() ? body.phone.trim() : null,
-      address: typeof body?.address === 'string' && body.address.trim() ? body.address.trim() : null,
-      city: typeof body?.city === 'string' && body.city.trim() ? body.city.trim() : null,
-      taxId: typeof body?.taxId === 'string' && body.taxId.trim() ? body.taxId.trim() : null,
-      note: typeof body?.note === 'string' && body.note.trim() ? body.note.trim() : null,
+      name: data.name,
+      email: data.email,
+      phone: data.phone,
+      address: data.address,
+      city: data.city,
+      taxId: data.taxId,
+      note: data.note,
     },
     include: { _count: { select: { projects: true, quotes: true } } },
   })

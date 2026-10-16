@@ -5,7 +5,9 @@
 //   if (auth instanceof NextResponse) return auth
 //   // auth.user, auth.perms
 
-import { createHash, randomUUID, scryptSync, timingSafeEqual } from 'crypto'
+import { createHash, randomBytes, randomUUID, scrypt as scryptCallback, timingSafeEqual } from 'crypto'
+import { promisify } from 'util'
+import type { ScryptOptions } from 'crypto'
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { permissionsForRole, type Permission } from '@/lib/permissions-core'
@@ -31,19 +33,80 @@ export function sessionTokenHash (token: string): string {
   return createHash('sha256').update(token).digest('hex')
 }
 
-export function hashPassword (password: string): string {
-  const salt = randomUUID().replace(/-/g, '')
-  const hash = scryptSync(password, salt, 64).toString('hex')
-  return `${salt}:${hash}`
+// ─── Zgoščevanje gesel (R536: scrypt N=2^17 + transparentna nadgradnja) ──────
+// Format v2: `scrypt:131072:8:1:{salt}:{hash}` (6 delov; sol in hash hex, sol
+// brez pik — zato split(':') ostane nedvoumen). Parametri po OWASP: N=2^17.
+// Stari format `salt:hash` (2 dela, scrypt privzeti N=16384, r=8, p=1 —
+// PREŠIBEK po reviziji) ostane VELJAVEN za branje; ob prijavi se tiho
+// nadgradi (glej login route + passwordNeedsRehash).
+//
+// ASINHRONO: N=2^17 blokira event loop ~100 ms+; prijava/nastavitev sta redki
+// operaciji, a asinhroni scrypt je pravilen (sync bi med eno prijavo zamrznil
+// VSE sočasne zahteve tega procesa).
+const SCRYPT_N = 131_072 // 2^17 (OWASP priporočilo)
+const SCRYPT_R = 8
+const SCRYPT_P = 1
+const SCRYPT_KEYLEN = 64
+// OBVEZNO: 128*N*r (~128 MiB) presega privzetih 32 MiB Node-ovega maxmem —
+// brez tega scrypt vrže izjemo. 160 MiB pusti glavo za izvedbo.
+const SCRYPT_MAXMEM = 160 * 1024 * 1024
+
+const scryptAsync = promisify(scryptCallback) as (
+  password: string | Buffer,
+  salt: string | Buffer,
+  keylen: number,
+  options: ScryptOptions
+) => Promise<Buffer>
+
+export async function hashPassword (password: string): Promise<string> {
+  const salt = randomBytes(16).toString('hex')
+  const hash = await scryptAsync(password, salt, SCRYPT_KEYLEN, {
+    N: SCRYPT_N, r: SCRYPT_R, p: SCRYPT_P, maxmem: SCRYPT_MAXMEM,
+  })
+  return `scrypt:${SCRYPT_N}:${SCRYPT_R}:${SCRYPT_P}:${salt}:${hash.toString('hex')}`
 }
 
-export function verifyPassword (password: string, stored: string): boolean {
-  const [salt, hash] = stored.split(':')
+export async function verifyPassword (password: string, stored: string): Promise<boolean> {
+  const parts = stored.split(':')
+  let N = 16_384, r = 8, p = 1 // privzeti parametri STAREGA formata
+  let salt = '', hash = ''
+  if (parts.length === 6 && parts[0] === 'scrypt') {
+    // v2: parametri so del zapisa
+    N = Number(parts[1]); r = Number(parts[2]); p = Number(parts[3])
+    salt = parts[4]; hash = parts[5]
+    if (!Number.isInteger(N) || N <= 0 || !Number.isInteger(r) || r <= 0 || !Number.isInteger(p) || p <= 0) return false
+  } else if (parts.length === 2) {
+    // stari format `salt:hash` (N=16384, r=8, p=1 — scryptSync privzete vrednosti izvirnika)
+    salt = parts[0]; hash = parts[1]
+  } else {
+    return false
+  }
   if (!salt || !hash) return false
-  const test = scryptSync(password, salt, 64)
+  const test = await scryptAsync(password, salt, SCRYPT_KEYLEN, { N, r, p, maxmem: SCRYPT_MAXMEM })
   const orig = Buffer.from(hash, 'hex')
   return test.length === orig.length && timingSafeEqual(test, orig)
 }
+
+/** Ali shranjeni hash zahteva nadgradnjo (stari format ALI N < 2^17)?
+ * Klicatelj: login — po uspešni prijavi se hash TIHO prepiše v v2
+ * (transparentna nadgradnja: uporabnik ne čuti nič; brez dodatnega audita —
+ * LOGIN revizija že obstaja in zapisuje ISTI dogodek; nadgradnja ne spreminja
+ * poverilnic, samo njihovo obliko). */
+export function passwordNeedsRehash (stored: string): boolean {
+  const parts = stored.split(':')
+  if (parts.length !== 6 || parts[0] !== 'scrypt') return true // stari format
+  const N = Number(parts[1])
+  return !Number.isInteger(N) || N < SCRYPT_N
+}
+
+// ─── Zaklepanje računa (R536 — druga plast zavor ob IP tempomatu) ───────────
+// FIXNI (brez env): 5 zaporednih NEUSPEŠNIH prijav zaklene račun za 15 min.
+// Uspešna prijava števec RESETIRA (testni pas r440-smoke s 645 uspešnimi
+// prijavami tako ostane zelen — štejejo SAMO neuspešni poskusi). Zaklep ščiti
+// RAČUN (tempomat v rate-limit.ts ščiti IP) — skupaj pokrijeta tako porazdeljen
+// napad iz več IP-jev na en račun kot ponavljanje z enega IP-ja.
+export const AUTH_LOCKOUT_MAX = 5
+export const AUTH_LOCKOUT_MINUTES = 15
 
 export interface SessionUser {
   id: string

@@ -2,13 +2,21 @@
 // PLACAN / DELNO_PLACAN določata SAMO zapisana plačila (/api/payments — payments.manage, R425).
 
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { db } from '@/lib/db'
 import { jsonError, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
+import { parseBody } from '@/lib/validate'
 
 type Params = { params: Promise<{ id: string }> }
 
 const MANUAL_STATUSES = ['OSNUTEK', 'IZDAN', 'ZAPRT']
+
+// R536: zod shema za ročno spremembo statusa računa — status obvezen niz;
+// poslovna pravila (PLACAN/DELNO_PLACAN izključno prek plačil) ostajajo v handlerju.
+const InvoiceStatusSchema = z.object({
+  status: z.string().min(1, 'Status je obvezen.'),
+})
 
 export async function GET (req: NextRequest, { params }: Params) {
   const auth = await requirePermission(req, 'invoices.read')
@@ -32,9 +40,9 @@ export async function PATCH (req: NextRequest, { params }: Params) {
   if (auth instanceof NextResponse) return auth
   const { id } = await params
 
-  const body = await req.json().catch(() => null)
-  const status = typeof body?.status === 'string' ? body.status : ''
-  if (!status) return jsonError(400, 'Status je obvezen.')
+  const parsed = await parseBody(req, InvoiceStatusSchema)
+  if (!parsed.ok) return parsed.response
+  const status = parsed.data.status
   if (status === 'PLACAN' || status === 'DELNO_PLACAN') {
     return jsonError(400, 'Statusa Plačan in Delno plačan določata zapisana plačila.', 'Uporabite Zapiši plačilo (payments.manage).')
   }

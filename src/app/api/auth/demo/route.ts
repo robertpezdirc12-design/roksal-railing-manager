@@ -41,7 +41,7 @@ export async function POST (req: NextRequest) {
     // brez stikala se pot vede, kot da ne obstaja
     return jsonError(404, 'Ni prijave.', 'Demo dostop ni vklopljen (DEMO_ACCESS).')
   }
-  if (authRateLimited(req)) {
+  if (await authRateLimited(req)) {
     return jsonError(429, 'Preveč poskusov prijave.', 'Počakaj eno minuto in poskusi znova.')
   }
 

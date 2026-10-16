@@ -26,6 +26,7 @@ import { MEASURE_MODES, calibrationForParams, parseCalibration, pointsForStorage
 import { DOC_TAGS, jeVeljavenDocTag, normalizirajDocSegment, normalizirajDocNote, zapišiDocVParams, type DocTag } from '@/lib/measure-doc'
 import { MEASURE_CONFLICT_PCT } from '@/lib/scene-understanding-core'
 import { posodobiCheck, preveriBlokadoZakljucka } from '@/lib/montaza-qa-core'
+import { retryOnUnique } from '@/lib/versioning'
 
 // R439: terenski tok — VERBATIM iz /api/nalog/[id]/transition
 const FLOW: Record<string, { next: string; event: string; label: string }[]> = {
@@ -275,18 +276,31 @@ async function opMeritev (
   })
 
   // verzija v1 — začetni posnetek (zgodovina verzij, issue #1)
-  await db.measurementVersion.create({
-    data: {
-      measurementId: measurement.id,
-      version: 1,
-      userId: user.id,
-      data: JSON.stringify({
-        type, lengthCm, heightCm, posts, segments, handrail, slopeDeg,
-        location: measurement.location, note: measurement.note, params: measurement.params,
-        status: provenance.status, statusNote: provenance.reason,
-      }),
-      note: photoId ? 'Potrjeno s kamero (offline sinhronizacija)' : 'Shranjeno prek sinhronizacije (offline)',
-    },
+  // R536: dirka verzij — P2002 → ponovni poskus (versioning.ts). Ovito je SAMO
+  // ustvarjanje verzije (+ izračun številke iz zadnje verzije ZNOTRAJ retried fn):
+  // idempotenca vrste je že zajeta z opId (obstoječi SyncOp se ne ponovi),
+  // širša logika opMeritev pa se NE ponavlja. Za svežo meritev (nov id) je
+  // izračunana številka vedno 1; če bi P2002 vseeno ušel po 3 poskusih, ga
+  // zanka POST ujame kot status ERROR tega opa (fail-closed — ostane v vrsti).
+  await retryOnUnique(async () => {
+    const last = await db.measurementVersion.findFirst({
+      where: { measurementId: measurement.id },
+      orderBy: { version: 'desc' },
+      select: { version: true },
+    })
+    return db.measurementVersion.create({
+      data: {
+        measurementId: measurement.id,
+        version: (last?.version ?? 0) + 1,
+        userId: user.id,
+        data: JSON.stringify({
+          type, lengthCm, heightCm, posts, segments, handrail, slopeDeg,
+          location: measurement.location, note: measurement.note, params: measurement.params,
+          status: provenance.status, statusNote: provenance.reason,
+        }),
+        note: photoId ? 'Potrjeno s kamero (offline sinhronizacija)' : 'Shranjeno prek sinhronizacije (offline)',
+      },
+    })
   })
 
   await writeAudit({

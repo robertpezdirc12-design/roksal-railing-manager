@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { rateLimited } from '@/lib/rate-limit'
+import { rateLimited, tokenBucketKey } from '@/lib/rate-limit'
 import { loadRunContext } from '@/lib/fence-run-service'
 import { computeSegments, qualityGate, validateRun } from '@/lib/fence-run-engine'
 import { buildPlanModel, parseTurns } from '@/lib/model-core'
@@ -48,7 +48,7 @@ export async function GET (req: NextRequest) {
   if (!token || token.length < REVIEW_TOKEN_MIN || token.length > REVIEW_TOKEN_MAX) {
     return NextResponse.json({ error: 'Neveljavna povezava.' }, { status: 404 })
   }
-  if (rateLimited(`review:${token}`)) {
+  if (await rateLimited(tokenBucketKey('review', token))) {
     return NextResponse.json({ error: 'Preveč zahtev — poskusite kasneje.' }, { status: 429 })
   }
 

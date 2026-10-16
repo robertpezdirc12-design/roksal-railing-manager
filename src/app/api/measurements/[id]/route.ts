@@ -18,6 +18,7 @@ import { jsonError, readsAllData, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
 import { MEASUREMENT_STATUS_LABELS, MEASUREMENT_STATUSES, deriveProvenance, type MeasurementStatus, type MeasureMode } from '@/lib/measure-engine'
 import { invalidateQuotesForPackage } from '@/lib/quote-invalidation'
+import { retryOnUnique } from '@/lib/versioning'
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -173,24 +174,31 @@ export async function PATCH (req: NextRequest, { params }: Params) {
   if (Object.keys(patch).length === 0) return jsonError(400, 'Ni sprememb za izvedbo.')
 
   // zgodovina verzij: posnetek STANJA PRED spremembo (kdo/kdaj/kaj — issue #1)
-  const lastVersion = await db.measurementVersion.findFirst({
-    where: { measurementId: id },
-    orderBy: { version: 'desc' },
-    select: { version: true },
-  })
-  await db.measurementVersion.create({
-    data: {
-      measurementId: id,
-      version: (lastVersion?.version ?? 0) + 1,
-      userId: auth.user.id,
-      data: JSON.stringify({
-        type: existing.type, location: existing.location, note: existing.note, handrail: existing.handrail,
-        lengthCm: existing.lengthCm, heightCm: existing.heightCm, posts: existing.posts,
-        segments: existing.segments, slopeDeg: existing.slopeDeg, params: existing.params,
-        status: existing.status, statusNote: existing.statusNote,
-      }),
-      note: `Popravek: ${Object.keys(patch).join(', ')}`,
-    },
+  // R536: dirka verzij — branje zadnje verzije in izračun naslednje sta ZNOTRAJ
+  // retried fn (versioning.ts): ob sočasnem P2002 na @@unique([measurementId,
+  // version]) se številka izračuna znova in poskus ponovi (posnetek `existing`
+  // je stabilen znotraj te zahteve, zato je ponovitev varna). Create NI v
+  // transakciji — razveljaviti ni treba ničesar.
+  await retryOnUnique(async () => {
+    const lastVersion = await db.measurementVersion.findFirst({
+      where: { measurementId: id },
+      orderBy: { version: 'desc' },
+      select: { version: true },
+    })
+    return db.measurementVersion.create({
+      data: {
+        measurementId: id,
+        version: (lastVersion?.version ?? 0) + 1,
+        userId: auth.user.id,
+        data: JSON.stringify({
+          type: existing.type, location: existing.location, note: existing.note, handrail: existing.handrail,
+          lengthCm: existing.lengthCm, heightCm: existing.heightCm, posts: existing.posts,
+          segments: existing.segments, slopeDeg: existing.slopeDeg, params: existing.params,
+          status: existing.status, statusNote: existing.statusNote,
+        }),
+        note: `Popravek: ${Object.keys(patch).join(', ')}`,
+      },
+    })
   })
 
   const updated = await db.measurement.update({ where: { id }, data: patch, include: INCLUDE })

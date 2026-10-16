@@ -62,6 +62,7 @@ import {
 import { MEASURE_CONFLICT_PCT } from '@/lib/scene-understanding-core'
 import { odlociPaket, HANDOFF_VERSION } from '@/lib/measurement-handoff'
 import { nextPackageCode } from '@/lib/product-core'
+import { retryOnUnique } from '@/lib/versioning'
 
 const TYPES = ['OGRAJA', 'BALUSTRADA', 'NAGIB', 'OSTANEO']
 
@@ -351,18 +352,28 @@ export async function POST (req: NextRequest) {
   if (multiView) versionBits.push(`razpršenost ${multiView.spreadPct.toString().replace('.', ',')} %${multiView.conflict ? ' ⚠ konflikt' : ''}`)
   if (manualOverride) versionBits.push('ročni popravek dolžine')
   if (mode) versionBits.push(`način ${mode}`)
-  await db.measurementVersion.create({
-    data: {
-      measurementId: measurement.id,
-      version: 1,
-      userId: user.id,
-      data: JSON.stringify({
-        type, lengthCm, heightCm, posts, segments, handrail, slopeDeg,
-        location: measurement.location, note: measurement.note, params,
-        status: provenance.status, statusNote: provenance.reason,
-      }),
-      note: versionBits.length > 0 ? `${versionBits.join(' · ')} — potrjeno s kamero` : 'Potrjeno s kamero (iz fotografije)',
-    },
+  // R536: dirka verzij — P2002 → ponovni poskus (versioning.ts). Številka se
+  // izračuna iz zadnje verzije ZNOTRAJ retried fn; za svežo meritev (nov id)
+  // je to vedno 1, vzorec pa je enoten z ostalimi mesti ustvarjanja verzij.
+  await retryOnUnique(async () => {
+    const last = await db.measurementVersion.findFirst({
+      where: { measurementId: measurement.id },
+      orderBy: { version: 'desc' },
+      select: { version: true },
+    })
+    return db.measurementVersion.create({
+      data: {
+        measurementId: measurement.id,
+        version: (last?.version ?? 0) + 1,
+        userId: user.id,
+        data: JSON.stringify({
+          type, lengthCm, heightCm, posts, segments, handrail, slopeDeg,
+          location: measurement.location, note: measurement.note, params,
+          status: provenance.status, statusNote: provenance.reason,
+        }),
+        note: versionBits.length > 0 ? `${versionBits.join(' · ')} — potrjeno s kamero` : 'Potrjeno s kamero (iz fotografije)',
+      },
+    })
   })
 
   await writeAudit({

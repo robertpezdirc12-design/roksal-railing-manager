@@ -8,7 +8,7 @@
 // R439 (issue #6): OfflineBadge v glavi + samodejna sinhronizacija (initOfflineSync)
 // + clearOfflineData ob odjavi (varnostna zahteva — vrsta NE sme preživeti odjave).
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTheme } from 'next-themes'
 import { Bell, Cloud, CloudOff, LogOut, Moon, MoreHorizontal, RefreshCw, Search, Sun, Ruler, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -54,6 +54,9 @@ export function AppShell () {
   const [searchQ, setSearchQ] = useState('')
   const [searchHits, setSearchHits] = useState<SearchGroup[]>([])
   const [searching, setSearching] = useState(false)
+  // R536: debounce ~200 ms — vsak pritisk tipke NE sproži laste zahteve;
+  // rezultati/prikaz ostajajo identični, čistilni vzorec (clearTimeout).
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // ── R448 (§11): mobilni Sheet „Več" — seznam vseh razpoložljivih sekcij ──
   const [moreOpen, setMoreOpen] = useState(false)
@@ -94,14 +97,21 @@ export function AppShell () {
 
   const runSearch = useCallback((q: string) => {
     setSearchQ(q)
-    if (q.trim().length < 2) { setSearchHits([]); return }
-    setSearching(true)
-    const url = `/api/search?q=${encodeURIComponent(q.trim())}`
-    apiGet<{ data: { groups: SearchGroup[] } }>(url)
-      .then((r) => setSearchHits(r.data.groups))
-      .catch(() => setSearchHits([]))
-      .finally(() => setSearching(false))
+    if (searchTimer.current) { clearTimeout(searchTimer.current); searchTimer.current = null }
+    if (q.trim().length < 2) { setSearchHits([]); setSearching(false); return }
+    searchTimer.current = setTimeout(() => {
+      searchTimer.current = null
+      setSearching(true)
+      const url = `/api/search?q=${encodeURIComponent(q.trim())}`
+      apiGet<{ data: { groups: SearchGroup[] } }>(url)
+        .then((r) => setSearchHits(r.data.groups))
+        .catch(() => setSearchHits([]))
+        .finally(() => setSearching(false))
+    }, 200)
   }, [])
+
+  // R536: ob odklopu komponente počistimo morebitni čakajoči iskalni timeout
+  useEffect(() => () => { if (searchTimer.current) clearTimeout(searchTimer.current) }, [])
 
   function goToHit (hit: SearchHit) {
     setSearchOpen(false)

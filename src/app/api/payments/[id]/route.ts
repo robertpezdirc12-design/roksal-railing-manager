@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { db } from '@/lib/db'
 import { jsonError, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
+import { parseBody } from '@/lib/validate'
 
 // /api/payments/[id] — R437 (route-map izvirnika): urejanje/brisanje posameznega plačila
 // GET    (payments.read):  plačilo + račun (koda, status, zneski, stranka)
@@ -13,8 +15,15 @@ import { writeAudit } from '@/lib/audit'
 
 type Params = { params: Promise<{ id: string }> }
 
-const METHODS = ['NAKAZNICA', 'GOTOVINA', 'KARTICA']
 const round2 = (n: number) => Math.round(n * 100) / 100
+
+// R536: zod shema za popravek plačila — delni PATCH: amount > 0 (z.coerce kot
+// Number() prej), method iz dovoljenega seznama, reference niz ali null (prazno ⇒ null).
+const PaymentPatchSchema = z.object({
+  amount: z.coerce.number({ error: 'Znesek plačila mora biti večji od 0.' }).positive('Znesek plačila mora biti večji od 0.').optional(),
+  method: z.enum(['NAKAZNICA', 'GOTOVINA', 'KARTICA'], { error: 'Neveljaven način plačila.' }).optional(),
+  reference: z.string().trim().nullable().optional().transform((v) => (v === undefined ? undefined : v || null)),
+})
 
 /** Ponovni izračun invoice.paid + status iz VSEH plačil računa (ZAPRT ohrani status). */
 async function recalcInvoice (invoiceId: string): Promise<{ paid: number; status: string }> {
@@ -54,8 +63,9 @@ export async function PATCH (req: NextRequest, { params }: Params) {
   const { user } = auth
   const { id } = await params
 
-  const body = await req.json().catch(() => null)
-  if (!body || typeof body !== 'object') return jsonError(400, 'Neveljavno telo zahteve.')
+  const parsed = await parseBody(req, PaymentPatchSchema)
+  if (!parsed.ok) return parsed.response
+  const data = parsed.data
 
   const existing = await db.payment.findUnique({ where: { id }, include: { invoice: true } })
   if (!existing) return jsonError(404, 'Plačilo ne obstaja.')
@@ -64,22 +74,9 @@ export async function PATCH (req: NextRequest, { params }: Params) {
   }
 
   const patch: Record<string, unknown> = {}
-  if (body.amount !== undefined) {
-    const amount = Number(body.amount)
-    if (!Number.isFinite(amount) || amount <= 0) return jsonError(400, 'Znesek plačila mora biti večji od 0.')
-    patch.amount = round2(amount)
-  }
-  if (body.method !== undefined) {
-    if (typeof body.method !== 'string' || !METHODS.includes(body.method)) {
-      return jsonError(400, 'Neveljaven način plačila.', `Dovoljeni: ${METHODS.join(', ')}.`)
-    }
-    patch.method = body.method
-  }
-  if (body.reference !== undefined) {
-    if (body.reference === null) patch.reference = null
-    else if (typeof body.reference === 'string') patch.reference = body.reference.trim() || null
-    else return jsonError(400, 'Referenca mora biti niz ali null.')
-  }
+  if (data.amount !== undefined) patch.amount = round2(data.amount)
+  if (data.method !== undefined) patch.method = data.method
+  if (data.reference !== undefined) patch.reference = data.reference
   if (Object.keys(patch).length === 0) return jsonError(400, 'Ni sprememb za izvedbo.', 'Podana polja: amount, method, reference.')
 
   await db.payment.update({ where: { id }, data: patch })

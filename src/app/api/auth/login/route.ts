@@ -1,24 +1,87 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { db } from '@/lib/db'
 import { authRateLimited } from '@/lib/rate-limit'
-import { createSession, jsonError, toSessionUser, verifyPassword } from '@/lib/auth'
+import {
+  AUTH_LOCKOUT_MAX, AUTH_LOCKOUT_MINUTES,
+  createSession, hashPassword, jsonError, passwordNeedsRehash, toSessionUser, verifyPassword,
+} from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
+import { parseBody } from '@/lib/validate'
+
+// /api/auth/login — prijava (route-map izvirnika)
+// R496: zavora brute-force na IP (zdaj porazdeljena — baza, R536).
+// R536: DVE plasti zavor: (1) tempomat login:ip:{ip} (rate-limit.ts),
+// (2) ZAKLEP RAČUNA — 5 zaporednih neuspešnih prijav → lockedUntil +15 min
+// (AUTH_LOCKOUT_* v auth.ts; uspešna prijava števec resetira).
+// R536: scrypt v2 — po uspešnem verifyPassword se starejši hash TIHO nadgradi
+// (passwordNeedsRehash; LOGIN revizija že pokriva dogodek).
+
+const LoginSchema = z.object({
+  // zod v4 idiom: vrhnji z.email() (z.string().email() je opuščen)
+  email: z.email('potrebna je veljavna e-pošta'),
+  password: z.string().min(1, 'geslo ne sme biti prazno'),
+})
 
 export async function POST (req: NextRequest) {
-  // R496: zavora brute-force napada na gesla (glej rate-limit.ts — poštena meja)
-  if (authRateLimited(req)) {
+  // plast 1: tempomat po IP (429 pred vsako rabo baze za geslo)
+  if (await authRateLimited(req)) {
     return jsonError(429, 'Preveč poskusov prijave.', 'Počakaj eno minuto in poskusi znova.')
   }
-  const body = await req.json().catch(() => null)
-  const email = typeof body?.email === 'string' ? body.email.trim().toLowerCase() : ''
-  const password = typeof body?.password === 'string' ? body.password : ''
-  if (!email || !password) {
-    return jsonError(400, 'Manjkajo prijavni podatki.', 'Potrebna sta e-pošta in geslo.')
-  }
+
+  // validacija telesa (zod prek skupnega parseBody — sporočila ostanejo slovenska)
+  const parsed = await parseBody(req, LoginSchema)
+  if (!parsed.ok) return parsed.response
+  const email = parsed.data.email.trim().toLowerCase() // baza hrani male črke (kot prej)
+  const { password } = parsed.data
+
   const user = await db.user.findUnique({ where: { email } })
-  if (!user || !user.active || !verifyPassword(password, user.passwordHash)) {
+  if (!user || !user.active) {
+    // generično 401 — brez naštevanja (ne razkrivamo, ali račun obstaja)
     return jsonError(401, 'Neveljavna prijava.', 'E-pošta ali geslo ni pravilno.')
   }
+
+  // zaklep: pred preverjanjem gesla (nadenapadalec ne more »črpati« verify)
+  // TRADEOFF: 423 (Locked) RAZKRIVA obstoj računa — zavestno sprejeto, ker je
+  // sporočilo nujno za poštenega uporabnika (ve, da je račun zaprt, ne da je
+  // geslo napačno); obstoj računa sicer razkrijeta že pozaba-gesla tokovi.
+  if (user.lockedUntil && user.lockedUntil.getTime() > Date.now()) {
+    const min = Math.max(1, Math.ceil((user.lockedUntil.getTime() - Date.now()) / 60_000))
+    return jsonError(423, 'Račun je začasno zaklenjen.', `Poskusi znova čez ${min} minut.`)
+  }
+
+  if (!await verifyPassword(password, user.passwordHash)) {
+    // neuspešno geslo: dvigni števec; ob presegu zakleni in resetiraj števec
+    // (reset ob zaklepu: po 15 min ne začenjaš že »na robu« novega zaklepa)
+    const after = await db.user.update({
+      where: { id: user.id },
+      data: { failedLoginCount: { increment: 1 } },
+    })
+    if (after.failedLoginCount >= AUTH_LOCKOUT_MAX) {
+      await db.user.update({
+        where: { id: user.id },
+        data: {
+          lockedUntil: new Date(Date.now() + AUTH_LOCKOUT_MINUTES * 60_000),
+          failedLoginCount: 0,
+        },
+      })
+    }
+    return jsonError(401, 'Neveljavna prijava.', 'E-pošta ali geslo ni pravilno.')
+  }
+
+  // uspeh: reset števca/zaklepa, če je bil sploh dvignjen (pogoj — brez lišnih
+  // pisanj ob vsaki navadni prijavi)
+  if (user.failedLoginCount !== 0 || user.lockedUntil !== null) {
+    await db.user.update({ where: { id: user.id }, data: { failedLoginCount: 0, lockedUntil: null } })
+  }
+
+  // transparentna nadgradnja hasha (scrypt v2): uporabnik je pravkar dokazal
+  // geslo — to je edini trenutek, ko imamo čisti tekst za nov izračun. Tiho,
+  // brez dodatnega audita (LOGIN revizija že obstaja za isti dogodek).
+  if (passwordNeedsRehash(user.passwordHash)) {
+    await db.user.update({ where: { id: user.id }, data: { passwordHash: await hashPassword(password) } })
+  }
+
   const token = await createSession(user.id)
   await writeAudit({ userId: user.id, action: 'LOGIN', entity: 'user', entityId: user.id })
   return NextResponse.json({ token, user: toSessionUser(user) })

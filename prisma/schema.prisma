@@ -21,6 +21,8 @@ model User {
   name         String
   role         String // ADMIN | VODJA | MONTER | SKLADISCE | PROIZVODNJA
   active       Boolean  @default(true)
+  failedLoginCount Int      @default(0) // R536: zaporedni neuspešni poskusi prijave (AUTH_LOCKOUT_MAX → zaklep)
+  lockedUntil      DateTime? // R536: račun zaklenjen do tega trenutka (AUTH_LOCKOUT_MINUTES)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -82,6 +84,19 @@ model Session {
   expiresAt DateTime
 
   @@index([userId])
+}
+
+// R536: PORAZDELENI tempomat — fiksno okno na (bucket, windowStart), atomarno
+// štetje z upsert. Izvorni tempomat je živel v pomnilniku posamezne instance
+// (na serverless vsaka svoja) — to je deljeno stanje v bazi, veljavno za vse.
+// bucket je PRIKRIT ključ brez surovih žetonov (glej rate-limit.ts maskKey).
+model RateLimitEntry {
+  bucket      String   // npr. "login:ip:203.0.113.9" | "portal:pt-1a2b3c…"
+  windowStart DateTime // začetek fiksenga okna (zaokrožen na windowMs)
+  hits        Int      @default(1)
+
+  @@id([bucket, windowStart])
+  @@index([windowStart]) // čistilna naloga (jobs.ts) briše vrstice izven oken
 }
 
 // ─── CRM ────────────────────────────────────────────────────────────────────
@@ -354,6 +369,7 @@ model Measurement {
 
   @@index([projectId])
   @@index([workOrderId])
+  @@index([status]) // R536: uskladitev s migracijo r501 (ustvarjen v SQL, v shemi manjkal — drift)
 }
 
 // Zgodovina verzij meritev — posnetek stanja ob vsaki spremembi (issue #1: zgodovina verzij)
@@ -368,7 +384,9 @@ model MeasurementVersion {
   note         String?
   createdAt    DateTime @default(now())
 
-  @@index([measurementId, version])
+  // R536: veriga verzij — enoličnost (starš, verzija) zagotavlja baza;
+  // sočasno ustvarjanje iste verzije sproži P2002 → retryOnUnique (versioning.ts)
+  @@unique([measurementId, version])
 }
 
 // ─── Katalog & zaloga ───────────────────────────────────────────────────────
@@ -1601,7 +1619,8 @@ model PhotoVisualizationVersion {
   note            String?
   createdAt       DateTime @default(now())
 
-  @@index([visualizationId, version])
+  // R536: veriga verzij — enoličnost (starš, verzija) v bazi (glej versioning.ts)
+  @@unique([visualizationId, version])
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1777,7 +1796,8 @@ model FenceRunVersion {
   note       String?
   createdAt  DateTime @default(now())
 
-  @@index([fenceRunId, version])
+  // R536: veriga verzij — enoličnost (starš, verzija) v bazi (glej versioning.ts)
+  @@unique([fenceRunId, version])
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -2137,7 +2157,8 @@ model Registration {
   note       String?
   createdAt  DateTime @default(now())
 
-  @@index([sessionId, version])
+  // R536: veriga verzij — enoličnost (starš, verzija) v bazi (glej versioning.ts)
+  @@unique([sessionId, version])
 }
 
 // LOOP CLOSURE (§5) — preverjanje začetka proti koncu dolgega/krožnega zajema.

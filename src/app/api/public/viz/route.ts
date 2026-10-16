@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { rateLimited } from '@/lib/rate-limit'
+import { rateLimited, tokenBucketKey } from '@/lib/rate-limit'
 import { consentStatus, photosBlockedReason } from '@/lib/pin-core'
 import { choiceSummary, publicVizVisualization, VIZ_TOKEN_MAX, VIZ_TOKEN_MIN } from '@/lib/viz-core'
 
@@ -31,7 +31,7 @@ export async function GET (req: NextRequest) {
   if (!token || token.length < VIZ_TOKEN_MIN || token.length > VIZ_TOKEN_MAX) {
     return NextResponse.json({ error: 'Neveljavna povezava.' }, { status: 404 })
   }
-  if (rateLimited(`viz:${token}`)) {
+  if (await rateLimited(tokenBucketKey('viz', token))) {
     return NextResponse.json({ error: 'Preveč zahtev — poskusite kasneje.' }, { status: 429 })
   }
 

@@ -1,10 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { db } from '@/lib/db'
 import { jsonError, readsAllData, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
 import { emitEvent } from '@/lib/notify'
+import { parseBody } from '@/lib/validate'
 
 type Params = { params: Promise<{ id: string }> }
+
+// R536: zod shema za urejanje projekta — delni PATCH: vsa polja neobvezna;
+// nizi se (kot prej) ne stiskajo; customerId sprejme tudi null (počisti).
+const ProjectPatchSchema = z.object({
+  title: z.string().optional(),
+  status: z.string().optional(),
+  address: z.string().optional(),
+  note: z.string().optional(),
+  customerId: z.string().nullable().optional().transform((v) => (v === undefined ? undefined : v || null)),
+})
 
 /** Obseg (issue #1): monter dostopa samo do projektov svojih nalogov. */
 async function projectInScope (userId: string, id: string): Promise<'missing' | boolean> {
@@ -47,7 +59,9 @@ export async function PATCH (req: NextRequest, { params }: Params) {
   const auth = await requirePermission(req, 'projects.write')
   if (auth instanceof NextResponse) return auth
   const { id } = await params
-  const body = await req.json().catch(() => null)
+  const parsed = await parseBody(req, ProjectPatchSchema)
+  if (!parsed.ok) return parsed.response
+  const data = parsed.data
   const existing = await db.project.findUnique({ where: { id } })
   if (!existing) return jsonError(404, 'Projekt ne obstaja.')
 
@@ -59,9 +73,9 @@ export async function PATCH (req: NextRequest, { params }: Params) {
 
   const patch: Record<string, unknown> = {}
   for (const key of ['title', 'status', 'address', 'note'] as const) {
-    if (typeof body?.[key] === 'string') patch[key] = body[key]
+    if (data[key] !== undefined) patch[key] = data[key]
   }
-  if (typeof body?.customerId === 'string' || body?.customerId === null) patch.customerId = body.customerId || null
+  if (data.customerId !== undefined) patch.customerId = data.customerId
   if (Object.keys(patch).length === 0) return jsonError(400, 'Ni sprememb za izvedbo.')
 
   const updated = await db.project.update({ where: { id }, data: patch, include: { customer: { select: { name: true } } } })

@@ -19,6 +19,7 @@ import { analyzeContext, loadRunContext, snapshotVersion } from '@/lib/fence-run
 import { fenceRunZaUporabnika } from '@/lib/fence-run-access'
 import { nextPackageCode } from '@/lib/product-core'
 import { POSTS_RULE_KEY } from '@/lib/segment-bom'
+import { retryOnUnique } from '@/lib/versioning'
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -107,18 +108,28 @@ export async function POST (req: NextRequest, { params }: Params) {
       note: ctx.run.note,
     },
   })
-  await db.measurementVersion.create({
-    data: {
-      measurementId: measurement.id,
-      version: 1,
-      userId: user.id,
-      data: JSON.stringify({
-        type: 'OGRAJA', lengthCm: analysis.summary.totalLengthCm, heightCm: maxHeight,
-        posts: analysis.summary.postCount, segments: analysis.summary.segmentCount,
-        slopeDeg: analysis.summary.maxSlopeDeg, location: ctx.run.name, note: ctx.run.note,
-      }),
-      note: `Potrjeno iz ograjnega tekača (${ctx.segments.length} segmentov · ${analysis.summary.verifiedCount} preverjenih)`,
-    },
+  // R536: dirka verzij — P2002 → ponovni poskus (versioning.ts). Številka se
+  // izračuna iz zadnje verzije ZNOTRAJ retried fn; za svežo kanonično meritev
+  // (nov id, §17) je to vedno 1, vzorec pa je enoten z ostalimi mesti.
+  await retryOnUnique(async () => {
+    const last = await db.measurementVersion.findFirst({
+      where: { measurementId: measurement.id },
+      orderBy: { version: 'desc' },
+      select: { version: true },
+    })
+    return db.measurementVersion.create({
+      data: {
+        measurementId: measurement.id,
+        version: (last?.version ?? 0) + 1,
+        userId: user.id,
+        data: JSON.stringify({
+          type: 'OGRAJA', lengthCm: analysis.summary.totalLengthCm, heightCm: maxHeight,
+          posts: analysis.summary.postCount, segments: analysis.summary.segmentCount,
+          slopeDeg: analysis.summary.maxSlopeDeg, location: ctx.run.name, note: ctx.run.note,
+        }),
+        note: `Potrjeno iz ograjnega tekača (${ctx.segments.length} segmentov · ${analysis.summary.verifiedCount} preverjenih)`,
+      },
+    })
   })
 
   // ── Handoff: paket projekta z istim produktom/varianto (§21) ──

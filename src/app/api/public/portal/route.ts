@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { rateLimited } from '@/lib/rate-limit'
+import { rateLimited, tokenBucketKey } from '@/lib/rate-limit'
 import { consentStatus, photosBlockedReason } from '@/lib/pin-core'
 
 // /api/public/portal — JAVNI pogled portala stranke (route-map izvirnika: /p/[token])
@@ -28,14 +28,14 @@ const COMPANY = {
   web: 'www.roksal.si',
 }
 
-// tempomat: skupni R437 lib (60 zahtev na žeton/minuto, lokalni pomnilnik)
+// tempomat: skupni R437 lib, R536 porazdeljen (baza; ključ = sha256 odsek žetona)
 
 export async function GET (req: NextRequest) {
   const token = new URL(req.url).searchParams.get('token') ?? ''
   if (!token || token.length < 8 || token.length > 80) {
     return NextResponse.json({ error: 'Neveljavna povezava.' }, { status: 404 })
   }
-  if (rateLimited(`portal:${token}`)) {
+  if (await rateLimited(tokenBucketKey('portal', token))) {
     return NextResponse.json({ error: 'Preveč zahtev — poskusite kasneje.' }, { status: 429 })
   }
 

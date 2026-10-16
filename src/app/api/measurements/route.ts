@@ -11,6 +11,7 @@ import { writeAudit } from '@/lib/audit'
 import { FAMILY_CODES, type FamilyCode } from '@/lib/product-core'
 import { deriveProvenance, photoRecordProvenance } from '@/lib/measure-engine'
 import { preveriDocPolja, zapišiDocVParams } from '@/lib/measure-doc'
+import { retryOnUnique } from '@/lib/versioning'
 
 const TYPES = ['OGRAJA', 'BALUSTRADA', 'NAGIB', 'FOTO', 'OSTANEO']
 
@@ -155,18 +156,28 @@ export async function POST (req: NextRequest) {
   })
 
   // R450 (issue #9): verzija v1 — začetni posnetek (isti vzorec kot /api/sync — opMeritev)
-  await db.measurementVersion.create({
-    data: {
-      measurementId: measurement.id,
-      version: 1,
-      userId: user.id,
-      data: JSON.stringify({
-        type, lengthCm, heightCm, posts, segments, handrail: measurement.handrail, slopeDeg,
-        location: measurement.location, note: measurement.note, params: measurement.params,
-        status: provenance.status, statusNote: provenance.reason,
-      }),
-      note: type === 'FOTO' ? 'Ročna foto meritev' : 'Ročna meritev',
-    },
+  // R536: dirka verzij — P2002 → ponovni poskus (versioning.ts). Številka se
+  // izračuna iz zadnje verzije ZNOTRAJ retried fn; za sveže ustvarjeno meritev
+  // (nov id) je to vedno 1, vzorec read-then-create pa je enoten z ostalimi mesti.
+  await retryOnUnique(async () => {
+    const last = await db.measurementVersion.findFirst({
+      where: { measurementId: measurement.id },
+      orderBy: { version: 'desc' },
+      select: { version: true },
+    })
+    return db.measurementVersion.create({
+      data: {
+        measurementId: measurement.id,
+        version: (last?.version ?? 0) + 1,
+        userId: user.id,
+        data: JSON.stringify({
+          type, lengthCm, heightCm, posts, segments, handrail: measurement.handrail, slopeDeg,
+          location: measurement.location, note: measurement.note, params: measurement.params,
+          status: provenance.status, statusNote: provenance.reason,
+        }),
+        note: type === 'FOTO' ? 'Ročna foto meritev' : 'Ročna meritev',
+      },
+    })
   })
 
   await writeAudit({
