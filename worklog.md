@@ -4126,3 +4126,24 @@ Stage Summary:
   generične, ozadje rež KUBO (lastnikova odločitev).
 - Pas 40 skupin zelen; E2E 21✓/0✗; CI zelen na GitLab (main + tag);
   GitHub = GitLab = zrcalo = 80bef55; verzija 1.55.2.
+
+---
+Task ID: R528
+Agent: main (Z.ai Code)
+Task: NADALJEVANJE po izteku konteksta — ugotovitev: peskovnik OBNOVLJEN na R514-rez; popolna obnovitev delovnega stanja iz GitHuba (R515–R527) + zagon + dokazi
+
+Work Log:
+- UGOTOVITEV (pošteno, pred vsakim dejanjem): peskovnik je bil OBNOVLJEN na posnetek iz 14. 10. ~21:23 — worklog.md se končal pri R514-zakljucek, lokalni main na 7996fd6 (R514 + .ci-local-logs-R514.out, NIKOLI pushan), package.json še nextjs_tailwind_shadcn_ts 1.49.0, brez tagov v1.55.x, zasebni runner (57464452) + lokalno zrcalo (/home/z/ci-mirror) + gitlab-runner binarna DATOTIKA izginili; dev strežnik je tekel STARI (R514) kodi
+- DOBRA NOVICA: GitHub origin/main je ČISTO PRED lokalnim — 2ca598e = R527-dodatek (v1.55.2, izdaja R526 + R527 z oznakami generičnih); VSE delo R515–R527 (236 datotek, ~13,9 tisoč vrstic) je preživelo na oddaljenih repozitorijih; GitLab main pa je ZASTAREL na dfe7174 (R514-zakljucek)
+- OBNOVITEV: edini nelokalni commit 7996fd6 varovan na veji sandbox/r514-ci-logs (ni izgube); main reset → 2ca598e; bun install --frozen-lockfile (3 paketi); migracije 12/12 usklajene (shema se ni spremenila po R514, nova sta samo seed-r523/r524)
+- NOVA PAST (zabeležena): peskovniški zagon izvaža DATABASE_URL=file:/home/z/my-project/db/custom.db v vsakem Bash klicu — PREGLAŠI .env (Prisma dotenv ne piše prek obstoječe spremenljivke) → prisma CLI in pas vidijo napačno bazo; rešitev: izrecen prefix DATABASE_URL=postgresql://roksal:roksal@localhost:54329/roksal (embedded PG na :54329 teče od zagona, .pgdata preživel v posnetku)
+- RELEJNI PAS (DOKAZ): bash tests/ci-local.sh (KEEP=1, zunanji strežnik pasu lasten) — 8 statičnih korakov + 40 skupin, EXIT 0, ZELENO; dokaz ops/r528-pas.out; db:seed veriga je pognala tudi seed-r523/r524 (uradna gradiva v lokalni bazi)
+- E2E SKOZI PRAVO APLIKACIJO (ponovitev dokaza na obnovljenem peskovniku): ops/r527-e2e.py — 21 ✓ / 0 ✗ (prijava → vt-terasa izvirnik → 4 vogali + prednji plan + ref 220 → opcija OGR-K-001 »— generični« + negativna kontrola ROK-OGP-POLNA-57 brez + 9/9 generičnih → jantar opozorilo → POTEM oznaka + poštena razlaga → SHRANI → seznam »(generični)« → BAZA: OGR-K-001 BREZ gradiva, engine 1.3.0, POKOCNA → čiščenje); zaslonski dokazi regenerirani (ops/r527-e2e-*.png, E2E-RESULTS.json)
+- BRSKALNIŠKA PREVERBA (agent-browser, ročno): prijava admin prek prave prijavne strani (metoda hidracije: preveri vrednosti po napolnitvi, klik v zanki), ogrodje aplikacije + čarovnik Foto vizualizacija se odpreta; mobilna širina 390 px BREZ vodoravnega scrolla, noga pripeta dnu (footerBottom 844 = scrollHeight 844); namizje 1440 px: dolga vsebina poreče nogo naravno na konec (footerBottom 1676 = scrollHeight 1676, brez prekrivanja); dokaz ops/r528-final-desktop.png
+- GITLAB (BLOKIRANO, pošteno): žeton v .git/config je PRED-ROTACIJSKI (glpat-h-…wb285NQ8, R514-era) → git ls-remote 401 »HTTP Basic: Access denied«, API /projects/87474527 401; veljavni žeton iz R519 (glpat-…mql1xx, lastnik ga posredoval v klepetu) je obstojal IZKLJUČNO v .git/config IZGUBLJENEGA peskovnika — po disciplini skrivnostnega pregleda se žetoni NIKOLI ne zapisujejo v repozitorij, zato ga ni mogoče obnoviti; posledice: GitLab main zastarel (dfe7174), zrcalo in runner pobrani, CI na GitLabu ne dokazuje novih pushov
+- POTREBNO LASTNIKOVO DEJANJE: nov GitLab žeton (scope write_repository; za preverjanje cevovodov še read_api) — ob njegovem prispevu: posodobiti remote gitlab, sinhronizirati main + taga v1.55.0–v1.55.2, po potrebi ponovno ustvariti zasebni runner (POST /user/runners) in zrcalo (.zscripts/ci-mirror.sh ensure+sync)
+
+Stage Summary:
+- Peskovnik popolnoma obnovljen na v1.55.2 (2ca598e): koda + odvisnosti + baza + semena + pas 8+40 ZELENO + E2E 21✓/0✗ + brskalniške preverbe (mobilna/namizna noga) — aplikacija je uporabna v predogledu (strežnik teče, KEEP=1)
+- GitHub (origin) sinhroniziran; GitLab čaka na nov žeton lastnika (stari je s peskovnikom izgubljen, glavna veja zastarela na R514)
+- Stanje issuejev nespremenjeno: #14 aplikacijska stran zaključena (oznake generičnih, R527), oskrba gradiv #6 ostaja lastnikova; brez novih funkcij (stalna usmeritev)
