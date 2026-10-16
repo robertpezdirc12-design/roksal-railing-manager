@@ -4256,3 +4256,22 @@ Work Log:
 Stage Summary:
 - Issue #20 izvedbena stran ZAKLJUČENA: kanonični vir določen in dokumentiran (GitHub), sinhronizacija po SHA z odkrivalnikom drifta (skupina r533), GitLab CI spet ZELEN na zasebnem runnerju (57490060), release vrata opisana (pas na izdajnem SHA + sync-check)
 - Ostaneta lastnikovi dejanji za #20: Vercel preverjanje po vsaki izdaji (brez žetona nez izvedljivo iz peskovnika — postopek dokumentiran); issueji ostajajo SAMO na GitHubu (GitLab issue seznam prazen — pravilno)
+
+---
+Task ID: R533 (del 2 — zadeve #16–#19)
+Agent: main (Z.ai Code)
+Task: Nove zadeve lastnika #16–#20: izvedba #18/#17/#19 revizije + #16 orodje in inventura (#20 zaključen v delu 1)
+
+Work Log:
+- #18 (P0) FIZIČNA VALIDACIJA — POŠTENO: v peskovniku NI fizične naprave/orođij/objektov → izdelan docs/MEASUREMENT-VALIDATION-PROTOCOL.md (5 objektov predlog, referenčno orođje + kalibracija, ponovljivost 2×, tabela rezultatov z NEUSPEŠIMI, tolerance po namenu kot RAZISKOVALNE do potrditve produkcijske odgovorne osebe, navodilo monterju, blokada pri lastniku); varovalke §3 REVIZIRANE kot ŽE OBSTOJEČE (merilna lestvica R501: vrata BOM 409, fail-closed, strežniški status, razveljavitev z razlogom, PDF provenienca) z dokazi v testih r501/r510/r511 — pregled ponudb: Quote je ročna gradnja (ne more tiho povleči mere)
+- #17 (P1) REVIZIJA DoD: izbirnik ŽE izpolnjuje 9/10 točk (družine = vrsta uporabe foto-replace.tsx:339, variante s čipi R523/R524, generični R527, E2E 21✓, shranitev/obnovitev r504 K) — edina odprta točka je ZAVEDNA meja: fotomontaža NE riče v poslovni tok brez meritve (arhitektura poštenosti #15); dokumentirano v docs/REVIZIJA-17-19.md
+- #19 (P0) AUDIT poslovnega toka: zemljevid po odelkih (vsi obstoječi moduli), 9/9 obveznih E2E scenarijev ŽE pokritih (dokazi v testih), vrzeli pošteno po prioriteti (13-stopenjski cikel = migracija+lastnikova odločitev, enoten order-id, FURS ne obstaja); priporočilo: ne graditi vzporednega sistema (docs/REVIZIJA-17-19.md)
+- #16 (P1) Faza 4 ORODJE: ops/roksal-fetch.mjs — idempotenten, SHA-256 dedup proti MANIFEST, suha vožnja privzeto, brez obvajanja zaščite, vezen vnos NAMENOMO ročen; Faza 0 INVENTURA: MANIFEST 116 vnosov vseh s SHA-256 po kategorijah (galerija 42, detajl-čipi 33, lestvice 11 …); Faza 1 PRVI POSKUS: 6 strani = 200 a ShellSquare izziv-lupina (12 KB, 0 povezav; robots.txt prav tako) — ZABELEŽENA BLOKADA z utemeljeno potjo (brskalniška seja, metoda R524); docs/ROKSAL-ASSET-INVENTORY.md
+- BREZ sprememb aplikacijske kode (samo docs + orodje + test r533 iz dela 1)
+
+Stage Summary:
+- #20: zaključen (del 1) — kanonični vir GitHub, sync po SHA, runner + cevovodi zeleni
+- #18: protokol pripravljen, varovalke dokazane; fizični preizkus čaka lastnika (objekti+orođje+naprava) — iskreno
+- #17: 9/10 izpolnjenih obstoječo kodo; 1 zavedna meja dokumentirana
+- #19: audit zaključen — jedro toka obstaja in je testirano; vrzeli po prioriteti
+- #16: orodje + inventura + blokada; brskalniški obhod je naslednji korak
