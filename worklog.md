@@ -4275,3 +4275,8 @@ Stage Summary:
 - #17: 9/10 izpolnjenih obstoječo kodo; 1 zavedna meja dokumentirana
 - #19: audit zaključen — jedro toka obstaja in je testirano; vrzeli po prioriteti
 - #16: orodje + inventura + blokada; brskalniški obhod je naslednji korak
+
+---
+Task ID: R533-dodatek (izdaja v1.57.0 po vratih #20)
+Agent: main (Z.ai Code)
+Task: Izdaja v1.57.0 — relejni pas ZELEN na točno izdajnem SHA (461e6bc: 8 statičnih + 42 skupin, EXIT 0, ops/r533-pas.out) → verzija 1.57.0 → oznaka → dvojni push → ops/sync-check.sh OK na obeh sistemih (post-push potrditev); poročila objavljena na vseh 5 zadevah (#16–#20, komentarji 6211938196/6211945853/6211946134/6211955333/6211955659); GitLab cevovod potrditev istega SHA; VERCEL: lastnikovo dejanje (brez žetona v peskovniku — postopek v README)

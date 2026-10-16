@@ -59,30 +59,8 @@
   ✓ r524                   ═══ r524: 1 ✓ / 0 ✗
   ✓ r527                   ═══ r527: 1 ✓ / 0 ✗
   ✓ r532                   ═══ r532: 1 ✓ / 0 ✗
-  ✗ r533                   (podrobnosti: .ci-local-logs/r533.log)
-── E) DRIFT: manjkajoča oznaka izdaje na enemu zrcalu ──
-  ✓ manjkajoča oznaka = DRIFT izhod 1 (dejansko 1)
-  ✓ manjkajoča oznaka izdaje je DRIFT z imenom repota
-  ✓ drugo zrcalo še vedno OK (nedotaknjeno)
-── D) FAILED: nedosegljiv oddaljen repozitorij ──
-  ✓ izhod 2 ob nedosegljivem repotu (dejansko 2)
-  ✓ izpis poimenuje nedosegljiv repozitorij
-── F) živi primer: pravi origin + gitlab (pošteno: preskok če nedosegljiva) ──
-  ✗ pravi origin+gitlab na istem SHA kot lokalni main (RC 1)
-  ✗ živo stanje OK
-── G) vir: kanonični repo dokumentiran, zrcalo pošteno ──
-  ✓ README: GitHub je kanonični vir (izrecno)
-  ✓ README: sinhronizacija po SHA z ops/sync-check.sh dokumentirana
-  ✓ skripta se sklicuje na issue #20
-  ✓ .gitlab-ci.yml obstaja (verify job — drugotna vrata)
+  ✓ r533                   ═══ r533: 1 ✓ / 0 ✗
 
-══ REZULTAT: 25 ✓ / 2 ✗ ══
-::endgroup::
-═══ r533: 0 ✓ / 1 ✗
-PADLI: r533.py
-
-════ RELEJNI PAS: ✗ 1 rdečih od 8 korakov in 42 skupin ════
-PADLE SKUPINE: r533
-Ne predlagaj deploya, dokler pas ni zelen.
+════ RELEJNI PAS: ✓ zeleno (8 statičnih korakov, 42 skupin) ════
 Logi: .ci-local-logs/
-BELT_EXIT_CODE=1
+BELT_EXIT_CODE=0
