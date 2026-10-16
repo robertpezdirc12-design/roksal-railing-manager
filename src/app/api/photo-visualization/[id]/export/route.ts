@@ -33,22 +33,31 @@ export async function POST (req: NextRequest, { params }: Params) {
   }
 
   // neobvezno: posodobi izrisano sličico ob izvozu (kar je uporabnik dejansko
-  // izvozil — za PDF in portal)
-  let renderedPosodobljen = false
+  // izvozil — za PDF in portal); validacija je čista in teče PREDAJ verigo
+  let novaSlicica: string | null = null
   if (body.rendered !== undefined && body.rendered !== null) {
     const r = preveriFoto(body.rendered, MAX_RENDERED_BYTES, 'Izrisana sličica')
     if ('napaka' in r) return jsonError(400, r.napaka)
-    await db.photoVisualization.update({ where: { id }, data: { rendered: r.dataUrl } })
-    renderedPosodobljen = true
+    novaSlicica = r.dataUrl
   }
 
-  await writeAudit({
-    userId: user.id,
-    action: 'PHOTO_VIZ_EXPORT',
-    entity: 'photoVisualization',
-    entityId: id,
-    projectId: viz.projectId,
-    detail: { format, variantLabel: viz.variantLabel, renderedPosodobljen },
+  let renderedPosodobljen = false
+  // R539 (transakcijska celovitost): posodobitev sličice + revizija izvoza v
+  // ENI transakciji — prej bi padec med njima pustil posodobljeno sličico brez
+  // zabeleženega izvoza. Odgovor (format, renderedPosodobljen) nespremenjen.
+  await db.$transaction(async (tx) => {
+    if (novaSlicica !== null) {
+      await tx.photoVisualization.update({ where: { id }, data: { rendered: novaSlicica } })
+      renderedPosodobljen = true
+    }
+    await writeAudit({
+      userId: user.id,
+      action: 'PHOTO_VIZ_EXPORT',
+      entity: 'photoVisualization',
+      entityId: id,
+      projectId: viz.projectId,
+      detail: { format, variantLabel: viz.variantLabel, renderedPosodobljen },
+    }, tx)
   })
 
   return NextResponse.json({ data: { ok: true, format, renderedPosodobljen } })

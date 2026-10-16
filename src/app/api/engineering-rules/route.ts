@@ -51,36 +51,42 @@ export async function POST (req: NextRequest) {
   if (!Number.isFinite(value) || value <= 0) return jsonError(400, 'Vrednost mora biti večja od 0.')
 
   const existing = await db.engineeringRule.findUnique({ where: { key } })
-  const rule = await db.engineeringRule.upsert({
-    where: { key },
-    create: { key, label, value, unit, note, active },
-    update: { label, value, unit, note, active },
-  })
+  // R539 (transakcijska celovitost): upsert pravila + zgodovina verzije + OBE
+  // reviziji v ENI transakciji — padec srednjega koraka ne pusti pravila brez
+  // zgodovine verzije (vzorec R537-d; predbranje `existing` ostaja izven tx).
+  const rule = await db.$transaction(async (tx) => {
+    const rule = await tx.engineeringRule.upsert({
+      where: { key },
+      create: { key, label, value, unit, note, active },
+      update: { label, value, unit, note, active },
+    })
 
-  // R449 (issue #8): zgodovina vrednosti — staro→novo ob vsakem upsertu
-  const version = await db.ruleVersion.create({
-    data: {
-      ruleId: rule.id,
+    // R449 (issue #8): zgodovina vrednosti — staro→novo ob vsakem upsertu
+    const version = await tx.ruleVersion.create({
+      data: {
+        ruleId: rule.id,
+        userId: auth.user.id,
+        oldValue: existing ? JSON.stringify(ruleSnapshot(existing)) : null,
+        newValue: JSON.stringify(ruleSnapshot(rule)),
+        note: existing ? `Posodobitev pravila ${key}` : `Novo pravilo ${key}`,
+      },
+    })
+
+    await writeAudit({
       userId: auth.user.id,
-      oldValue: existing ? JSON.stringify(ruleSnapshot(existing)) : null,
-      newValue: JSON.stringify(ruleSnapshot(rule)),
-      note: existing ? `Posodobitev pravila ${key}` : `Novo pravilo ${key}`,
-    },
-  })
-
-  await writeAudit({
-    userId: auth.user.id,
-    action: 'ENGINEERING_RULE_UPSERT',
-    entity: 'engineeringRule',
-    entityId: rule.id,
-    detail: { key, value, unit, active },
-  })
-  await writeAudit({
-    userId: auth.user.id,
-    action: 'RULE_VERSION',
-    entity: 'ruleVersion',
-    entityId: version.id,
-    detail: { ruleId: rule.id, key, operacija: existing ? 'posodobitev' : 'nastanek' },
+      action: 'ENGINEERING_RULE_UPSERT',
+      entity: 'engineeringRule',
+      entityId: rule.id,
+      detail: { key, value, unit, active },
+    }, tx)
+    await writeAudit({
+      userId: auth.user.id,
+      action: 'RULE_VERSION',
+      entity: 'ruleVersion',
+      entityId: version.id,
+      detail: { ruleId: rule.id, key, operacija: existing ? 'posodobitev' : 'nastanek' },
+    }, tx)
+    return rule
   })
   return NextResponse.json({ data: rule }, { status: 201 })
 }

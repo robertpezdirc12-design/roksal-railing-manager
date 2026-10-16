@@ -75,26 +75,33 @@ export async function POST (req: NextRequest, { params }: { params: Promise<{ id
     thumb = body.thumb
   }
 
-  const photo = await db.capturePhoto.create({
-    data: {
-      sessionId: id, clientKey, zone,
-      quality: JSON.stringify(quality),
-      offsetCm,
-      thumb,
-    },
+  // R539 (transakcijska celovitost): posnetek + revizija CAPTURE_PHOTO v ENI
+  // transakciji; sveža analiza (pokritost/drift — pisanje prek globalnega db)
+  // ostane PO commitu, ker potrebuje VIDEN nov posnetek.
+  const photo = await db.$transaction(async (tx) => {
+    const photo = await tx.capturePhoto.create({
+      data: {
+        sessionId: id, clientKey, zone,
+        quality: JSON.stringify(quality),
+        offsetCm,
+        thumb,
+      },
+    })
+
+    await writeAudit({
+      userId: user.id,
+      action: 'CAPTURE_PHOTO',
+      entity: 'captureSession',
+      entityId: id,
+      projectId: access.session.projectId,
+      detail: { photoId: photo.id, zone: stop.label, ...(offsetCm != null ? { offsetCm } : {}) },
+    }, tx)
+
+    return photo
   })
 
   const fresh = await loadCaptureContext(id)
   const analysis = fresh ? await analyzeSession(fresh) : null
-
-  await writeAudit({
-    userId: user.id,
-    action: 'CAPTURE_PHOTO',
-    entity: 'captureSession',
-    entityId: id,
-    projectId: access.session.projectId,
-    detail: { photoId: photo.id, zone: stop.label, ...(offsetCm != null ? { offsetCm } : {}) },
-  })
 
   return NextResponse.json({ data: { id: photo.id, analysis } }, { status: 201 })
 }

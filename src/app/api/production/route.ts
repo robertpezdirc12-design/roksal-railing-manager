@@ -49,15 +49,19 @@ export async function POST (req: NextRequest) {
   const existingCodes = await db.productionOrder.findMany({ where: { code: { startsWith: 'PR-' } }, select: { code: true } })
   const code = nextCodeFromList(existingCodes.map((w) => w.code), 'PR-')
 
-  const order = await db.productionOrder.create({
-    data: { code, title, projectId, dueAt },
-    include: { project: { select: { code: true, title: true } } },
-  })
-
-  await writeAudit({
-    userId: auth.user.id, action: 'PRODUCTION_CREATE', entity: 'productionOrder', entityId: order.id,
-    projectId,
-    detail: { code, title, dueAt },
+  // R539 (transakcijska celovitost): nalog + revizija atomarno (vzorec R537-d;
+  // predbranje zasedenih kod ostaja izven tx).
+  const order = await db.$transaction(async (tx) => {
+    const order = await tx.productionOrder.create({
+      data: { code, title, projectId, dueAt },
+      include: { project: { select: { code: true, title: true } } },
+    })
+    await writeAudit({
+      userId: auth.user.id, action: 'PRODUCTION_CREATE', entity: 'productionOrder', entityId: order.id,
+      projectId,
+      detail: { code, title, dueAt },
+    }, tx)
+    return order
   })
   return NextResponse.json({ data: order }, { status: 201 })
 }

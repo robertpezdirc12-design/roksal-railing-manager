@@ -63,19 +63,24 @@ export async function POST (req: NextRequest, { params }: Params) {
     ? Math.trunc(daysNum)
     : REVIEW_LINK_DEFAULT_DAYS
 
-  const link = await db.reviewLink.create({
-    data: {
-      token: 'rv-' + randomUUID().replace(/-/g, ''),
-      fenceRunId: id,
-      createdById: user.id,
-      note: typeof body?.note === 'string' && body.note.trim() ? body.note.trim() : null,
-      expiresAt: new Date(Date.now() + days * 86400000),
-    },
-  })
-  await writeAudit({
-    userId: user.id, action: 'REVIEWLINK_CREATE', entity: 'reviewLink', entityId: link.id,
-    projectId: scope.run.projectId,
-    detail: { fenceRunId: id, run: scope.run.name, days, expiresAt: link.expiresAt.toISOString() },
+  // R539 (transakcijska celovitost): povezava + revizija atomarno — padec
+  // revizije NE pusti javno objavljene povezave brez sledi v dnevniku.
+  const link = await db.$transaction(async (tx) => {
+    const link = await tx.reviewLink.create({
+      data: {
+        token: 'rv-' + randomUUID().replace(/-/g, ''),
+        fenceRunId: id,
+        createdById: user.id,
+        note: typeof body?.note === 'string' && body.note.trim() ? body.note.trim() : null,
+        expiresAt: new Date(Date.now() + days * 86400000),
+      },
+    })
+    await writeAudit({
+      userId: user.id, action: 'REVIEWLINK_CREATE', entity: 'reviewLink', entityId: link.id,
+      projectId: scope.run.projectId,
+      detail: { fenceRunId: id, run: scope.run.name, days, expiresAt: link.expiresAt.toISOString() },
+    }, tx)
+    return link
   })
 
   return NextResponse.json({
@@ -107,11 +112,15 @@ export async function DELETE (req: NextRequest, { params }: Params) {
   if (!link || link.fenceRunId !== id) return jsonError(404, 'Povezava ne obstaja.')
   if (link.revokedAt) return NextResponse.json({ data: { revoked: true, id: linkId } }) // idempotentno
 
-  await db.reviewLink.update({ where: { id: linkId }, data: { revokedAt: new Date() } })
-  await writeAudit({
-    userId: user.id, action: 'REVIEWLINK_REVOKE', entity: 'reviewLink', entityId: linkId,
-    projectId: scope.run.projectId,
-    detail: { fenceRunId: id, token: link.token.slice(0, 10) + '…' }, // prikrit žeton (varnost)
+  // R539 (transakcijska celovitost): preklic + revizija atomarno — javni
+  // dostop preneha natanko takrat, ko je dejanje tudi revizijsko zabeleženo.
+  await db.$transaction(async (tx) => {
+    await tx.reviewLink.update({ where: { id: linkId }, data: { revokedAt: new Date() } })
+    await writeAudit({
+      userId: user.id, action: 'REVIEWLINK_REVOKE', entity: 'reviewLink', entityId: linkId,
+      projectId: scope.run.projectId,
+      detail: { fenceRunId: id, token: link.token.slice(0, 10) + '…' }, // prikrit žeton (varnost)
+    }, tx)
   })
 
   return NextResponse.json({ data: { revoked: true, id: linkId } })

@@ -13,9 +13,10 @@ import { db } from '@/lib/db'
 import { jsonError, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
 import { parseCalibration, parseNodes, parseTerrain } from '@/lib/fence-run-engine'
-import { analyzeContext, loadRunContext, snapshotVersion, syncSegments } from '@/lib/fence-run-service'
+import { analyzeContext, loadRunContext, snapshotVersionOn, syncSegments } from '@/lib/fence-run-service'
 import { fenceRunZaUporabnika } from '@/lib/fence-run-access'
-import { emitEvent } from '@/lib/notify'
+import { deliverEvent, recordEvent } from '@/lib/notify'
+import { retryOnUnique } from '@/lib/versioning'
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -152,37 +153,52 @@ export async function PATCH (req: NextRequest, { params }: Params) {
 
   if (Object.keys(data).length === 0) return jsonError(400, 'Ni sprememb.', 'Podajte vsaj eno polje: name, note, nodes, terrain, calibration, productId, variantId, status.')
 
-  await db.fenceRun.update({ where: { id }, data })
-
-  // ponoven izračun segmentov + quality (zmanjšanje POŠTENO razveljavi preveritve)
-  const ctx = await loadRunContext(id)
-  if (ctx) await syncSegments(ctx)
-  const version = await snapshotVersion(id, user.id, 'Sprememba tekača')
-
-  await writeAudit({
-    userId: user.id,
-    action: 'FENCE_RUN_UPDATE',
-    entity: 'fenceRun',
-    entityId: id,
-    projectId: scope.run.projectId,
-    detail: { fields: Object.keys(data), version },
-  })
-
+  // R539 (transakcijska celovitost): sprememba + ponoven izračun segmentov +
+  // verzija + revizija + zapis dogodka (outbox) v ENI transakciji — padec
+  // srednjega koraka NE pusti spremembe brez verzije/revizije/dogodka.
+  // ZUNANJA retryOnUnique (R536) pokriva dirko verzij (P2002 na
+  // @@unique([fenceRunId, version])) — ob ponovnem poskusu se CELO telo
+  // (branje zadnje verzije vključno) izvede znova; notranji poskusi v PG
+  // transakciji niso možni. Dostava obvestila teče PO commitu (deliverEvent,
+  // ognjevarna).
   // R481 (issue #9 §9 — „model spremenjen"): dogodek SAMO ob spremembi
   // model-relevantnih polj (nodes/terrain/calibration/productId/variantId —
   // ime/opomba/status modela NE spremenijo). Ključ nosi verzijo (vsaka
   // sprememba = nov dogodek, deterministično).
   const MODEL_FIELDS = ['nodes', 'terrain', 'calibration', 'productId', 'variantId']
-  if (MODEL_FIELDS.some((f) => f in data)) {
-    await emitEvent({
-      type: 'MODEL_CHANGED',
-      key: `model-changed:${id}:${version}`,
-      title: 'Model spremenjen',
-      body: `Tekač ${scope.run.name}: model-relevantna sprememba (${Object.keys(data).filter((f) => MODEL_FIELDS.includes(f)).join(', ')}) — verzija v${version}.`,
+  const { version, recorded } = await retryOnUnique(() => db.$transaction(async (tx) => {
+    await tx.fenceRun.update({ where: { id }, data })
+
+    // ponoven izračun segmentov + quality (zmanjšanje POŠTENO razveljavi preveritve)
+    const ctx = await loadRunContext(id, tx)
+    if (ctx) await syncSegments(ctx, tx)
+    const version = await snapshotVersionOn(tx, id, user.id, 'Sprememba tekača')
+
+    await writeAudit({
+      userId: user.id,
+      action: 'FENCE_RUN_UPDATE',
+      entity: 'fenceRun',
+      entityId: id,
       projectId: scope.run.projectId,
-      audience: 'OFFICE',
-    })
-  }
+      detail: { fields: Object.keys(data), version },
+    }, tx)
+
+    // R539: zapis dogodka V transakciji (recordEvent, outbox), dostava PO commitu
+    const recorded = MODEL_FIELDS.some((f) => f in data)
+      ? await recordEvent({
+        type: 'MODEL_CHANGED',
+        key: `model-changed:${id}:${version}`,
+        title: 'Model spremenjen',
+        body: `Tekač ${scope.run.name}: model-relevantna sprememba (${Object.keys(data).filter((f) => MODEL_FIELDS.includes(f)).join(', ')}) — verzija v${version}.`,
+        projectId: scope.run.projectId,
+        audience: 'OFFICE',
+      }, tx)
+      : null
+    return { version, recorded }
+  }))
+
+  // dostava obvestila PO uspešnem commitu (ognjevarna — nikoli ne vrže napake)
+  if (recorded) await deliverEvent(recorded)
 
   const fresh = await loadRunContext(id)
   return NextResponse.json({ data: { version, analysis: fresh ? analyzeContext(fresh) : null } })
@@ -203,14 +219,18 @@ export async function DELETE (req: NextRequest, { params }: Params) {
     return jsonError(403, 'Monter lahko briše samo svoje tekače.')
   }
 
-  await db.fenceRun.delete({ where: { id } }) // kaskadno pobriše segmente + verzije
-  await writeAudit({
-    userId: user.id,
-    action: 'FENCE_RUN_DELETE',
-    entity: 'fenceRun',
-    entityId: id,
-    projectId: scope.run.projectId,
-    detail: { name: scope.run.name },
+  // R539 (transakcijska celovitost): brisanje tekača + revizija atomarno —
+  // padec revizije NE pusti brezsledno izbrisanega tekača.
+  await db.$transaction(async (tx) => {
+    await tx.fenceRun.delete({ where: { id } }) // kaskadno pobriše segmente + verzije
+    await writeAudit({
+      userId: user.id,
+      action: 'FENCE_RUN_DELETE',
+      entity: 'fenceRun',
+      entityId: id,
+      projectId: scope.run.projectId,
+      detail: { name: scope.run.name },
+    }, tx)
   })
   return NextResponse.json({ data: { deleted: true } })
 }

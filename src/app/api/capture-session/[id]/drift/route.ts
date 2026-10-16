@@ -51,20 +51,24 @@ export async function POST (req: NextRequest, { params }: { params: Promise<{ id
   const all = [...photoSamples, ...manual, sample].slice(-200)
   const status = driftStatus(all)
 
-  await db.captureSession.update({
-    where: { id },
-    data: {
-      drift: JSON.stringify({ samples: all, status: status.state, lastRefCode: existing.lastRefCode }),
-    },
-  })
+  // R539 (transakcijska celovitost): drift vzorec + revizija CAPTURE_DRIFT v
+  // ENI transakciji; sveža analiza ostane PO commitu (piše prek globalnega db).
+  await db.$transaction(async (tx) => {
+    await tx.captureSession.update({
+      where: { id },
+      data: {
+        drift: JSON.stringify({ samples: all, status: status.state, lastRefCode: existing.lastRefCode }),
+      },
+    })
 
-  await writeAudit({
-    userId: user.id,
-    action: 'CAPTURE_DRIFT',
-    entity: 'captureSession',
-    entityId: id,
-    projectId: access.session.projectId,
-    detail: { offsetCm: body.offsetCm, state: status.state, maxAbsCm: status.maxAbsCm },
+    await writeAudit({
+      userId: user.id,
+      action: 'CAPTURE_DRIFT',
+      entity: 'captureSession',
+      entityId: id,
+      projectId: access.session.projectId,
+      detail: { offsetCm: body.offsetCm, state: status.state, maxAbsCm: status.maxAbsCm },
+    }, tx)
   })
 
   const fresh = await loadCaptureContext(id)

@@ -13,6 +13,7 @@ import { writeAudit } from '@/lib/audit'
 import { REF_METHODS, referenceNetwork } from '@/lib/capture-qa-engine'
 import { captureSessionZaUporabnika } from '@/lib/capture-qa-access'
 import { analyzeSession, loadCaptureContext, syncReferenceStatuses } from '@/lib/capture-qa-service'
+import { retryOnUnique } from '@/lib/versioning'
 
 export async function GET (req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requirePermission(req, 'measurements.read')
@@ -63,42 +64,65 @@ export async function POST (req: NextRequest, { params }: { params: Promise<{ id
   const m = REF_METHODS.find((x) => x.id === method)
   if (!m) return jsonError(400, 'Neveljavna metoda.', `method: ${REF_METHODS.map((x) => x.id).join(' | ')}`)
 
-  // koda REF-00n (zaporedna po številu referenc zajema)
-  const count = await db.captureReference.count({ where: { sessionId: id } })
-  const code = `REF-${String(count + 1).padStart(3, '0')}`
+  // R539 (transakcijska celovitost): referenca + revizija REFERENCE_CREATE v
+  // ENI transakciji. Koda REF-00n je read-then-create (@@unique([sessionId,
+  // code])) — branje referenc ZNOTRAJ tx na tx klientu, sočasen P2002 pa
+  // retryOnUnique okoli CELE transakcije ponovi z novo kodo (vzorec R535/R538).
+  // Konflikt nove reference (oznaka v reviziji) je izračunan iz ČISTEGA engine-a
+  // (referenceNetwork — isti izračun kot syncReferenceStatuses) znotraj tx,
+  // ker syncReferenceStatuses/analyzeSession pišeta prek globalnega db in ne
+  // moreta teči znotraj tx (ne bi videla nezapisanega create) — ostajata PO
+  // commitu, kot prej.
+  const { ref, code } = await retryOnUnique(() => db.$transaction(async (tx) => {
+    // koda REF-00n (zaporedna po številu referenc zajema)
+    const existing = await tx.captureReference.findMany({
+      where: { sessionId: id },
+      select: { code: true, atCm: true, measureCm: true, method: true, status: true },
+    })
+    const code = `REF-${String(existing.length + 1).padStart(3, '0')}`
 
-  const ref = await db.captureReference.create({
-    data: {
-      sessionId: id, code,
-      label: typeof body.label === 'string' && body.label.trim() ? body.label.trim().slice(0, 120) : null,
-      atCm, measureCm, method,
-      device: typeof body.device === 'string' && body.device.trim() ? body.device.trim().slice(0, 120) : null,
-      operatorId: user.id,
-      confidence: m.confidence,
-      note: typeof body.note === 'string' && body.note.trim() ? body.note.trim().slice(0, 300) : null,
-    },
-  })
+    // konflikt nove reference — deterministično iz verige (brez pisanja)
+    const netPre = referenceNetwork([
+      ...existing.map((r) => ({ code: r.code, atCm: r.atCm, measureCm: r.measureCm, method: r.method, status: r.status })),
+      { code, atCm, measureCm, method, status: 'AKTIVNA' },
+    ])
+    const konflikt = netPre.pairs.some((p) => p.conflict && p.toCode === code)
 
-  // veriga se preveri; konflikti se OZNAČIJO (ne rešijo tiho)
+    const ref = await tx.captureReference.create({
+      data: {
+        sessionId: id, code,
+        label: typeof body.label === 'string' && body.label.trim() ? body.label.trim().slice(0, 120) : null,
+        atCm, measureCm, method,
+        device: typeof body.device === 'string' && body.device.trim() ? body.device.trim().slice(0, 120) : null,
+        operatorId: user.id,
+        confidence: m.confidence,
+        note: typeof body.note === 'string' && body.note.trim() ? body.note.trim().slice(0, 300) : null,
+      },
+    })
+
+    await writeAudit({
+      userId: user.id,
+      action: 'REFERENCE_CREATE',
+      entity: 'captureReference',
+      entityId: ref.id,
+      projectId: access.session.projectId,
+      detail: {
+        sessionId: id, code, atCm, measureCm, method,
+        confidence: m.confidence,
+        ...(konflikt ? { konflikt: true } : {}),
+      },
+    }, tx)
+
+    return { ref, code }
+  }))
+
+  // veriga se preveri; konflikti se OZNAČIJO (ne rešijo tiho) — po commitu
   const net = await syncReferenceStatuses(id)
   const fresh = await loadCaptureContext(id)
   const analysis = fresh ? await analyzeSession(fresh) : null
 
   // označi referenco, ki je v konfliktu (sveže stanje po sync)
   const savedRef = await db.captureReference.findUnique({ where: { id: ref.id } })
-
-  await writeAudit({
-    userId: user.id,
-    action: 'REFERENCE_CREATE',
-    entity: 'captureReference',
-    entityId: ref.id,
-    projectId: access.session.projectId,
-    detail: {
-      sessionId: id, code, atCm, measureCm, method,
-      confidence: m.confidence,
-      ...(savedRef?.status === 'KONFLIKT' ? { konflikt: true } : {}),
-    },
-  })
 
   return NextResponse.json({
     data: {
@@ -137,25 +161,31 @@ export async function PATCH (req: NextRequest, { params }: { params: Promise<{ i
     return jsonError(400, 'Zavrnitev reference zahteva razlog.', '§18: sprememba kritične meritve potrebuje zapis razloga.')
   }
 
-  await db.captureReference.update({
-    where: { id: referenceId },
-    data: {
-      status: action === 'ZAVRCI' ? 'ZAVRACENA' : 'AKTIVNA',
-      note: reason ?? ref.note,
-    },
+  // R539 (transakcijska celovitost): reševanje konflikta (status + razlog) +
+  // revizija REFERENCE_REJECT/ACTIVATE v ENI transakciji; sync verige in
+  // analiza (pisanje prek globalnega db) ostaneta PO commitu — kot prej.
+  await db.$transaction(async (tx) => {
+    await tx.captureReference.update({
+      where: { id: referenceId },
+      data: {
+        status: action === 'ZAVRCI' ? 'ZAVRACENA' : 'AKTIVNA',
+        note: reason ?? ref.note,
+      },
+    })
+
+    await writeAudit({
+      userId: user.id,
+      action: action === 'ZAVRCI' ? 'REFERENCE_REJECT' : 'REFERENCE_ACTIVATE',
+      entity: 'captureReference',
+      entityId: referenceId,
+      projectId: access.session.projectId,
+      detail: { sessionId: id, code: ref.code, ...(reason ? { reason } : {}) },
+    }, tx)
   })
+
   const net = await syncReferenceStatuses(id)
   const fresh = await loadCaptureContext(id)
   const analysis = fresh ? await analyzeSession(fresh) : null
-
-  await writeAudit({
-    userId: user.id,
-    action: action === 'ZAVRCI' ? 'REFERENCE_REJECT' : 'REFERENCE_ACTIVATE',
-    entity: 'captureReference',
-    entityId: referenceId,
-    projectId: access.session.projectId,
-    detail: { sessionId: id, code: ref.code, ...(reason ? { reason } : {}) },
-  })
 
   return NextResponse.json({ data: { id: referenceId, status: action === 'ZAVRCI' ? 'ZAVRACENA' : 'AKTIVNA', network: net, analysis } })
 }

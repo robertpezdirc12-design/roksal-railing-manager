@@ -4,6 +4,7 @@
 // Brez runtime AI (§18) — čist deterministični izračun iz fence-run-engine.
 
 import { db } from '@/lib/db'
+import type { Prisma } from '@prisma/client'
 import {
   DEFAULT_RULES, ENGINE_VERSION, computeSegments, parseCalibration, parseNodes, parseTerrain,
   productRulesFromTech, qualityGate, reconcileSegments, suggestPosts, summarizeRun,
@@ -12,6 +13,12 @@ import {
   type SegmentCalc, type TerrainPoint, type ValidationIssue,
 } from '@/lib/fence-run-engine'
 import { retryOnUnique } from '@/lib/versioning'
+
+/** R539 (transakcijska celovitost): klient, prek katerega gre branje/pisanje
+ * tekača — globalni db (privzeto) ALI transakcijski klient (tx) iz poslovne
+ * rute. Isti vzorec kot writeAudit (AuditClient) / recordEvent (NotifyClient):
+ * obstoječi klici brez argumenta ostanejo na globalnem db. */
+export type FenceRunClient = Pick<Prisma.TransactionClient, 'fenceRun' | 'fenceSegment' | 'fenceRunVersion'>
 
 // ─── Kontekst tekača ────────────────────────────────────────────────────────
 
@@ -45,9 +52,12 @@ function safeParse<T> (json: string | null, fn: (v: unknown) => T | null): T | n
   try { return fn(JSON.parse(json)) } catch { return null }
 }
 
-/** Naloži tekač z razčlenjenimi vozlišči/terenom/kalibracijo + produktnimi pravili. */
-export async function loadRunContext (runId: string): Promise<RunContext | null> {
-  const run = await db.fenceRun.findUnique({
+/** Naloži tekač z razčlenjenimi vozlišči/terenom/kalibracijo + produktnimi pravili.
+ *  R539 (transakcijska celovitost): neobvezen klient — globalni db (privzeto,
+ *  vsi obstoječi klici) ali tx iz verige zapisa, da branje ZNOTRAJ transakcije
+ *  vidi še ne-potrjene spremembe (npr. sveže ustvarjen tekač v POST-u). */
+export async function loadRunContext (runId: string, client: FenceRunClient = db): Promise<RunContext | null> {
+  const run = await client.fenceRun.findUnique({
     where: { id: runId },
     include: { product: { select: { tech: true } } },
   })
@@ -56,7 +66,7 @@ export async function loadRunContext (runId: string): Promise<RunContext | null>
   const terrain = safeParse(run.terrain, parseTerrain)
   const calibration = safeParse(run.calibration, parseCalibration)
   const rules: ProductRules = { ...DEFAULT_RULES, ...productRulesFromTech((run.product as { tech: string | null } | null)?.tech) }
-  const segments = await db.fenceSegment.findMany({
+  const segments = await client.fenceSegment.findMany({
     where: { fenceRunId: runId },
     orderBy: { order: 'asc' },
   })
@@ -93,8 +103,11 @@ function verificationsFrom (segments: SegmentRow[]): { fromAtCm: number; toAtCm:
  * nespremenjenim razponom (±1 cm) ohrani id/status/verifikacijo (version+1),
  * spremenjena geometrija POŠTENO razveljavi preveritev (ESTIMATED v1, §19).
  * Osveži tudi quality JSON na tekaču. Vrača sveže segmente.
+ * R539 (transakcijska celovitost): neobvezen klient — globalni db (privzeto)
+ * ali tx iz verige zapisa, da je ponoven izračun segmentov atomarno vezan na
+ * spremembo, ki ga je povzročila (vsi obstoječi klici nespremenjeni).
  */
-export async function syncSegments (ctx: RunContext): Promise<SegmentRow[]> {
+export async function syncSegments (ctx: RunContext, client: FenceRunClient = db): Promise<SegmentRow[]> {
   const computed: SegmentCalc[] = computeFor(ctx)
   const old = ctx.segments
   const ups = reconcileSegments(computed, old)
@@ -116,7 +129,7 @@ export async function syncSegments (ctx: RunContext): Promise<SegmentRow[]> {
     )
     if (match) {
       matchedIds.add(match.id)
-      await db.fenceSegment.update({
+      await client.fenceSegment.update({
         where: { id: match.id },
         data: {
           order: u.order, fromKind: u.fromKind, toKind: u.toKind,
@@ -127,7 +140,7 @@ export async function syncSegments (ctx: RunContext): Promise<SegmentRow[]> {
         },
       })
     } else {
-      await db.fenceSegment.create({
+      await client.fenceSegment.create({
         data: {
           fenceRunId: ctx.run.id, order: u.order, fromKind: u.fromKind, toKind: u.toKind,
           fromAtCm: u.fromAtCm, toAtCm: u.toAtCm, lengthCm: u.lengthCm,
@@ -140,13 +153,13 @@ export async function syncSegments (ctx: RunContext): Promise<SegmentRow[]> {
   }
   // pobriši odvečne (geometrija se je skrčila)
   for (const o of old) {
-    if (!matchedIds.has(o.id)) await db.fenceSegment.delete({ where: { id: o.id } })
+    if (!matchedIds.has(o.id)) await client.fenceSegment.delete({ where: { id: o.id } })
   }
 
-  const fresh = await db.fenceSegment.findMany({ where: { fenceRunId: ctx.run.id }, orderBy: { order: 'asc' } })
+  const fresh = await client.fenceSegment.findMany({ where: { fenceRunId: ctx.run.id }, orderBy: { order: 'asc' } })
   // osveži quality (§3)
   const analysis = analyzeContext({ ...ctx, segments: fresh.map(toSegmentRow) })
-  await db.fenceRun.update({
+  await client.fenceRun.update({
     where: { id: ctx.run.id },
     data: { quality: JSON.stringify(analysis.quality) },
   })
@@ -222,7 +235,50 @@ export function analyzeContext (ctx: RunContext): RunAnalysis {
 // ─── Verzije (§17: posnetek ob vsaki spremembi) ────────────────────────────
 
 /**
- * Zapiše posnetek tekača kot naslednjo verzijo (nikoli prepis, §17).
+ * Zapiše posnetek tekača kot naslednjo verzijo NA PODANEM klientu (R539 —
+ * transakcijska celovitost), BREZ notranjega retryOnUnique: v PG transakciji
+ * P2002 aborta CELO transakcijo in je neobnovljiv (ugotovitev R536), zato
+ * ponovne poskuse pokriva ZUNANJA retryOnUnique okoli CELE transakcije v
+ * klicatelju — ob ponovnem poskusu se ta funkcija (branje zadnje verzije
+ * vključno) izvede znova. Run brez obstoja se NE zapiše (kot prej) — vrne
+ * izračunano številko.
+ */
+export async function snapshotVersionOn (
+  client: FenceRunClient,
+  runId: string,
+  userId: string,
+  note: string
+): Promise<number> {
+  const last = await client.fenceRunVersion.findFirst({
+    where: { fenceRunId: runId },
+    orderBy: { version: 'desc' },
+    select: { version: true },
+  })
+  const version = (last?.version ?? 0) + 1
+  const run = await client.fenceRun.findUnique({ where: { id: runId } })
+  if (!run) return version
+  const segments = await client.fenceSegment.findMany({
+    where: { fenceRunId: runId },
+    orderBy: { order: 'asc' },
+    select: { order: true, fromAtCm: true, toAtCm: true, lengthCm: true, slopeDeg: true, status: true, verifiedCm: true, version: true },
+  })
+  await client.fenceRunVersion.create({
+    data: {
+      fenceRunId: runId, version, userId, note,
+      data: JSON.stringify({
+        status: run.status, productId: run.productId, variantId: run.variantId,
+        nodes: run.nodes, terrain: run.terrain, calibration: run.calibration,
+        quality: run.quality, engineVersion: ENGINE_VERSION,
+        segments,
+      }),
+    },
+  })
+  return version
+}
+
+/**
+ * Zapiše posnetek tekača kot naslednjo verzijo (nikoli prepis, §17) —
+ * samostojno, na globalnem db (obstoječi klici izven transakcij).
  *
  * R536: dirka verzij — branje zadnje verzije + create sta ZNOTRAJ retried fn
  * (versioning.ts): dvema sočasnima klicema (npr. PATCH tekača + confirm) baza
@@ -230,37 +286,13 @@ export function analyzeContext (ctx: RunContext): RunAnalysis {
  * z naslednjo številko. Posnetek (run/segmenti) se ob vsakem poskusu prebere
  * znova, da zmagoviti zapis nosi sveže stanje. Create ni v transakciji —
  * razveljavljanje ni potrebno. Run brez obstoja se NE zapiše (kot prej).
+ * R539: znotraj poslovne $transaction uporabi snapshotVersionOn(tx, …) —
+ * notranji retry tam ni možen (P2002 aborta celo tx).
  */
 export async function snapshotVersion (
   runId: string,
   userId: string,
   note: string
 ): Promise<number> {
-  return retryOnUnique(async () => {
-    const last = await db.fenceRunVersion.findFirst({
-      where: { fenceRunId: runId },
-      orderBy: { version: 'desc' },
-      select: { version: true },
-    })
-    const version = (last?.version ?? 0) + 1
-    const run = await db.fenceRun.findUnique({ where: { id: runId } })
-    if (!run) return version
-    const segments = await db.fenceSegment.findMany({
-      where: { fenceRunId: runId },
-      orderBy: { order: 'asc' },
-      select: { order: true, fromAtCm: true, toAtCm: true, lengthCm: true, slopeDeg: true, status: true, verifiedCm: true, version: true },
-    })
-    await db.fenceRunVersion.create({
-      data: {
-        fenceRunId: runId, version, userId, note,
-        data: JSON.stringify({
-          status: run.status, productId: run.productId, variantId: run.variantId,
-          nodes: run.nodes, terrain: run.terrain, calibration: run.calibration,
-          quality: run.quality, engineVersion: ENGINE_VERSION,
-          segments,
-        }),
-      },
-    })
-    return version
-  })
+  return retryOnUnique(() => snapshotVersionOn(db, runId, userId, note))
 }

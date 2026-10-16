@@ -55,37 +55,42 @@ export async function POST (req: NextRequest, { params }: Params) {
   const toleranceCm = round1(conflictToleranceCm(measuredCm))
   const conflict = deviationCm > toleranceCm
 
-  await db.fenceSegment.update({
-    where: { id: segmentId },
-    data: {
-      status: 'VERIFIED',
-      verifiedCm: round1(measuredCm),
-      verifyMethod: method,
-      verifyNote: typeof body.note === 'string' && body.note.trim() ? body.note.trim().slice(0, 200) : null,
-    },
-  })
+  // R539 (transakcijska celovitost): preveritev segmenta + ponoven izračun
+  // (quality §3) + revizija v ENI transakciji — preverjen segment brez
+  // revizije ni več možen. Brez zapisa verzije tekača → brez dirke P2002.
+  await db.$transaction(async (tx) => {
+    await tx.fenceSegment.update({
+      where: { id: segmentId },
+      data: {
+        status: 'VERIFIED',
+        verifiedCm: round1(measuredCm),
+        verifyMethod: method,
+        verifyNote: typeof body.note === 'string' && body.note.trim() ? body.note.trim().slice(0, 200) : null,
+      },
+    })
 
-  // osveži quality + validacijo (konflikt se izrazi, če je)
-  const ctx = await loadRunContext(id)
-  if (ctx) await syncSegments(ctx)
+    // osveži quality + validacijo (konflikt se izrazi, če je) — na tx klientu
+    const ctx = await loadRunContext(id, tx)
+    if (ctx) await syncSegments(ctx, tx)
 
-  await writeAudit({
-    userId: user.id,
-    action: 'FENCE_RUN_VERIFY',
-    entity: 'fenceSegment',
-    entityId: segmentId,
-    projectId: scope.run.projectId,
-    detail: {
-      fenceRunId: id,
-      segmentOrder: segment.order,
-      method,
-      ...(typeof body.device === 'string' && body.device.trim() ? { device: body.device.trim().slice(0, 80) } : {}),
-      computedCm: segment.lengthCm,
-      measuredCm: round1(measuredCm),
-      deviationCm,
-      toleranceCm,
-      conflict,
-    },
+    await writeAudit({
+      userId: user.id,
+      action: 'FENCE_RUN_VERIFY',
+      entity: 'fenceSegment',
+      entityId: segmentId,
+      projectId: scope.run.projectId,
+      detail: {
+        fenceRunId: id,
+        segmentOrder: segment.order,
+        method,
+        ...(typeof body.device === 'string' && body.device.trim() ? { device: body.device.trim().slice(0, 80) } : {}),
+        computedCm: segment.lengthCm,
+        measuredCm: round1(measuredCm),
+        deviationCm,
+        toleranceCm,
+        conflict,
+      },
+    }, tx)
   })
 
   const fresh = await loadRunContext(id)

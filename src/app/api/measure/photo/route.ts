@@ -43,32 +43,39 @@ export async function POST (req: NextRequest) {
   }
 
   const zapis = photoRecordProvenance()
-  const photo = await db.measurement.create({
-    data: {
-      type: 'FOTO',
-      source: 'KAMERA',
-      status: zapis.status,
-      statusNote: zapis.reason,
-      projectId: projectId ?? workOrder?.projectId ?? null,
-      workOrderId,
-      authorId: user.id,
-      location: typeof body.location === 'string' && body.location.trim() ? body.location.trim() : null,
-      params: JSON.stringify({ photo: dataUrl, stage: 'ZAJEM' }),
-    },
-    include: {
-      author: { select: { name: true } },
-      project: { select: { id: true, code: true, title: true } },
-      workOrder: { select: { id: true, code: true, title: true } },
-    },
+  // R539 (transakcijska celovitost): fotografska meritev + revizija
+  // PHOTO_UPLOAD v ENI transakciji — prej bi padec med njima pustil meritev
+  // brez revizije (nalaganje bi izginilo iz sledi).
+  const photo = await db.$transaction(async (tx) => {
+    const created = await tx.measurement.create({
+      data: {
+        type: 'FOTO',
+        source: 'KAMERA',
+        status: zapis.status,
+        statusNote: zapis.reason,
+        projectId: projectId ?? workOrder?.projectId ?? null,
+        workOrderId,
+        authorId: user.id,
+        location: typeof body.location === 'string' && body.location.trim() ? body.location.trim() : null,
+        params: JSON.stringify({ photo: dataUrl, stage: 'ZAJEM' }),
+      },
+      include: {
+        author: { select: { name: true } },
+        project: { select: { id: true, code: true, title: true } },
+        workOrder: { select: { id: true, code: true, title: true } },
+      },
+    })
+
+    await writeAudit({
+      userId: user.id,
+      action: 'PHOTO_UPLOAD',
+      entity: 'measurement',
+      entityId: created.id,
+      projectId: created.projectId,
+      detail: { workOrderId: workOrderId ?? null, bytes: dataUrl.length, location: created.location },
+    }, tx)
+    return created
   })
 
-  await writeAudit({
-    userId: user.id,
-    action: 'PHOTO_UPLOAD',
-    entity: 'measurement',
-    entityId: photo.id,
-    projectId: photo.projectId,
-    detail: { workOrderId: workOrderId ?? null, bytes: dataUrl.length, location: photo.location },
-  })
   return NextResponse.json({ data: photo }, { status: 201 })
 }

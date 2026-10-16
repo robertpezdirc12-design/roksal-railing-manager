@@ -113,20 +113,26 @@ export async function PATCH (req: NextRequest, { params }: Params) {
     return jsonError(400, 'Nič za spremembo.', 'Podprta polja: status, note, internalNote.')
   }
 
-  const pin = await db.reviewPin.update({
-    where: { id },
-    data: patch,
-    include: PIN_INCLUDE,
-  })
+  // R539 (transakcijska celovitost): posodobitev pina + revizija PIN_UPDATE v
+  // ENI transakciji — prej bi padec med njima pustil spremenjen pin brez
+  // revizije (prehod statusov bi izginil iz zgodovine).
+  const pin = await db.$transaction(async (tx) => {
+    const updated = await tx.reviewPin.update({
+      where: { id },
+      data: patch,
+      include: PIN_INCLUDE,
+    })
 
-  await writeAudit({
-    userId: user.id, action: 'PIN_UPDATE', entity: 'reviewPin', entityId: id,
-    projectId: scope.run.projectId,
-    detail: {
-      fenceRunId: existing.fenceRunId,
-      ...(fromStatus && toStatus ? { fromStatus, toStatus } : {}),
-      fields: Object.keys(patch).filter((k) => k !== 'resolvedAt' && k !== 'resolvedById'),
-    },
+    await writeAudit({
+      userId: user.id, action: 'PIN_UPDATE', entity: 'reviewPin', entityId: id,
+      projectId: scope.run.projectId,
+      detail: {
+        fenceRunId: existing.fenceRunId,
+        ...(fromStatus && toStatus ? { fromStatus, toStatus } : {}),
+        fields: Object.keys(patch).filter((k) => k !== 'resolvedAt' && k !== 'resolvedById'),
+      },
+    }, tx)
+    return updated
   })
 
   return NextResponse.json({ data: pinRow(pin) })
@@ -153,11 +159,16 @@ export async function DELETE (req: NextRequest, { params }: Params) {
       'Rešen/zaprt pin je del zgodovine pregleda — ostane zapisan (sledljivost).')
   }
 
-  await db.reviewPin.delete({ where: { id } })
-  await writeAudit({
-    userId: user.id, action: 'PIN_DELETE', entity: 'reviewPin', entityId: id,
-    projectId: scope.run.projectId,
-    detail: { fenceRunId: existing.fenceRunId, targetType: existing.targetType, targetKey: existing.targetKey },
+  // R539 (transakcijska celovitost): izbris pina + revizija PIN_DELETE v ENI
+  // transakciji — prej bi padec med njima pustil izbrisan pin brez revizije
+  // (sledljivost izbrisanega pina bi se izgubila).
+  await db.$transaction(async (tx) => {
+    await tx.reviewPin.delete({ where: { id } })
+    await writeAudit({
+      userId: user.id, action: 'PIN_DELETE', entity: 'reviewPin', entityId: id,
+      projectId: scope.run.projectId,
+      detail: { fenceRunId: existing.fenceRunId, targetType: existing.targetType, targetKey: existing.targetKey },
+    }, tx)
   })
 
   return NextResponse.json({ data: { deleted: true, id } })

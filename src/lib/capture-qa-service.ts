@@ -3,6 +3,7 @@
 // tekač (R460) ostaja vir geometrije — ta sloj NE podvaja engine-a.
 // Brez runtime AI, brez fuzzy matchinga, brez tihih sprememb (§25).
 
+import type { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 import {
   CAPTURE_QA_VERSION, buildAsDesigned, buildAsInstalled, buildAsMeasured, buildAsProduced,
@@ -249,11 +250,18 @@ export interface FinishResult {
   version?: number
 }
 
-/** Zaključi zajem: vsa vrata morajo pasti → ustvari AS-MEASURED snapshot. */
+/** Zaključi zajem: vsa vrata morajo pasti → ustvari AS-MEASURED snapshot.
+ * R539 (transakcijska celovitost): neobvezen `client` — privzeto globalni db
+ * (obstoječi klici brez argumenta so nespremenjeni), zaključna pisanja
+ * (AS-MEASURED snapshot z verzijo + status ZAKLJUCEN) pa lahko tečejo na
+ * transakcijskem klientu znotraj $transaction klicatelja (finish ruta doda
+ * še reviziji + dogodek v isto transakcijo). Analiza (analyzeSession/
+ * loadCaptureContext) ostaja na globalnem db — bralno-analitični sloj. */
 export async function finishCaptureSession (
   ctx: CaptureContext,
   userId: string,
-  obstojeco: string | null
+  obstojeco: string | null,
+  client: Prisma.TransactionClient = db
 ): Promise<FinishResult> {
   if (ctx.session.status === 'ZAKLJUCEN') {
     return { ok: false, reasons: ['Zajem je že zaključen.'] }
@@ -289,9 +297,10 @@ export async function finishCaptureSession (
     reason: `Zaključen zajem »${fresh.session.name}« (pokritost ${analysis.coverage.zones.length} con, ${fresh.photos.length} posnetkov, ${fresh.refs.length} referenc).`,
     createdFrom: fresh.session.id,
     userId,
-  })
+  }, client)
 
-  await db.captureSession.update({
+  // R539: zaključni zapis ZAKLJUCEN + snapshotId na istem klientu kot snapshot
+  await client.captureSession.update({
     where: { id: fresh.session.id },
     data: { status: 'ZAKLJUCEN', snapshotId: snapshot.id },
   })
@@ -300,6 +309,11 @@ export async function finishCaptureSession (
 
 // ─── Digitalni dvojček: snapshoti (§8–§12/§22) ──────────────────────────────
 
+/** R539 (transakcijska celovitost): neobvezen klient — verzija (branje zadnje)
+ * in create tečeta čes njega; privzeto globalni db (obstoječi klici iz
+ * build*Snapshot funkcij so nespremenjeni). Verzija je read-then-create —
+ * znotraj $transaction jo P2002 aborta celo tx, zato retry vodi KLICATELJ
+ * (retryOnUnique okoli cele transakcije, vzorec R536/R539). */
 export async function createTwinSnapshotRow (args: {
   projectId: string
   kind: 'AS_MEASURED' | 'AS_DESIGNED' | 'AS_PRODUCED' | 'AS_INSTALLED'
@@ -308,14 +322,14 @@ export async function createTwinSnapshotRow (args: {
   reason: string
   createdFrom?: string | null
   userId: string
-}): Promise<{ id: string; version: number }> {
-  const last = await db.digitalTwinSnapshot.findFirst({
+}, client: Prisma.TransactionClient = db): Promise<{ id: string; version: number }> {
+  const last = await client.digitalTwinSnapshot.findFirst({
     where: { projectId: args.projectId, kind: args.kind },
     orderBy: { version: 'desc' },
     select: { id: true, version: true },
   })
   const version = (last?.version ?? 0) + 1
-  const created = await db.digitalTwinSnapshot.create({
+  const created = await client.digitalTwinSnapshot.create({
     data: {
       projectId: args.projectId,
       kind: args.kind,

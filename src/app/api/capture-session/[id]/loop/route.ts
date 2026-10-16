@@ -48,30 +48,36 @@ export async function POST (req: NextRequest, { params }: { params: Promise<{ id
 
   const result = loopClosureCheck({ expectedCm, measuredCm, heightDiffCm, toleranceCm: tol.toleranceCm })
 
-  const loop = await db.loopClosure.create({
-    data: {
-      sessionId: id, startCode, endCode,
-      expectedCm, measuredCm,
-      heightDiffCm,
-      positionDiffCm: result.positionDiffCm,
-      status: result.status,
-      userId: user.id,
-      note: typeof body.note === 'string' && body.note.trim() ? body.note.trim().slice(0, 300) : null,
-    },
-  })
+  // R539 (transakcijska celovitost): zanka + revizija LOOP_CLOSURE_CREATE v
+  // ENI transakciji — zapis brez sledi ne more nastati.
+  const loop = await db.$transaction(async (tx) => {
+    const loop = await tx.loopClosure.create({
+      data: {
+        sessionId: id, startCode, endCode,
+        expectedCm, measuredCm,
+        heightDiffCm,
+        positionDiffCm: result.positionDiffCm,
+        status: result.status,
+        userId: user.id,
+        note: typeof body.note === 'string' && body.note.trim() ? body.note.trim().slice(0, 300) : null,
+      },
+    })
 
-  await writeAudit({
-    userId: user.id,
-    action: 'LOOP_CLOSURE_CREATE',
-    entity: 'loopClosure',
-    entityId: loop.id,
-    projectId: access.session.projectId,
-    detail: {
-      sessionId: id, status: result.status,
-      positionDiffCm: result.positionDiffCm,
-      startCode, endCode,
-      ...(tol.noRule ? { toleranceFrom: `privzeta (pravilo ${TOLERANCE_RULE_KEYS.loop} manjka)` } : { toleranceFrom: TOLERANCE_RULE_KEYS.loop }),
-    },
+    await writeAudit({
+      userId: user.id,
+      action: 'LOOP_CLOSURE_CREATE',
+      entity: 'loopClosure',
+      entityId: loop.id,
+      projectId: access.session.projectId,
+      detail: {
+        sessionId: id, status: result.status,
+        positionDiffCm: result.positionDiffCm,
+        startCode, endCode,
+        ...(tol.noRule ? { toleranceFrom: `privzeta (pravilo ${TOLERANCE_RULE_KEYS.loop} manjka)` } : { toleranceFrom: TOLERANCE_RULE_KEYS.loop }),
+      },
+    }, tx)
+
+    return loop
   })
 
   const ctx = await geoContext(id)

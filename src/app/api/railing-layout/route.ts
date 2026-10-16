@@ -118,56 +118,61 @@ export async function POST (req: NextRequest) {
       calibration: body.calibration,
       legacyType: type,
     })
-    const saved = await db.measurement.create({
-      data: {
-        type,
-        source: 'KAMERA',
-        status: provenance.status,
-        statusNote: provenance.reason,
-        projectId,
-        workOrderId,
-        authorId: user.id,
-        location: typeof body.location === 'string' && body.location.trim() ? body.location.trim() : null,
-        lengthCm: layout.totalLengthCm,
-        posts: layout.posts,
-        segments: layout.segments.length,
-        slopeDeg: layout.slopeDeg,
-        params: JSON.stringify({
-          points: pts, calibration: calibrationToParams(calib), maxSpanCm, layout,
-          // R501: ista provenienca/pogodba kot confirm in sinhronizacija.
-          provenance: provenanceForParams({ status: provenance.status, reason: provenance.reason, scale: provenance.scale, calibration: calib }),
-        }),
-        note: typeof body.note === 'string' && body.note.trim() ? body.note.trim() : 'Postavitev iz točk na fotografiji',
-      },
-    })
-    savedId = saved.id
-    // R536: dirka verzij — P2002 → ponovni poskus (versioning.ts). Številka se
-    // izračuna iz zadnje verzije ZNOTRAJ retried fn; za sveže shranjeno meritev
-    // (nov id) je to vedno 1, vzorec pa je enoten z ostalimi mesti ustvarjanja verzij.
-    await retryOnUnique(async () => {
-      const last = await db.measurementVersion.findFirst({
-        where: { measurementId: saved.id },
+    // R539 (transakcijska celovitost): meritev + verzija + revizija v ENI
+    // transakciji — padec srednjega koraka ne pusti meritve brez zgodovine
+    // verzije/revizije. retryOnUnique je OKOLI CELE transakcije (P2002 znotraj
+    // PG transakcije aborta celo tx in je neobnovljiv — ugotovitev R536);
+    // številka verzije se ob ponovnem poskusu znova izračuna ZNOTRAJ tx.
+    // Za sveže shranjeno meritev (nov id) je to vedno 1, vzorec pa je enoten
+    // z ostalimi mesti ustvarjanja verzij.
+    const saved = await retryOnUnique(() => db.$transaction(async (tx) => {
+      const created = await tx.measurement.create({
+        data: {
+          type,
+          source: 'KAMERA',
+          status: provenance.status,
+          statusNote: provenance.reason,
+          projectId,
+          workOrderId,
+          authorId: user.id,
+          location: typeof body.location === 'string' && body.location.trim() ? body.location.trim() : null,
+          lengthCm: layout.totalLengthCm,
+          posts: layout.posts,
+          segments: layout.segments.length,
+          slopeDeg: layout.slopeDeg,
+          params: JSON.stringify({
+            points: pts, calibration: calibrationToParams(calib), maxSpanCm, layout,
+            // R501: ista provenienca/pogodba kot confirm in sinhronizacija.
+            provenance: provenanceForParams({ status: provenance.status, reason: provenance.reason, scale: provenance.scale, calibration: calib }),
+          }),
+          note: typeof body.note === 'string' && body.note.trim() ? body.note.trim() : 'Postavitev iz točk na fotografiji',
+        },
+      })
+      const last = await tx.measurementVersion.findFirst({
+        where: { measurementId: created.id },
         orderBy: { version: 'desc' },
         select: { version: true },
       })
-      return db.measurementVersion.create({
+      await tx.measurementVersion.create({
         data: {
-          measurementId: saved.id,
+          measurementId: created.id,
           version: (last?.version ?? 0) + 1,
           userId: user.id,
           data: JSON.stringify({ lengthCm: layout.totalLengthCm, posts: layout.posts, segments: layout.segments.length, slopeDeg: layout.slopeDeg }),
           note: 'Postavitev (layout) iz točk',
         },
       })
-    })
-    await writeAudit({
-      userId: user.id,
-      action: 'LAYOUT_CREATE',
-      entity: 'measurement',
-      entityId: saved.id,
-      projectId,
-      detail: { totalLengthCm: layout.totalLengthCm, posts: layout.posts, segments: layout.segments.length, workOrderId, status: provenance.status },
-    })
+      await writeAudit({
+        userId: user.id,
+        action: 'LAYOUT_CREATE',
+        entity: 'measurement',
+        entityId: created.id,
+        projectId,
+        detail: { totalLengthCm: layout.totalLengthCm, posts: layout.posts, segments: layout.segments.length, workOrderId, status: provenance.status },
+      }, tx)
+      return created
+    }))
+    savedId = saved.id
   }
 
   return NextResponse.json({ data: { ...layout, savedId } }, { status: 201 })

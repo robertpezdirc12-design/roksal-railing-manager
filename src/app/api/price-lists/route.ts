@@ -44,17 +44,21 @@ export async function POST (req: NextRequest) {
   const type = typeof body?.type === 'string' && TYPES.includes(body.type) ? body.type : 'PRODAJNA'
   if (!name) return jsonError(400, 'Ime cenika je obvezno.')
 
-  const list = await db.priceList.create({
-    data: {
-      name, type,
-      note: typeof body?.note === 'string' && body.note.trim() ? body.note.trim() : null,
-      validFrom: typeof body?.validFrom === 'string' && body.validFrom ? new Date(body.validFrom) : new Date(),
-      validTo: typeof body?.validTo === 'string' && body.validTo ? new Date(body.validTo) : null,
-    },
-  })
-  await writeAudit({
-    userId: auth.user.id, action: 'PRICE_LIST_CREATE', entity: 'priceList', entityId: list.id,
-    detail: { name, type },
+  // R539 (transakcijska celovitost): nov cenik + revizija atomarno (vzorec R537-d)
+  const list = await db.$transaction(async (tx) => {
+    const list = await tx.priceList.create({
+      data: {
+        name, type,
+        note: typeof body?.note === 'string' && body.note.trim() ? body.note.trim() : null,
+        validFrom: typeof body?.validFrom === 'string' && body.validFrom ? new Date(body.validFrom) : new Date(),
+        validTo: typeof body?.validTo === 'string' && body.validTo ? new Date(body.validTo) : null,
+      },
+    })
+    await writeAudit({
+      userId: auth.user.id, action: 'PRICE_LIST_CREATE', entity: 'priceList', entityId: list.id,
+      detail: { name, type },
+    }, tx)
+    return list
   })
   return NextResponse.json({ data: list }, { status: 201 })
 }

@@ -107,30 +107,38 @@ export async function POST (req: NextRequest) {
   }
 
   // ── cilj mora OB NASTANKU obstajati (fail-closed; kasnejši premik odkrije snapshot) ──
+  // R539: buildSnapshot je BRANJE pred verigo (segment/vozlišče/fotografija na
+  // globalnem db) — ostaja izven tx po pravilu predbranj.
   const snapshot = await buildSnapshot(fenceRunId, targetType, parsed.targetKey, parsed.index)
   if (typeof snapshot === 'string' && snapshot.startsWith('ERR:')) {
     return jsonError(400, snapshot.slice(4))
   }
 
-  const pin = await db.reviewPin.create({
-    data: {
-      fenceRunId,
-      authorId: user.id,
-      targetType,
-      targetKey: parsed.targetKey,
-      x: body?.x ?? null,
-      y: body?.y ?? null,
-      note: (body?.note as string).trim(),
-      internalNote: body?.internalNote?.trim() ? (body?.internalNote as string).trim() : null,
-      snapshot: snapshot as string | null,
-    },
-    include: PIN_INCLUDE,
-  })
+  // R539 (transakcijska celovitost): pin + revizija PIN_CREATE v ENI
+  // transakciji — prej bi padec med njima pustil pin brez revizije
+  // (zgodovina pregleda bi izgubila sled).
+  const pin = await db.$transaction(async (tx) => {
+    const created = await tx.reviewPin.create({
+      data: {
+        fenceRunId,
+        authorId: user.id,
+        targetType,
+        targetKey: parsed.targetKey,
+        x: body?.x ?? null,
+        y: body?.y ?? null,
+        note: (body?.note as string).trim(),
+        internalNote: body?.internalNote?.trim() ? (body?.internalNote as string).trim() : null,
+        snapshot: snapshot as string | null,
+      },
+      include: PIN_INCLUDE,
+    })
 
-  await writeAudit({
-    userId: user.id, action: 'PIN_CREATE', entity: 'reviewPin', entityId: pin.id,
-    projectId: scope.run.projectId,
-    detail: { fenceRunId, targetType, targetKey: parsed.targetKey, run: scope.run.name },
+    await writeAudit({
+      userId: user.id, action: 'PIN_CREATE', entity: 'reviewPin', entityId: created.id,
+      projectId: scope.run.projectId,
+      detail: { fenceRunId, targetType, targetKey: parsed.targetKey, run: scope.run.name },
+    }, tx)
+    return created
   })
 
   return NextResponse.json({ data: pinRow(pin) }, { status: 201 })

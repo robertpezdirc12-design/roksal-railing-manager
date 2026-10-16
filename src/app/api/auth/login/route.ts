@@ -19,6 +19,9 @@ import { parseBody } from '@/lib/validate'
 // R538: ob uspehu sejo izdamo TUDI kot httpOnly piškotek `roksal_session`
 // (brskalnik — XSS ga ne more prebrati); telo ODGOVORA še vedno nosi žeton —
 // programska Bearer pot (testni pas, skripte) ostaja 100 % nespremenjena.
+// R539 (transakcijska celovitost): uspešna prijava je VERIGA pisanj —
+// reset števca/zaklepa + morebitna scrypt nadgradnja + seja + revizija LOGIN
+// v ENI $transaction (padec srednjega koraka ne pusti sirot).
 
 const LoginSchema = z.object({
   // zod v4 idiom: vrhnji z.email() (z.string().email() je opuščen)
@@ -72,21 +75,33 @@ export async function POST (req: NextRequest) {
     return jsonError(401, 'Neveljavna prijava.', 'E-pošta ali geslo ni pravilno.')
   }
 
-  // uspeh: reset števca/zaklepa, če je bil sploh dvignjen (pogoj — brez lišnih
-  // pisanj ob vsaki navadni prijavi)
-  if (user.failedLoginCount !== 0 || user.lockedUntil !== null) {
-    await db.user.update({ where: { id: user.id }, data: { failedLoginCount: 0, lockedUntil: null } })
-  }
+  // R539 (transakcijska celovitost): uspešna prijava ima 3–4 pisanja —
+  // (a) reset števca/zaklepa, (b) scrypt nadgradnja hasha, (c) seja,
+  // (d) revizija LOGIN. Vsa v ENI transakciji: prej bi padec srednjega koraka
+  // pustil npr. nadgrajeno geslo brez seje ali resetiran zaklep brez revizije.
+  // Drag scrypt izračun teče PREDAJ tx (telo transakcije ostane kratko —
+  // enako kot auth/password v R538-b); žeton se vrne IZ tx, piškotek se
+  // nastavi po uspešnem commitu na odgovoru (oblika odgovora nespremenjena).
+  const rehash = passwordNeedsRehash(user.passwordHash) ? await hashPassword(password) : null
+  const token = await db.$transaction(async (tx) => {
+    // uspeh: reset števca/zaklepa, če je bil sploh dvignjen (pogoj — brez lišnih
+    // pisanj ob vsaki navadni prijavi)
+    if (user.failedLoginCount !== 0 || user.lockedUntil !== null) {
+      await tx.user.update({ where: { id: user.id }, data: { failedLoginCount: 0, lockedUntil: null } })
+    }
 
-  // transparentna nadgradnja hasha (scrypt v2): uporabnik je pravkar dokazal
-  // geslo — to je edini trenutek, ko imamo čisti tekst za nov izračun. Tiho,
-  // brez dodatnega audita (LOGIN revizija že obstaja za isti dogodek).
-  if (passwordNeedsRehash(user.passwordHash)) {
-    await db.user.update({ where: { id: user.id }, data: { passwordHash: await hashPassword(password) } })
-  }
+    // transparentna nadgradnja hasha (scrypt v2): uporabnik je pravkar dokazal
+    // geslo — to je edini trenutek, ko imamo čisti tekst za nov izračun. Tiho,
+    // brez dodatnega audita (LOGIN revizija že obstaja za isti dogodek).
+    if (rehash !== null) {
+      await tx.user.update({ where: { id: user.id }, data: { passwordHash: rehash } })
+    }
 
-  const token = await createSession(user.id)
-  await writeAudit({ userId: user.id, action: 'LOGIN', entity: 'user', entityId: user.id })
+    // seja (tx klient — R539) + revizija LOGIN, atomarno z zgornjimi popravki
+    const created = await createSession(user.id, tx)
+    await writeAudit({ userId: user.id, action: 'LOGIN', entity: 'user', entityId: user.id }, tx)
+    return created
+  })
   const res = NextResponse.json({ token, user: toSessionUser(user) })
   setSessionCookie(res, token) // R538: httpOnly piškotek za brskalnik (7 dni, R534)
   return res

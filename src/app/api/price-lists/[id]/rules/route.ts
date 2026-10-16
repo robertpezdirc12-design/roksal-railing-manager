@@ -63,14 +63,18 @@ export async function POST (req: NextRequest, { params }: Params) {
       ? { priceListId: id, productId: null, itemId: null, note: konfigRuleNote(key as KonfigPriceKey) }
       : { priceListId: id, productId, itemId },
   })
-  const rule = existing
-    ? await db.priceRule.update({ where: { id: existing.id }, data })
-    : await db.priceRule.create({ data: { priceListId: id, productId, itemId, ...data } })
-
-  await writeAudit({
-    userId: auth.user.id, action: existing ? 'PRICE_RULE_UPDATE' : 'PRICE_RULE_CREATE',
-    entity: 'priceRule', entityId: rule.id,
-    detail: { priceList: list.name, productId, itemId, key: key || null, price: data.price, discountPct: data.discountPct },
+  // R539 (transakcijska celovitost): pravilo (update ali create) + revizija
+  // atomarno v ENI transakciji (vzorec R537-d; predbranje `existing` izven tx).
+  const rule = await db.$transaction(async (tx) => {
+    const rule = existing
+      ? await tx.priceRule.update({ where: { id: existing.id }, data })
+      : await tx.priceRule.create({ data: { priceListId: id, productId, itemId, ...data } })
+    await writeAudit({
+      userId: auth.user.id, action: existing ? 'PRICE_RULE_UPDATE' : 'PRICE_RULE_CREATE',
+      entity: 'priceRule', entityId: rule.id,
+      detail: { priceList: list.name, productId, itemId, key: key || null, price: data.price, discountPct: data.discountPct },
+    }, tx)
+    return rule
   })
   return NextResponse.json({ data: rule }, { status: existing ? 200 : 201 })
 }

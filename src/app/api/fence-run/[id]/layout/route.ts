@@ -9,8 +9,9 @@ import { db } from '@/lib/db'
 import { jsonError, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
 import { suggestPosts, type RunNode } from '@/lib/fence-run-engine'
-import { analyzeContext, loadRunContext, snapshotVersion, syncSegments } from '@/lib/fence-run-service'
+import { analyzeContext, loadRunContext, snapshotVersionOn, syncSegments } from '@/lib/fence-run-service'
 import { fenceRunZaUporabnika } from '@/lib/fence-run-access'
+import { retryOnUnique } from '@/lib/versioning'
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -77,24 +78,32 @@ export async function POST (req: NextRequest, { params }: Params) {
     if (dedup.length === 0 || n.atCm - dedup[dedup.length - 1].atCm >= 5) dedup.push(n)
   }
 
-  await db.fenceRun.update({ where: { id }, data: { nodes: JSON.stringify(dedup) } })
-  const fresh = await loadRunContext(id)
-  if (fresh) await syncSegments(fresh)
-  const version = await snapshotVersion(id, user.id, `Vstavljenih ${dedup.length - ctx.nodes.length} stebrov (razpored)`)
+  // R539 (transakcijska celovitost): vstavljeni stebri + ponoven izračun
+  // segmentov + verzija + revizija v ENI transakciji — padec srednjega koraka
+  // NE pusti spremenjene geometrije brez verzije/revizije. ZUNANJA
+  // retryOnUnique (R536) pokriva dirko verzij (P2002) — ob ponovnem poskusu
+  // se CELO telo izvede znova.
+  const version = await retryOnUnique(() => db.$transaction(async (tx) => {
+    await tx.fenceRun.update({ where: { id }, data: { nodes: JSON.stringify(dedup) } })
+    const fresh = await loadRunContext(id, tx)
+    if (fresh) await syncSegments(fresh, tx)
+    const version = await snapshotVersionOn(tx, id, user.id, `Vstavljenih ${dedup.length - ctx.nodes.length} stebrov (razpored)`)
 
-  await writeAudit({
-    userId: user.id,
-    action: 'FENCE_RUN_LAYOUT',
-    entity: 'fenceRun',
-    entityId: id,
-    projectId: scope.run.projectId,
-    detail: {
-      inserted: dedup.length - ctx.nodes.length,
-      maxSpanCm: effectiveRules.maxSpanCm,
-      override: rulesOverride ?? null,
-      version,
-    },
-  })
+    await writeAudit({
+      userId: user.id,
+      action: 'FENCE_RUN_LAYOUT',
+      entity: 'fenceRun',
+      entityId: id,
+      projectId: scope.run.projectId,
+      detail: {
+        inserted: dedup.length - ctx.nodes.length,
+        maxSpanCm: effectiveRules.maxSpanCm,
+        override: rulesOverride ?? null,
+        version,
+      },
+    }, tx)
+    return version
+  }))
 
   const after = await loadRunContext(id)
   return NextResponse.json({

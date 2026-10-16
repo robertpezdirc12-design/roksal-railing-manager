@@ -74,11 +74,16 @@ export async function PATCH (req: NextRequest, { params }: Params) {
     }
   }
 
-  const updated = await db.bom.update({ where: { id }, data: { status, note: typeof body?.note === 'string' ? body.note : existing.note } })
-  await writeAudit({
-    userId: auth.user.id, action: 'BOM_STATUS', entity: 'bom', entityId: id,
-    projectId: existing.packageId ?? null,
-    detail: { code: existing.code, from: existing.status, to: status },
+  // R539 (transakcijska celovitost): sprememba statusa + revizija atomarno
+  // (vzorec R537-d; predbranji `existing`/`active` ostajajo izven tx).
+  const updated = await db.$transaction(async (tx) => {
+    const updated = await tx.bom.update({ where: { id }, data: { status, note: typeof body?.note === 'string' ? body.note : existing.note } })
+    await writeAudit({
+      userId: auth.user.id, action: 'BOM_STATUS', entity: 'bom', entityId: id,
+      projectId: existing.packageId ?? null,
+      detail: { code: existing.code, from: existing.status, to: status },
+    }, tx)
+    return updated
   })
   return NextResponse.json({ data: updated })
 }

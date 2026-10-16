@@ -10,7 +10,7 @@ import { db } from '@/lib/db'
 import { jsonError, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
 import { parseCalibration, parseNodes, parseTerrain, round1 } from '@/lib/fence-run-engine'
-import { loadRunContext, snapshotVersion, syncSegments } from '@/lib/fence-run-service'
+import { loadRunContext, snapshotVersionOn, syncSegments } from '@/lib/fence-run-service'
 import { projectIdsZaUporabnika } from '@/lib/fence-run-access'
 
 export async function GET (req: NextRequest) {
@@ -126,38 +126,45 @@ export async function POST (req: NextRequest) {
     ? body.name.trim().slice(0, 120)
     : `Ograjna izmera — ${project.code}`
 
-  const run = await db.fenceRun.create({
-    data: {
-      projectId, workOrderId, authorId: user.id, name,
-      productId, variantId,
-      calibration: calibration ? JSON.stringify(calibration) : null,
-      terrain: terrain ? JSON.stringify(terrain) : null,
-      nodes: JSON.stringify(nodes),
-      note: typeof body.note === 'string' && body.note.trim() ? body.note.trim().slice(0, 500) : null,
-    },
+  // R539 (transakcijska celovitost): tekač + izračun segmentov + verzija v1 +
+  // revizija v ENI transakciji — padec srednjega koraka NE pusti praznega
+  // tekača brez segmentov/verzije/revizije. Svež id tekača pomeni, da dirka
+  // verzij (P2002) ni mogoča — retryOnUnique ni potreben.
+  const { runId, version } = await db.$transaction(async (tx) => {
+    const run = await tx.fenceRun.create({
+      data: {
+        projectId, workOrderId, authorId: user.id, name,
+        productId, variantId,
+        calibration: calibration ? JSON.stringify(calibration) : null,
+        terrain: terrain ? JSON.stringify(terrain) : null,
+        nodes: JSON.stringify(nodes),
+        note: typeof body.note === 'string' && body.note.trim() ? body.note.trim().slice(0, 500) : null,
+      },
+    })
+
+    // kanonični izračun segmentov + quality (§3) — na tx klientu (vidi svež tekač)
+    const ctx = await loadRunContext(run.id, tx)
+    if (ctx) await syncSegments(ctx, tx)
+    const version = await snapshotVersionOn(tx, run.id, user.id, 'Ustvarjen tekač')
+
+    await writeAudit({
+      userId: user.id,
+      action: 'FENCE_RUN_CREATE',
+      entity: 'fenceRun',
+      entityId: run.id,
+      projectId,
+      detail: {
+        name, nodes: nodes.length,
+        ...(productId ? { productId } : {}),
+        ...(variantId ? { variantId } : {}),
+        ...(calibration ? { calibrationMethod: calibration.method } : {}),
+        ...(terrain ? { terrainPoints: terrain.length } : {}),
+        version,
+      },
+    }, tx)
+    return { runId: run.id, version }
   })
 
-  // kanonični izračun segmentov + quality (§3)
-  const ctx = await loadRunContext(run.id)
-  if (ctx) await syncSegments(ctx)
-  const version = await snapshotVersion(run.id, user.id, 'Ustvarjen tekač')
-
-  await writeAudit({
-    userId: user.id,
-    action: 'FENCE_RUN_CREATE',
-    entity: 'fenceRun',
-    entityId: run.id,
-    projectId,
-    detail: {
-      name, nodes: nodes.length,
-      ...(productId ? { productId } : {}),
-      ...(variantId ? { variantId } : {}),
-      ...(calibration ? { calibrationMethod: calibration.method } : {}),
-      ...(terrain ? { terrainPoints: terrain.length } : {}),
-      version,
-    },
-  })
-
-  const fresh = await loadRunContext(run.id)
-  return NextResponse.json({ data: { id: run.id, version, run: fresh?.run ?? null } }, { status: 201 })
+  const fresh = await loadRunContext(runId)
+  return NextResponse.json({ data: { id: runId, version, run: fresh?.run ?? null } }, { status: 201 })
 }

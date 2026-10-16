@@ -495,14 +495,31 @@ export async function nextBomCode (): Promise<string> {
   return `BOM-${year}-${Date.now()}`
 }
 
-export async function nextPackageCode (projectCode: string): Promise<string> {
-  const count = await db.projectPackage.count({ where: { code: { startsWith: `PAK-${projectCode}-` } } })
+/**
+ * Zaporedna koda PAK-<projekt>-<n> NA PODANEM klientu (R539 — transakcijska
+ * celovitost): ista logika kot nextPackageCode, a teče ZNOTRAJ poslovne
+ * transakcije (tx) — ob sočasnem P2002 (dva handoffa si izračunata isto
+ * kodo) ZUNANJA retryOnUnique okoli CELE transakcije ponovi tudi izračun
+ * kode (vzorec R535/R536 — read-then-create dirka je s tem zaprta).
+ */
+export async function nextPackageCodeOn (
+  client: Pick<Prisma.TransactionClient, 'projectPackage'>,
+  projectCode: string
+): Promise<string> {
+  const count = await client.projectPackage.count({ where: { code: { startsWith: `PAK-${projectCode}-` } } })
   let n = count + 1
   for (let i = 0; i < 500; i++) {
     const code = `PAK-${projectCode}-${n}`
-    const exists = await db.projectPackage.findUnique({ where: { code } })
+    const exists = await client.projectPackage.findUnique({ where: { code } })
     if (!exists) return code
     n++
   }
   return `PAK-${projectCode}-${Date.now()}`
+}
+
+/** R539: wrapper na globalnem db — obstoječi klici (npr. handoff
+ *  /api/measurement/confirm) ostanejo nespremenjeni; znotraj transakcije
+ *  uporabi nextPackageCodeOn(tx, …). */
+export async function nextPackageCode (projectCode: string): Promise<string> {
+  return nextPackageCodeOn(db, projectCode)
 }

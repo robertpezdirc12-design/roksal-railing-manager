@@ -66,25 +66,29 @@ export async function POST (req: NextRequest) {
     if (Number.isNaN(calibrationDue.getTime())) return jsonError(400, 'Rok umeritve ni veljaven datum.')
   }
 
-  const equipment = await db.equipment.create({
-    data: {
-      code,
-      name,
-      category,
-      serialNumber: typeof body?.serialNumber === 'string' && body.serialNumber.trim() ? body.serialNumber.trim() : null,
-      location: typeof body?.location === 'string' && body.location.trim() ? body.location.trim() : null,
-      calibrationDue,
-      note: typeof body?.note === 'string' && body.note.trim() ? body.note.trim() : null,
-    },
-    include: {
-      holder: { select: { id: true, name: true } },
-      checkouts: { where: { inAt: null }, include: { user: { select: { id: true, name: true } } } },
-    },
-  })
-
-  await writeAudit({
-    userId: auth.user.id, action: 'EQUIP_CREATE', entity: 'equipment', entityId: equipment.id,
-    detail: { code, name, category, calibrationDue },
+  // R539 (transakcijska celovitost): novo orodje + revizija atomarno (vzorec
+  // R537-d; predbranje dupleta `existing` ostaja izven tx).
+  const equipment = await db.$transaction(async (tx) => {
+    const equipment = await tx.equipment.create({
+      data: {
+        code,
+        name,
+        category,
+        serialNumber: typeof body?.serialNumber === 'string' && body.serialNumber.trim() ? body.serialNumber.trim() : null,
+        location: typeof body?.location === 'string' && body.location.trim() ? body.location.trim() : null,
+        calibrationDue,
+        note: typeof body?.note === 'string' && body.note.trim() ? body.note.trim() : null,
+      },
+      include: {
+        holder: { select: { id: true, name: true } },
+        checkouts: { where: { inAt: null }, include: { user: { select: { id: true, name: true } } } },
+      },
+    })
+    await writeAudit({
+      userId: auth.user.id, action: 'EQUIP_CREATE', entity: 'equipment', entityId: equipment.id,
+      detail: { code, name, category, calibrationDue },
+    }, tx)
+    return equipment
   })
   return NextResponse.json({ data: equipment }, { status: 201 })
 }

@@ -19,13 +19,19 @@ export async function DELETE (req: NextRequest, { params }: Params) {
   if (!link) return jsonError(404, 'Povezava ne obstaja.')
   if (link.revokedAt) return NextResponse.json({ data: link }) // idempotentno
 
-  const revoked = await db.portalLink.update({
-    where: { id },
-    data: { revokedAt: new Date() },
-  })
-  await writeAudit({
-    userId: user.id, action: 'PORTAL_REVOKE', entity: 'portalLink', entityId: id, projectId: link.projectId,
-    detail: { project: link.project.code, token: link.token.slice(0, 12) + '…' },
+  // R539 (transakcijska celovitost): preklic + revizija PORTAL_REVOKE v ENI
+  // transakciji — prej bi padec med njima pustil prekinjen javni dostop brez
+  // revizije (kdo je preklical povezavo, bi ostalo nezabeleženo).
+  const revoked = await db.$transaction(async (tx) => {
+    const r = await tx.portalLink.update({
+      where: { id },
+      data: { revokedAt: new Date() },
+    })
+    await writeAudit({
+      userId: user.id, action: 'PORTAL_REVOKE', entity: 'portalLink', entityId: id, projectId: link.projectId,
+      detail: { project: link.project.code, token: link.token.slice(0, 12) + '…' },
+    }, tx)
+    return r
   })
 
   return NextResponse.json({ data: revoked })

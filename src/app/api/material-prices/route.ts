@@ -66,13 +66,18 @@ export async function POST (req: NextRequest) {
     if (!sup) return jsonError(404, 'Dobavitelj ne obstaja.')
   }
 
-  const created = await db.materialPrice.create({ data: { itemId, supplierId, price } })
-  await writeAudit({
-    userId: auth.user.id,
-    action: 'MATERIAL_PRICE_CREATE',
-    entity: 'materialPrice',
-    entityId: created.id,
-    detail: { item: item.name, price, supplierId },
+  // R539 (transakcijska celovitost): nova cena + revizija atomarno (vzorec
+  // R537-d; predbranji artikel/dobavitelj ostajata izven tx).
+  const created = await db.$transaction(async (tx) => {
+    const created = await tx.materialPrice.create({ data: { itemId, supplierId, price } })
+    await writeAudit({
+      userId: auth.user.id,
+      action: 'MATERIAL_PRICE_CREATE',
+      entity: 'materialPrice',
+      entityId: created.id,
+      detail: { item: item.name, price, supplierId },
+    }, tx)
+    return created
   })
   return NextResponse.json({ data: created }, { status: 201 })
 }

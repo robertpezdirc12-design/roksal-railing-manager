@@ -142,33 +142,39 @@ export async function POST (req: NextRequest) {
     ? body.name.trim().slice(0, 120)
     : `Zajem — ${project.code}`
 
-  const session = await db.captureSession.create({
-    data: {
-      projectId, workOrderId, fenceRunId, authorId: user.id, name, mode,
-      device: JSON.stringify(device),
-      outdoor: JSON.stringify(outdoor),
-      plan: JSON.stringify(plan),
-      state: JSON.stringify({ currentStopId: plan[0]?.id ?? null, doneStops: [] }),
-      coverage: JSON.stringify({ zones: [], criticalMissing: [], gateOk: false }),
-      drift: JSON.stringify({ samples: [], status: 'DRIFT_OK', lastRefCode: null }),
-      note: typeof body.note === 'string' && body.note.trim() ? body.note.trim().slice(0, 500) : null,
-    },
-  })
+  // R539 (transakcijska celovitost): zajem + revizija CAPTURE_START v ENI
+  // transakciji — padec srednjega koraka ne pusti zajema brez sledi.
+  const session = await db.$transaction(async (tx) => {
+    const session = await tx.captureSession.create({
+      data: {
+        projectId, workOrderId, fenceRunId, authorId: user.id, name, mode,
+        device: JSON.stringify(device),
+        outdoor: JSON.stringify(outdoor),
+        plan: JSON.stringify(plan),
+        state: JSON.stringify({ currentStopId: plan[0]?.id ?? null, doneStops: [] }),
+        coverage: JSON.stringify({ zones: [], criticalMissing: [], gateOk: false }),
+        drift: JSON.stringify({ samples: [], status: 'DRIFT_OK', lastRefCode: null }),
+        note: typeof body.note === 'string' && body.note.trim() ? body.note.trim().slice(0, 500) : null,
+      },
+    })
 
-  await writeAudit({
-    userId: user.id,
-    action: 'CAPTURE_START',
-    entity: 'captureSession',
-    entityId: session.id,
-    projectId,
-    detail: {
-      name, mode,
-      stops: plan.length,
-      tier: device.tier,
-      ...(fenceRunId ? { fenceRunId } : {}),
-      outdoor: outdoor.conditions,
-      engineVersion: CAPTURE_QA_VERSION,
-    },
+    await writeAudit({
+      userId: user.id,
+      action: 'CAPTURE_START',
+      entity: 'captureSession',
+      entityId: session.id,
+      projectId,
+      detail: {
+        name, mode,
+        stops: plan.length,
+        tier: device.tier,
+        ...(fenceRunId ? { fenceRunId } : {}),
+        outdoor: outdoor.conditions,
+        engineVersion: CAPTURE_QA_VERSION,
+      },
+    }, tx)
+
+    return session
   })
 
   return NextResponse.json({

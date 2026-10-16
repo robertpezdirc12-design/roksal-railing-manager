@@ -53,32 +53,38 @@ export async function PATCH (req: NextRequest, ctx: Ctx) {
   if (typeof body?.active === 'boolean') patch.active = body.active
   if (Object.keys(patch).length === 0) return jsonError(400, 'Ni sprememb.')
 
-  const updated = await db.engineeringRule.update({ where: { id }, data: patch })
+  // R539 (transakcijska celovitost): popravek pravila + zgodovina verzije + OBE
+  // reviziji v ENI transakciji — padec srednjega koraka ne pusti pravila brez
+  // zgodovine verzije (vzorec R537-d; predbranje `rule` ostaja izven tx).
+  const updated = await db.$transaction(async (tx) => {
+    const updated = await tx.engineeringRule.update({ where: { id }, data: patch })
 
-  // R449 (issue #8): zgodovina vrednosti — staro→novo
-  const version = await db.ruleVersion.create({
-    data: {
-      ruleId: rule.id,
+    // R449 (issue #8): zgodovina vrednosti — staro→novo
+    const version = await tx.ruleVersion.create({
+      data: {
+        ruleId: rule.id,
+        userId: auth.user.id,
+        oldValue: JSON.stringify(ruleSnapshot(rule)),
+        newValue: JSON.stringify(ruleSnapshot(updated)),
+        note: `Popravek: ${Object.keys(patch).join(', ')}`,
+      },
+    })
+
+    await writeAudit({
       userId: auth.user.id,
-      oldValue: JSON.stringify(ruleSnapshot(rule)),
-      newValue: JSON.stringify(ruleSnapshot(updated)),
-      note: `Popravek: ${Object.keys(patch).join(', ')}`,
-    },
-  })
-
-  await writeAudit({
-    userId: auth.user.id,
-    action: 'ENGINEERING_RULE_UPDATE',
-    entity: 'engineeringRule',
-    entityId: rule.id,
-    detail: { key: rule.key, from: { value: rule.value, active: rule.active }, to: patch },
-  })
-  await writeAudit({
-    userId: auth.user.id,
-    action: 'RULE_VERSION',
-    entity: 'ruleVersion',
-    entityId: version.id,
-    detail: { ruleId: rule.id, key: rule.key, spremembe: Object.keys(patch) },
+      action: 'ENGINEERING_RULE_UPDATE',
+      entity: 'engineeringRule',
+      entityId: rule.id,
+      detail: { key: rule.key, from: { value: rule.value, active: rule.active }, to: patch },
+    }, tx)
+    await writeAudit({
+      userId: auth.user.id,
+      action: 'RULE_VERSION',
+      entity: 'ruleVersion',
+      entityId: version.id,
+      detail: { ruleId: rule.id, key: rule.key, spremembe: Object.keys(patch) },
+    }, tx)
+    return updated
   })
   return NextResponse.json({ data: updated })
 }
@@ -92,32 +98,37 @@ export async function DELETE (req: NextRequest, ctx: Ctx) {
   if (!rule) return jsonError(404, 'Pravilo ne obstaja.')
 
   // pravila se deaktivirajo (zgodovina izračunov se sklicuje nanje)
-  const updated = await db.engineeringRule.update({ where: { id }, data: { active: false } })
+  // R539 (transakcijska celovitost): deaktivacija + zgodovina verzije + OBE
+  // reviziji v ENI transakciji (vzorec R537-d; predbranje `rule` izven tx).
+  const updated = await db.$transaction(async (tx) => {
+    const updated = await tx.engineeringRule.update({ where: { id }, data: { active: false } })
 
-  // R449 (issue #8): deaktivacija je sprememba (active) → tudi zgodovina vrednosti
-  const version = await db.ruleVersion.create({
-    data: {
-      ruleId: rule.id,
+    // R449 (issue #8): deaktivacija je sprememba (active) → tudi zgodovina vrednosti
+    const version = await tx.ruleVersion.create({
+      data: {
+        ruleId: rule.id,
+        userId: auth.user.id,
+        oldValue: JSON.stringify(ruleSnapshot(rule)),
+        newValue: JSON.stringify(ruleSnapshot(updated)),
+        note: 'Deaktivacija pravila',
+      },
+    })
+
+    await writeAudit({
       userId: auth.user.id,
-      oldValue: JSON.stringify(ruleSnapshot(rule)),
-      newValue: JSON.stringify(ruleSnapshot(updated)),
-      note: 'Deaktivacija pravila',
-    },
-  })
-
-  await writeAudit({
-    userId: auth.user.id,
-    action: 'ENGINEERING_RULE_UPDATE',
-    entity: 'engineeringRule',
-    entityId: rule.id,
-    detail: { key: rule.key, deactivated: true },
-  })
-  await writeAudit({
-    userId: auth.user.id,
-    action: 'RULE_VERSION',
-    entity: 'ruleVersion',
-    entityId: version.id,
-    detail: { ruleId: rule.id, key: rule.key, operacija: 'deaktivacija' },
+      action: 'ENGINEERING_RULE_UPDATE',
+      entity: 'engineeringRule',
+      entityId: rule.id,
+      detail: { key: rule.key, deactivated: true },
+    }, tx)
+    await writeAudit({
+      userId: auth.user.id,
+      action: 'RULE_VERSION',
+      entity: 'ruleVersion',
+      entityId: version.id,
+      detail: { ruleId: rule.id, key: rule.key, operacija: 'deaktivacija' },
+    }, tx)
+    return updated
   })
   return NextResponse.json({ data: updated })
 }

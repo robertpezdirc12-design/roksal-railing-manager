@@ -52,35 +52,40 @@ export async function PATCH (req: NextRequest, { params }: Params) {
 
   if (Object.keys(patch).length === 0) return jsonError(400, 'Ni sprememb za izvedbo.')
 
-  const updated = await db.productionElement.update({
-    where: { id },
-    data: { ...patch, userId: user.id },
-  })
+  // R539 (transakcijska celovitost): posodobitev elementa + revizija atomarno
+  // v ENI transakciji (vzorec R537-d; predbranje `element` ostaja izven tx).
+  const updated = await db.$transaction(async (tx) => {
+    const updated = await tx.productionElement.update({
+      where: { id },
+      data: { ...patch, userId: user.id },
+    })
 
-  if (patch.status) {
-    await writeAudit({
-      userId: user.id,
-      action: 'PREFAB_STATUS',
-      entity: 'productionElement',
-      entityId: id,
-      projectId: element.productionOrder.projectId,
-      detail: {
-        order: element.productionOrder.code,
-        key: element.key,
-        from: element.status,
-        to: patch.status,
-      },
-    })
-  } else {
-    await writeAudit({
-      userId: user.id,
-      action: 'PREFAB_UPDATE',
-      entity: 'productionElement',
-      entityId: id,
-      projectId: element.productionOrder.projectId,
-      detail: { order: element.productionOrder.code, key: element.key, note: patch.note },
-    })
-  }
+    if (patch.status) {
+      await writeAudit({
+        userId: user.id,
+        action: 'PREFAB_STATUS',
+        entity: 'productionElement',
+        entityId: id,
+        projectId: element.productionOrder.projectId,
+        detail: {
+          order: element.productionOrder.code,
+          key: element.key,
+          from: element.status,
+          to: patch.status,
+        },
+      }, tx)
+    } else {
+      await writeAudit({
+        userId: user.id,
+        action: 'PREFAB_UPDATE',
+        entity: 'productionElement',
+        entityId: id,
+        projectId: element.productionOrder.projectId,
+        detail: { order: element.productionOrder.code, key: element.key, note: patch.note },
+      }, tx)
+    }
+    return updated
+  })
 
   return NextResponse.json({
     data: {

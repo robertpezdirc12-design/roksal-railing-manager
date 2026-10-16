@@ -13,6 +13,7 @@ import { writeAudit } from '@/lib/audit'
 import { GEO_SOURCES, RTK_NOT_PRODUCTION, effectiveAccuracy, parseGeoInput, rtkQuality, geoSourceDef } from '@/lib/reality-r2p-engine'
 import { captureSessionZaUporabnika } from '@/lib/capture-qa-access'
 import { geoContext } from '@/lib/reality-r2p-service'
+import { retryOnUnique } from '@/lib/versioning'
 
 export async function GET (req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requirePermission(req, 'measurements.read')
@@ -56,45 +57,53 @@ export async function POST (req: NextRequest, { params }: { params: Promise<{ id
   // učinkovita natančnost — OMEJENA na vir (§1)
   const acc = effectiveAccuracy(input.source, input.hAccM, input.vAccM)
 
-  const count = await db.geoReference.count({ where: { sessionId: id } })
-  const code = `GEO-${String(count + 1).padStart(3, '0')}`
+  // R539 (transakcijska celovitost): georeferenca + revizija GEO_REF_CREATE v
+  // ENI transakciji; koda GEO-00n je read-then-create (@@unique([sessionId,
+  // code])) — števec se bere ZNOTRAJ tx na tx klientu, sočasen P2002 pa
+  // retryOnUnique okoli CELE transakcije ponovi z novo kodo (vzorec R535/R538).
+  const ref = await retryOnUnique(() => db.$transaction(async (tx) => {
+    const count = await tx.geoReference.count({ where: { sessionId: id } })
+    const code = `GEO-${String(count + 1).padStart(3, '0')}`
 
-  const ref = await db.geoReference.create({
-    data: {
-      sessionId: id, code,
-      tier: input.tier, lat: input.lat, lon: input.lon,
-      altM: input.altM ?? null,
-      atCm: input.atCm ?? null,
-      coordinateSystem: input.coordinateSystem,
-      datum: input.datum ?? null, geoid: input.geoid ?? null,
-      hAccM: acc.hAccM, vAccM: acc.vAccM, // učinkovita (capana)
-      source: input.source,
-      rtkStatus: input.rtkStatus ?? null,
-      correctionAgeSec: input.correctionAgeSec ?? null,
-      device: input.device ?? null,
-      operatorId: user.id,
-      note: input.note ?? null,
-    },
-  })
+    const ref = await tx.geoReference.create({
+      data: {
+        sessionId: id, code,
+        tier: input.tier, lat: input.lat, lon: input.lon,
+        altM: input.altM ?? null,
+        atCm: input.atCm ?? null,
+        coordinateSystem: input.coordinateSystem,
+        datum: input.datum ?? null, geoid: input.geoid ?? null,
+        hAccM: acc.hAccM, vAccM: acc.vAccM, // učinkovita (capana)
+        source: input.source,
+        rtkStatus: input.rtkStatus ?? null,
+        correctionAgeSec: input.correctionAgeSec ?? null,
+        device: input.device ?? null,
+        operatorId: user.id,
+        note: input.note ?? null,
+      },
+    })
 
-  await writeAudit({
-    userId: user.id,
-    action: 'GEO_REF_CREATE',
-    entity: 'geoReference',
-    entityId: ref.id,
-    projectId: access.session.projectId,
-    detail: {
-      sessionId: id, code, tier: input.tier, source: input.source,
-      hAccM: acc.hAccM, vAccM: acc.vAccM,
-      ...(acc.capped ? { capped: true } : {}),
-      ...(input.rtkStatus ? { rtkStatus: input.rtkStatus } : {}),
-    },
-  })
+    await writeAudit({
+      userId: user.id,
+      action: 'GEO_REF_CREATE',
+      entity: 'geoReference',
+      entityId: ref.id,
+      projectId: access.session.projectId,
+      detail: {
+        sessionId: id, code, tier: input.tier, source: input.source,
+        hAccM: acc.hAccM, vAccM: acc.vAccM,
+        ...(acc.capped ? { capped: true } : {}),
+        ...(input.rtkStatus ? { rtkStatus: input.rtkStatus } : {}),
+      },
+    }, tx)
+
+    return ref
+  }))
 
   const ctx = await geoContext(id)
   return NextResponse.json({
     data: {
-      id: ref.id, code,
+      id: ref.id, code: ref.code,
       hAccM: acc.hAccM, vAccM: acc.vAccM,
       capped: acc.capped, accuracyReason: acc.reason,
       rtkUsable: rtk.usable, rtkReason: rtk.reason,

@@ -14,6 +14,7 @@
 import { createHash, randomBytes, randomUUID, scrypt as scryptCallback, timingSafeEqual } from 'crypto'
 import { promisify } from 'util'
 import type { ScryptOptions } from 'crypto'
+import type { Prisma } from '@prisma/client'
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { permissionsForRole, type Permission } from '@/lib/permissions-core'
@@ -128,11 +129,18 @@ export function toSessionUser (u: { id: string; email: string; name: string; rol
   return { id: u.id, email: u.email, name: u.name, role: u.role, perms: permissionsForRole(u.role) }
 }
 
-export async function createSession (userId: string): Promise<string> {
+/** Odjemalec, prek katerega se ustvari seja: globalni db ALI transakcijski
+ * klient (tx) — R539 (transakcijska celovitost): login ustvari sejo v ENI
+ * transakciji z resetom števca/zaklepa, morebitno nadgradnjo hasha in
+ * revizijo LOGIN (isti vzorec kot writeAudit/recordEvent). Vsi ostali
+ * klicatelji (demo, setup) ostajajo na privzetem db klientu. */
+export type SessionClient = Pick<Prisma.TransactionClient, 'session'>
+
+export async function createSession (userId: string, client: SessionClient = db): Promise<string> {
   const token = randomUUID() + '.' + randomUUID()
   const expiresAt = new Date(Date.now() + SESSION_DAYS * 86400000)
   // v bazi LE zgoščeno obliko — surov žeton pozna samo odjemalec (R534 #21 §4)
-  await db.session.create({ data: { token: sessionTokenHash(token), userId, expiresAt } })
+  await client.session.create({ data: { token: sessionTokenHash(token), userId, expiresAt } })
   return token
 }
 

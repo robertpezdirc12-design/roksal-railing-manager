@@ -124,17 +124,23 @@ export async function PATCH (req: NextRequest, { params }: { params: Promise<{ i
 
   if (Object.keys(data).length === 0) return jsonError(400, 'Nič za posodobiti.')
 
-  const updated = await db.captureSession.update({ where: { id }, data: data as never })
-  await writeAudit({
-    userId: user.id,
-    action: 'CAPTURE_UPDATE',
-    entity: 'captureSession',
-    entityId: id,
-    projectId: access.session.projectId,
-    detail: {
-      polja: Object.keys(data).join(', '),
-      ...(typeof data.status === 'string' ? { status: data.status } : {}),
-    },
+  // R539 (transakcijska celovitost): posodobitev + revizija CAPTURE_UPDATE v
+  // ENI transakciji; sveža analiza (pisanje pokritosti/drifta prek globalnega
+  // db) ostane PO commitu — potrebuje viden posodobljeni zajem.
+  const updated = await db.$transaction(async (tx) => {
+    const updated = await tx.captureSession.update({ where: { id }, data: data as never })
+    await writeAudit({
+      userId: user.id,
+      action: 'CAPTURE_UPDATE',
+      entity: 'captureSession',
+      entityId: id,
+      projectId: access.session.projectId,
+      detail: {
+        polja: Object.keys(data).join(', '),
+        ...(typeof data.status === 'string' ? { status: data.status } : {}),
+      },
+    }, tx)
+    return updated
   })
 
   const fresh = await loadCaptureContext(id)
@@ -154,14 +160,18 @@ export async function DELETE (req: NextRequest, { params }: { params: Promise<{ 
     return jsonError(409, 'Zaključenega zajema ni mogoče izbrisati.', 'Zajem ima AS-MEASURED snapshot (§22 — zgodovina ostane).')
   }
 
-  await db.captureSession.delete({ where: { id } })
-  await writeAudit({
-    userId: user.id,
-    action: 'CAPTURE_DELETE',
-    entity: 'captureSession',
-    entityId: id,
-    projectId: access.session.projectId,
-    detail: { name: access.session.name },
+  // R539 (transakcijska celovitost): brisanje + revizija CAPTURE_DELETE v
+  // ENI transakciji — zajem ne izgine brez sledi.
+  await db.$transaction(async (tx) => {
+    await tx.captureSession.delete({ where: { id } })
+    await writeAudit({
+      userId: user.id,
+      action: 'CAPTURE_DELETE',
+      entity: 'captureSession',
+      entityId: id,
+      projectId: access.session.projectId,
+      detail: { name: access.session.name },
+    }, tx)
   })
   return NextResponse.json({ data: { ok: true } })
 }

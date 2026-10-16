@@ -23,29 +23,36 @@ export async function POST (req: NextRequest) {
   // ── uskladitev (?fix=1): paid ← vsota plačil, status ← pravilo ──────────────
   let fixed = 0
   if (fix) {
-    const invoices = await db.invoice.findMany({
-      where: { status: { not: 'OSNUTEK' } },
-      include: { payments: true },
-    })
-    for (const inv of invoices) {
-      const sumPayments = round2(inv.payments.reduce((s, p) => s + p.amount.toNumber(), 0))
-      const status = inv.status === 'ZAPRT'
-        ? 'ZAPRT'
-        : sumPayments + 0.005 >= inv.total.toNumber() ? 'PLACAN' : sumPayments > 0 ? 'DELNO_PLACAN' : 'IZDAN'
-      const paidDiffers = Math.abs(inv.paid.toNumber() - sumPayments) > 0.005
-      if (paidDiffers || inv.status !== status) {
-        await db.invoice.update({ where: { id: inv.id }, data: { paid: sumPayments, status } })
-        fixed++
-      }
-    }
-    if (fixed > 0) {
-      await writeAudit({
-        userId: user.id, action: 'PAYMENT_RECONCILE', entity: 'invoice',
-        detail: { popravljenih: fixed, obseg: 'paid ← vsota plačil + status' },
+    // R539 (transakcijska celovitost): uskladitev VSEH računov + revizija v
+    // ENI transakciji — prej bi padec srednjega koraka pustil DELNO usklajene
+    // račune brez revizije. Branje računov+plačil je ZNOTRAJ tx (vsote morajo
+    // biti sveže glede na zapis — zrcalo /api/payments iz R537-d); poročilo
+    // se bere PO commitu na globalnem klientu (vedno sveže stanje).
+    await db.$transaction(async (tx) => {
+      const invoices = await tx.invoice.findMany({
+        where: { status: { not: 'OSNUTEK' } },
+        include: { payments: true },
       })
-    } else {
-      await writeAudit({ userId: user.id, action: 'PAYMENT_RECONCILE', entity: 'invoice', detail: { popravljenih: 0 } })
-    }
+      for (const inv of invoices) {
+        const sumPayments = round2(inv.payments.reduce((s, p) => s + p.amount.toNumber(), 0))
+        const status = inv.status === 'ZAPRT'
+          ? 'ZAPRT'
+          : sumPayments + 0.005 >= inv.total.toNumber() ? 'PLACAN' : sumPayments > 0 ? 'DELNO_PLACAN' : 'IZDAN'
+        const paidDiffers = Math.abs(inv.paid.toNumber() - sumPayments) > 0.005
+        if (paidDiffers || inv.status !== status) {
+          await tx.invoice.update({ where: { id: inv.id }, data: { paid: sumPayments, status } })
+          fixed++
+        }
+      }
+      if (fixed > 0) {
+        await writeAudit({
+          userId: user.id, action: 'PAYMENT_RECONCILE', entity: 'invoice',
+          detail: { popravljenih: fixed, obseg: 'paid ← vsota plačil + status' },
+        }, tx)
+      } else {
+        await writeAudit({ userId: user.id, action: 'PAYMENT_RECONCILE', entity: 'invoice', detail: { popravljenih: 0 } }, tx)
+      }
+    })
   }
 
   // ── poročilo (po morebitni uskladitvi — vedno sveže stanje) ─────────────────

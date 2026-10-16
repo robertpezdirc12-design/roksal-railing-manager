@@ -15,9 +15,9 @@ import { jsonError, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
 import { ENGINE_VERSION, SEGMENT_STATUSES } from '@/lib/fence-run-engine'
 import { segmentLadderProvenance } from '@/lib/measure-engine'
-import { analyzeContext, loadRunContext, snapshotVersion } from '@/lib/fence-run-service'
+import { analyzeContext, loadRunContext, snapshotVersionOn } from '@/lib/fence-run-service'
 import { fenceRunZaUporabnika } from '@/lib/fence-run-access'
-import { nextPackageCode } from '@/lib/product-core'
+import { nextPackageCodeOn } from '@/lib/product-core'
 import { POSTS_RULE_KEY } from '@/lib/segment-bom'
 import { retryOnUnique } from '@/lib/versioning'
 
@@ -75,49 +75,56 @@ export async function POST (req: NextRequest, { params }: Params) {
   // zavrnejo kosovnico iz pravilno potrjenega tekača.
   const ladder = segmentLadderProvenance(ctx.segments.map((s) => s.status))
 
-  const measurement = await db.measurement.create({
-    data: {
-      type: 'OGRAJA',
-      source: 'ROCNO',
-      status: ladder.status,
-      statusNote: ladder.reason,
-      projectId: ctx.run.projectId,
-      workOrderId: ctx.run.workOrderId,
-      authorId: user.id,
-      location: ctx.run.name,
-      lengthCm: analysis.summary.totalLengthCm,
-      heightCm: maxHeight,
-      posts: analysis.summary.postCount,
-      segments: analysis.summary.segmentCount,
-      handrail: true,
-      slopeDeg: analysis.summary.maxSlopeDeg,
-      params: JSON.stringify({
-        fenceRunId: id,
-        engine: ENGINE_VERSION,
-        source: 'FENCE_RUN',
-        calibration: ctx.calibration,
-        terrain: ctx.terrain,
-        nodes: ctx.nodes,
-        segments: ctx.segments.map((s) => ({
-          order: s.order, fromAtCm: s.fromAtCm, toAtCm: s.toAtCm,
-          lengthCm: s.lengthCm, heightCm: s.heightCm, slopeDeg: s.slopeDeg,
-          status: s.status, verifiedCm: s.verifiedCm,
-        })),
-        summary: analysis.summary,
-      }),
-      note: ctx.run.note,
-    },
-  })
-  // R536: dirka verzij — P2002 → ponovni poskus (versioning.ts). Številka se
-  // izračuna iz zadnje verzije ZNOTRAJ retried fn; za svežo kanonično meritev
-  // (nov id, §17) je to vedno 1, vzorec pa je enoten z ostalimi mesti.
-  await retryOnUnique(async () => {
-    const last = await db.measurementVersion.findFirst({
+  // ── R539 (transakcijska celovitost): kanonična meritev + verzija v1 +
+  // morebitni handoff paket + statusi segmentov/tekača + posnetek verzije +
+  // revizija v ENI transakciji — padec srednjega koraka NE pusti »pol-potrjenega«
+  // tekača (npr. meritev brez paketa, tekač brez revizije). ZUNANJA retryOnUnique
+  // (R536) pokriva P2002 dirke (verzija tekača, koda paketa PAK-…) — ob ponovnem
+  // poskusu se CELO telo (izračun kode + verzije vključno) izvede znova;
+  // notranji poskusi v PG transakciji niso možni (abortirajo celo tx). ──
+  const out = await retryOnUnique(() => db.$transaction(async (tx) => {
+    const measurement = await tx.measurement.create({
+      data: {
+        type: 'OGRAJA',
+        source: 'ROCNO',
+        status: ladder.status,
+        statusNote: ladder.reason,
+        projectId: ctx.run.projectId,
+        workOrderId: ctx.run.workOrderId,
+        authorId: user.id,
+        location: ctx.run.name,
+        lengthCm: analysis.summary.totalLengthCm,
+        heightCm: maxHeight,
+        posts: analysis.summary.postCount,
+        segments: analysis.summary.segmentCount,
+        handrail: true,
+        slopeDeg: analysis.summary.maxSlopeDeg,
+        params: JSON.stringify({
+          fenceRunId: id,
+          engine: ENGINE_VERSION,
+          source: 'FENCE_RUN',
+          calibration: ctx.calibration,
+          terrain: ctx.terrain,
+          nodes: ctx.nodes,
+          segments: ctx.segments.map((s) => ({
+            order: s.order, fromAtCm: s.fromAtCm, toAtCm: s.toAtCm,
+            lengthCm: s.lengthCm, heightCm: s.heightCm, slopeDeg: s.slopeDeg,
+            status: s.status, verifiedCm: s.verifiedCm,
+          })),
+          summary: analysis.summary,
+        }),
+        note: ctx.run.note,
+      },
+    })
+    // R536/R539: verzija v1 kanonične meritve — za SVEŽ id je vedno 1, BREZ
+    // notranjega retryOnUnique (P2002 v PG transakciji aborta celo tx;
+    // pokriva ga zunanja retryOnUnique okoli transakcije).
+    const last = await tx.measurementVersion.findFirst({
       where: { measurementId: measurement.id },
       orderBy: { version: 'desc' },
       select: { version: true },
     })
-    return db.measurementVersion.create({
+    await tx.measurementVersion.create({
       data: {
         measurementId: measurement.id,
         version: (last?.version ?? 0) + 1,
@@ -130,107 +137,114 @@ export async function POST (req: NextRequest, { params }: Params) {
         note: `Potrjeno iz ograjnega tekača (${ctx.segments.length} segmentov · ${analysis.summary.verifiedCount} preverjenih)`,
       },
     })
-  })
 
-  // ── Handoff: paket projekta z istim produktom/varianto (§21) ──
-  let pkg: { id: string; code: string } | null = null
-  if (handoff && ctx.run.productId) {
-    const product = await db.product.findUnique({
-      where: { id: ctx.run.productId },
-      select: { id: true, name: true, unit: true, family: { select: { code: true } } },
-    })
-    if (product) {
-      const variant = ctx.run.variantId
-        ? await db.productVariant.findUnique({ where: { id: ctx.run.variantId }, select: { id: true, name: true } })
-        : null
-      const code = await nextPackageCode(project?.code ?? 'P')
-      const qty = Math.round((analysis.summary.totalLengthCm / 100) * 100) / 100
-      // R488 (P1 — end-to-end veriga): handoff paket nosi STRUCTURIRANE VHODE
-      // iz POTRJENIH segmentov tekača (m-forma, ključi seg-N — isti vir kot
-      // konfigurator). Tako POST /api/project-packages/[id]/bom izpelje
-      // vrstice PO SEGMENTU (segmentsApplied = N) brez ponovnega vnosa (§21).
-      // calcJson.plan se NE shranjuje — izračun ostane suh dry-run (enako
-      // konfiguratorju: cene/marža se zapišejo šele z generacijo kosovnice).
-      const gates = ctx.nodes.filter((n) => n.kind === 'VRATA').length
-      const inputs: Record<string, unknown> = {
-        familyCode: product.family.code,
-        form: 'm',
-        qty,
-        qtySource: 'fence-run',
-        segments: ctx.segments.map((s) => ({
-          kljuc: `seg-${s.order + 1}`,
-          dolzina: Math.round(s.lengthCm) / 100, // cm → m (na cel cm)
-          visina: s.heightCm != null && s.heightCm > 0 ? Math.round(s.heightCm) / 100 : null,
-        })),
-        ...(gates > 0 ? { vrataKos: gates } : {}),
-        fenceRunId: id,
-        runName: ctx.run.name,
-        engine: ENGINE_VERSION,
-        source: 'FENCE_RUN',
-      }
-      // razmik stebrov iz AKTIVNEGA EngineeringRule max_razdalja_stebrov (cm → m);
-      // brez pravila pusti izpeljavo planBom (opozorilo BREZ_RAZMIKA — pošteno)
-      const postsRule = await db.engineeringRule.findFirst({ where: { key: POSTS_RULE_KEY, active: true } })
-      if (postsRule && Number(postsRule.value) > 0) {
-        inputs.razmikStebrovM = Math.round(Number(postsRule.value)) / 100
-      }
-      const created = await db.projectPackage.create({
-        data: {
-          code,
-          projectId: ctx.run.projectId,
-          productId: product.id,
-          variantId: variant?.id ?? null,
-          measurementId: measurement.id,
-          name: variant ? `${product.name} — ${variant.name}` : product.name,
-          qty,
-          unit: product.unit === 'm' ? 'm' : 'm',
-          status: 'IZMERA',
-          calcJson: JSON.stringify({ inputs }),
-          note: `Iz ograjnega tekača (${ctx.run.name})`,
-        },
+    // ── Handoff: paket projekta z istim produktom/varianto (§21) ──
+    let pkg: { id: string; code: string } | null = null
+    if (handoff && ctx.run.productId) {
+      const product = await tx.product.findUnique({
+        where: { id: ctx.run.productId },
+        select: { id: true, name: true, unit: true, family: { select: { code: true } } },
       })
-      pkg = { id: created.id, code: created.code }
+      if (product) {
+        const variant = ctx.run.variantId
+          ? await tx.productVariant.findUnique({ where: { id: ctx.run.variantId }, select: { id: true, name: true } })
+          : null
+        // R539: koda PAK-… se izračuna ZNOTRAJ transakcije na tx klientu — ob
+        // sočasnem P2002 (dva handoffa si izračunata isto kodo) zunanja
+        // retryOnUnique ponovi izračun znova (read-then-create dirka zaprta).
+        const code = await nextPackageCodeOn(tx, project?.code ?? 'P')
+        const qty = Math.round((analysis.summary.totalLengthCm / 100) * 100) / 100
+        // R488 (P1 — end-to-end veriga): handoff paket nosi STRUCTURIRANE VHODE
+        // iz POTRJENIH segmentov tekača (m-forma, ključi seg-N — isti vir kot
+        // konfigurator). Tako POST /api/project-packages/[id]/bom izpelje
+        // vrstice PO SEGMENTU (segmentsApplied = N) brez ponovnega vnosa (§21).
+        // calcJson.plan se NE shranjuje — izračun ostane suh dry-run (enako
+        // konfiguratorju: cene/marža se zapišejo šele z generacijo kosovnice).
+        const gates = ctx.nodes.filter((n) => n.kind === 'VRATA').length
+        const inputs: Record<string, unknown> = {
+          familyCode: product.family.code,
+          form: 'm',
+          qty,
+          qtySource: 'fence-run',
+          segments: ctx.segments.map((s) => ({
+            kljuc: `seg-${s.order + 1}`,
+            dolzina: Math.round(s.lengthCm) / 100, // cm → m (na cel cm)
+            visina: s.heightCm != null && s.heightCm > 0 ? Math.round(s.heightCm) / 100 : null,
+          })),
+          ...(gates > 0 ? { vrataKos: gates } : {}),
+          fenceRunId: id,
+          runName: ctx.run.name,
+          engine: ENGINE_VERSION,
+          source: 'FENCE_RUN',
+        }
+        // razmik stebrov iz AKTIVNEGA EngineeringRule max_razdalja_stebrov (cm → m);
+        // brez pravila pusti izpeljavo planBom (opozorilo BREZ_RAZMIKA — pošteno)
+        const postsRule = await tx.engineeringRule.findFirst({ where: { key: POSTS_RULE_KEY, active: true } })
+        if (postsRule && Number(postsRule.value) > 0) {
+          inputs.razmikStebrovM = Math.round(Number(postsRule.value)) / 100
+        }
+        const created = await tx.projectPackage.create({
+          data: {
+            code,
+            projectId: ctx.run.projectId,
+            productId: product.id,
+            variantId: variant?.id ?? null,
+            measurementId: measurement.id,
+            name: variant ? `${product.name} — ${variant.name}` : product.name,
+            qty,
+            unit: product.unit === 'm' ? 'm' : 'm',
+            status: 'IZMERA',
+            calcJson: JSON.stringify({ inputs }),
+            note: `Iz ograjnega tekača (${ctx.run.name})`,
+          },
+        })
+        pkg = { id: created.id, code: created.code }
+      }
     }
-  }
 
-  // ── Statusi: segmenti → CONFIRMED, tekač → POTRJEN ──
-  await db.fenceSegment.updateMany({ where: { fenceRunId: id }, data: { status: 'CONFIRMED' } })
-  await db.fenceRun.update({
-    where: { id },
-    data: {
-      status: 'POTRJEN',
-      measurementId: measurement.id,
-      quality: JSON.stringify(analysis.quality),
-    },
-  })
-  const version = await snapshotVersion(id, user.id, 'Potrjena izmera')
+    // ── Statusi: segmenti → CONFIRMED, tekač → POTRJEN ──
+    await tx.fenceSegment.updateMany({ where: { fenceRunId: id }, data: { status: 'CONFIRMED' } })
+    await tx.fenceRun.update({
+      where: { id },
+      data: {
+        status: 'POTRJEN',
+        measurementId: measurement.id,
+        quality: JSON.stringify(analysis.quality),
+      },
+    })
+    // R539: posnetek verzije NA tx klientu, brez notranjega retrija (zunanja
+    // retryOnUnique okoli cele transakcije ga pokriva) — posnetek vidi še
+    // ne-commitano stanje POTRJEN (isti vrstni red kot prej).
+    const version = await snapshotVersionOn(tx, id, user.id, 'Potrjena izmera')
 
-  await writeAudit({
-    userId: user.id,
-    action: 'FENCE_RUN_CONFIRM',
-    entity: 'fenceRun',
-    entityId: id,
-    projectId: ctx.run.projectId,
-    detail: {
-      name: ctx.run.name,
-      measurementId: measurement.id,
-      totalLengthCm: analysis.summary.totalLengthCm,
-      posts: analysis.summary.postCount,
-      segments: analysis.summary.segmentCount,
-      verified: analysis.summary.verifiedCount,
-      quality: analysis.quality,
-      ...(pkg ? { package: pkg.code } : {}),
-      version,
-    },
-  })
+    await writeAudit({
+      userId: user.id,
+      action: 'FENCE_RUN_CONFIRM',
+      entity: 'fenceRun',
+      entityId: id,
+      projectId: ctx.run.projectId,
+      detail: {
+        name: ctx.run.name,
+        measurementId: measurement.id,
+        totalLengthCm: analysis.summary.totalLengthCm,
+        posts: analysis.summary.postCount,
+        segments: analysis.summary.segmentCount,
+        verified: analysis.summary.verifiedCount,
+        quality: analysis.quality,
+        ...(pkg ? { package: pkg.code } : {}),
+        version,
+      },
+    }, tx)
+    return { measurementId: measurement.id, version, pkg }
+  }))
 
   return NextResponse.json({
     data: {
       runId: id,
       status: 'POTRJEN',
-      version,
-      measurementId: measurement.id,
-      ...(pkg ? { package: pkg } : {}),
+      version: out.version,
+      measurementId: out.measurementId,
+      ...(out.pkg ? { package: out.pkg } : {}),
       summary: analysis.summary,
     },
   }, { status: 201 })

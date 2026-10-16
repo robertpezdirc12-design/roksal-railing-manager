@@ -12,7 +12,8 @@ import { jsonError, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
 import { captureSessionZaUporabnika } from '@/lib/capture-qa-access'
 import { analyzeSession, finishCaptureSession, loadCaptureContext } from '@/lib/capture-qa-service'
-import { emitEvent } from '@/lib/notify'
+import { deliverEvent, recordEvent } from '@/lib/notify'
+import { retryOnUnique } from '@/lib/versioning'
 
 export async function POST (req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requirePermission(req, 'measurements.write')
@@ -35,49 +36,71 @@ export async function POST (req: NextRequest, { params }: { params: Promise<{ id
     return jsonError(409, 'Zajem je že zaključen.', `Snapshot: ${ctx.session.snapshotId ?? '—'}`)
   }
 
-  const result = await finishCaptureSession(ctx, user.id, obstojeco)
+  // R539 (transakcijska celovitost): criticalGate za revizijo/odgovor je
+  // determinističen iz ctx (tekač se pri zaključku NE spreminja) — analiza
+  // teče PRED transakcijo, ker analyzeSession persistira pokritost/drift prek
+  // globalnega db (ne more teči znotraj odprte tx nad istim zajemom —
+  // zaklenjena vrstica bi pomenila blokado).
+  const analysis = await analyzeSession(ctx)
+
+  // R539: zaključek zajema (status ZAKLJUCEN + AS-MEASURED snapshot + verzija
+  // — finishCaptureSession na tx klientu) + OBE reviziji (CAPTURE_FINISH +
+  // TWIN_SNAPSHOT_CREATE) + zapis dogodka CAPTURE_PROCESSED (outbox) v ENI
+  // $transaction. retryOnUnique okoli CELE transakcije: verzija snapshot-a je
+  // read-then-create (@@unique([projectId, kind, version])) — sočasen zaključek
+  // povzroči P2002, ki v PG transakciji aborta CELO tx (neobnovljiv, R536),
+  // zunanji ponovni poskus verzijo izračuna znova. Neuspešna vrata (ok:false)
+  // NE ustvarijo napake tx — callback se vrne brez pisanja in prazna tx se brez
+  // škode potrdi; obstoječa semantika 409 ostaja nespremenjena.
+  const { result, recorded } = await retryOnUnique(() => db.$transaction(async (tx) => {
+    const result = await finishCaptureSession(ctx, user.id, obstojeco, tx)
+    if (!result.ok) return { result, recorded: null }
+
+    await writeAudit({
+      userId: user.id,
+      action: 'CAPTURE_FINISH',
+      entity: 'captureSession',
+      entityId: id,
+      projectId: access.session.projectId,
+      detail: {
+        name: access.session.name,
+        snapshotId: result.snapshotId,
+        version: result.version,
+        ...(analysis?.criticalGate ? { gate: analysis.criticalGate } : {}),
+      },
+    }, tx)
+    await writeAudit({
+      userId: user.id,
+      action: 'TWIN_SNAPSHOT_CREATE',
+      entity: 'digitalTwinSnapshot',
+      entityId: result.snapshotId as string,
+      projectId: access.session.projectId,
+      detail: { kind: 'AS_MEASURED', version: result.version, reason: 'Zaključek zajema' },
+    }, tx)
+
+    // R481 (issue #9 §9 — „zajem obdelan"): dogodek ob zaključku obdelave
+    // zajema (IN_APP pisarni + webhook dostava) — ZAPIS v isti transakciji
+    // (transakcijski outbox, R537), dostava PO commitu. Ključ vključuje
+    // snapshotId (deterministično — ponoven klic ne podvoji).
+    const recorded = await recordEvent({
+      type: 'CAPTURE_PROCESSED',
+      key: `capture-processed:${id}:${result.snapshotId}`,
+      title: 'Zajem obdelan',
+      body: `Zajem ${access.session.name} je obdelan — AS-MEASURED snapshot v${result.version} (${access.session.mode}).`,
+      projectId: access.session.projectId,
+      audience: 'OFFICE',
+    }, tx)
+    return { result, recorded }
+  }))
+
   if (!result.ok) {
     return jsonError(409, 'Zajem ne more biti zaključen — manjkajoči pogoji.', (result.reasons ?? []).join(' '))
   }
 
+  // dostava obvestila PO uspešnem commitu (ognjevarna — nikoli ne vrže napake)
+  if (recorded) await deliverEvent(recorded)
+
   // kritična vrata mer se vrnejo v odgovoru (ZA PONUDBO/KONFIGURACIJO/PROIZVODNJO, §7)
-  const fresh = await loadCaptureContext(id)
-  const analysis = fresh ? await analyzeSession(fresh) : null
-
-  await writeAudit({
-    userId: user.id,
-    action: 'CAPTURE_FINISH',
-    entity: 'captureSession',
-    entityId: id,
-    projectId: access.session.projectId,
-    detail: {
-      name: access.session.name,
-      snapshotId: result.snapshotId,
-      version: result.version,
-      ...(analysis?.criticalGate ? { gate: analysis.criticalGate } : {}),
-    },
-  })
-  await writeAudit({
-    userId: user.id,
-    action: 'TWIN_SNAPSHOT_CREATE',
-    entity: 'digitalTwinSnapshot',
-    entityId: result.snapshotId as string,
-    projectId: access.session.projectId,
-    detail: { kind: 'AS_MEASURED', version: result.version, reason: 'Zaključek zajema' },
-  })
-
-  // R481 (issue #9 §9 — „zajem obdelan"): dogodek ob zaključku obdelave zajema
-  // (IN_APP pisarni + webhook dostava prek emitEvent). Ključ vključuje snapshotId
-  // (deterministično — ponoven klic ne podvoji).
-  await emitEvent({
-    type: 'CAPTURE_PROCESSED',
-    key: `capture-processed:${id}:${result.snapshotId}`,
-    title: 'Zajem obdelan',
-    body: `Zajem ${access.session.name} je obdelan — AS-MEASURED snapshot v${result.version} (${access.session.mode}).`,
-    projectId: access.session.projectId,
-    audience: 'OFFICE',
-  })
-
   return NextResponse.json({
     data: {
       snapshotId: result.snapshotId,

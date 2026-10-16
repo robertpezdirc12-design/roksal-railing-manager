@@ -34,24 +34,33 @@ export async function POST (req: NextRequest, { params }: Params) {
   const now = new Date()
   const eventKey = `webhook-test:${id}:${now.getTime()}`
 
-  const delivery = await db.webhookDelivery.create({
-    data: {
-      subscriptionId: id,
-      eventKey,
-      eventType: WEBHOOK_TEST_EVENT,
-      payload: JSON.stringify(publicWebhookPayload({
+  // R539 (transakcijska celovitost): testni ping sledi OUTBOX vzorcu iz
+  // webhook-delivery.ts (R537) — ZAPIS vrstice (PENDING) je transakcijska
+  // faza, ZUNANJA dostava (HTTP + posodobitve vrstice/naročnine v lib-u na
+  // globalnem db) pa teče PO commitu in NI del transakcije.
+  const delivery = await db.$transaction(async (tx) =>
+    tx.webhookDelivery.create({
+      data: {
+        subscriptionId: id,
         eventKey,
         eventType: WEBHOOK_TEST_EVENT,
-        occurredAt: now,
-        title: 'Webhook test',
-        body: 'To je testni ping naročnine ROKSAL — potrditev prejema (in podpisa).',
-      })),
-      status: 'PENDING',
-    },
-  })
+        payload: JSON.stringify(publicWebhookPayload({
+          eventKey,
+          eventType: WEBHOOK_TEST_EVENT,
+          occurredAt: now,
+          title: 'Webhook test',
+          body: 'To je testni ping naročnine ROKSAL — potrditev prejema (in podpisa).',
+        })),
+        status: 'PENDING',
+      },
+    }),
+  )
 
   const result = await attemptWebhookDelivery(delivery.id)
 
+  // R539: revizija WEBHOOK_TEST DOKUMENTIRA IZID zunanje dostave — izid ob
+  // zapisu vrstice še ne obstaja, zato (kot pri /api/webhooks/retry) NI del
+  // zapisne verige; primarni zapis izida je vrstica WebhookDelivery sama.
   await writeAudit({
     userId: user.id,
     action: 'WEBHOOK_TEST',

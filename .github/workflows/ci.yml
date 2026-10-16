@@ -235,6 +235,14 @@ jobs:
           # ostaja 100 % nespremenjena za programske odjemalce in testni pas.
           # Nova skupina MORA biti tudi v tests/ci-matrix.sh.
           - grupa: r538
+          # R539: transakcijska celovitost preostalih družin (fence-run 6,
+          # capture-session 9, produkcija/katalog 10, preostale 8; login =
+          # 4 pisanja v ENI tx) — retryOnUnique samo okoli cele tx,
+          # recordEvent/deliverEvent razcep, lib službe z neobveznim
+          # klientom. Izpuščene (documented): logout/rate-limit/retry/
+          # ar-analyze/digital-twin.
+          # Nova skupina MORA biti tudi v tests/ci-matrix.sh.
+          - grupa: r539
     services:
       postgres:
         image: postgres:16
