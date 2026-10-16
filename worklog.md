@@ -4237,3 +4237,22 @@ Work Log:
 
 Stage Summary:
 - v1.56.0 = R531 + R532 (usklajena dokumentacija + harmonizacija barv + raziskava); pas 8+41, E2E 21✓
+
+---
+Task ID: R533 (del 1 — issue #20)
+Agent: main (Z.ai Code)
+Task: Issue #20 P0 — enoten vir kode, issue tracker in release gate; nov GitLab žeton lastnika + nove zadeve #16–#20
+
+Work Log:
+- NOV ŽETON (lastnik posredoval v klepetu): posodobljen remote gitlab; API deluje (robertpezdirc8, active; tokrat IMA read_api scope — izboljšanje); git ls-remote občasno 403 (Cloudflare, prehodno — 2. poskus uspešen, znana past)
+- SINHRONIZACIJA: GitLab bil na 2ca598e (R527-dodatek) — push main → 5223047 + oznaka v1.56.0; preverjeno: lokalno = GitHub = GitLab = zrcalo (ci-mirror verify)
+- ZASEBNI RUNNER PONOVNO VZPOSTAVLJEN (izgubljen z resetom peskovnika R528): POST /user/runners → id 57490060 (tag sandbox, run_untagged); gitlab-runner 19.4.1 v /home/z/gitlab-runner-r533/; PAST zabeležena: `--user z` sili su (uporabnik z brez gesla) → »prepare environment: su: Authentication failure« — rešitev: zagon BREZ --user (runner že teče kot z); CONFIG_FILE env (ne --config pred run)
+- CEVOVODI ZELENI: main (2954289908) + v1.56.0 (2954289903) na 5223047 — job verify ~104 s; prvotni padli cevovodi (08:33, pred runnerjem) retrirani v ZELENO
+- ops/sync-check.sh NOV (issue #20 točki 2+6): primerja lokalni main + oznako izdaje (v{version} iz package.json) proti VSEM repotom (privzeto origin+gitlab) po SHA; stanja OK/DRIFT/FAILED z izhodno kodo 0/1/2; retriji na prehodne 403; varnost: izpis SAMO imen+SHA (nikoli URL-jev z žetoni); SYNC_ROOT za testabilnost; logika oznake: lokalna ↔ oddaljena (ne proti main — oznaka sme kazati na starejši izdajni commit)
+- tests/r533.py NOV — 27 ✓ / 0 ✗ (42. skupina): A sintaksa+varnost izpisa; B OK primer (2 lokalni zrcali, izhod 0); C NAMERNO ZASTARELO zrcalo → izhod 1, DRIFT z imenom repota, OBA SHA v izpisu, naslednji korak (DoD #20: »namenski test odkrije namerno zastarelo zrcalo«); D nedosegljiv repo → izhod 2; E manjkajoča izdajna oznaka na enem zrcalu → DRIFT z imenom; F živi primer (origin+gitlab resnično OK — pošteno: preskok ob nedosegljivosti); G dokumentacija vira
+- README: GLAVA + CI/CD sekcija preoblikovana po resnici — GitHub je KANONIČNI vir (zadeve #16–#20 živijo tam), GitLab je drugo zrcalo (issue tracker se NE upravlja tam); sinhronizacija po SHA z ops/sync-check.sh; release vrata = pas na točno izdajnem SHA + sync-check OK + šele nato oznaka/push; poštena Vercel opomba (brez žetona v peskovniku — lastnikovo dejanje: alias READY + /api/health; lastnik je pri #20 potrdil d9bf4cf); GitHub Actions minute do 1. 11. 2026; 42 skupin povsod
+- matrika+ci.yml sinhrono 42 = 42; lint 0 napak
+
+Stage Summary:
+- Issue #20 izvedbena stran ZAKLJUČENA: kanonični vir določen in dokumentiran (GitHub), sinhronizacija po SHA z odkrivalnikom drifta (skupina r533), GitLab CI spet ZELEN na zasebnem runnerju (57490060), release vrata opisana (pas na izdajnem SHA + sync-check)
+- Ostaneta lastnikovi dejanji za #20: Vercel preverjanje po vsaki izdaji (brez žetona nez izvedljivo iz peskovnika — postopek dokumentiran); issueji ostajajo SAMO na GitHubu (GitLab issue seznam prazen — pravilno)

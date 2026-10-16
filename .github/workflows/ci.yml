@@ -215,9 +215,12 @@ jobs:
           # rezultat POTEM, shranjene, javni pregled).
           # R532: harmonizacija barv prizora (issue #14 §4) — čiste funkcije,
           # žičenje v izris, meje ±22, determinizem, živi API engineVersion 1.4.0.
+          # R533 (issue #20): sinhronizacija po SHA — strojni odkrivalnik
+          # zastarelega zrcala (OK/DRIFT/FAILED, brez omrežja).
           # Nova skupina MORA biti tudi v tests/ci-matrix.sh.
           - grupa: r527
           - grupa: r532
+          - grupa: r533
     services:
       postgres:
         image: postgres:16

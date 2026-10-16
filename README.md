@@ -4,9 +4,9 @@ Poslovno-operativni sistem za Roksal — od prvega voda do zaključene montaže 
 fasad in teras: CRM, ponudbe s podpisom, proizvodnja, teren (tudi brez signala),
 računi in **fotomontaža PREJ/POTEM** iz uradnih Roksalovih gradiv.
 
-> **Stanje:** rekonstrukcija zaključena in presežena · izdaja **v1.55.1** ·
-> GitLab CI **zelen** (zasebni runner) · **41 testnih skupin + E2E skozi pravo
-> aplikacijo** · GitLab je kanonični vir, GitHub zrcalo sinhrono ·
+> **Stanje:** rekonstrukcija zaključena in presežena · izdaja **v1.56.0** ·
+> **42 testnih skupin + E2E skozi pravo aplikacijo** · GitHub je kanonični vir
+> (zadeve + release vrata), GitLab zrcalo, sinhronizacija po SHA (`ops/sync-check.sh`) ·
 > [docs/](docs/) vsebuje poročila za vsako fazo.
 
 ---
@@ -103,7 +103,7 @@ hitro demo prijavo se izrišejo samo z `DEMO_ACCESS=on`.
 
 ```bash
 bash tests/ci-local.sh        # ENO VSTOPNO MESTO: typecheck + lint + migracije + seed
-                              # + živa aplikacija + VSE skupine (39); logi v .ci-local-logs/
+                              # + živa aplikacija + VSE skupine (42); logi v .ci-local-logs/
 bash tests/ci-matrix.sh --list    # seznam skupin — edini vir resnice
 bash tests/ci-matrix.sh r524       # ena skupina (točno tako jih poganja CI)
 ```
@@ -116,13 +116,32 @@ ImageMagick, poppler) — podrobno v `tests/ci-local.sh` glavi.
 
 ## CI/CD
 
-- **GitLab je kanonični vir** (`markec-group1/roksal-railing-manager`); GitHub
-  zrcalo (`origin`) sinhrono ob vsakem pushu.
-- Po izčrpani mesečni kvoti skupnih runnerjev (R525) teče CI na **zasebnem
-  shell runnerju** v peskovniku (klon prek uradne možnosti `clone_url` iz
-  lokalnega golega zrcala — `.zscripts/ci-mirror.sh sync|verify|ensure` — ker
-  Cloudflare blokira git smart-HTTP z job-tokenom). Zasebni runner kvote
-  **ne** porablja.
+- **GitHub je kanonični vir** (`robertpezdirc12-design/roksal-railing-manager`,
+  `origin`): tam živijo zadeve (issue tracker) in release vrata. GitLab
+  (`markec-group1`) je **drugo zrcalo** — issuejev NE upravljamo tam (issue #20).
+- **Sinhronizacija se dokazuje po SHA, ne po uspehu pusha:**
+  `bash ops/sync-check.sh` primerja lokalni main + oznako izdaje proti OBEMA
+  repozitorijema in izpiše OK/DRIFT/FAILED (izhod 0/1/2). Strojni test
+  odkrivanja razhajanja: skupina `r533` namerno zastarelo zrcalo dokazuje brez
+  omrežja (začasni repozitoriji). Po vsakem pushu na en sistem preveri še
+  drugega — »sinhrono« brez preverjene SHA ni resnica.
+- Po izčrpani mesečni kvoti skupnih runnerjev (R525) teče GitLab CI na
+  **zasebnem shell runnerju** v peskovniku (R533: id 57490060; klon prek
+  uradne možnosti `clone_url` iz lokalnega golega zrcala —
+  `.zscripts/ci-mirror.sh sync|verify|ensure` — ker Cloudflare blokira git
+  smart-HTTP z job-tokenom). Zasebni runner kvote **ne** porablja.
+- **Release vrata (obvezna pred vsako izdajo):** relejni pas
+  `bash tests/ci-local.sh` na TOČNO tistem commitu, ki se izdaja (8 statičnih
+  korakov + vseh 42 skupin, EXIT 0), nato `bash ops/sync-check.sh` = OK na
+  obeh sistemih, šele nato oznaka + push. GitLab pipeline (`verify`) je
+  drugotna potrditev istega SHA — ne nadomestilo pasu.
+- **Vercel (produkcija) — pošteno:** iz peskovnika NI dostopa do Vercel API-ja
+  (noben žeton; lastnikovo dejanje). Preverjanje po izdaji opravi lastnik:
+  alias → `READY` na izdajnem SHA + `GET /api/health` na produkciji. Pri
+  izdaji v1.56.0 je lastnik (issue #20) potrdil alias na d9bf4cf; stanje
+  vsake izdaje se zapiše v worklog ob izdaji. GitHub Actions minute so
+  izčrpane do 1. 11. 2026 — do takrat je relejni pas lokalni (dokaz v
+  `ops/r5xx-pas.out`).
 - Vzdrževalni cron: `vercel.json` → `GET /api/jobs/run` 03:30 UTC (zaželen samo
   s `CRON_SECRET`; brez njega 401 — opravila se poganjajo ročno).
 
@@ -148,7 +167,7 @@ ImageMagick, poppler) — podrobno v `tests/ci-local.sh` glavi.
 | `src/lib/` | 72 knjižnic: photo-replace-{mask,texture,core,engine}, permissions-core, nav-registry, audit, … |
 | `prisma/` | shema + 12 migracij + semenske skripte (`db:seed` veriga) |
 | `public/assets/roksal/src/` | uradni Roksalovi viri, `MANIFEST.json` s SHA-256 |
-| `tests/` | 41 skupin + `ci-local.sh` / `ci-matrix.sh` + fixtures |
+| `tests/` | 42 skupin + `ci-local.sh` / `ci-matrix.sh` + fixtures |
 | `ops/` | E2E skripte, izrisi-dokazi, backup/restore/drill, secret-audit |
 | `docs/` | poročila po fazah (RECOVERY, FOTOZAMENJAVA, E2E, …) |
 | `.zscripts/` | vzdrževanje peskovnika: dev-detach, git-retry, ci-mirror |
