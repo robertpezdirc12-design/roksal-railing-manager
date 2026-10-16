@@ -62,17 +62,21 @@ export async function POST (req: NextRequest) {
     return jsonError(400, 'Posnetek potrebuje vsaj params (posnetek), analysis, scene ali opombo.')
   }
 
-  const snapshot = await db.arSnapshot.create({
-    data: { projectId, authorId: user.id, scene, analysis, params, note, sceneJson },
-  })
+  // R537 (transakcijska celovitost): posnetek + revizija v ENI transakciji.
+  const snapshot = await db.$transaction(async (tx) => {
+    const snapshot = await tx.arSnapshot.create({
+      data: { projectId, authorId: user.id, scene, analysis, params, note, sceneJson },
+    })
 
-  await writeAudit({
-    userId: user.id,
-    action: 'AR_SNAPSHOT_CREATE',
-    entity: 'arSnapshot',
-    entityId: snapshot.id,
-    projectId,
-    detail: { scene, hasPhoto: !!params, note, sceneElements: sceneUnderstanding?.elements.length ?? 0 },
+    await writeAudit({
+      userId: user.id,
+      action: 'AR_SNAPSHOT_CREATE',
+      entity: 'arSnapshot',
+      entityId: snapshot.id,
+      projectId,
+      detail: { scene, hasPhoto: !!params, note, sceneElements: sceneUnderstanding?.elements.length ?? 0 },
+    }, tx)
+    return snapshot
   })
 
   return NextResponse.json({ data: { id: snapshot.id, createdAt: snapshot.createdAt } }, { status: 201 })

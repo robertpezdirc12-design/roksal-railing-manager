@@ -53,7 +53,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { jsonError, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
-import { emitEvent } from '@/lib/notify'
+import { deliverEvent, recordEvent } from '@/lib/notify'
 import {
   MEASURE_MODES, MODE_RULES, consolidateViews, viewLengthCm, polygonMetrics, parseEnginePoints,
   pointsForStorage, viewForStorage, calibrationForParams, parseCalibration,
@@ -319,31 +319,14 @@ export async function POST (req: NextRequest) {
     params = JSON.stringify(extra)
   } catch { params = JSON.stringify({ photoId, source: 'KAMERA' }) }
 
-  const measurement = await db.measurement.create({
-    data: {
-      type,
-      source: 'KAMERA',
-      status: provenance.status,
-      statusNote: provenance.reason,
-      projectId,
-      workOrderId,
-      authorId: user.id,
-      location: typeof body.location === 'string' && body.location.trim() ? body.location.trim() : photo.location,
-      lengthCm,
-      heightCm,
-      posts,
-      segments,
-      handrail,
-      slopeDeg,
-      params,
-      note: typeof body.note === 'string' && body.note.trim() ? body.note.trim() : null,
-    },
-    include: {
-      author: { select: { name: true } },
-      project: { select: { id: true, code: true, title: true } },
-      workOrder: { select: { id: true, code: true, title: true } },
-    },
-  })
+  // R438 (issue #5): kontakt stranke za statusno obvestilo (EMAIL, maskiran
+  // naslov) — branje PRED transakcijo (samo vsebina obvestila, ne odloča o zapisu).
+  const customer = projectId
+    ? await db.project.findUnique({
+      where: { id: projectId },
+      select: { customer: { select: { name: true, email: true } } },
+    }).then((p) => p?.customer ?? null)
+    : null
 
   // verzija v1 — začetni posnetek (zgodovina verzij)
   const versionBits: string[] = []
@@ -352,62 +335,94 @@ export async function POST (req: NextRequest) {
   if (multiView) versionBits.push(`razpršenost ${multiView.spreadPct.toString().replace('.', ',')} %${multiView.conflict ? ' ⚠ konflikt' : ''}`)
   if (manualOverride) versionBits.push('ročni popravek dolžine')
   if (mode) versionBits.push(`način ${mode}`)
-  // R536: dirka verzij — P2002 → ponovni poskus (versioning.ts). Številka se
-  // izračuna iz zadnje verzije ZNOTRAJ retried fn; za svežo meritev (nov id)
-  // je to vedno 1, vzorec pa je enoten z ostalimi mesti ustvarjanja verzij.
-  await retryOnUnique(async () => {
-    const last = await db.measurementVersion.findFirst({
-      where: { measurementId: measurement.id },
-      orderBy: { version: 'desc' },
-      select: { version: true },
-    })
-    return db.measurementVersion.create({
+
+  // R537 (transakcijska celovitost): meritev + verzija v1 + revizija + zapis
+  // obvestila (outbox) v ENI transakciji — padec srednjega koraka NE pusti
+  // meritve brez verzije/revizije/dogodka. R536 retryOnUnique teče na tx klientu
+  // (za SVEŽ id je verzija vedno 1 → P2002 praktično nedosegljiv; fn znova
+  // prebere zadnjo verzijo ZNOTRAJ poskusa, vzorec ostaja enak). Dostava
+  // obvestila (stranka EMAIL + webhook HTTP) teče PO commitu (deliverEvent).
+  // Prenos v paket (R509 handoff) ostaja IZVEN transakcije — nextPackageCode ima
+  // lastno $transaction (product-core, izven lastništva te naloge).
+  const { measurement, recorded } = await db.$transaction(async (tx) => {
+    const measurement = await tx.measurement.create({
       data: {
-        measurementId: measurement.id,
-        version: (last?.version ?? 0) + 1,
-        userId: user.id,
-        data: JSON.stringify({
-          type, lengthCm, heightCm, posts, segments, handrail, slopeDeg,
-          location: measurement.location, note: measurement.note, params,
-          status: provenance.status, statusNote: provenance.reason,
-        }),
-        note: versionBits.length > 0 ? `${versionBits.join(' · ')} — potrjeno s kamero` : 'Potrjeno s kamero (iz fotografije)',
+        type,
+        source: 'KAMERA',
+        status: provenance.status,
+        statusNote: provenance.reason,
+        projectId,
+        workOrderId,
+        authorId: user.id,
+        location: typeof body.location === 'string' && body.location.trim() ? body.location.trim() : photo.location,
+        lengthCm,
+        heightCm,
+        posts,
+        segments,
+        handrail,
+        slopeDeg,
+        params,
+        note: typeof body.note === 'string' && body.note.trim() ? body.note.trim() : null,
+      },
+      include: {
+        author: { select: { name: true } },
+        project: { select: { id: true, code: true, title: true } },
+        workOrder: { select: { id: true, code: true, title: true } },
       },
     })
-  })
 
-  await writeAudit({
-    userId: user.id,
-    action: 'MEASUREMENT_CONFIRM',
-    entity: 'measurement',
-    entityId: measurement.id,
-    projectId,
-    detail: {
-      photoId, type, lengthCm, heightCm, slopeDeg, workOrderId: workOrderId ?? null, location: measurement.location,
-      // R501 (issue #15 faza 2): provenienca v reviziji — pisarna vidi, KAKO je
-      // bila številka pridobljena, ne samo da je bila »potrjena«.
-      status: provenance.status, statusReason: provenance.reason,
-      // R455: razširjeni podatki o potrditvi (issue #10)
-      ...(confidence !== null ? { confidence } : {}),
-      ...(views ? { views: views.length } : {}),
-      // R487: strežniško izračunana konsolidacija v reviziji (konflikt VIDEN)
-      ...(multiView ? { multiView } : {}),
-      ...(quality ? { qualityFlags: Object.keys(quality) } : {}),
-      ...(manualOverride ? { manualOverride } : {}),
-      // R457: način izmere + prisotnost engine rezultata (issue #12)
-      ...(mode ? { mode } : {}),
-      ...(engine ? { engine: Object.keys(engine) } : {}),
-    },
-  })
+    // R536: dirka verzij — P2002 → ponovni poskus (versioning.ts). Številka se
+    // izračuna iz zadnje verzije ZNOTRAJ retried fn; za svežo meritev (nov id)
+    // je to vedno 1, vzorec pa je enoten z ostalimi mesti ustvarjanja verzij.
+    await retryOnUnique(async () => {
+      const last = await tx.measurementVersion.findFirst({
+        where: { measurementId: measurement.id },
+        orderBy: { version: 'desc' },
+        select: { version: true },
+      })
+      return tx.measurementVersion.create({
+        data: {
+          measurementId: measurement.id,
+          version: (last?.version ?? 0) + 1,
+          userId: user.id,
+          data: JSON.stringify({
+            type, lengthCm, heightCm, posts, segments, handrail, slopeDeg,
+            location: measurement.location, note: measurement.note, params,
+            status: provenance.status, statusNote: provenance.reason,
+          }),
+          note: versionBits.length > 0 ? `${versionBits.join(' · ')} — potrjeno s kamero` : 'Potrjeno s kamero (iz fotografije)',
+        },
+      })
+    })
 
-  // R438 (issue #5): potrjena meritev → statusno obvestilo stranki (EMAIL, maskiran naslov)
-  if (projectId) {
-    const customer = await db.project.findUnique({
-      where: { id: projectId },
-      select: { customer: { select: { name: true, email: true } } },
-    }).then((p) => p?.customer ?? null)
-    if (customer?.email) {
-      await emitEvent({
+    await writeAudit({
+      userId: user.id,
+      action: 'MEASUREMENT_CONFIRM',
+      entity: 'measurement',
+      entityId: measurement.id,
+      projectId,
+      detail: {
+        photoId, type, lengthCm, heightCm, slopeDeg, workOrderId: workOrderId ?? null, location: measurement.location,
+        // R501 (issue #15 faza 2): provenienca v reviziji — pisarna vidi, KAKO je
+        // bila številka pridobljena, ne samo da je bila »potrjena«.
+        status: provenance.status, statusReason: provenance.reason,
+        // R455: razširjeni podatki o potrditvi (issue #10)
+        ...(confidence !== null ? { confidence } : {}),
+        ...(views ? { views: views.length } : {}),
+        // R487: strežniško izračunana konsolidacija v reviziji (konflikt VIDEN)
+        ...(multiView ? { multiView } : {}),
+        ...(quality ? { qualityFlags: Object.keys(quality) } : {}),
+        ...(manualOverride ? { manualOverride } : {}),
+        // R457: način izmere + prisotnost engine rezultata (issue #12)
+        ...(mode ? { mode } : {}),
+        ...(engine ? { engine: Object.keys(engine) } : {}),
+      },
+    }, tx)
+
+    // R438 (issue #5): potrjena meritev → statusno obvestilo stranki —
+    // R537: ZAPIS dogodka v isti tx (outbox), dostava PO commitu (ognjevarna).
+    const recorded = projectId && customer?.email
+      ? await recordEvent({
         type: 'MEASUREMENT_CONFIRMED',
         key: `measurement-confirmed:${measurement.id}`,
         title: 'Meritev potrjena',
@@ -415,9 +430,13 @@ export async function POST (req: NextRequest) {
         projectId,
         customerEmail: customer.email,
         customerName: customer.name,
-      })
-    }
-  }
+      }, tx)
+      : null
+    return { measurement, recorded }
+  })
+
+  // dostava obvestila PO uspešnem commitu (ognjevarna — nikoli ne vrže napake)
+  if (recorded) await deliverEvent(recorded)
   // ── R509 (issue #7 §8): prenos potrjene meritve V PAKET ────────────────────
   // Ročna odločitev, NE tiha domišljija: paket ustvarimo samo, če izvajalec
   // zahteve izrecno podaja izdelek (`handoffProductId`) in ima pravico `quotes.create`

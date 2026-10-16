@@ -10,6 +10,7 @@ import { projectIdsZaUporabnika } from '@/lib/fence-run-access'
 import { writeAudit } from '@/lib/audit'
 import { computeQuoteTotals, parseDiscountPct, round2 } from '@/lib/quote-core'
 import { parseBody } from '@/lib/validate'
+import { retryOnUnique } from '@/lib/versioning'
 
 // R536: zod shema za ustvarjanje ponudbe — zrcali prejšnjo ročno validacijo:
 //  • stranka/projekt/paket neobvezni (null ⇒ brez; obstoj se preverja v handlerju)
@@ -127,11 +128,14 @@ export async function POST (req: NextRequest) {
   const totals = computeQuoteTotals(lines.map((l) => l.total), discountPct)
 
   // R535: koda + zapis v ENI transakciji, ob sočasnem P2002 (dva POST si
-  // izračunata isto kodo) do 3 poskusi — read-then-create dirka je s tem zaprta.
-  const isCodeCollision = (e: unknown): boolean => (e as { code?: string } | null)?.code === 'P2002'
+  // izračunata isto kodo) do 3 poskusi (retryOnUnique) — read-then-create
+  // dirka je s tem zaprta.
+  // R537 (transakcijska celovitost): revizija QUOTE_CREATE se zapiše V isti
+  // transakciji kot koda + ponudba (R535) — padec koraka NE pusti ponudbe brez
+  // revizije (prej je bil writeAudit LOČEN await za transakcijo).
   const buildWithCode = () => db.$transaction(async (tx) => {
     const code = await nextQuoteCode(tx)
-    return tx.quote.create({
+    const quote = await tx.quote.create({
       data: {
         code,
         status: 'OSNUTEK',
@@ -152,21 +156,12 @@ export async function POST (req: NextRequest) {
         _count: { select: { lines: true } },
       },
     })
+    await writeAudit({
+      userId: auth.user.id, action: 'QUOTE_CREATE', entity: 'quote', entityId: quote.id, projectId,
+      detail: { code: quote.code, customerId, packageId, lines: lines.length, ...totals },
+    }, tx)
+    return quote
   })
-  let quote: Awaited<ReturnType<typeof buildWithCode>>
-  for (let attempt = 1; ; attempt++) {
-    try {
-      quote = await buildWithCode()
-      break
-    } catch (err) {
-      if (isCodeCollision(err) && attempt < 3) continue // sočasni POST je vzel isto kodo → preberi ponovno
-      throw err
-    }
-  }
-
-  await writeAudit({
-    userId: auth.user.id, action: 'QUOTE_CREATE', entity: 'quote', entityId: quote.id, projectId,
-    detail: { code: quote.code, customerId, packageId, lines: lines.length, ...totals },
-  })
+  const quote = await retryOnUnique(buildWithCode, 3)
   return NextResponse.json({ data: quote }, { status: 201 })
 }

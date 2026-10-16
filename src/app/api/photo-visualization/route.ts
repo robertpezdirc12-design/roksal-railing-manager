@@ -150,70 +150,77 @@ export async function POST (req: NextRequest) {
     gradivoRazlog: gradivo.rezultat.razlog,
   }
 
-  const viz = await db.photoVisualization.create({
-    data: {
-      projectId: projekt.id,
-      authorId: user.id,
-      variantLabel: oznaka,
-      status: 'OSNUTEK',
-      sourcePhoto: foto.dataUrl,
-      sourcePhotoId: srcFoto ?? null,
-      measurementId,
-      measurementVersion,
-      productId: izdelek.produkt.id,
-      variantId: typeof body.variantId === 'string' && body.variantId ? body.variantId : null,
-      engineVersion: ENGINE_VERSION,
-      renderParams: renderParamsJson,
-      rendered,
-      note: typeof body.note === 'string' && body.note.trim() ? body.note.trim().slice(0, 500) : null,
-    },
-  })
-
-  // verzija v1 — posnetek nastanka (§12: brez tihega prepisovanja)
-  // R536: dirka verzij — P2002 na @@unique([visualizationId, version]) → ponovni
-  // poskus (versioning.ts). Številka se izračuna iz zadnje verzije ZNOTRAJ
-  // retried fn; za sveže ustvarjeno vizualizacijo (nov id) je to vedno 1,
-  // vzorec read-then-create pa je enoten z ostalimi verigami verzij.
-  const v1 = await retryOnUnique(async () => {
-    const zadnja = await db.photoVisualizationVersion.findFirst({
-      where: { visualizationId: viz.id },
-      orderBy: { version: 'desc' },
-      select: { version: true },
-    })
-    return db.photoVisualizationVersion.create({
+  // R537 (transakcijska celovitost): vizualizacija + verzija v1 + revizija v ENI
+  // transakciji — padec srednjega koraka NE pusti vizualizacije brez verzije/revizije.
+  // R536 retryOnUnique teče na tx klientu (za SVEŽ id je verzija vedno 1 →
+  // P2002 praktično nedosegljiv; fn znova prebere zadnjo verzijo ZNOTRAJ poskusa).
+  const { viz, v1 } = await db.$transaction(async (tx) => {
+    const viz = await tx.photoVisualization.create({
       data: {
-        visualizationId: viz.id,
-        version: (zadnja?.version ?? 0) + 1,
-        data: JSON.stringify({
-          renderParams: params.params,
-          meta: {
-            opozorila,
-            engineVersion: ENGINE_VERSION,
-            // R510: dokaz, NA KATERI MERI in KATEREM IZVIRNIKU gradiva slika stoji.
-            dokaz,
-          },
-        }),
-        userId: user.id,
-        note: 'Ustvarjena varianta',
+        projectId: projekt.id,
+        authorId: user.id,
+        variantLabel: oznaka,
+        status: 'OSNUTEK',
+        sourcePhoto: foto.dataUrl,
+        sourcePhotoId: srcFoto ?? null,
+        measurementId,
+        measurementVersion,
+        productId: izdelek.produkt.id,
+        variantId: typeof body.variantId === 'string' && body.variantId ? body.variantId : null,
+        engineVersion: ENGINE_VERSION,
+        renderParams: renderParamsJson,
+        rendered,
+        note: typeof body.note === 'string' && body.note.trim() ? body.note.trim().slice(0, 500) : null,
       },
     })
-  })
 
-  await writeAudit({
-    userId: user.id,
-    action: 'PHOTO_VIZ_CREATE',
-    entity: 'photoVisualization',
-    entityId: viz.id,
-    projectId: projekt.id,
-    detail: {
-      variantLabel: oznaka, productId: izdelek.produkt.id, sku: izdelek.produkt.sku,
-      measurementId, measurementVersion, sourcePhotoId: srcFoto ?? null,
-      engineVersion: ENGINE_VERSION, opozorila: opozorila.map((o) => o.koda),
-      // R510: dokaz je del revizijskega zapisa — kaj je bilo potrjeno in kaj ne
-      meraStatus: dokaz.meritev?.status ?? null,
-      gradivoDokaz: dokaz.gradivo?.assetId ?? null,
-      gradivoRazlog: dokaz.gradivoRazlog,
-    },
+    // verzija v1 — posnetek nastanka (§12: brez tihega prepisovanja)
+    // R536: dirka verzij — P2002 na @@unique([visualizationId, version]) → ponovni
+    // poskus (versioning.ts). Številka se izračuna iz zadnje verzije ZNOTRAJ
+    // retried fn; za sveže ustvarjeno vizualizacijo (nov id) je to vedno 1,
+    // vzorec read-then-create pa je enoten z ostalimi verigami verzij.
+    const v1 = await retryOnUnique(async () => {
+      const zadnja = await tx.photoVisualizationVersion.findFirst({
+        where: { visualizationId: viz.id },
+        orderBy: { version: 'desc' },
+        select: { version: true },
+      })
+      return tx.photoVisualizationVersion.create({
+        data: {
+          visualizationId: viz.id,
+          version: (zadnja?.version ?? 0) + 1,
+          data: JSON.stringify({
+            renderParams: params.params,
+            meta: {
+              opozorila,
+              engineVersion: ENGINE_VERSION,
+              // R510: dokaz, NA KATERI MERI in KATEREM IZVIRNIKU gradiva slika stoji.
+              dokaz,
+            },
+          }),
+          userId: user.id,
+          note: 'Ustvarjena varianta',
+        },
+      })
+    })
+
+    await writeAudit({
+      userId: user.id,
+      action: 'PHOTO_VIZ_CREATE',
+      entity: 'photoVisualization',
+      entityId: viz.id,
+      projectId: projekt.id,
+      detail: {
+        variantLabel: oznaka, productId: izdelek.produkt.id, sku: izdelek.produkt.sku,
+        measurementId, measurementVersion, sourcePhotoId: srcFoto ?? null,
+        engineVersion: ENGINE_VERSION, opozorila: opozorila.map((o) => o.koda),
+        // R510: dokaz je del revizijskega zapisa — kaj je bilo potrjeno in kaj ne
+        meraStatus: dokaz.meritev?.status ?? null,
+        gradivoDokaz: dokaz.gradivo?.assetId ?? null,
+        gradivoRazlog: dokaz.gradivoRazlog,
+      },
+    }, tx)
+    return { viz, v1 }
   })
 
   return NextResponse.json({

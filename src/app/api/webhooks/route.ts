@@ -99,24 +99,28 @@ export async function POST (req: NextRequest) {
     ? body.description.trim().slice(0, DESCRIPTION_MAX)
     : null
 
-  const sub = await db.webhookSubscription.create({
-    data: {
-      url,
-      secretHash: sha256Hex(secret),
-      events: serializeWebhookEvents(events),
-      active: true,
-      description,
-      createdById: user.id,
-    },
-  })
+  // R537 (transakcijska celovitost): naročnina + revizija v ENI transakciji.
+  const sub = await db.$transaction(async (tx) => {
+    const sub = await tx.webhookSubscription.create({
+      data: {
+        url,
+        secretHash: sha256Hex(secret),
+        events: serializeWebhookEvents(events),
+        active: true,
+        description,
+        createdById: user.id,
+      },
+    })
 
-  // revizija BREZ skrivnosti (in brez hash-a — hash je podpisni ključ)
-  await writeAudit({
-    userId: user.id,
-    action: 'WEBHOOK_CREATE',
-    entity: 'webhookSubscription',
-    entityId: sub.id,
-    detail: { url, events, ...(description ? { description } : {}) },
+    // revizija BREZ skrivnosti (in brez hash-a — hash je podpisni ključ)
+    await writeAudit({
+      userId: user.id,
+      action: 'WEBHOOK_CREATE',
+      entity: 'webhookSubscription',
+      entityId: sub.id,
+      detail: { url, events, ...(description ? { description } : {}) },
+    }, tx)
+    return sub
   })
 
   return NextResponse.json({

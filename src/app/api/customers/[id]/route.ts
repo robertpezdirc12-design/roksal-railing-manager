@@ -62,14 +62,18 @@ export async function PATCH (req: NextRequest, { params }: Params) {
   }
   if (Object.keys(patch).length === 0) return jsonError(400, 'Ni sprememb za izvedbo.')
 
-  const updated = await db.customer.update({
-    where: { id },
-    data: patch,
-    include: { _count: { select: { projects: true, quotes: true } } },
-  })
-  await writeAudit({
-    userId: auth.user.id, action: 'CUSTOMER_UPDATE', entity: 'customer', entityId: id,
-    detail: patch as Record<string, unknown>,
+  // R537 (transakcijska celovitost): posodobitev + revizija v ENI transakciji.
+  const updated = await db.$transaction(async (tx) => {
+    const updated = await tx.customer.update({
+      where: { id },
+      data: patch,
+      include: { _count: { select: { projects: true, quotes: true } } },
+    })
+    await writeAudit({
+      userId: auth.user.id, action: 'CUSTOMER_UPDATE', entity: 'customer', entityId: id,
+      detail: patch as Record<string, unknown>,
+    }, tx)
+    return updated
   })
   return NextResponse.json({ data: updated })
 }

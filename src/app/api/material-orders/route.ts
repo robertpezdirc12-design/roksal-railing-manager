@@ -7,11 +7,12 @@
 //       za katere lot ni bil ustvarjen) + linesSkippedCount; ustvarjanje z vrsticami brez itemId
 //       vrne opozorilo (warning) — obstoječi odgovori ostajajo nespremenjeni (samo aditivno).
 
+import type { Prisma } from '@prisma/client'
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { jsonError, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
-import { emitEvent } from '@/lib/notify'
+import { deliverEvent, recordEvent } from '@/lib/notify'
 
 const STATUSES = ['PRIPRAVA', 'POSLANO', 'PREJETO', 'PREKINJENO']
 
@@ -24,44 +25,58 @@ function brezArtiklaFraza (n: number, imena: string[], kontekst: 'prejeto' | 'us
   return `${n} ${stevnik} povezave na artikel — lot v zalogi NI bil ustvarjen za: ${imena.join(', ')}.`
 }
 
-async function nextCode (): Promise<string> {
+/** Odjemalec za nextCode: globalni db ALI transakcijski klient (R537). */
+type SeqClient = Pick<Prisma.TransactionClient, 'setting' | 'materialOrder' | 'auditLog'> & {
+  $queryRaw: Prisma.TransactionClient['$queryRaw']
+}
+
+/** Telo števca (R464: vrstična ključavnica FOR UPDATE) — izvedeno na podanem klientu. */
+async function nextCodeOn (client: SeqClient): Promise<string> {
   const year = new Date().getFullYear()
   // R464: trajni števec v Setting (vrstična ključavnica FOR UPDATE) — koda
   // dokumenta se NIKOLI ne reciklira, tudi če se naročilo izbriše (revizija
   // se nanaša na enolično kodo; prej: count/max-based → ponovna uporaba po
   // brisanju je povzročila trke v revizijski sledi).
   const key = `materialOrderSeq.${year}`
-  return db.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT "value" FROM "Setting" WHERE "key" = ${key} FOR UPDATE`
-    let setting = await tx.setting.findUnique({ where: { key } })
-    if (!setting) {
-      // prvi zagon števca: upoštej VSE kode kdajkoli izdane — obstoječa
-      // naročila + revizijsko sled (izbrisana naročila imajo immutabilen zapis)
-      const orders = await tx.materialOrder.findMany({
-        where: { code: { startsWith: `NAR-${year}-` } },
-        select: { code: true },
-        take: 500,
-      })
-      const audit = await tx.auditLog.findMany({
-        where: { action: 'MATERIAL_ORDER_CREATE' },
-        select: { detail: true },
-        take: 500,
-        orderBy: { createdAt: 'desc' },
-      })
-      let maxSeq = 0
-      for (const c of [...orders.map(o => o.code), ...audit.map(a => {
-        try { return (JSON.parse(a.detail ?? '{}') as { code?: string }).code ?? '' } catch { return '' }
-      })]) {
-        const n = Number(String(c).split('-')[2])
-        if (Number.isFinite(n) && n > maxSeq) maxSeq = n
-      }
-      setting = await tx.setting.create({ data: { key, value: String(maxSeq) } })
+  await client.$queryRaw`SELECT "value" FROM "Setting" WHERE "key" = ${key} FOR UPDATE`
+  let setting = await client.setting.findUnique({ where: { key } })
+  if (!setting) {
+    // prvi zagon števca: upoštej VSE kode kdajkoli izdane — obstoječa
+    // naročila + revizijsko sled (izbrisana naročila imajo immutabilen zapis)
+    const orders = await client.materialOrder.findMany({
+      where: { code: { startsWith: `NAR-${year}-` } },
+      select: { code: true },
+      take: 500,
+    })
+    const audit = await client.auditLog.findMany({
+      where: { action: 'MATERIAL_ORDER_CREATE' },
+      select: { detail: true },
+      take: 500,
+      orderBy: { createdAt: 'desc' },
+    })
+    let maxSeq = 0
+    for (const c of [...orders.map(o => o.code), ...audit.map(a => {
+      try { return (JSON.parse(a.detail ?? '{}') as { code?: string }).code ?? '' } catch { return '' }
+    })]) {
+      const n = Number(String(c).split('-')[2])
+      if (Number.isFinite(n) && n > maxSeq) maxSeq = n
     }
-    const seq = Number(setting.value) + 1
-    if (!Number.isFinite(seq) || seq < 1) throw new Error('Neveljavna vrednost števca naročil.')
-    await tx.setting.update({ where: { key }, data: { value: String(seq) } })
-    return `NAR-${year}-${String(seq).padStart(3, '0')}`
-  })
+    setting = await client.setting.create({ data: { key, value: String(maxSeq) } })
+  }
+  const seq = Number(setting.value) + 1
+  if (!Number.isFinite(seq) || seq < 1) throw new Error('Neveljavna vrednost števca naročil.')
+  await client.setting.update({ where: { key }, data: { value: String(seq) } })
+  return `NAR-${year}-${String(seq).padStart(3, '0')}`
+}
+
+/**
+ * Koda NAR-<leto>-<seq>. Brez argumenta teče v LASTNI transakciji (obnašanje
+ * R464 nespremenjeno); R537: klic znotraj $transaction prejme tx — števec se
+ * zaklene in poveča V isti transakciji (brez vgnezdenih transakcij, ki bi si
+ * lahko navzkrižno blokirale povezave).
+ */
+async function nextCode (tx?: Prisma.TransactionClient): Promise<string> {
+  return tx ? nextCodeOn(tx) : db.$transaction((t) => nextCodeOn(t))
 }
 
 export async function GET (req: NextRequest) {
@@ -134,54 +149,65 @@ export async function POST (req: NextRequest) {
       return jsonError(409, 'Poslati je mogoče samo naročilo v pripravi.')
     }
 
+    // R537 (transakcijska celovitost): loti v zalogi + sprememba statusa + revizija
+    // + zapis dogodka (outbox) v ENI transakciji — prej bi padec srednjega koraka
+    // pustil LOCE (npr. loti ustvarjeni, naročilo še v PRIPRAVA → ponoven PREJETO
+    // bi podvojil zalogo). Dostava (OFFICE IN_APP + webhook HTTP) teče PO commitu.
     // PREJETO: ustvari losa v zalogi za pozicije s povezanim artikelom (nabava → zaloga)
     // R450 (issue #9): vrstice BREZ itemId se izpišejo v odgovoru (prej tiho preskočene)
     let lotsCreated = 0
     const linesSkipped: string[] = []
-    if (status === 'PREJETO') {
-      for (const line of order.lines) {
-        if (!line.itemId) {
-          linesSkipped.push(line.itemName)
-          continue
+    const { updated, recorded } = await db.$transaction(async (tx) => {
+      if (status === 'PREJETO') {
+        for (const line of order.lines) {
+          if (!line.itemId) {
+            linesSkipped.push(line.itemName)
+            continue
+          }
+          await tx.stockLot.create({
+            data: {
+              itemId: line.itemId,
+              qty: line.qty,
+              unitCost: line.unitPrice,
+              supplierId: order.supplierId,
+            },
+          })
+          lotsCreated++
         }
-        await db.stockLot.create({
-          data: {
-            itemId: line.itemId,
-            qty: line.qty,
-            unitCost: line.unitPrice,
-            supplierId: order.supplierId,
-          },
-        })
-        lotsCreated++
       }
-    }
 
-    const updated = await db.materialOrder.update({
-      where: { id: order.id },
-      data: {
-        status,
-        sentAt: status === 'POSLANO' ? new Date() : order.sentAt,
-        receivedAt: status === 'PREJETO' ? new Date() : order.receivedAt,
-      },
-    })
-    await writeAudit({
-      userId: auth.user.id,
-      action: 'MATERIAL_ORDER_STATUS',
-      entity: 'materialOrder',
-      entityId: order.id,
-      detail: { code: order.code, from: order.status, to: status, lotsCreated, linesSkipped: linesSkipped.length, linesSkippedNames: linesSkipped },
-    })
-    // R481 (issue #9 §9 — „naročilo potrjeno"): dogodek ob prejemu blaga
-    // (PREJETO je končni status — prehod enkraten, ključ po naročilu).
-    if (status === 'PREJETO') {
-      await emitEvent({
-        type: 'ORDER_CONFIRMED',
-        key: `order-confirmed:${order.id}`,
-        title: 'Naročilo potrjeno',
-        body: `Nabavno naročilo ${order.code} je prejeto — ${lotsCreated} ${lotsCreated === 1 ? 'lot' : 'loti'} v zalogi.`,
-        audience: 'OFFICE',
+      const updated = await tx.materialOrder.update({
+        where: { id: order.id },
+        data: {
+          status,
+          sentAt: status === 'POSLANO' ? new Date() : order.sentAt,
+          receivedAt: status === 'PREJETO' ? new Date() : order.receivedAt,
+        },
       })
-    }
+      await writeAudit({
+        userId: auth.user.id,
+        action: 'MATERIAL_ORDER_STATUS',
+        entity: 'materialOrder',
+        entityId: order.id,
+        detail: { code: order.code, from: order.status, to: status, lotsCreated, linesSkipped: linesSkipped.length, linesSkippedNames: linesSkipped },
+      }, tx)
+      // R481 (issue #9 §9 — „naročilo potrjeno"): dogodek ob prejemu blaga
+      // (PREJETO je končni status — prehod enkraten, ključ po naročilu).
+      // R537: ZAPIS dogodka v isti tx (outbox), dostava PO commitu (ognjevarna).
+      const recorded = status === 'PREJETO'
+        ? await recordEvent({
+          type: 'ORDER_CONFIRMED',
+          key: `order-confirmed:${order.id}`,
+          title: 'Naročilo potrjeno',
+          body: `Nabavno naročilo ${order.code} je prejeto — ${lotsCreated} ${lotsCreated === 1 ? 'lot' : 'loti'} v zalogi.`,
+          audience: 'OFFICE',
+        }, tx)
+        : null
+      return { updated, recorded }
+    })
+
+    // dostava obvestila PO uspešnem commitu (ognjevarna — nikoli ne vrže napake)
+    if (recorded) await deliverEvent(recorded)
     return NextResponse.json({
       data: updated,
       lotsCreated,
@@ -231,22 +257,27 @@ export async function POST (req: NextRequest) {
     }
   }
 
-  const order = await db.materialOrder.create({
-    data: {
-      code: await nextCode(),
-      supplierId,
-      note,
-      createdBy: auth.user.id,
-      lines: { create: validated },
-    },
-    include: { lines: true },
-  })
-  await writeAudit({
-    userId: auth.user.id,
-    action: 'MATERIAL_ORDER_CREATE',
-    entity: 'materialOrder',
-    entityId: order.id,
-    detail: { code: order.code, supplierId, positions: validated.length, brezArtikla: validated.filter((v) => !v.itemId).map((v) => v.itemName) },
+  // R537 (transakcijska celovitost): števec kode + naročilo + revizija v ENI
+  // transakciji (nextCode prejme tx — vrstična ključavnica Setting ostaja).
+  const order = await db.$transaction(async (tx) => {
+    const order = await tx.materialOrder.create({
+      data: {
+        code: await nextCode(tx),
+        supplierId,
+        note,
+        createdBy: auth.user.id,
+        lines: { create: validated },
+      },
+      include: { lines: true },
+    })
+    await writeAudit({
+      userId: auth.user.id,
+      action: 'MATERIAL_ORDER_CREATE',
+      entity: 'materialOrder',
+      entityId: order.id,
+      detail: { code: order.code, supplierId, positions: validated.length, brezArtikla: validated.filter((v) => !v.itemId).map((v) => v.itemName) },
+    }, tx)
+    return order
   })
   // R450 (issue #9): proaktivno opozorilo ob ustvarjanju — vrstice brez povezave na
   // artikel ob PREJETO ne bodo vnesene v zalogo (aditivno polje, ne zavrnemo)

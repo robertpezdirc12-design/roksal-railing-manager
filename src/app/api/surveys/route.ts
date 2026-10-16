@@ -7,7 +7,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { jsonError, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
-import { emitEvent } from '@/lib/notify'
+import { deliverEvent, recordEvent } from '@/lib/notify'
 
 const TYPES = ['OGRAJA', 'STOPNISCE', 'TERASA', 'DRUGO']
 
@@ -38,13 +38,17 @@ export async function POST (req: NextRequest) {
     if (typeof handled !== 'boolean') return jsonError(400, 'Manjka handled (true/false).')
     const survey = await db.survey.findUnique({ where: { id: body.id } })
     if (!survey) return jsonError(404, 'Anketa ne obstaja.')
-    const updated = await db.survey.update({ where: { id: body.id }, data: { handled } })
-    await writeAudit({
-      userId: auth.user.id,
-      action: 'SURVEY_HANDLED',
-      entity: 'survey',
-      entityId: survey.id,
-      detail: { name: survey.name, handled },
+    // R537: posodobitev + revizija v ENI transakciji
+    const updated = await db.$transaction(async (tx) => {
+      const updated = await tx.survey.update({ where: { id: body.id }, data: { handled } })
+      await writeAudit({
+        userId: auth.user.id,
+        action: 'SURVEY_HANDLED',
+        entity: 'survey',
+        entityId: survey.id,
+        detail: { name: survey.name, handled },
+      }, tx)
+      return updated
     })
     return NextResponse.json({ data: updated })
   }
@@ -66,24 +70,35 @@ export async function POST (req: NextRequest) {
     return jsonError(400, 'Ocenjena dolžina mora biti večja od 0.')
   }
 
-  const survey = await db.survey.create({
-    data: { name, email, phone, type, lengthCm, location, message },
-  })
-  await writeAudit({
-    userId: auth.user.id,
-    action: 'SURVEY_CREATE',
-    entity: 'survey',
-    entityId: survey.id,
-    detail: { name, type },
+  // R537 (transakcijska celovitost): anketa + revizija + zapis obvestila
+  // (outbox) v ENI transakciji — padec srednjega koraka NE pusti povpraševanja
+  // brez revizije/dogodka. Dostava (OFFICE IN_APP + webhook HTTP) teče PO
+  // commitu (deliverEvent, ognjevarna).
+  const { survey, recorded } = await db.$transaction(async (tx) => {
+    const survey = await tx.survey.create({
+      data: { name, email, phone, type, lengthCm, location, message },
+    })
+    await writeAudit({
+      userId: auth.user.id,
+      action: 'SURVEY_CREATE',
+      entity: 'survey',
+      entityId: survey.id,
+      detail: { name, type },
+    }, tx)
+
+    // R438 (issue #5): novo povpraševanje → obvestilo pisarni (OFFICE) —
+    // R537: ZAPIS dogodka v isti tx (outbox), dostava PO commitu (ognjevarna).
+    const recorded = await recordEvent({
+      type: 'SURVEY_NEW',
+      key: `survey-new:${survey.id}`,
+      title: 'Novo povpraševanje',
+      body: `Novo povpraševanje: ${name} (${type}${location ? `, ${location}` : ''}${lengthCm ? `, ~${Math.round(lengthCm)} cm` : ''})`,
+      audience: 'OFFICE',
+    }, tx)
+    return { survey, recorded }
   })
 
-  // R438 (issue #5): novo povpraševanje → obvestilo pisarni (OFFICE)
-  await emitEvent({
-    type: 'SURVEY_NEW',
-    key: `survey-new:${survey.id}`,
-    title: 'Novo povpraševanje',
-    body: `Novo povpraševanje: ${name} (${type}${location ? `, ${location}` : ''}${lengthCm ? `, ~${Math.round(lengthCm)} cm` : ''})`,
-    audience: 'OFFICE',
-  })
+  // dostava obvestila PO uspešnem commitu (ognjevarna — nikoli ne vrže napake)
+  if (recorded) await deliverEvent(recorded)
   return NextResponse.json({ data: survey }, { status: 201 })
 }

@@ -129,64 +129,71 @@ export async function POST (req: NextRequest) {
     ? zapišiDocVParams(typeof body.params === 'string' ? body.params : null, doc)
     : (typeof body.params === 'string' ? body.params : null)
 
-  const measurement = await db.measurement.create({
-    data: {
-      type,
-      status: provenance.status,
-      statusNote: provenance.reason,
-      familyCode: typeof body.familyCode === 'string' && FAMILY_CODES.includes(body.familyCode as FamilyCode) ? body.familyCode : null, // R442: generalizacija meritev na produktno družino
-      projectId: projectId ?? workOrder?.projectId ?? null,
-      workOrderId,
-      authorId: user.id,
-      location: typeof body.location === 'string' && body.location.trim() ? body.location.trim() : null,
-      lengthCm,
-      heightCm,
-      posts,
-      segments,
-      handrail: typeof body.handrail === 'boolean' ? body.handrail : true,
-      slopeDeg,
-      params: paramsKoncni,
-      note: typeof body.note === 'string' && body.note.trim() ? body.note.trim() : null,
-    },
-    include: {
-      author: { select: { name: true } },
-      project: { select: { id: true, code: true, title: true } },
-      workOrder: { select: { id: true, code: true, title: true } },
-    },
-  })
-
-  // R450 (issue #9): verzija v1 — začetni posnetek (isti vzorec kot /api/sync — opMeritev)
-  // R536: dirka verzij — P2002 → ponovni poskus (versioning.ts). Številka se
-  // izračuna iz zadnje verzije ZNOTRAJ retried fn; za sveže ustvarjeno meritev
-  // (nov id) je to vedno 1, vzorec read-then-create pa je enoten z ostalimi mesti.
-  await retryOnUnique(async () => {
-    const last = await db.measurementVersion.findFirst({
-      where: { measurementId: measurement.id },
-      orderBy: { version: 'desc' },
-      select: { version: true },
-    })
-    return db.measurementVersion.create({
+  // R537 (transakcijska celovitost): meritev + verzija v1 + revizija v ENI
+  // transakciji — padec srednjega koraka NE pusti meritve brez verzije/revizije.
+  // R536 retryOnUnique teče na tx klientu (za SVEŽ id je verzija vedno 1 →
+  // P2002 praktično nedosegljiv; fn znova prebere zadnjo verzijo ZNOTRAJ poskusa).
+  const measurement = await db.$transaction(async (tx) => {
+    const measurement = await tx.measurement.create({
       data: {
-        measurementId: measurement.id,
-        version: (last?.version ?? 0) + 1,
-        userId: user.id,
-        data: JSON.stringify({
-          type, lengthCm, heightCm, posts, segments, handrail: measurement.handrail, slopeDeg,
-          location: measurement.location, note: measurement.note, params: measurement.params,
-          status: provenance.status, statusNote: provenance.reason,
-        }),
-        note: type === 'FOTO' ? 'Ročna foto meritev' : 'Ročna meritev',
+        type,
+        status: provenance.status,
+        statusNote: provenance.reason,
+        familyCode: typeof body.familyCode === 'string' && FAMILY_CODES.includes(body.familyCode as FamilyCode) ? body.familyCode : null, // R442: generalizacija meritev na produktno družino
+        projectId: projectId ?? workOrder?.projectId ?? null,
+        workOrderId,
+        authorId: user.id,
+        location: typeof body.location === 'string' && body.location.trim() ? body.location.trim() : null,
+        lengthCm,
+        heightCm,
+        posts,
+        segments,
+        handrail: typeof body.handrail === 'boolean' ? body.handrail : true,
+        slopeDeg,
+        params: paramsKoncni,
+        note: typeof body.note === 'string' && body.note.trim() ? body.note.trim() : null,
+      },
+      include: {
+        author: { select: { name: true } },
+        project: { select: { id: true, code: true, title: true } },
+        workOrder: { select: { id: true, code: true, title: true } },
       },
     })
-  })
 
-  await writeAudit({
-    userId: user.id,
-    action: 'MEASUREMENT_CREATE',
-    entity: 'measurement',
-    entityId: measurement.id,
-    projectId: measurement.projectId,
-    detail: { type, workOrderId: workOrderId ?? null, location: measurement.location, lengthCm, slopeDeg, isPhoto: type === 'FOTO', status: provenance.status, ...(doc.docOf ? { docOf: doc.docOf, docTag: doc.docTag ?? null } : {}) },
+    // R450 (issue #9): verzija v1 — začetni posnetek (isti vzorec kot /api/sync — opMeritev)
+    // R536: dirka verzij — P2002 → ponovni poskus (versioning.ts). Številka se
+    // izračuna iz zadnje verzije ZNOTRAJ retried fn; za sveže ustvarjeno meritev
+    // (nov id) je to vedno 1, vzorec read-then-create pa je enoten z ostalimi mesti.
+    await retryOnUnique(async () => {
+      const last = await tx.measurementVersion.findFirst({
+        where: { measurementId: measurement.id },
+        orderBy: { version: 'desc' },
+        select: { version: true },
+      })
+      return tx.measurementVersion.create({
+        data: {
+          measurementId: measurement.id,
+          version: (last?.version ?? 0) + 1,
+          userId: user.id,
+          data: JSON.stringify({
+            type, lengthCm, heightCm, posts, segments, handrail: measurement.handrail, slopeDeg,
+            location: measurement.location, note: measurement.note, params: measurement.params,
+            status: provenance.status, statusNote: provenance.reason,
+          }),
+          note: type === 'FOTO' ? 'Ročna foto meritev' : 'Ročna meritev',
+        },
+      })
+    })
+
+    await writeAudit({
+      userId: user.id,
+      action: 'MEASUREMENT_CREATE',
+      entity: 'measurement',
+      entityId: measurement.id,
+      projectId: measurement.projectId,
+      detail: { type, workOrderId: workOrderId ?? null, location: measurement.location, lengthCm, slopeDeg, isPhoto: type === 'FOTO', status: provenance.status, ...(doc.docOf ? { docOf: doc.docOf, docTag: doc.docTag ?? null } : {}) },
+    }, tx)
+    return measurement
   })
   return NextResponse.json({ data: measurement }, { status: 201 })
 }

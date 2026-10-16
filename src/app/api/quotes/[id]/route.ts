@@ -65,29 +65,33 @@ export async function PATCH (req: NextRequest, { params }: Params) {
       return jsonError(400, 'Popust je mogoče spremeniti samo na osnutku ponudbe.', `Ta ponudba je v statusu ${existing.status} — poslanih/sprejetih ponudb se ne spreminja tiho.`)
     }
     const totals = computeQuoteTotals(existing.lines.map((l) => l.total.toNumber()), discountPct)
-    const updated = await db.quote.update({
-      where: { id },
-      data: {
-        discountPct: discountPct > 0 ? discountPct : null,
-        discount: totals.discount,
-        subtotal: totals.subtotal,
-        vat: totals.vat,
-        total: totals.total,
-      },
-      include: {
-        customer: { select: { name: true, city: true } },
-        project: { select: { code: true, title: true } },
-        lines: true,
-      },
-    })
-    await writeAudit({
-      userId: auth.user.id, action: 'QUOTE_DISCOUNT', entity: 'quote', entityId: id, projectId: existing.projectId,
-      detail: {
-        code: existing.code,
-        fromPct: existing.discountPct?.toNumber() ?? 0,
-        toPct: discountPct,
-        ...totals,
-      },
+    // R537 (transakcijska celovitost): popust (preračun zneskov) + revizija v ENI transakciji.
+    const updated = await db.$transaction(async (tx) => {
+      const updated = await tx.quote.update({
+        where: { id },
+        data: {
+          discountPct: discountPct > 0 ? discountPct : null,
+          discount: totals.discount,
+          subtotal: totals.subtotal,
+          vat: totals.vat,
+          total: totals.total,
+        },
+        include: {
+          customer: { select: { name: true, city: true } },
+          project: { select: { code: true, title: true } },
+          lines: true,
+        },
+      })
+      await writeAudit({
+        userId: auth.user.id, action: 'QUOTE_DISCOUNT', entity: 'quote', entityId: id, projectId: existing.projectId,
+        detail: {
+          code: existing.code,
+          fromPct: existing.discountPct?.toNumber() ?? 0,
+          toPct: discountPct,
+          ...totals,
+        },
+      }, tx)
+      return updated
     })
     return NextResponse.json({ data: updated })
   }
@@ -105,22 +109,26 @@ export async function PATCH (req: NextRequest, { params }: Params) {
   }
   if (existing.status === status) return jsonError(400, 'Ponudba je že v tem statusu.')
 
-  const updated = await db.quote.update({
-    where: { id },
-    data: {
-      status,
-      // R474: izrecna sprememba statusa = pisarna je zastarelost pregledala
-      ...(existing.staleAt ? { staleAt: null, staleReason: null } : {}),
-    },
-    include: {
-      customer: { select: { name: true, city: true } },
-      project: { select: { code: true, title: true } },
-      lines: true,
-    },
-  })
-  await writeAudit({
-    userId: auth.user.id, action: 'QUOTE_STATUS', entity: 'quote', entityId: id, projectId: existing.projectId,
-    detail: { code: existing.code, from: existing.status, to: status },
+  // R537 (transakcijska celovitost): sprememba statusa + revizija v ENI transakciji.
+  const updated = await db.$transaction(async (tx) => {
+    const updated = await tx.quote.update({
+      where: { id },
+      data: {
+        status,
+        // R474: izrecna sprememba statusa = pisarna je zastarelost pregledala
+        ...(existing.staleAt ? { staleAt: null, staleReason: null } : {}),
+      },
+      include: {
+        customer: { select: { name: true, city: true } },
+        project: { select: { code: true, title: true } },
+        lines: true,
+      },
+    })
+    await writeAudit({
+      userId: auth.user.id, action: 'QUOTE_STATUS', entity: 'quote', entityId: id, projectId: existing.projectId,
+      detail: { code: existing.code, from: existing.status, to: status },
+    }, tx)
+    return updated
   })
   return NextResponse.json({ data: updated })
 }

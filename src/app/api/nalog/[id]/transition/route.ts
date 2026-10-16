@@ -8,7 +8,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { jsonError, managesAssignments, readsAllData, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
-import { emitEvent } from '@/lib/notify'
+import { deliverEvent, recordEvent } from '@/lib/notify'
 import { preveriBlokadoZakljucka } from '@/lib/montaza-qa-core'
 
 type Params = { params: Promise<{ id: string }> }
@@ -62,6 +62,10 @@ export async function POST (req: NextRequest, { params }: Params) {
 
   // R489 (issue #12 §2C): kritična nerešena napaka BLOKIRA zaključek terena —
   // izvzem samo z izrecnim odobrenjem vodstva (force + razlog, revizija).
+  // R537: izvzemna revizija se zapiše V transakciji (skupaj s prehodom) —
+  // prej bi ob padcu prehoda ostal samoten override zapis.
+  let overrideZapis = false
+  let blokadaRazlogi: string[] = []
   if (to === 'ZAKLJUCEN') {
     const blokada = await preveriBlokadoZakljucka(id)
     if (blokada.blokira) {
@@ -75,52 +79,68 @@ export async function POST (req: NextRequest, { params }: Params) {
       if (!forceReason) {
         return jsonError(400, 'Izvzem blokade zahteva razlog (forceReason).', 'Razlog se zapiše v revizijsko sled.')
       }
+      overrideZapis = true
+      blokadaRazlogi = blokada.razlogi
+    }
+  }
+
+  const now = new Date()
+  // R537 (transakcijska celovitost): prehod statusa + dogodek + revizija
+  // (+ morebitna izvzemna revizija WO_ZAKLJUCEK_OVERRIDE) + zapis obvestila
+  // (outbox) v ENI transakciji — padec srednjega koraka NE pusti prehoda brez
+  // revizije/dogodka. Dostava (OFFICE IN_APP + stranka EMAIL + webhook HTTP)
+  // teče PO commitu (deliverEvent, ognjevarna).
+  const { updated, recorded } = await db.$transaction(async (tx) => {
+    if (overrideZapis) {
       await writeAudit({
         userId: auth.user.id,
         action: 'WO_ZAKLJUCEK_OVERRIDE',
         entity: 'workOrder',
         entityId: id,
         projectId: order.project?.id ?? null,
-        detail: { code: order.code, razlog: forceReason, blokirajoce: blokada.razlogi },
-      })
+        detail: { code: order.code, razlog: forceReason, blokirajoce: blokadaRazlogi },
+      }, tx)
     }
-  }
 
-  const now = new Date()
-  const updated = await db.workOrder.update({
-    where: { id },
-    data: {
-      status: step.next,
-      startedAt: step.event === 'ZACETEK' ? now : order.startedAt,
-      completedAt: step.event === 'ZAKLJUCEK' ? now : order.completedAt,
-      summary: step.event === 'ZAKLJUCEK' && note ? note : order.summary,
-    },
-  })
-  await db.workOrderEvent.create({
-    data: { workOrderId: id, userId: auth.user.id, type: step.event, note: note ?? step.label },
-  })
-  await writeAudit({
-    userId: auth.user.id,
-    action: 'WO_TRANSITION',
-    entity: 'workOrder',
-    entityId: id,
-    projectId: order.project?.id ?? null,
-    detail: { from: order.status, to: step.next, label: step.label, code: order.code },
-  })
-
-  // R438 (issue #5): zaključek terena → pisarna (OFFICE) + stranka (EMAIL) —
-  // dedup po ključu wo-completed:<id> (ponovni zaključek istega naloga ni mogoč).
-  if (step.next === 'ZAKLJUCEN') {
-    await emitEvent({
-      type: 'WO_COMPLETED',
-      key: `wo-completed:${id}`,
-      title: 'Zaključek terena',
-      body: `Nalog ${order.code} je zaključen${order.project ? ` (projekt ${order.project.code})` : ''}${note ? ` — ${note.slice(0, 160)}` : ''}`,
-      projectId: order.project?.id ?? null,
-      audience: 'OFFICE',
-      customerEmail: order.project?.customer?.email ?? null,
-      customerName: order.project?.customer?.name ?? null,
+    const updated = await tx.workOrder.update({
+      where: { id },
+      data: {
+        status: step.next,
+        startedAt: step.event === 'ZACETEK' ? now : order.startedAt,
+        completedAt: step.event === 'ZAKLJUCEK' ? now : order.completedAt,
+        summary: step.event === 'ZAKLJUCEK' && note ? note : order.summary,
+      },
     })
-  }
+    await tx.workOrderEvent.create({
+      data: { workOrderId: id, userId: auth.user.id, type: step.event, note: note ?? step.label },
+    })
+    await writeAudit({
+      userId: auth.user.id,
+      action: 'WO_TRANSITION',
+      entity: 'workOrder',
+      entityId: id,
+      projectId: order.project?.id ?? null,
+      detail: { from: order.status, to: step.next, label: step.label, code: order.code },
+    }, tx)
+
+    // R438 (issue #5): zaključek terena → pisarna (OFFICE) + stranka (EMAIL) —
+    // dedup po ključu wo-completed:<id> (ponovni zaključek istega naloga ni mogoč).
+    const recorded = step.next === 'ZAKLJUCEN'
+      ? await recordEvent({
+        type: 'WO_COMPLETED',
+        key: `wo-completed:${id}`,
+        title: 'Zaključek terena',
+        body: `Nalog ${order.code} je zaključen${order.project ? ` (projekt ${order.project.code})` : ''}${note ? ` — ${note.slice(0, 160)}` : ''}`,
+        projectId: order.project?.id ?? null,
+        audience: 'OFFICE',
+        customerEmail: order.project?.customer?.email ?? null,
+        customerName: order.project?.customer?.name ?? null,
+      }, tx)
+      : null
+    return { updated, recorded }
+  })
+
+  // dostava obvestila PO uspešnem commitu (ognjevarna — nikoli ne vrže napake)
+  if (recorded) await deliverEvent(recorded)
   return NextResponse.json({ data: updated })
 }

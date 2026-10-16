@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { jsonError, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
-import { emitEvent } from '@/lib/notify'
+import { deliverEvent, recordEvent, type RecordedEvent } from '@/lib/notify'
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -47,36 +47,48 @@ export async function PATCH (req: NextRequest, { params }: Params) {
 
   if (Object.keys(patch).length === 0) return jsonError(400, 'Ni sprememb za izvedbo.')
 
-  const updated = await db.productionOrder.update({
-    where: { id },
-    data: patch,
-    include: { project: { select: { code: true, title: true } } },
+  // R537 (transakcijska celovitost): posodobitev + revizija + zapis obvestila
+  // (outbox, ob prehodu v DOKONCAN) v ENI transakciji — padec srednjega koraka
+  // NE pusti spremembe brez revizije/dogodka. Dostava (OFFICE IN_APP + webhook
+  // HTTP) teče PO commitu (deliverEvent, ognjevarna).
+  const { updated, recorded } = await db.$transaction(async (tx) => {
+    const updated = await tx.productionOrder.update({
+      where: { id },
+      data: patch,
+      include: { project: { select: { code: true, title: true } } },
+    })
+
+    let recorded: RecordedEvent | null = null
+    if (patch.status) {
+      await writeAudit({
+        userId: auth.user.id, action: 'PRODUCTION_STATUS', entity: 'productionOrder', entityId: id,
+        projectId: updated.projectId,
+        detail: { code: existing.code, from: existing.status, to: patch.status },
+      }, tx)
+      // R481 (issue #9 §9 — „proizvodnja pripravljena"): dogodek ob prehodu v
+      // DOKONCAN (linearni tok — prehod je enkraten, ključ po nalogu).
+      // R537: ZAPIS dogodka v isti tx (outbox), dostava PO commitu (ognjevarna).
+      if (patch.status === 'DOKONCAN') {
+        recorded = await recordEvent({
+          type: 'PRODUCTION_READY',
+          key: `production-ready:${id}`,
+          title: 'Proizvodnja pripravljena',
+          body: `Proizvodni nalog ${existing.code} je dokončan — pripravljen za odpošiljanje${updated.project ? ` (${updated.project.code})` : ''}.`,
+          projectId: updated.projectId,
+          audience: 'OFFICE',
+        }, tx)
+      }
+    } else {
+      await writeAudit({
+        userId: auth.user.id, action: 'PRODUCTION_UPDATE', entity: 'productionOrder', entityId: id,
+        projectId: updated.projectId,
+        detail: { code: existing.code, ...patch },
+      }, tx)
+    }
+    return { updated, recorded }
   })
 
-  if (patch.status) {
-    await writeAudit({
-      userId: auth.user.id, action: 'PRODUCTION_STATUS', entity: 'productionOrder', entityId: id,
-      projectId: updated.projectId,
-      detail: { code: existing.code, from: existing.status, to: patch.status },
-    })
-    // R481 (issue #9 §9 — „proizvodnja pripravljena"): dogodek ob prehodu v
-    // DOKONCAN (linearni tok — prehod je enkraten, ključ po nalogu).
-    if (patch.status === 'DOKONCAN') {
-      await emitEvent({
-        type: 'PRODUCTION_READY',
-        key: `production-ready:${id}`,
-        title: 'Proizvodnja pripravljena',
-        body: `Proizvodni nalog ${existing.code} je dokončan — pripravljen za odpošiljanje${updated.project ? ` (${updated.project.code})` : ''}.`,
-        projectId: updated.projectId,
-        audience: 'OFFICE',
-      })
-    }
-  } else {
-    await writeAudit({
-      userId: auth.user.id, action: 'PRODUCTION_UPDATE', entity: 'productionOrder', entityId: id,
-      projectId: updated.projectId,
-      detail: { code: existing.code, ...patch },
-    })
-  }
+  // dostava obvestila PO uspešnem commitu (ognjevarna — nikoli ne vrže napake)
+  if (recorded) await deliverEvent(recorded)
   return NextResponse.json({ data: updated })
 }

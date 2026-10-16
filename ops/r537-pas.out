@@ -1,0 +1,429 @@
+── CI matrika usklajena z .github/workflows/ci.yml
+── AUTH_RATE_MAX=100000 (lokalno; v produkciji je privzeto 30/min/IP)
+── harness: brez backtick ukazov
+   ✓
+── avtorji commitov (Vercel)
+   ✓
+── razčlenitev Python suite-ov
+   ✓
+── typecheck
+   ✓
+── lint
+   ✓
+── prisma generate
+   ✓
+── migrate deploy
+   ✓
+── db:seed
+   ✓
+── aplikacija pripravljena: http://localhost:3000
+  ✗ r437-r445              (podrobnosti: .ci-local-logs/r437-r445.log)
+  ✓ revizija VEHICLE_CREATE zapisana
+  ✓ revizija CREW_CREATE zapisana
+  ✓ revizija CREW_UPDATE zapisana
+  ✓ revizija WO_CREW_ASSIGN zapisana
+  ✓ revizija DELIVERY_CREATE zapisana
+  ✓ revizija DELIVERY_PLAN zapisana
+  ✓ revizija DELIVERY_STATUS zapisana
+  ✓ WO_CREW_ASSIGN za N-2026-008
+── regresija ──
+  ✓ /api/projects → 200
+  ✓ /api/nalog → 200
+  ✓ /api/stock → 200
+  ✓ /api/bom → 200
+  ✓ /api/picking → 200
+  ✓ /api/nalog/cmvbbbl6700wgo47rpy4rb3zr → 200
+
+══ R445 e2e: 75 ✓ / 0 ✗ ══
+::endgroup::
+═══ r437-r445: 7 ✓ / 1 ✗
+PADLI: r441.sh
+  ✓ r446-r452              ═══ r446-r452: 7 ✓ / 0 ✗
+  ✓ r454-r458              ═══ r454-r458: 5 ✓ / 0 ✗
+  ✓ r459-r462              ═══ r459-r462: 4 ✓ / 0 ✗
+  ✓ r464                   ═══ r464: 2 ✓ / 0 ✗
+  ⏸ r464-notifications: dev strežnik na http://localhost:3000 začasno ustavljen (Next dev blokada)
+  ✓ r464-notifications     ═══ r464-notifications: 1 ✓ / 0 ✗
+  ✓ r465-r474              ═══ r465-r474: 8 ✓ / 0 ✗
+  ✓ r475-r478              ═══ r475-r478: 4 ✓ / 0 ✗
+  ✓ r479                   ═══ r479: 1 ✓ / 0 ✗
+  ✓ r480                   ═══ r480: 1 ✓ / 0 ✗
+  ✓ r481                   ═══ r481: 1 ✓ / 0 ✗
+  ✓ r483                   ═══ r483: 1 ✓ / 0 ✗
+  ✓ r484                   ═══ r484: 1 ✓ / 0 ✗
+  ✓ r485                   ═══ r485: 1 ✓ / 0 ✗
+  ✗ r486                   (podrobnosti: .ci-local-logs/r486.log)
+  ✓ KAMERA: samodejni osnutek
+  ✓ STORE: setMeasureCtx
+  ✓ STORE: measureCtx polje
+  ✓ LIB: saveDraft osnutek
+  ✓ LIB: clearDraft osnutek
+  ✓ OFFLINE: calibration v QueuePhotoInput
+  ✓ OFFLINE: views v QueuePhotoInput
+  ✓ OFFLINE: quality v QueuePhotoInput
+  ✓ SYNC: parseExtras veja
+  ✓ ZAJEM: skrčitev sličice ≤ 120 KB
+  ✓ ZAJEM: gumb Dodaj posnetek ostaja
+  ✗ KAMERA: saveOffline pošlje kalibracijo
+── G) Idempotentno čiščenje ×2
+  ✓ počiščenje testnih zapisov (1.) 
+  ✓ počiščenje testnih zapisov (2.) 
+
+══ R486 REZULTAT: ✓ 68 / ✗ 2 ══
+::endgroup::
+═══ r486: 0 ✓ / 1 ✗
+PADLI: r486.py
+  ✗ r487                   (podrobnosti: .ci-local-logs/r487.log)
+  ✓ KAMERA: konflikt → final ni tiho povprečje
+  ✗ KAMERA: laserska rešitev z razlogom
+  ✓ CONFIRM: konsolidacija pogledov prek enotnega jedra
+  ✓ CONFIRM: obstoječi computeGeometry (NE tretja semantika)
+  ✓ LIB: per-view izračun dolžine je v jedru
+  ✓ LIB: multiViewStats izvoz
+  ✓ CONFIRM: prag 15 % deljen z AR konsolidatorjem
+  ✓ CONFIRM: params.multiView zapis
+  ✓ SYNC: offline pot uporabi ISTO konsolidacijo (brez terenskega obvoza)
+  ✓ SYNC: stanje izračuna strežnik, ne trditev odjemalca
+  ✓ EXPORT: skupina Pogledi
+  ✓ EXPORT: razpršenost v izvozu
+── F) Idempotentno čiščenje ×2
+  ✓ počiščenje testnih zapisov (1.) 
+  ✓ počiščenje testnih zapisov (2.) 
+
+══ R487 REZULTAT: ✓ 74 / ✗ 6 ══
+::endgroup::
+═══ r487: 0 ✓ / 1 ✗
+PADLI: r487.py
+  ✓ r488                   ═══ r488: 1 ✓ / 0 ✗
+  ✓ r489                   ═══ r489: 1 ✓ / 0 ✗
+  ✓ r490                   ═══ r490: 1 ✓ / 0 ✗
+  ✓ r493                   ═══ r493: 1 ✓ / 0 ✗
+  ✓ r494                   ═══ r494: 1 ✓ / 0 ✗
+  ✓ r495                   ═══ r495: 1 ✓ / 0 ✗
+  ✗ r500                   (podrobnosti: .ci-local-logs/r500.log)
+  ✓ LIB: tiha rezerva merila 1 cm/px je odstranjena
+  ✓ LIB: ENA definicija merila (resolveScale) — ne trije ločeni izračuni
+  ✓ LIB: eksplicitna koda napake za napačno merilo
+  ✓ LIB: veljavnost je izvožena (uporabljata jo strežnik in UI)
+  ✓ CONFIRM: dolžine in merilo dobi iz obstoječega jedra (brez paralelnega izračuna merila)
+  ✓ LIB: merilo in veljavnost preživita v params (revizija/izvoz) — ena pot, v jedru
+  ✓ ANALYZE: ločena Y referenca je sprejeta po HTTP (parse v enotni pogodbi jedra)
+  ✗ KAMERA UI: pošlje scale + validity in ju prikaže
+  ✗ KAMERA UI: monter vidi, katera količina je dokazana
+  ✗ KAMERA UI: izračun v živo gre prek enotnega jedra (ne lastne delitve cm/px)
+  ✗ KAMERA UI: pošteno besedilo o merilu (dokazano / predpostavka) je prikazano
+  ✓ ENOTNO MERILO: src/app/api/sync/route.ts ne računa več svojega cm/px
+  ✓ ENOTNO MERILO: src/app/api/railing-layout/route.ts ne računa več svojega cm/px
+  ✓ ENOTNO MERILO: src/app/api/measurements/route.ts ne računa več svojega cm/px
+  ✓ ENOTNO MERILO: src/components/roksal/modules/meritve-kamera.tsx ne računa več svojega cm/px
+
+══ R500 (issue #15 faza 1): 72 ✓ / 4 ✗ ══
+::endgroup::
+═══ r500: 0 ✓ / 1 ✗
+PADLI: r500.py
+  ✗ r501                   (podrobnosti: .ci-local-logs/r501.log)
+  ✓ src/app/api/measurement/confirm/route.ts: nima več lastnega cm/px izračuna (vrednost pride iz jedra)
+  ✓ src/app/api/railing-layout/route.ts: nima več lastnega cm/px izračuna (vrednost pride iz jedra)
+  ✓ src/lib/fence-run-engine.ts: nima več lastnega cm/px izračuna (vrednost pride iz jedra)
+  ✓ src/components/roksal/modules/meritve-kamera.tsx: nima več lastnega cm/px izračuna (vrednost pride iz jedra)
+  ✓ src/components/roksal/modules/meritve.tsx: nima več lastnega cm/px izračuna (vrednost pride iz jedra)
+  ✓ PATCH: sam prehod stanja (brez polj) je veljavna zahteva — pisarniški klik deluje
+  ✗ jedro: vseh 5 ustvarjalnih poti nastavi status (nobena ne sme biti skrita)
+  ✓ src/app/api/fence-run/[id]/confirm/route.ts: measurement.create nastavi status iz jedra, ne zanaša se na privzetek stolpca
+  ✓ src/app/api/railing-layout/route.ts: measurement.create nastavi status iz jedra, ne zanaša se na privzetek stolpca
+  ✓ src/app/api/measure/photo/route.ts: measurement.create nastavi status iz jedra, ne zanaša se na privzetek stolpca
+  ✓ src/app/api/sync/route.ts: measurement.create nastavi status iz jedra, ne zanaša se na privzetek stolpca
+  ✓ src/app/api/sync/route.ts: measurement.create nastavi status iz jedra, ne zanaša se na privzetek stolpca
+── L) čiščenje testnih zapisov (×2, idempotentno)
+  ✓ počiščenje testnih zapisov (1.) 
+  ✓ počiščenje testnih zapisov (2.) 
+
+══ R501 (issue #15 faza 2): 126 ✓ / 3 ✗ ══
+::endgroup::
+═══ r501: 0 ✓ / 1 ✗
+PADLI: r501.py
+  ✓ r502                   ═══ r502: 1 ✓ / 0 ✗
+  ✗ r503                   (podrobnosti: .ci-local-logs/r503.log)
+  ✓ N: 180°/zrcaljenje (3) dimenzij NE zamenja → s primerjavo ni dokazati; koda pošteno reče NI_DOKAZA
+  ✓ N: brez izvirnih dimenzij / neujemanje → NI_DOKAZA (nikoli tiha trditev, da je vse v redu)
+  ✓ N: vsaka ugotovitev nosi razlog, ki ga monter tudi VIDI
+  ✓ N: osi zamenjajo samo 5..8
+  ✓ N: normalizedSize zamenja osi samo pri 5..8
+  ✓ N: matrika za orientacijo 5 pokrije orientirano platno brez luknj in presegov
+  ✓ N: matrika za orientacijo 6 pokrije orientirano platno brez luknj in presegov
+  ✓ N: matrika za orientacijo 7 pokrije orientirano platno brez luknj in presegov
+  ✓ N: matrika za orientacijo 8 pokrije orientirano platno brez luknj in presegov
+  ✓ N: kamera orientacijo dejansko PREVERI in rezultat shrani v stanje (ne samo prevede)
+  ✗ N: sam obrat (kanva dimenzije + matrika) je priklopljen na zajem podatkov
+  ✗ N: rotacija se izvede SAMO, kadar je dokazano, da je brskalnik ni
+Traceback (most recent call last):
+  File "/home/z/my-project/tests/r503.py", line 621, in <module>
+    _zajem = kamera[kamera.index('function capture (): void'):]
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ValueError: substring not found
+::endgroup::
+═══ r503: 0 ✓ / 1 ✗
+PADLI: r503.py
+  ✗ r504                   (podrobnosti: .ci-local-logs/r504.log)
+  ✓ K: čiščenje ostankov ()
+  ✓ K: strežnik dosegljiv
+  ✓ K: testni projekt ustvarjen (201)
+  ✓ K: zapis z masko sprejet (201: {"data": {"id": "cmvbbibb601yeo4oyhrcuym6f", "variantLabel": "A", "status": "OSNUTEK", "version": 1, "engineVersion": "1.4.0", "opozorila": )
+  ✓ K: maska je SHRAMNJENA v renderParams (2 obliki ograje)
+  ✓ K: prednji plan je shranjen
+  ✓ K: quad je ostal (navzaj združljiv vhod)
+  ✓ K: različica pogona 1.4.0 zapisana
+  ✓ K: STARI vhod brez maske je veljaven (201)
+  ✓ K: prazna maska se NE shrani kot ključ (zapis ostane bit-enak staremu)
+  ✓ K: 5. oblika zavrnjena z 400 (400)
+  ✓ K: 21 točk zavrnjeno (400)
+  ✓ K: točka izven slike zavrnjena (400)
+  ✓ K: ne-seznam oblik zavrnjen (400)
+  ✓ K: PATCH brez maske se ne zruši (200)
+  ✓ K: testni zapisi počiščeni
+══ REZULTAT: 213 ✓ / 3 ✗ ══
+::endgroup::
+═══ r504: 0 ✓ / 1 ✗
+PADLI: r504.py
+  ✗ r508                   (podrobnosti: .ci-local-logs/r508.log)
+  ✗ KAMERA: pošten napis zmožnosti
+  ✓ KAMERA: statusna vrstica shranjevanja
+  ✓ KAMERA: stanje vzeto iz vrste, ne iz domneve
+  ✓ KAMERA: več nedokončanih sej
+  ✓ KAMERA: seja po projekt/nalog
+  ✓ KAMERA: ključ se računa iz trenutnega konteksta
+  ✓ KAMERA: oznaka stanja pride iz lib-a, ne iz kopiranega niza (ena sama resnica)
+  ✗ KAMERA: VSI clearDraft klici so ključni (seja), ne vseslovanski — ['for (const prazna of seje.filter((s) => !uporabne.includes(s))) void clearDraft(uid, prazna.key)']
+  ✓ KAMERA: izpadle seje so monterju POVEDENE
+  ✗ KAMERA: ključ se izračuna pred resetAll (sicer bi bil tiho napačen)
+  ✗ KAMERA: preklop sme trditi uspeh samo po dejanskem zagonu
+  ✓ BREZ nove odvisnosti: @tensorflow
+  ✓ BREZ nove odvisnosti: onnxruntime
+  ✓ BREZ nove odvisnosti: opencv
+  ✓ BREZ nove odvisnosti: mediasoup
+  ✓ BREZ nove odvisnosti: huggingface
+════ R508: 60✓ / 7✗ ════
+::endgroup::
+═══ r508: 0 ✓ / 1 ✗
+PADLI: r508.py
+  ✗ r509                   (podrobnosti: .ci-local-logs/r509.log)
+  ✓ PDF: dokazna veriga je vezana na KANONICNO meritev tekača (§17)
+  ✓ PDF: avtor + zgodovina + originali grejo v renderer
+  ✓ PDF: tudi tu je zgodovina vseh verzij, ne samo zadnje
+  ✓ PDF: dokument ima izrecen blok dokazne verige
+  ✓ PDF: verzija predloge je dvignjena (1.0 → 1.1)
+  ✓ PDF: blok upošteva prelom strani (ne seka vrstice čez rob)
+  ✗ KAMERA: nastavitve se berejo prek DOM-free bralnika
+  ✗ KAMERA: uspešen zagon kamere shrani smer
+  ✗ KAMERA: svetilka se shrani samo za stanje, ki ga UI zares pokaže
+  ✗ KAMERA: nastaviTorch je klican SAMO v monterjevem aktu (spomin ne prižge luči)
+  ✗ KAMERA: opomnik o spominu je viden monterju
+  ✓ BREZ nove odvisnosti: @tensorflow
+  ✓ BREZ nove odvisnosti: onnxruntime
+  ✓ BREZ nove odvisnosti: opencv
+  ✓ BREZ nove odvisnosti: huggingface
+  ✓ BREZ nove odvisnosti: openai
+════ R509: 60✓ / 5✗ ════
+::endgroup::
+═══ r509: 0 ✓ / 1 ✗
+PADLI: r509.py
+  ✗ r510                   (podrobnosti: .ci-local-logs/r510.log)
+  ✓ VIZ-PROVENANCE je DOM-free (testable brez brskalnika)
+  ✓ VIZ-PROVENANCE NE uporablja poslovnega bloka (vizualizacija ≠ proizvodnja)
+  ✓ SHENA: PhotoVisualization je NESPREMENJEN — nič novih stolpcev, dokaz živi v JSON posnetku: []
+  ✓ SHENA: v PhotoVisualization ni stolpca dokaz/gradivo (veriga živi v JSON posnetku — brez migracije)
+  ✓ MERILNO JEDRO: poslovni blok ostaja ESTIMATED/AUTO_SUGGESTED/INVALIDATED (R510 ga ni zožil in ni razširil)
+  ✓ MERILNO JEDRO: poslovna preverba je še na svojem mestu (ločena od vizualizacije)
+  ✓ src/lib/viz-provenance.ts: nima uvoza iz katerega koli paketa (uvozi samo @/lib in next): []
+  ✓ src/lib/viz-provenance.ts: nobenega zunanjega klica (brez AI, brez plačljivih API-jev)
+  ✓ src/lib/photo-replace-engine.ts: nima uvoza iz katerega koli paketa (uvozi samo @/lib in next): []
+  ✓ src/lib/photo-replace-engine.ts: nobenega zunanjega klica (brez AI, brez plačljivih API-jev)
+  ✓ src/app/api/photo-visualization/route.ts: nima uvoza iz katerega koli paketa (uvozi samo @/lib in next): []
+  ✓ src/app/api/photo-visualization/route.ts: nobenega zunanjega klica (brez AI, brez plačljivih API-jev)
+  ✓ src/app/api/photo-visualization/[id]/route.ts: nima uvoza iz katerega koli paketa (uvozi samo @/lib in next): []
+  ✓ src/app/api/photo-visualization/[id]/route.ts: nobenega zunanjega klica (brez AI, brez plačljivih API-jev)
+  ✓ ODVISNOSTI: noben AI/EXIF/slikovni paket ni dodan za dokazno verigo (61 obstoječih ključev, licenc ne odpiramo)
+  ✓ ODVISNOSTI: sharp je OBSTOJEČ (pipeline sredstev) in ga R510 NE uporablja — veriga je računska, ne slikovna
+════ r510: 93 ✓ / 4 ✗ ════
+::endgroup::
+═══ r510: 0 ✓ / 1 ✗
+PADLI: r510.py
+  ✓ r511                   ═══ r511: 1 ✓ / 0 ✗
+  ✗ r513                   (podrobnosti: .ci-local-logs/r513.log)
+  ✓ neveljavna kalibracija: known=false, cmPerPxX=null, razlog da (False/None/True)
+  ✓ kolinearni vogali → planeHomography null
+  ✓ ravnina prek resolveScale: known/basis/H (True/RAVNINA/True)
+  ✓ determinizem: isti vogali → ista homografija
+── H) UI-nizi (source grep)
+  ✗ kamera: gumb Postavi ravnino
+  ✗ kamera: prikaz perspektivne kalibracije
+  ✗ kamera: metoda RAVNINA opisana
+  ✓ engine: RAVNINA v tipih kalibracije
+  ✓ engine: PREDPOSTAVKA_FRONTALNOST koda
+  ✓ engine: MERITEV_NA_RAVNINI koda
+  ✓ engine: RAVNINA_NERESENLJIVA koda
+── I) idempotentno čiščenje ×2
+  ✓ počiščenje testnih zapisov (1.) 
+  ✓ počiščenje testnih zapisov (2.) 
+
+══ R513 REZULTAT: ✓ 58 / ✗ 3 ══
+::endgroup::
+═══ r513: 0 ✓ / 1 ✗
+PADLI: r513.py
+  ✓ r516                   ═══ r516: 1 ✓ / 0 ✗
+  ✗ r517                   (podrobnosti: .ci-local-logs/r517.log)
+  ✓ ops/r517-5-zoom-tekstura.png obstaja (402 kB ≥ 50 kB)
+  ✓ dokazni izris POTEM nosi žig VIZUALIZACIJA ZA PREDSTAVITEV (§15)
+── G) živi API: kupska fixture preživi krog s 67 mm konfiguracijo ──
+  ✓ ROK-OG-ROMB-67 dosegljiv prek API-ja
+  ✓ vsaj en projekt na voljo
+  ✓ varianta GLT na voljo prek API-ja
+  ✓ preverjeno gradivo GLT dosegljivo prek API-ja
+  ✓ vizualizacija ustvarjena (201, dejansko 201)
+  ✓ konfiguracija 67 mm preživi krog (lamela 67, deska 67)
+  ✓ razmik 8 mm, stebri 2
+  ✓ skrito vijačenje (vijaki=false) preživi krog
+  ✓ maska (1 ograja + 1 izpust + 1 prednji) preživi krog
+  ✓ trdnja gradiva potrjena s strežniško potjo (public/assets/roksal/src/r495-wpc-woodcore-romb-golden-precna-ograja-gasper1.jpg)
+  ✓ trdnja nosi SHA-256 preverjene datoteke
+  ✓ testna vizualizacija počiščena (idempotentno ×2)
+
+══ REZULTAT: 61 ✓ / 5 ✗ ══
+::endgroup::
+═══ r517: 0 ✓ / 1 ✗
+PADLI: r517.py
+  ✗ r518                   (podrobnosti: .ci-local-logs/r518.log)
+  ✓ ops/r518-D-zoom.png obstaja (1158 kB ≥ 300 kB)
+  ✓ ops/r518-E-potem.png obstaja (1437 kB ≥ 400 kB)
+  ✓ ops/r518-E-primerjava.png obstaja (1428 kB ≥ 400 kB)
+── G) živi API: hotel-bazen fixture + POLNA-128 (128 mm + reza 18) ──
+  ✓ ROK-OG-POLNA-128 dosegljiv prek API-ja
+  ✓ vsaj en projekt na voljo
+  ✓ varianta BUT (Burma teak) na voljo prek API-ja
+  ✓ preverjeno gradivo BUT dosegljivo prek API-ja
+  ✓ vizualizacija ustvarjena (201, dejansko 201)
+  ✓ konfiguracija 128 mm preživi krog (lamela 128, deska 128)
+  ✓ reza 18 mm (iz kataloga!), stebri 3
+  ✓ maska (1 ograja + 0 izpustov + 1 prednji) preživi krog
+  ✓ trdnja gradiva potrjena s strežniško potjo (public/assets/roksal/src/r495-pokoncna-ograjam-burma128-2.jpg)
+  ✓ trdnja nosi SHA-256 preverjene datoteke
+  ✓ testna vizualizacija počiščena (idempotentno ×2)
+
+══ REZULTAT: 65 ✓ / 3 ✗ ══
+::endgroup::
+═══ r518: 0 ✓ / 1 ✗
+PADLI: r518.py
+  ✗ r520                   (podrobnosti: .ci-local-logs/r520.log)
+  ✓ ops/r520-T-zoom.png obstaja (1031 kB ≥ 300 kB)
+  ✓ ops/r520-T2-potem.png obstaja (1998 kB ≥ 500 kB)
+  ✓ ops/r520-T2-primerjava.png obstaja (2020 kB ≥ 500 kB)
+  ✓ ops/r520-T2-zoom.png obstaja (1030 kB ≥ 300 kB)
+  ✓ ops/r520-T3-potem.png obstaja (1928 kB ≥ 400 kB)
+  ✓ ops/r520-T3-primerjava.png obstaja (1988 kB ≥ 400 kB)
+── J) živi API: hotel-bazen terasa fixture + RUSTIC (150/6) ──
+  ✓ ROK-TER-RUSTIC dosegljiv prek API-ja
+  ✓ vsaj en projekt na voljo
+  ✓ varianta ROAK (Rustic oak) na voljo prek API-ja
+  ✓ vizualizacija TERASA ustvarjena (201, dejansko 201)
+  ✓ tip TERASA + deska 150 mm preživita krog (dejansko TERASA/150)
+  ✓ reža 6 mm (uradni FAQ!) + globina 350 preživita (dejansko 6/350)
+  ✓ maska prednjega plana (ležalnik) preživi krog
+  ✓ testna vizualizacija počiščena (idempotentno ×2)
+
+══ REZULTAT: 76 ✓ / 7 ✗ ══
+::endgroup::
+═══ r520: 0 ✓ / 1 ✗
+PADLI: r520.py
+  ✗ r522                   (podrobnosti: .ci-local-logs/r522.log)
+  ✓ neobstoječi docOf → 400 (dejansko 400)
+  ✓ predolga opomba → 400 (dejansko 400)
+  ✓ dokumentacijska slika z docOf + oznako + segmentom → 201 (dejansko 201)
+  ✓ drug detajl na isto izvorno meritev → 201 (več slik je legitimno, dejansko 201)
+  ✓ zapis je FOTO z ESTIMATED (dokaz, ne poslovna mera — FOTO/ESTIMATED)
+  ✓ params.docOf se ujema z izvorno meritvijo
+  ✓ oznaka + segment + opomba preživijo krog
+  ✓ faza DOKUMENTACIJA se shrani
+  ✓ online pot NE zapiše docOffline (lažna oznaka bi zavajala)
+  ✓ drugi detajl pravilno vezan (OVIRA)
+  ✓ neodločeni polji se ne zapišejo (ne null smeti)
+  ✓ testni zapisi počiščeni (idempotentno ×2)
+── D) dokazni artefakti E2E (ops/r522-ui-*.png) ──
+  ✓ E2E dokazi obstajajo (6 PNG: r522-ui-1-meritve.png, r522-ui-2-kalibracija.png, r522-ui-3-detajl.png, r522-ui-4-preverjanje.png, r522-ui-5-potrditev.png, r522-ui-6-shranjeno.png…)
+  ✓ dokazi niso prazni (6 > 20 kB)
+
+══ REZULTAT: 49 ✓ / 5 ✗ ══
+::endgroup::
+═══ r522: 0 ✓ / 1 ✗
+PADLI: r522.py
+  ✗ r523                   (podrobnosti: .ci-local-logs/r523.log)
+  ✓ ops/r523-K3-primerjava.png obstaja (1712 kB ≥ 400 kB)
+  ✓ ops/r523-K3-zoom.png obstaja (903 kB ≥ 300 kB)
+  ✓ ops/r523-KM-potem.png obstaja (1733 kB ≥ 400 kB)
+  ✓ ops/r523-KM-primerjava.png obstaja (1719 kB ≥ 400 kB)
+  ✓ ops/r523-KM-zoom.png obstaja (932 kB ≥ 300 kB)
+  ✓ ops/r523-primerjava-kakovosti.png obstaja (1689 kB ≥ 400 kB)
+── I) živi API: kubo-fasada fixture + KUBO FASADA (80/20) ──
+  ✓ ROK-FAS-KUBO dosegljiv prek API-ja
+  ✓ vsaj en projekt na voljo
+  ✓ varianta ROAK (Rustic oak) na voljo prek API-ja
+  ✓ vizualizacija FASADA ustvarjena (201, dejansko 201)
+  ✓ tip FASADA + letvica 80 mm (uradno) preživi krog (dejansko FASADA/80)
+  ✓ razmik 20 mm + višina 285 preživita krog (dejansko 20/285)
+  ✓ engineVersion 1.4.0 zapisan (§13 — R532 dvig, dejansko 1.4.0)
+  ✓ testna vizualizacija počiščena (idempotentno ×2)
+
+══ REZULTAT: 65 ✓ / 1 ✗ ══
+::endgroup::
+═══ r523: 0 ✓ / 1 ✗
+PADLI: r523.py
+  ✗ r524                   (podrobnosti: .ci-local-logs/r524.log)
+  ✓ ops/r524-P4-primerjava.png obstaja
+  ✓ ops/r524-P4-zoom.png obstaja
+  ✓ ops/r524-P5-potem.png obstaja
+  ✓ ops/r524-P5-primerjava.png obstaja
+  ✓ ops/r524-P5-zoom.png obstaja
+  ✓ ops/r524-tabela-cipov.png obstaja
+── I) živi API: POLNA-57 POKOCNA (57/20, RWA čip) ──
+  ✓ ROK-OGP-POLNA-57 dosegljiv prek API-ja
+  ✓ vsaj en projekt na voljo
+  ✓ varianta RWA (Rustic walnut) na voljo prek API-ja
+  ✓ vizualizacija POKOCNA ustvarjena (201, dejansko 201)
+  ✓ tip POKOCNA + lamela 57 mm preživi krog (dejansko POKOCNA/57)
+  ✓ razmik 20 mm + višina 120 preživita krog (dejansko 20/120)
+  ✓ engineVersion 1.4.0 zapisan (§13, dejansko 1.4.0)
+  ✓ testna vizualizacija počiščena (idempotentno ×2)
+
+══ REZULTAT: 104 ✓ / 3 ✗ ══
+::endgroup::
+═══ r524: 0 ✓ / 1 ✗
+PADLI: r524.py
+  ✗ r527                   (podrobnosti: .ci-local-logs/r527.log)
+── C) žičenje: izbira, opozorilo, rezultat, shranjene, javni pregled ──
+  ✓ katalog-original.ts nosi predponsko pravilo
+  ✓ katalog-original.ts nosi OZNAKA_GENERIKA po besedilu poročila
+  ✗ izbira izdelka: dopolnilo »— generični« ob vsakem generičnem
+  ✗ korak IZDELEK: opozorilo (data-testid) ob izbiri generičnega
+  ✗ izbira gradiva (korak Označi): vrstica oznake ob generičnem izdelku
+  ✗ rezultat POTEM: oznaka ob samem izrisu (data-testid)
+  ✗ rezultat POTEM: izrecni napis oznake nad razlago
+  ✗ seznam shranjenih vizualizacij: oznaka ob generičnem izdelku
+  ✓ javni pregled povezav: oznaka vidi tudi stranka
+  ✗ razlaga pod izbiro: pove, kaj dopolnilo pomeni
+── D) živi API: katalog, ki ga vidi fotomontaža ──
+  ✓ API vrne 17 izdelkov fotomontažnih družin (dejansko 17)
+  ✓ generični po API = seznam poročila (['FAS-K-002', 'FAS-L-001', 'OGR-K-001', 'OGR-K-002', 'OGR-P-001', 'OGR-P-002', 'TER-ALU-001', 'TER-WPC-001', 'TER-WPC-002'])
+  ✓ originali po API = seznam poročila (['ROK-FAS-KUBO', 'ROK-OG-DESKA-150', 'ROK-OG-POLNA-128', 'ROK-OG-ROMB-67', 'ROK-OGP-POLNA-100', 'ROK-OGP-POLNA-57', 'ROK-TER-KLASIK', 'ROK-TER-RUSTIC'])
+
+══ REZULTAT: 14 ✓ / 7 ✗ ══
+::endgroup::
+═══ r527: 0 ✓ / 1 ✗
+PADLI: r527.py
+  ✓ r532                   ═══ r532: 1 ✓ / 0 ✗
+  ✓ r533                   ═══ r533: 1 ✓ / 0 ✗
+  ✓ r534                   ═══ r534: 1 ✓ / 0 ✗
+  ✓ r536                   ═══ r536: 1 ✓ / 0 ✗
+
+════ RELEJNI PAS: ✗ 18 rdečih od 8 korakov in 44 skupin ════
+PADLE SKUPINE: r437-r445 r486 r487 r500 r501 r503 r504 r508 r509 r510 r513 r517 r518 r520 r522 r523 r524 r527
+Ne predlagaj deploya, dokler pas ni zelen.
+Logi: .ci-local-logs/

@@ -5,7 +5,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { jsonError, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
-import { emitEvent } from '@/lib/notify'
+import { deliverEvent, recordEvent } from '@/lib/notify'
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -35,29 +35,40 @@ export async function POST (req: NextRequest, { params }: Params) {
     return jsonError(400, 'Podpisati je mogoče le ponudbo v statusu Poslan ali Sprejet.', `Trenutni status: ${quote.status}.`)
   }
 
-  const updated = await db.quote.update({
-    where: { id },
-    data: { signature, signedBy, signedAt: new Date(), status: 'ZAKLENJEN' },
-    include: {
-      customer: { select: { name: true, city: true } },
-      project: { select: { code: true, title: true } },
-      _count: { select: { lines: true } },
-    },
+  // R537 (transakcijska celovitost): podpis (zaklep posla) + revizija + zapis
+  // obvestila (outbox) v ENI transakciji — padec srednjega koraka NE pusti
+  // zaklenjene ponudbe brez revizije/dogodka. Dostava (OFFICE IN_APP + webhook
+  // HTTP) teče PO commitu (deliverEvent, ognjevarna).
+  const { updated, recorded } = await db.$transaction(async (tx) => {
+    const updated = await tx.quote.update({
+      where: { id },
+      data: { signature, signedBy, signedAt: new Date(), status: 'ZAKLENJEN' },
+      include: {
+        customer: { select: { name: true, city: true } },
+        project: { select: { code: true, title: true } },
+        _count: { select: { lines: true } },
+      },
+    })
+
+    await writeAudit({
+      userId: auth.user.id, action: 'DEAL_LOCK', entity: 'quote', entityId: id, projectId: quote.projectId,
+      detail: { code: quote.code, signedBy, total: quote.total }, // podpis NE gre v revizijo (velikost)
+    }, tx)
+
+    // R438 (issue #5): podpis ponudbe → obvestilo pisarni (OFFICE, IN_APP) —
+    // R537: ZAPIS dogodka v isti tx (outbox), dostava PO commitu (ognjevarna).
+    const recorded = await recordEvent({
+      type: 'QUOTE_SIGNED',
+      key: `quote-signed:${id}`,
+      title: 'Podpis ponudbe',
+      body: `Ponudba ${quote.code} je podpisana (${signedBy}) — znesek ${quote.total.toFixed(2)} €, posel zaklenjen`,
+      projectId: quote.projectId,
+      audience: 'OFFICE',
+    }, tx)
+    return { updated, recorded }
   })
 
-  await writeAudit({
-    userId: auth.user.id, action: 'DEAL_LOCK', entity: 'quote', entityId: id, projectId: quote.projectId,
-    detail: { code: quote.code, signedBy, total: quote.total }, // podpis NE gre v revizijo (velikost)
-  })
-
-  // R438 (issue #5): podpis ponudbe → obvestilo pisarni (OFFICE, IN_APP)
-  await emitEvent({
-    type: 'QUOTE_SIGNED',
-    key: `quote-signed:${id}`,
-    title: 'Podpis ponudbe',
-    body: `Ponudba ${quote.code} je podpisana (${signedBy}) — znesek ${quote.total.toFixed(2)} €, posel zaklenjen`,
-    projectId: quote.projectId,
-    audience: 'OFFICE',
-  })
+  // dostava obvestila PO uspešnem commitu (ognjevarna — nikoli ne vrže napake)
+  if (recorded) await deliverEvent(recorded)
   return NextResponse.json({ data: updated })
 }

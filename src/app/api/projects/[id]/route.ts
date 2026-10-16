@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { db } from '@/lib/db'
 import { jsonError, readsAllData, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
-import { emitEvent } from '@/lib/notify'
+import { deliverEvent, recordEvent, type RecordedEvent } from '@/lib/notify'
 import { parseBody } from '@/lib/validate'
 
 type Params = { params: Promise<{ id: string }> }
@@ -78,26 +78,37 @@ export async function PATCH (req: NextRequest, { params }: Params) {
   if (data.customerId !== undefined) patch.customerId = data.customerId
   if (Object.keys(patch).length === 0) return jsonError(400, 'Ni sprememb za izvedbo.')
 
-  const updated = await db.project.update({ where: { id }, data: patch, include: { customer: { select: { name: true } } } })
-  await writeAudit({
-    userId: auth.user.id, action: 'PROJECT_UPDATE', entity: 'project', entityId: id, projectId: id,
-    detail: patch as Record<string, unknown>,
+  // R537 (transakcijska celovitost): posodobitev + revizija + zapis statusnega
+  // obvestila (outbox) v ENI transakciji — padec srednjega koraka NE pusti
+  // spremembe statusa brez revizije/dogodka. Dostava (stranka EMAIL + webhook
+  // HTTP) teče PO commitu (deliverEvent, ognjevarna).
+  const { updated, recorded } = await db.$transaction(async (tx) => {
+    const updated = await tx.project.update({ where: { id }, data: patch, include: { customer: { select: { name: true } } } })
+    await writeAudit({
+      userId: auth.user.id, action: 'PROJECT_UPDATE', entity: 'project', entityId: id, projectId: id,
+      detail: patch as Record<string, unknown>,
+    }, tx)
+
+    // R438 (issue #5): sprememba statusa → statusno obvestilo stranki (zunanji kanal EMAIL)
+    let recorded: RecordedEvent | null = null
+    if (typeof patch.status === 'string' && patch.status !== existing.status) {
+      const customer = updated.customerId
+        ? await tx.customer.findUnique({ where: { id: updated.customerId }, select: { name: true, email: true } })
+        : null
+      recorded = await recordEvent({
+        type: 'PROJECT_STATUS',
+        key: `project-status:${id}:${existing.status}:${patch.status}:${Date.now()}`,
+        title: `Status projekta ${existing.code}`,
+        body: `Status projekta ${existing.code} je spremenjen: ${existing.status} → ${patch.status}`,
+        projectId: id,
+        customerEmail: customer?.email ?? null,
+        customerName: customer?.name ?? null,
+      }, tx)
+    }
+    return { updated, recorded }
   })
 
-  // R438 (issue #5): sprememba statusa → statusno obvestilo stranki (zunanji kanal EMAIL)
-  if (typeof patch.status === 'string' && patch.status !== existing.status) {
-    const customer = updated.customerId
-      ? await db.customer.findUnique({ where: { id: updated.customerId }, select: { name: true, email: true } })
-      : null
-    await emitEvent({
-      type: 'PROJECT_STATUS',
-      key: `project-status:${id}:${existing.status}:${patch.status}:${Date.now()}`,
-      title: `Status projekta ${existing.code}`,
-      body: `Status projekta ${existing.code} je spremenjen: ${existing.status} → ${patch.status}`,
-      projectId: id,
-      customerEmail: customer?.email ?? null,
-      customerName: customer?.name ?? null,
-    })
-  }
+  // dostava obvestila PO uspešnem commitu (ognjevarna — nikoli ne vrže napake)
+  if (recorded) await deliverEvent(recorded)
   return NextResponse.json({ data: updated })
 }

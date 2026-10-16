@@ -7,6 +7,9 @@
 cd "$(dirname "$0")/.."
 if [ -f env.sh ]; then source env.sh; fi
 PORT="${DEV_PORT:-3000}"
+# R536/R537: jedrni OOM ubijalec je 2× ustrelil next dev (anon-rss ~3 GB ob
+# kompilaciji vseh 195 rut) — enaka varovalka kot .zscripts/dev.sh.
+export NODE_OPTIONS="${NODE_OPTIONS:---max-old-space-size=1536}"
 
 poslusalec () { # PID poslušalca na vratih (Linux `ss`, Windows/mac `netstat`)
   if command -v ss >/dev/null 2>&1; then

@@ -70,6 +70,10 @@ export async function POST (req: NextRequest, { params }: Params) {
 
   const scoped = await obsegNaloga(auth.user, id)
   if (scoped.error || !scoped.wo) return jsonError(scoped.conflict ? 403 : 404, scoped.error ?? 'Nalog ne obstaja.')
+  // R537: ozki navezi za znotraj transakcijskega callbacka (TS ozko določanje
+  // `scoped.wo` ne preživi meje closure-a).
+  const woKoda = scoped.wo.code
+  const woProjekt = scoped.wo.projectId
 
   const body = await req.json().catch(() => null)
   const force = body?.force === true
@@ -89,28 +93,38 @@ export async function POST (req: NextRequest, { params }: Params) {
           : 'Obstoječega seznama ne prepišemo — zgodovina montaže ostane (issue #12 §3).'
       )
     }
-    await db.montazaCheck.deleteMany({ where: { workOrderId: id } }) // vse NI_ZACETO — nič ne izgubimo
   }
 
+  // R537 (transakcijska celovitost): predloga se zgradi IZ VIROV ŠE PREDAJ
+  // transakciji (branje), nato brišemo+ustvarjamo+revizija ATOMARNO — prej bi
+  // padec po deleteMany pustil nalog BREZ kontrolnih točk (izguba NI_ZACETO
+  // seznama), padec po createMany pa prazen seznam brez revizije.
   const { drafts, viri } = await sestaviPredlogo(scoped.wo.projectId)
   if (drafts.length === 0) {
     return jsonError(409, 'Ni virov za kontrolni seznam.', 'Niso na voljo nobene playbook definicije niti pravila.')
   }
 
-  const rows = await db.montazaCheck.createMany({
-    data: drafts.map((d) => ({ ...d, workOrderId: id })),
-  })
+  const rows = await db.$transaction(async (tx) => {
+    if (obstojeco.length > 0) {
+      await tx.montazaCheck.deleteMany({ where: { workOrderId: id } }) // vse NI_ZACETO — nič ne izgubimo
+    }
 
-  await writeAudit({
-    userId: auth.user.id,
-    action: 'MONTAZA_TEMPLATE_APPLY',
-    entity: 'workOrder',
-    entityId: id,
-    projectId: scoped.wo.projectId,
-    detail: {
-      workOrder: scoped.wo.code, stevilo: rows.count, viri,
-      force: obstojeco.length > 0,
-    },
+    const rows = await tx.montazaCheck.createMany({
+      data: drafts.map((d) => ({ ...d, workOrderId: id })),
+    })
+
+    await writeAudit({
+      userId: auth.user.id,
+      action: 'MONTAZA_TEMPLATE_APPLY',
+      entity: 'workOrder',
+      entityId: id,
+      projectId: woProjekt,
+      detail: {
+        workOrder: woKoda, stevilo: rows.count, viri,
+        force: obstojeco.length > 0,
+      },
+    }, tx)
+    return rows
   })
 
   const checks = await db.montazaCheck.findMany({

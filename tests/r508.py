@@ -262,7 +262,18 @@ else:
 print('── F) meritve-kamera: zmožnosti, bliskavica, status, seje')
 def src (rel):
     try:
-        with open(os.path.join(REPO, rel), encoding='utf-8') as f: return f.read()
+        # R537: veliki moduli so razbiti v podmapo (modul.tsx + modul/*) —
+        # statični pregled velja za celo funkcionalnost, ne samo datoteko.
+        p = os.path.join(REPO, rel)
+        with open(p, encoding='utf-8') as f:
+            besedilo = f.read()
+        podmapa = p.rsplit('.', 1)[0]
+        if os.path.isdir(podmapa):
+            for ime in sorted(os.listdir(podmapa)):
+                if ime.endswith(('.ts', '.tsx')):
+                    with open(os.path.join(podmapa, ime), encoding='utf-8') as f:
+                        besedilo += '\n' + f.read()
+        return besedilo
     except Exception: return ''
 
 kamera = src('src/components/roksal/modules/meritve-kamera.tsx')

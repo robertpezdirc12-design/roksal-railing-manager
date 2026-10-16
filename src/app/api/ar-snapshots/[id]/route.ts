@@ -44,21 +44,25 @@ export async function PATCH (req: NextRequest, { params }: Params) {
     return jsonError(400, 'Podajte scene ali note.')
   }
 
-  const updated = await db.arSnapshot.update({
-    where: { id },
-    data: {
-      ...(scene !== undefined ? { scene } : {}),
-      ...(note !== undefined ? { note } : {}),
-    },
-    select: { id: true, scene: true, note: true },
-  })
+  // R537 (transakcijska celovitost): preimenovanje/opis + revizija v ENI transakciji.
+  const updated = await db.$transaction(async (tx) => {
+    const updated = await tx.arSnapshot.update({
+      where: { id },
+      data: {
+        ...(scene !== undefined ? { scene } : {}),
+        ...(note !== undefined ? { note } : {}),
+      },
+      select: { id: true, scene: true, note: true },
+    })
 
-  await writeAudit({
-    userId: user.id,
-    action: 'AR_SNAPSHOT_UPDATE',
-    entity: 'arSnapshot',
-    entityId: id,
-    detail: { before: { scene: snapshot.scene, note: snapshot.note }, after: { scene: updated.scene, note: updated.note } },
+    await writeAudit({
+      userId: user.id,
+      action: 'AR_SNAPSHOT_UPDATE',
+      entity: 'arSnapshot',
+      entityId: id,
+      detail: { before: { scene: snapshot.scene, note: snapshot.note }, after: { scene: updated.scene, note: updated.note } },
+    }, tx)
+    return updated
   })
   return NextResponse.json({ data: updated })
 }
@@ -72,15 +76,18 @@ export async function DELETE (req: NextRequest, { params }: Params) {
   const snapshot = await db.arSnapshot.findUnique({ where: { id }, select: { id: true, projectId: true, scene: true } })
   if (!snapshot) return jsonError(404, 'AR posnetek ne obstaja.')
 
-  await db.arSnapshot.delete({ where: { id } })
+  // R537 (transakcijska celovitost): brisanje + revizija v ENI transakciji.
+  await db.$transaction(async (tx) => {
+    await tx.arSnapshot.delete({ where: { id } })
 
-  await writeAudit({
-    userId: user.id,
-    action: 'AR_SNAPSHOT_DELETE',
-    entity: 'arSnapshot',
-    entityId: id,
-    projectId: snapshot.projectId,
-    detail: { scene: snapshot.scene },
+    await writeAudit({
+      userId: user.id,
+      action: 'AR_SNAPSHOT_DELETE',
+      entity: 'arSnapshot',
+      entityId: id,
+      projectId: snapshot.projectId,
+      detail: { scene: snapshot.scene },
+    }, tx)
   })
   return NextResponse.json({ data: { ok: true, id } })
 }

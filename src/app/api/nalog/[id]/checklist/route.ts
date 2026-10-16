@@ -54,16 +54,21 @@ export async function POST (req: NextRequest, { params }: Params) {
   if (!label) return jsonError(400, 'Besedilo točke je obvezno.')
   if (label.length > 300) return jsonError(400, 'Besedilo točke je predolgo (največ 300 znakov).')
 
-  const count = await db.installationChecklist.count({ where: { workOrderId: id } })
-  const row = await db.installationChecklist.create({
-    data: { workOrderId: id, label, sortOrder: count },
-    include: { doneBy: { select: { name: true } } },
-  })
+  // R537 (transakcijska celovitost): točka + revizija v ENI transakciji
+  // (števec sortOrder se prebere ZNOTRAJ tx — sočasna doda ne more podvojiti zapisa).
+  const row = await db.$transaction(async (tx) => {
+    const count = await tx.installationChecklist.count({ where: { workOrderId: id } })
+    const row = await tx.installationChecklist.create({
+      data: { workOrderId: id, label, sortOrder: count },
+      include: { doneBy: { select: { name: true } } },
+    })
 
-  await writeAudit({
-    userId: auth.user.id, action: 'CHECKLIST_ADD', entity: 'installationChecklist', entityId: row.id,
-    projectId: scoped.wo.projectId,
-    detail: { workOrder: scoped.wo.code, label },
+    await writeAudit({
+      userId: auth.user.id, action: 'CHECKLIST_ADD', entity: 'installationChecklist', entityId: row.id,
+      projectId: scoped.wo.projectId,
+      detail: { workOrder: scoped.wo.code, label },
+    }, tx)
+    return row
   })
   return NextResponse.json({ data: row }, { status: 201 })
 }
@@ -85,20 +90,24 @@ export async function PATCH (req: NextRequest, { params }: Params) {
   const row = await db.installationChecklist.findUnique({ where: { id: rowId } })
   if (!row || row.workOrderId !== id) return jsonError(404, 'Točka ne pripada temu nalogu.')
 
-  const updated = await db.installationChecklist.update({
-    where: { id: rowId },
-    data: {
-      done,
-      doneAt: done ? new Date() : null,
-      doneById: done ? auth.user.id : null,
-    },
-    include: { doneBy: { select: { name: true } } },
-  })
+  // R537 (transakcijska celovitost): odkljuka + revizija v ENI transakciji.
+  const updated = await db.$transaction(async (tx) => {
+    const updated = await tx.installationChecklist.update({
+      where: { id: rowId },
+      data: {
+        done,
+        doneAt: done ? new Date() : null,
+        doneById: done ? auth.user.id : null,
+      },
+      include: { doneBy: { select: { name: true } } },
+    })
 
-  await writeAudit({
-    userId: auth.user.id, action: 'CHECKLIST_TOGGLE', entity: 'installationChecklist', entityId: rowId,
-    projectId: scoped.wo.projectId,
-    detail: { workOrder: scoped.wo.code, label: row.label, done },
+    await writeAudit({
+      userId: auth.user.id, action: 'CHECKLIST_TOGGLE', entity: 'installationChecklist', entityId: rowId,
+      projectId: scoped.wo.projectId,
+      detail: { workOrder: scoped.wo.code, label: row.label, done },
+    }, tx)
+    return updated
   })
   return NextResponse.json({ data: updated })
 }

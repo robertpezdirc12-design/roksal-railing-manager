@@ -58,17 +58,21 @@ export async function PATCH (req: NextRequest, { params }: Params) {
     return jsonError(400, 'Ni sprememb za izvedbo.', 'Podajte vsaj eno polje: active, events, description.')
   }
 
-  const updated = await db.webhookSubscription.update({ where: { id }, data })
+  // R537 (transakcijska celovitost): sprememba naročnine + revizija v ENI transakciji.
+  const updated = await db.$transaction(async (tx) => {
+    const updated = await tx.webhookSubscription.update({ where: { id }, data })
 
-  await writeAudit({
-    userId: user.id,
-    action: 'WEBHOOK_UPDATE',
-    entity: 'webhookSubscription',
-    entityId: id,
-    detail: {
-      fields: Object.keys(data).filter((f) => f !== 'events'),
-      ...(data.events ? { events: parseWebhookEvents(updated.events) ?? [] } : {}),
-    },
+    await writeAudit({
+      userId: user.id,
+      action: 'WEBHOOK_UPDATE',
+      entity: 'webhookSubscription',
+      entityId: id,
+      detail: {
+        fields: Object.keys(data).filter((f) => f !== 'events'),
+        ...(data.events ? { events: parseWebhookEvents(updated.events) ?? [] } : {}),
+      },
+    }, tx)
+    return updated
   })
 
   return NextResponse.json({
@@ -92,16 +96,19 @@ export async function DELETE (req: NextRequest, { params }: Params) {
   if (!sub) return jsonError(404, 'Naročnina ne obstaja.')
   if (sub.revokedAt) return NextResponse.json({ data: { revoked: true, id } }) // idempotentno
 
-  await db.webhookSubscription.update({
-    where: { id },
-    data: { active: false, revokedAt: new Date() },
-  })
-  await writeAudit({
-    userId: user.id,
-    action: 'WEBHOOK_REVOKE',
-    entity: 'webhookSubscription',
-    entityId: id,
-    detail: { url: sub.url }, // javni cilj (brez skrivnosti — ta ni nikoli shranjena)
+  // R537 (transakcijska celovitost): preklic + revizija v ENI transakciji.
+  await db.$transaction(async (tx) => {
+    await tx.webhookSubscription.update({
+      where: { id },
+      data: { active: false, revokedAt: new Date() },
+    })
+    await writeAudit({
+      userId: user.id,
+      action: 'WEBHOOK_REVOKE',
+      entity: 'webhookSubscription',
+      entityId: id,
+      detail: { url: sub.url }, // javni cilj (brez skrivnosti — ta ni nikoli shranjena)
+    }, tx)
   })
 
   return NextResponse.json({ data: { revoked: true, id } })

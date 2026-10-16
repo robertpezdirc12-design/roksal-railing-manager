@@ -9,14 +9,21 @@
 //    (src/lib/notify-providers.ts) — provider se izbere prek okolja (NOTIFY_*_PROVIDER);
 //    privzeto vedenje ostaja: EMAIL = log adapter (SENT), SMS/WHATSAPP = kanal
 //    ni konfiguriran (SKIPPED oz. FAILED ob poskusu). Poslovni klici se NE spreminjajo.
+//  • R537 (transakcijski outbox): emitEvent je razcepljen na ZAPIS (recordEvent,
+//    tx-aware — dogodek + prejemniki + webhook outbox VRSTICE v isti transakciji
+//    kot poslovna mutacija + revizija) in DOSTAVO (deliverEvent — IN_APP/EMAIL/
+//    SMS/WHATSAPP + webhook HTTP poskusi, IZVEN transakcije, PO commitu).
+//    emitEvent = vgrajena kombinacija obeh nad privzetim db klientom — vsi
+//    obstoječi klici (izven transakcij) obnašajo NESPREMENJENO.
 
+import type { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 import {
   NOTIFICATION_EVENT_TYPES,
   type NotificationEventType,
 } from '@/lib/notify-events'
 import { providerConfigured, resolveProvider, type ProviderDelivery } from '@/lib/notify-providers'
-import { emitWebhookEvent } from '@/lib/webhook-delivery'
+import { deliverWebhookDeliveries, recordWebhookEvent } from '@/lib/webhook-delivery'
 
 // ─── Vhod emitEvent ──────────────────────────────────────────────────────────
 
@@ -174,92 +181,157 @@ async function createAndAttempt (
   await sendDelivery(delivery.id, channel, userId, recipient, payload, ev)
 }
 
-// ─── emitEvent (ognjevaren) ──────────────────────────────────────────────────
+// ─── Zapis dogodka (tx-aware, R537) ───────────────────────────────────────
+
+/** Odjemalec, prek katerega gre zapis dogodka + outboxa: globalni db ALI
+ * transakcijski klient (tx) — isti vzorec kot writeAudit (R464). Vključuje
+ * tudi webhook delegate (recordWebhookEvent zapiše outbox vrstice). */
+export type NotifyClient = Pick<Prisma.TransactionClient, 'notificationEvent' | 'user' | 'webhookSubscription' | 'webhookDelivery'>
+
+/** Zapisan dogodek (izhod recordEvent) — vhod za deliverEvent PO commitu. */
+export interface RecordedEvent {
+  /** Dogodek (en vir resnice) — id/key/type/createdAt za dostavo + webhook payload. */
+  event: { id: string; key: string; type: string; createdAt: Date }
+  /** Telo obvestila (title/body + kontakt stranke za zunanje kanale). */
+  payload: EventPayload
+  /** Prejemniki-app uporabniki (id → e-pošta) — IN_APP + EMAIL dostava po commitu. */
+  userEmails: Map<string, string>
+  /** Webhook outbox vrstice, zapisane V isti transakciji (prazno = ni naročnin
+   *  oz. tip ni v katalogu) — HTTP dostava teče PO commitu. */
+  webhookDeliveryIds: string[]
+}
+
+/**
+ * ZAPIS poslovnega dogodka (transakcijski outbox, R537):
+ *  1. dedup po ključu (isti dogodek NE obstaja dvakrat) → null;
+ *  2. razrešitev prejemnikov (OFFICE = aktivni ADMIN/VODJA + eksplicitni userIds);
+ *  3. NotificationEvent (en vir resnice) — NA PODANEM klientu (tx v ruti);
+ *  4. WebhookDelivery PENDING vrstice (webhook outbox) — isto transakcijo.
+ * Napake baze se širijo naprej: znotraj $transaction pomenijo rollback (brez
+ * spremembe brez dogodka — to je točka vzorca), emitEvent jih ulovi sama.
+ * Dostava (IN_APP/EMAIL/SMS/WHATSAPP + webhook HTTP) NI del zapisa —
+ * pokliči deliverEvent PO uspešnem commitu.
+ */
+export async function recordEvent (input: EmitEventInput, client: NotifyClient = db): Promise<RecordedEvent | null> {
+  // 1) dedup po ključu — isti dogodek (retry/dvoklik) NE ustvari novega eventa
+  const existing = await client.notificationEvent.findUnique({ where: { key: input.key } })
+  if (existing) return null
+
+  const payload: EventPayload = {
+    title: input.title,
+    body: input.body,
+    ...(input.customerEmail ? { customerEmail: input.customerEmail } : {}),
+    ...(input.customerName ? { customerName: input.customerName } : {}),
+  }
+
+  // 2) prejemniki: OFFICE (aktivni ADMIN/VODJA) + eksplicitni userIds (ASSIGNEE)
+  const ids = new Set<string>(input.userIds ?? [])
+  if (input.audience === 'OFFICE' || input.audience === 'ALL') {
+    const office = await client.user.findMany({
+      where: { active: true, role: { in: ['ADMIN', 'VODJA'] } },
+      select: { id: true },
+    })
+    for (const u of office) ids.add(u.id)
+  }
+  let userEmails = new Map<string, string>()
+  if (ids.size > 0) {
+    const valid = await client.user.findMany({
+      where: { id: { in: [...ids] }, active: true },
+      select: { id: true, email: true },
+    })
+    userEmails = new Map(valid.map((u) => [u.id, u.email]))
+  }
+
+  // 3) event = en vir resnice
+  const event = await client.notificationEvent.create({
+    data: {
+      key: input.key,
+      type: input.type,
+      payload: JSON.stringify(payload),
+      projectId: input.projectId ?? null,
+    },
+  })
+
+  // 4) R481 (issue #9 §9) + R537: poslovno-dogodkovni WEBHOOK IZHOD — zapis
+  //    outbox vrstic V isti transakciji kot dogodek (brez dvojnega emitiranja:
+  //    dogodek je ŽE dedupliciran po key zgoraj). Dostava (HTTP) je ločena
+  //    (deliverEvent PO commitu) in NE odvisa uporabniških obvestil —
+  //    partner dobi varni podskup telesa (publicWebhookPayload).
+  const webhookDeliveryIds = await recordWebhookEvent({
+    type: input.type,
+    eventKey: event.key,
+    projectId: input.projectId ?? null,
+    title: input.title,
+    body: input.body,
+    customerName: input.customerName ?? null,
+    occurredAt: event.createdAt,
+  }, client)
+
+  return {
+    event: { id: event.id, key: event.key, type: event.type, createdAt: event.createdAt },
+    payload,
+    userEmails,
+    webhookDeliveryIds,
+  }
+}
+
+// ─── Dostava (PO commitu, ognjevarna — R537) ───────────────────────────────
+
+/**
+ * Dostavi zapisan dogodek po vseh kanalih — kliče se PO uspešnem commitu
+ * transakcije (zapis je že viden vsem povezavam). OGNJEVARNA: nikoli ne vrže
+ * napake — odpoved dostave se samo zabeleži (dnevnik + status FAILED na
+ * dostavi), poslovni tok (rute, ki je zapisala dogodek) se nadaljuje.
+ */
+export async function deliverEvent (rec: RecordedEvent): Promise<void> {
+  try {
+    const input = rec.payload
+    // webhook HTTP poskusi (outbox vrstice iz zapisa — PO commitu)
+    await deliverWebhookDeliveries(rec.webhookDeliveryIds)
+
+    // dostave za uporabnike: IN_APP vedno (prek prefs), EMAIL prek prefs (privzeto IZKLOPLJEN)
+    for (const uid of rec.userEmails.keys()) {
+      const inAppOn = await prefEnabled(uid, rec.event.type, 'IN_APP')
+      await createAndAttempt(rec.event.id, 'IN_APP', uid, null, inAppOn, rec.payload, { key: rec.event.key, type: rec.event.type })
+      const emailOn = await prefEnabled(uid, rec.event.type, 'EMAIL')
+      await createAndAttempt(rec.event.id, 'EMAIL', uid, emailOn ? maskEmail(rec.userEmails.get(uid) ?? '') : null, emailOn, rec.payload, { key: rec.event.key, type: rec.event.type })
+    }
+
+    // zunanji prejemnik (stranka): EMAIL + SMS/WHATSAPP prek adapter plasti —
+    // nekonfiguriran kanal ostane SKIPPED (R438), konfiguriran provider pa se poskusi
+    if (input.customerEmail) {
+      await createAndAttempt(rec.event.id, 'EMAIL', null, maskEmail(input.customerEmail), true, rec.payload, { key: rec.event.key, type: rec.event.type })
+      for (const ch of ['SMS', 'WHATSAPP'] as const) {
+        if (providerConfigured(ch)) {
+          await createAndAttempt(rec.event.id, ch, null, maskEmail(input.customerEmail), true, rec.payload, { key: rec.event.key, type: rec.event.type })
+            .catch(() => {}) // unique spamet → ne prekini toka
+        } else {
+          await db.notificationDelivery.create({
+            data: { eventId: rec.event.id, channel: ch, userId: null, recipient: null, status: 'SKIPPED', error: 'kanal ni konfiguriran' },
+          }).catch(() => {}) // unique spamet → ne prekini toka
+        }
+      }
+    }
+  } catch (err) {
+    // R438: odpoved obvestil NIKOLI ne sme prekiniti poslovnega toka
+    console.error('[notify] deliverEvent odpoved (poslovni tok se nadaljuje):', rec.event.type, rec.event.key, err)
+  }
+}
+
+// ─── emitEvent (ognjevaren, klici IZVEN transakcij) ────────────────────────
 
 /**
  * Ustvari poslovni dogodek in ga razdeli po kanalih.
  * NIKOLI ne vrže napake — odpoved obvestil se samo zabeleži (console.error),
  * poslovni tok (ruta, ki je klicala emitEvent) se nadaljuje nespremenjeno.
+ * R537: zapis + dostava (recordEvent/deliverEvent nad privzetim db) — za
+ * klice znotraj $transaction uporabi recordEvent(input, tx) v transakciji
+ * in deliverEvent(zapis) PO commitu.
  */
 export async function emitEvent (input: EmitEventInput): Promise<void> {
   try {
-    // 1) dedup po ključu — isti dogodek (retry/dvoklik) NE ustvari novega eventa
-    const existing = await db.notificationEvent.findUnique({ where: { key: input.key } })
-    if (existing) return
-
-    const payload: EventPayload = {
-      title: input.title,
-      body: input.body,
-      ...(input.customerEmail ? { customerEmail: input.customerEmail } : {}),
-      ...(input.customerName ? { customerName: input.customerName } : {}),
-    }
-
-    // 2) prejemniki: OFFICE (aktivni ADMIN/VODJA) + eksplicitni userIds (ASSIGNEE)
-    const ids = new Set<string>(input.userIds ?? [])
-    if (input.audience === 'OFFICE' || input.audience === 'ALL') {
-      const office = await db.user.findMany({
-        where: { active: true, role: { in: ['ADMIN', 'VODJA'] } },
-        select: { id: true },
-      })
-      for (const u of office) ids.add(u.id)
-    }
-    let userEmails = new Map<string, string>()
-    if (ids.size > 0) {
-      const valid = await db.user.findMany({
-        where: { id: { in: [...ids] }, active: true },
-        select: { id: true, email: true },
-      })
-      userEmails = new Map(valid.map((u) => [u.id, u.email]))
-    }
-
-    // 3) event = en vir resnice
-    const event = await db.notificationEvent.create({
-      data: {
-        key: input.key,
-        type: input.type,
-        payload: JSON.stringify(payload),
-        projectId: input.projectId ?? null,
-      },
-    })
-
-    // 3b) R481 (issue #9 §9): poslovno-dogodkovni WEBHOOK IZHOD — eno mesto v
-    //     emitEvent, vseh 15 klicnih točk samodejno pokrito (brez dvojnega
-    //     emitiranja: dogodek je ŽE dedupliciran po key zgoraj). Dostava je
-    //     ognjevarena (emitWebhookEvent lovi sama) in NE odvisa uporabniških
-    //     obvestil — partner dobi varni podskup telesa (publicWebhookPayload).
-    await emitWebhookEvent({
-      type: input.type,
-      eventKey: event.key,
-      projectId: input.projectId ?? null,
-      title: input.title,
-      body: input.body,
-      customerName: input.customerName ?? null,
-      occurredAt: event.createdAt,
-    })
-
-    // 4) dostave za uporabnike: IN_APP vedno (prek prefs), EMAIL prek prefs (privzeto IZKLOPLJEN)
-    for (const uid of userEmails.keys()) {
-      const inAppOn = await prefEnabled(uid, input.type, 'IN_APP')
-      await createAndAttempt(event.id, 'IN_APP', uid, null, inAppOn, payload, { key: event.key, type: event.type })
-      const emailOn = await prefEnabled(uid, input.type, 'EMAIL')
-      await createAndAttempt(event.id, 'EMAIL', uid, emailOn ? maskEmail(userEmails.get(uid) ?? '') : null, emailOn, payload, { key: event.key, type: event.type })
-    }
-
-    // 5) zunanji prejemnik (stranka): EMAIL + SMS/WHATSAPP prek adapter plasti —
-    //    nekonfiguriran kanal ostane SKIPPED (R438), konfiguriran provider pa se poskusi
-    if (input.customerEmail) {
-      await createAndAttempt(event.id, 'EMAIL', null, maskEmail(input.customerEmail), true, payload, { key: event.key, type: event.type })
-      for (const ch of ['SMS', 'WHATSAPP'] as const) {
-        if (providerConfigured(ch)) {
-          await createAndAttempt(event.id, ch, null, maskEmail(input.customerEmail), true, payload, { key: event.key, type: event.type })
-            .catch(() => {}) // unique spamet → ne prekini toka
-        } else {
-          await db.notificationDelivery.create({
-            data: { eventId: event.id, channel: ch, userId: null, recipient: null, status: 'SKIPPED', error: 'kanal ni konfiguriran' },
-          }).catch(() => {}) // unique spamet → ne prekini toka
-        }
-      }
-    }
+    const rec = await recordEvent(input)
+    if (rec) await deliverEvent(rec)
   } catch (err) {
     // R438: odpoved obvestil NIKOLI ne sme prekiniti poslovnega toka
     console.error('[notify] emitEvent odpoved (poslovni tok se nadaljuje):', input.type, input.key, err)

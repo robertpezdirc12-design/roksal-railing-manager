@@ -37,17 +37,22 @@ export async function PATCH (req: NextRequest) {
   }
   if (Object.keys(patch).length === 0) return jsonError(400, 'Ni sprememb za izvedbo.')
 
-  const updated = await db.user.update({
-    where: { id },
-    data: patch,
-    select: { id: true, email: true, name: true, role: true, active: true, createdAt: true },
-  })
-  await writeAudit({
-    userId: auth.user.id,
-    action: patch.role ? 'USER_ROLE_CHANGE' : patch.active === false ? 'USER_DEACTIVATE' : 'USER_ACTIVATE',
-    entity: 'user',
-    entityId: id,
-    detail: { from: { role: target.role, active: target.active }, to: { role: updated.role, active: updated.active } },
+  // R537 (transakcijska celovitost): sprememba uporabnika + revizija v ENI
+  // transakciji (občutljiva mutacija — vloga/deaktivacija ne sme ostati brez sledi).
+  const updated = await db.$transaction(async (tx) => {
+    const updated = await tx.user.update({
+      where: { id },
+      data: patch,
+      select: { id: true, email: true, name: true, role: true, active: true, createdAt: true },
+    })
+    await writeAudit({
+      userId: auth.user.id,
+      action: patch.role ? 'USER_ROLE_CHANGE' : patch.active === false ? 'USER_DEACTIVATE' : 'USER_ACTIVATE',
+      entity: 'user',
+      entityId: id,
+      detail: { from: { role: target.role, active: target.active }, to: { role: updated.role, active: updated.active } },
+    }, tx)
+    return updated
   })
   return NextResponse.json({ data: updated })
 }

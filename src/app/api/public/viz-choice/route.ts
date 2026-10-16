@@ -3,7 +3,7 @@ import { db } from '@/lib/db'
 import { jsonError } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
 import { rateLimited, tokenBucketKey } from '@/lib/rate-limit'
-import { emitEvent } from '@/lib/notify'
+import { deliverEvent, recordEvent } from '@/lib/notify'
 import { choiceSummary, VIZ_REQUEST_TYPE_LABELS, validVizChoiceInput, VIZ_TOKEN_MAX, VIZ_TOKEN_MIN } from '@/lib/viz-core'
 
 // /api/public/viz-choice — STRANKIN IZBOR VARIANTE (R480 — issue #9 §10)
@@ -66,63 +66,74 @@ export async function POST (req: NextRequest) {
     return jsonError(400, 'Varianta je umaknjena iz ponudbe.')
   }
 
-  // LEAD — če je stranka pustila katerikoli kontakt (predprodaja §10)
+  // R537 (transakcijska celovitost): vod (če je pustila kontakt) + izbor +
+  // revizija + zapis obvestila (outbox) v ENI transakciji — prej sta bila LEAD
+  // in IZBOR ločena await-a (padec srednjega koraka = izbor brez voda ali brez
+  // revizije/dogodka). Dostava (OFFICE IN_APP + webhook HTTP) teče PO commitu
+  // (deliverEvent, ognjevarna) — javna povezava ostane hitra.
   const hasContact = !!(value.contactName || value.contactPhone || value.contactEmail)
-  let leadId: string | null = null
-  if (hasContact) {
-    const lead = await db.lead.create({
+  const { choice, recorded } = await db.$transaction(async (tx) => {
+    // LEAD — če je stranka pustila katerikoli kontakt (predprodaja §10)
+    let leadId: string | null = null
+    if (hasContact) {
+      const lead = await tx.lead.create({
+        data: {
+          name: value.contactName ?? `Stranka prek vizualizatorja (${link.project.code})`,
+          email: value.contactEmail,
+          phone: value.contactPhone,
+          source: 'VIZUALIZATOR', // R480: vir iz javnega vizualizatorja (§10)
+          status: 'NOV',
+          note: `Izbor variante ${viz.variantLabel} na projektu ${link.project.code} (${link.project.title}); zahteva: ${VIZ_REQUEST_TYPE_LABELS[value.requestType]}${value.note ? `; opomba stranke: ${value.note}` : ''}`,
+        },
+      })
+      leadId = lead.id
+    }
+
+    const choice = await tx.visualizationChoice.create({
       data: {
-        name: value.contactName ?? `Stranka prek vizualizatorja (${link.project.code})`,
-        email: value.contactEmail,
-        phone: value.contactPhone,
-        source: 'VIZUALIZATOR', // R480: vir iz javnega vizualizatorja (§10)
-        status: 'NOV',
-        note: `Izbor variante ${viz.variantLabel} na projektu ${link.project.code} (${link.project.title}); zahteva: ${VIZ_REQUEST_TYPE_LABELS[value.requestType]}${value.note ? `; opomba stranke: ${value.note}` : ''}`,
+        projectId: link.projectId,
+        visualizationId: viz.id,
+        variantLabel: viz.variantLabel, // SNAPSHOT ob izbiri (črka se lahko reciklira po ARHIV)
+        chosenAt: new Date(),
+        chosenVia: 'VIZUALIZATOR',
+        requestType: value.requestType,
+        leadId,
+        linkId: link.id,
+        note: value.note,
+        contactName: value.contactName,
+        contactPhone: value.contactPhone,
+        contactEmail: value.contactEmail,
+        consentAcceptedAt: new Date(),
       },
     })
-    leadId = lead.id
-  }
 
-  const choice = await db.visualizationChoice.create({
-    data: {
+    // revizija — BREZ kontakta in BREZ žetona (entityId = choice id, vzorec R479)
+    await writeAudit({
+      userId: null, // javni izbor — ni prijavljenega uporabnika
+      action: 'VIZ_CHOICE_CREATE', entity: 'visualizationChoice', entityId: choice.id,
       projectId: link.projectId,
-      visualizationId: viz.id,
-      variantLabel: viz.variantLabel, // SNAPSHOT ob izbiri (črka se lahko reciklira po ARHIV)
-      chosenAt: new Date(),
-      chosenVia: 'VIZUALIZATOR',
-      requestType: value.requestType,
-      leadId,
-      linkId: link.id,
-      note: value.note,
-      contactName: value.contactName,
-      contactPhone: value.contactPhone,
-      contactEmail: value.contactEmail,
-      consentAcceptedAt: new Date(),
-    },
+      detail: {
+        variantLabel: viz.variantLabel,
+        requestType: value.requestType,
+        leadId, // samo kazalec na vod; kontakt ostaja v CRM
+        chosenVia: 'VIZUALIZATOR',
+      },
+    }, tx)
+
+    // obvestilo pisarni (ognjevarena dostava PO commitu — dedup po choice id)
+    const recorded = await recordEvent({
+      type: 'VIZ_CHOICE',
+      key: `viz-choice:${choice.id}`,
+      title: `Izbor variante ${viz.variantLabel} — ${link.project.code}`,
+      body: `Stranka je izbrala varianto ${viz.variantLabel} na projektu ${link.project.code} in zahteva: ${VIZ_REQUEST_TYPE_LABELS[value.requestType]}.${leadId ? ' Kontakt je zabeležen — nov vod v CRM.' : ''}`,
+      projectId: link.projectId,
+      audience: 'OFFICE',
+    }, tx)
+    return { choice, recorded }
   })
 
-  // revizija — BREZ kontakta in BREZ žetona (entityId = choice id, vzorec R479)
-  await writeAudit({
-    userId: null, // javni izbor — ni prijavljenega uporabnika
-    action: 'VIZ_CHOICE_CREATE', entity: 'visualizationChoice', entityId: choice.id,
-    projectId: link.projectId,
-    detail: {
-      variantLabel: viz.variantLabel,
-      requestType: value.requestType,
-      leadId, // samo kazalec na vod; kontakt ostane v CRM
-      chosenVia: 'VIZUALIZATOR',
-    },
-  })
-
-  // obvestilo pisarni (ognjevaren emitEvent — dedup po choice id)
-  await emitEvent({
-    type: 'VIZ_CHOICE',
-    key: `viz-choice:${choice.id}`,
-    title: `Izbor variante ${viz.variantLabel} — ${link.project.code}`,
-    body: `Stranka je izbrala varianto ${viz.variantLabel} na projektu ${link.project.code} in zahteva: ${VIZ_REQUEST_TYPE_LABELS[value.requestType]}.${leadId ? ' Kontakt je zabeležen — nov vod v CRM.' : ''}`,
-    projectId: link.projectId,
-    audience: 'OFFICE',
-  })
+  // dostava obvestila PO uspešnem commitu (ognjevarna — nikoli ne vrže napake)
+  if (recorded) await deliverEvent(recorded)
 
   return NextResponse.json({ data: choiceSummary(choice) }, { status: 201 })
 }

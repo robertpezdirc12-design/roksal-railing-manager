@@ -39,17 +39,22 @@ export async function POST (req: NextRequest, { params }: Params) {
   if (!note) return jsonError(400, 'Besedilo dogodka je obvezno.')
   if (note.length > 1000) return jsonError(400, 'Besedilo je predolgo (največ 1000 znakov).')
 
-  const event = await db.workOrderEvent.create({
-    data: { workOrderId: id, userId: auth.user.id, type, note },
-    include: { user: { select: { name: true } } },
-  })
-
-  if (type === 'TEZAVA') {
-    await writeAudit({
-      userId: auth.user.id, action: 'WO_TROUBLE', entity: 'workOrder', entityId: id,
-      projectId: wo.projectId,
-      detail: { workOrder: wo.code, note: note.slice(0, 400) },
+  // R537 (transakcijska celovitost): dogodek + (ob TEŽAVI) revizija v ENI
+  // transakciji — občutljiva mutacija ne sme ostati brez sledi.
+  const event = await db.$transaction(async (tx) => {
+    const event = await tx.workOrderEvent.create({
+      data: { workOrderId: id, userId: auth.user.id, type, note },
+      include: { user: { select: { name: true } } },
     })
-  }
+
+    if (type === 'TEZAVA') {
+      await writeAudit({
+        userId: auth.user.id, action: 'WO_TROUBLE', entity: 'workOrder', entityId: id,
+        projectId: wo.projectId,
+        detail: { workOrder: wo.code, note: note.slice(0, 400) },
+      }, tx)
+    }
+    return event
+  })
   return NextResponse.json({ data: event }, { status: 201 })
 }

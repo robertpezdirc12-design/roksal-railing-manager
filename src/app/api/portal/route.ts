@@ -3,7 +3,7 @@ import { randomUUID } from 'crypto'
 import { db } from '@/lib/db'
 import { jsonError, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
-import { emitEvent } from '@/lib/notify'
+import { deliverEvent, recordEvent } from '@/lib/notify'
 
 // /api/portal — povezave portala stranke (route-map izvirnika: /portal + /p/[token])
 // GET  (portal.manage): ?projectId=… → povezave projekta (+ status veljavnosti)
@@ -65,30 +65,41 @@ export async function POST (req: NextRequest) {
   const days = Number(body?.days)
   const d = Number.isFinite(days) && days >= 1 && days <= 365 ? Math.trunc(days) : 90
 
-  const link = await db.portalLink.create({
-    data: {
-      token: 'pt-' + randomUUID().replace(/-/g, ''),
+  // R537 (transakcijska celovitost): povezava portala + revizija + zapis
+  // obvestila (outbox) v ENI transakciji — padec srednjega koraka NE pusti
+  // objavljene povezave brez revizije/dogodka. Dostava (stranka EMAIL + webhook
+  // HTTP) teče PO commitu (deliverEvent, ognjevarna).
+  const { link, recorded } = await db.$transaction(async (tx) => {
+    const link = await tx.portalLink.create({
+      data: {
+        token: 'pt-' + randomUUID().replace(/-/g, ''),
+        projectId,
+        note: typeof body?.note === 'string' && body.note.trim() ? body.note.trim() : null,
+        expiresAt: new Date(Date.now() + d * 86400000),
+      },
+    })
+    await writeAudit({
+      userId: user.id, action: 'PORTAL_CREATE', entity: 'portalLink', entityId: link.id, projectId,
+      detail: { project: project.code, days: d },
+    }, tx)
+
+    // R438 (issue #5): objava portala → statusno obvestilo stranki (EMAIL).
+    // Pozor: žetona NE vključimo v telo obvestila (varnost — povezavo posreduje pisarna).
+    // R537: ZAPIS dogodka v isti tx (outbox), dostava PO commitu (ognjevarna).
+    const recorded = await recordEvent({
+      type: 'PORTAL_PUBLISHED',
+      key: `portal-published:${link.id}`,
+      title: `Objavljen portal projekta ${project.code}`,
+      body: `Objavljen portal projekta ${project.code} — sledite poteku del na povezavi, ki vam jo je posredovala pisarna.`,
       projectId,
-      note: typeof body?.note === 'string' && body.note.trim() ? body.note.trim() : null,
-      expiresAt: new Date(Date.now() + d * 86400000),
-    },
-  })
-  await writeAudit({
-    userId: user.id, action: 'PORTAL_CREATE', entity: 'portalLink', entityId: link.id, projectId,
-    detail: { project: project.code, days: d },
+      customerEmail: project.customer?.email ?? null,
+      customerName: project.customer?.name ?? null,
+    }, tx)
+    return { link, recorded }
   })
 
-  // R438 (issue #5): objava portala → statusno obvestilo stranki (EMAIL).
-  // Pozor: žetona NE vključimo v telo obvestila (varnost — povezavo posreduje pisarna).
-  await emitEvent({
-    type: 'PORTAL_PUBLISHED',
-    key: `portal-published:${link.id}`,
-    title: `Objavljen portal projekta ${project.code}`,
-    body: `Objavljen portal projekta ${project.code} — sledite poteku del na povezavi, ki vam jo je posredovala pisarna.`,
-    projectId,
-    customerEmail: project.customer?.email ?? null,
-    customerName: project.customer?.name ?? null,
-  })
+  // dostava obvestila PO uspešnem commitu (ognjevarna — nikoli ne vrže napake)
+  if (recorded) await deliverEvent(recorded)
 
   return NextResponse.json({ data: link }, { status: 201 })
 }

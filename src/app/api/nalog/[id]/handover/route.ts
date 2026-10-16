@@ -76,21 +76,32 @@ export async function PATCH (req: NextRequest, { params }: Params) {
     ? await db.handoverReport.findUnique({ where: { id: body.reportId } })
     : await db.handoverReport.findFirst({ where: { workOrderId: id }, orderBy: { version: 'desc' } })
   if (!row || row.workOrderId !== id) return jsonError(404, 'Poročilo primopredaje ne obstaja za ta nalog.')
+  // R537: ozka naveza za znotraj transakcijskih callbackov (TS ozko določanje
+  // `let row` ne preživi meje closure-a).
+  const trenutni = row
 
   const scoped = await obsegNaloga(auth.user, id)
   if (scoped.error || !scoped.wo) return jsonError(scoped.conflict ? 403 : 404, scoped.error ?? 'Nalog ne obstaja.')
+  // R537: ozka naveza za znotraj transakcijskega callbacka (TS ozko določanje
+  // `scoped.wo` ne preživi meje closure-a).
+  const wo = scoped.wo
+  const woCode = wo.code
 
   const now = new Date()
 
   if (action === 'monter-confirm') {
     if (row.monterConfirmedAt) return jsonError(409, 'Monter je to verzijo že potrdil.', 'Potrditev velja za verzijo poročila; za spremembo zgradite novo verzijo.')
-    row = await db.handoverReport.update({
-      where: { id: row.id },
-      data: { monterConfirmedAt: now, monterConfirmedById: auth.user.id },
-    })
-    await writeAudit({
-      userId: auth.user.id, action: 'HANDOVER_MONTER_CONFIRM', entity: 'handoverReport', entityId: row.id,
-      projectId: row.projectId, detail: { workOrder: scoped.wo.code, version: row.version },
+    // R537 (transakcijska celovitost): potrditev + revizija v ENI transakciji.
+    row = await db.$transaction(async (tx) => {
+      const posodobljen = await tx.handoverReport.update({
+        where: { id: trenutni.id },
+        data: { monterConfirmedAt: now, monterConfirmedById: auth.user.id },
+      })
+      await writeAudit({
+        userId: auth.user.id, action: 'HANDOVER_MONTER_CONFIRM', entity: 'handoverReport', entityId: posodobljen.id,
+        projectId: posodobljen.projectId, detail: { workOrder: woCode, version: posodobljen.version },
+      }, tx)
+      return posodobljen
     })
   } else if (action === 'sign') {
     if (row.customerSignedAt) return jsonError(409, 'Stranka je to verzijo že podpisala.', 'Za spremembo zgradite novo verzijo poročila — ta podpis ostane v zgodovini.')
@@ -108,23 +119,27 @@ export async function PATCH (req: NextRequest, { params }: Params) {
     // NE sme tihe izginiti (issue #12 §2D)
     const remark = typeof body.remark === 'string' ? body.remark.trim() : ''
     if (remark.length > 1000) return jsonError(400, 'Pripomba je predolga (največ 1000 znakov).')
-    row = await db.handoverReport.update({
-      where: { id: row.id },
-      data: {
-        customerSignature: signatureDataUrl,
-        customerSignedAt: now,
-        customerSignedBy: signedBy,
-        ...(remark ? { customerRemark: remark } : {}),
-      },
-    })
-    await writeAudit({
-      userId: auth.user.id, action: 'HANDOVER_SIGN', entity: 'handoverReport', entityId: row.id,
-      projectId: row.projectId,
-      detail: {
-        workOrder: scoped.wo.code, version: row.version, signedBy,
-        ...(remark ? { remark: remark.slice(0, 200) } : {}),
-        vrsta: 'ZABELEŽENA potrditev (ne kvalificiran e-podpis)',
-      },
+    // R537 (transakcijska celovitost): podpis + revizija v ENI transakciji.
+    row = await db.$transaction(async (tx) => {
+      const posodobljen = await tx.handoverReport.update({
+        where: { id: trenutni.id },
+        data: {
+          customerSignature: signatureDataUrl,
+          customerSignedAt: now,
+          customerSignedBy: signedBy,
+          ...(remark ? { customerRemark: remark } : {}),
+        },
+      })
+      await writeAudit({
+        userId: auth.user.id, action: 'HANDOVER_SIGN', entity: 'handoverReport', entityId: posodobljen.id,
+        projectId: posodobljen.projectId,
+        detail: {
+          workOrder: woCode, version: posodobljen.version, signedBy,
+          ...(remark ? { remark: remark.slice(0, 200) } : {}),
+          vrsta: 'ZABELEŽENA potrditev (ne kvalificiran e-podpis)',
+        },
+      }, tx)
+      return posodobljen
     })
   } else if (action === 'remark') {
     const remark = typeof body.remark === 'string' ? body.remark.trim() : ''
@@ -135,20 +150,28 @@ export async function PATCH (req: NextRequest, { params }: Params) {
       return jsonError(400, 'Ni pripombe za izbris.')
     }
     const prej = row.customerRemark
-    row = await db.handoverReport.update({ where: { id: row.id }, data: { customerRemark: remark || null } })
-    await writeAudit({
-      userId: auth.user.id, action: 'HANDOVER_REMARK', entity: 'handoverReport', entityId: row.id,
-      projectId: row.projectId,
-      detail: { workOrder: scoped.wo.code, version: row.version, remark: remark.slice(0, 200) || null, prej: prej?.slice(0, 200) ?? null, izbris: !remark },
+    // R537 (transakcijska celovitost): pripomba + revizija v ENI transakciji.
+    row = await db.$transaction(async (tx) => {
+      const posodobljen = await tx.handoverReport.update({ where: { id: trenutni.id }, data: { customerRemark: remark || null } })
+      await writeAudit({
+        userId: auth.user.id, action: 'HANDOVER_REMARK', entity: 'handoverReport', entityId: posodobljen.id,
+        projectId: posodobljen.projectId,
+        detail: { workOrder: woCode, version: posodobljen.version, remark: remark.slice(0, 200) || null, prej: prej?.slice(0, 200) ?? null, izbris: !remark },
+      }, tx)
+      return posodobljen
     })
   } else if (action === 'summary') {
     const summary = typeof body.summary === 'string' ? body.summary.trim() : ''
     if (!summary) return jsonError(400, 'Povzetek je obvezen.')
     if (summary.length > 2000) return jsonError(400, 'Povzetek je predolg (največ 2000 znakov).')
-    row = await db.handoverReport.update({ where: { id: row.id }, data: { summary } })
-    await writeAudit({
-      userId: auth.user.id, action: 'HANDOVER_SUMMARY', entity: 'handoverReport', entityId: row.id,
-      projectId: row.projectId, detail: { workOrder: scoped.wo.code, version: row.version },
+    // R537 (transakcijska celovitost): povzetek + revizija v ENI transakciji.
+    row = await db.$transaction(async (tx) => {
+      const posodobljen = await tx.handoverReport.update({ where: { id: trenutni.id }, data: { summary } })
+      await writeAudit({
+        userId: auth.user.id, action: 'HANDOVER_SUMMARY', entity: 'handoverReport', entityId: posodobljen.id,
+        projectId: posodobljen.projectId, detail: { workOrder: woCode, version: posodobljen.version },
+      }, tx)
+      return posodobljen
     })
   } else {
     return jsonError(400, 'Neznana akcija.', 'Veljavne akcije: monter-confirm, sign, remark, summary.')

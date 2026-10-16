@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { db } from '@/lib/db'
 import { jsonError, managesAssignments, readsAllData, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
-import { emitEvent, fmtTermin } from '@/lib/notify'
+import { deliverEvent, recordEvent, fmtTermin, type RecordedEvent } from '@/lib/notify'
 import { parseBody } from '@/lib/validate'
 
 type Params = { params: Promise<{ id: string }> }
@@ -119,60 +119,74 @@ export async function PATCH (req: NextRequest, { params }: Params) {
 
   if (Object.keys(patch).length === 0) return jsonError(400, 'Ni sprememb za izvedbo.')
 
-  const updated = await db.workOrder.update({
-    where: { id },
-    data: patch,
-    include: { project: { select: { code: true } }, assignee: { select: { name: true } }, crew: { select: { name: true, type: true } } },
-  })
-
   const instructionsChanged = 'instructions' in patch && patch.instructions !== order.instructions
-  if (assigneeChanged && patch.assigneeId) {
-    await db.workOrderEvent.create({
-      data: {
-        workOrderId: id, userId: user.id, type: 'DODELJEN',
-        note: `Dodelitev: ${updated.assignee?.name ?? String(patch.assigneeId)}`,
-      },
+  // R537 (transakcijska celovitost): posodobitev + dogodek DODELJEN + reviziji
+  // (WO_UPDATE, morebiti WO_CREW_ASSIGN) + zapis obvestil (outbox) v ENI
+  // transakciji — padec srednjega koraka NE pusti spremembe brez revizije/dogodka.
+  // Dostava obvestil (IN_APP/EMAIL/webhook HTTP) teče PO commitu (deliverEvent).
+  const { updated, dogodki } = await db.$transaction(async (tx) => {
+    const updated = await tx.workOrder.update({
+      where: { id },
+      data: patch,
+      include: { project: { select: { code: true } }, assignee: { select: { name: true } }, crew: { select: { name: true, type: true } } },
     })
-  }
-  await writeAudit({
-    userId: user.id, action: 'WO_UPDATE', entity: 'workOrder', entityId: id, projectId: updated.projectId ?? order.projectId,
-    detail: { code: order.code, polja: Object.keys(patch) },
+
+    if (assigneeChanged && patch.assigneeId) {
+      await tx.workOrderEvent.create({
+        data: {
+          workOrderId: id, userId: user.id, type: 'DODELJEN',
+          note: `Dodelitev: ${updated.assignee?.name ?? String(patch.assigneeId)}`,
+        },
+      })
+    }
+    await writeAudit({
+      userId: user.id, action: 'WO_UPDATE', entity: 'workOrder', entityId: id, projectId: updated.projectId ?? order.projectId,
+      detail: { code: order.code, polja: Object.keys(patch) },
+    }, tx)
+
+    // R445 (issue #7 §9): sprememba ekipe na nalogu — lastna revizija WO_CREW_ASSIGN
+    if (crewChanged) {
+      await writeAudit({
+        userId: user.id, action: 'WO_CREW_ASSIGN', entity: 'workOrder', entityId: id, projectId: updated.projectId ?? order.projectId,
+        detail: { code: order.code, crewId: patch.crewId ?? null, prej: order.crewId ?? null, ekipa: updated.crew?.name ?? null },
+      }, tx)
+    }
+
+    // R438 (issue #5): obvestili — ZAPIS dogodkov v isti tx (outbox, ognjevarena
+    // dostava PO commitu), ki ne motita odgovora ruta
+    const dogodki: RecordedEvent[] = []
+    if (assigneeChanged && patch.assigneeId) {
+      const rec = await recordEvent({
+        type: 'WO_ASSIGNED',
+        key: `wo-assign:${id}:${String(patch.assigneeId)}:${Date.now()}`,
+        title: 'Nov nalog dodeljen',
+        body: [
+          `${updated.code} — ${updated.title}`,
+          updated.project ? `projekt ${updated.project.code}` : null,
+          updated.scheduledFor ? `termin: ${fmtTermin(updated.scheduledFor)}` : null,
+          updated.instructions ? `navodila: ${updated.instructions.slice(0, 160)}` : null,
+        ].filter(Boolean).join(' · '),
+        projectId: updated.projectId ?? null,
+        userIds: [String(patch.assigneeId)],
+      }, tx)
+      if (rec) dogodki.push(rec)
+    }
+    if (instructionsChanged && updated.assigneeId) {
+      const rec = await recordEvent({
+        type: 'WO_INSTRUCTIONS',
+        key: `wo-instructions:${id}:${Date.now()}`,
+        title: 'Nova navodila za nalog',
+        body: `${updated.code} — ${updated.title}: ${updated.instructions ?? ''}`.slice(0, 300),
+        projectId: updated.projectId ?? null,
+        userIds: [updated.assigneeId],
+      }, tx)
+      if (rec) dogodki.push(rec)
+    }
+    return { updated, dogodki }
   })
 
-  // R445 (issue #7 §9): sprememba ekipe na nalogu — lastna revizija WO_CREW_ASSIGN
-  if (crewChanged) {
-    await writeAudit({
-      userId: user.id, action: 'WO_CREW_ASSIGN', entity: 'workOrder', entityId: id, projectId: updated.projectId ?? order.projectId,
-      detail: { code: order.code, crewId: patch.crewId ?? null, prej: order.crewId ?? null, ekipa: updated.crew?.name ?? null },
-    })
-  }
-
-  // R438 (issue #5): obvestili — ognjevarti klici, ki ne motita odgovora ruta
-  if (assigneeChanged && patch.assigneeId) {
-    await emitEvent({
-      type: 'WO_ASSIGNED',
-      key: `wo-assign:${id}:${String(patch.assigneeId)}:${Date.now()}`,
-      title: 'Nov nalog dodeljen',
-      body: [
-        `${updated.code} — ${updated.title}`,
-        updated.project ? `projekt ${updated.project.code}` : null,
-        updated.scheduledFor ? `termin: ${fmtTermin(updated.scheduledFor)}` : null,
-        updated.instructions ? `navodila: ${updated.instructions.slice(0, 160)}` : null,
-      ].filter(Boolean).join(' · '),
-      projectId: updated.projectId ?? null,
-      userIds: [String(patch.assigneeId)],
-    })
-  }
-  if (instructionsChanged && updated.assigneeId) {
-    await emitEvent({
-      type: 'WO_INSTRUCTIONS',
-      key: `wo-instructions:${id}:${Date.now()}`,
-      title: 'Nova navodila za nalog',
-      body: `${updated.code} — ${updated.title}: ${updated.instructions ?? ''}`.slice(0, 300),
-      projectId: updated.projectId ?? null,
-      userIds: [updated.assigneeId],
-    })
-  }
+  // dostava obvestil PO uspešnem commitu (ognjevarna — nikoli ne vrže napake)
+  for (const dogodek of dogodki) await deliverEvent(dogodek)
 
   return NextResponse.json({ data: updated })
 }

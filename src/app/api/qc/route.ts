@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { jsonError, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
-import { emitEvent } from '@/lib/notify'
+import { deliverEvent, recordEvent } from '@/lib/notify'
 
 // /api/qc — kontrola kakovosti proizvodnih nalogov (route-map: GET/POST /api/qc)
 // GET  (production.read): ?productionOrderId=… → kontrole naloga (+ osnovni podatki naloga)
@@ -47,32 +47,43 @@ export async function POST (req: NextRequest) {
   const order = await db.productionOrder.findUnique({ where: { id: productionOrderId }, select: { id: true, code: true, projectId: true } })
   if (!order) return jsonError(404, 'Proizvodni nalog ne obstaja.')
 
-  const check = await db.qcCheck.create({
-    data: {
-      productionOrderId,
-      item,
-      result,
-      note: typeof body?.note === 'string' && body.note.trim() ? body.note.trim() : null,
-      userId: user.id,
-    },
-  })
-
-  await writeAudit({
-    userId: user.id, action: 'QC_CHECK', entity: 'productionOrder', entityId: order.id, projectId: order.projectId,
-    detail: { code: order.code, item, result },
-  })
-
-  // R438 (issue #5): neustrezna kontrola (NOK) → obvestilo pisarni (OFFICE)
-  if (result === 'NOK') {
-    await emitEvent({
-      type: 'QC_NOK',
-      key: `qc-nok:${check.id}`,
-      title: 'QC neustrezno',
-      body: `Kontrola NOK na ${order.code}: ${item}${body?.note ? ` — ${String(body.note).slice(0, 160)}` : ''}`,
-      projectId: order.projectId,
-      audience: 'OFFICE',
+  // R537 (transakcijska celovitost): kontrola + revizija + zapis obvestila
+  // (outbox) v ENI transakciji — padec srednjega koraka NE pusti kontrole brez
+  // revizije/dogodka. Dostava (OFFICE IN_APP + webhook HTTP) teče PO commitu
+  // (deliverEvent, ognjevarna).
+  const { check, recorded } = await db.$transaction(async (tx) => {
+    const check = await tx.qcCheck.create({
+      data: {
+        productionOrderId,
+        item,
+        result,
+        note: typeof body?.note === 'string' && body.note.trim() ? body.note.trim() : null,
+        userId: user.id,
+      },
     })
-  }
+
+    await writeAudit({
+      userId: user.id, action: 'QC_CHECK', entity: 'productionOrder', entityId: order.id, projectId: order.projectId,
+      detail: { code: order.code, item, result },
+    }, tx)
+
+    // R438 (issue #5): neustrezna kontrola (NOK) → obvestilo pisarni (OFFICE) —
+    // R537: ZAPIS dogodka v isti tx (outbox), dostava PO commitu (ognjevarna).
+    const recorded = result === 'NOK'
+      ? await recordEvent({
+        type: 'QC_NOK',
+        key: `qc-nok:${check.id}`,
+        title: 'QC neustrezno',
+        body: `Kontrola NOK na ${order.code}: ${item}${body?.note ? ` — ${String(body.note).slice(0, 160)}` : ''}`,
+        projectId: order.projectId,
+        audience: 'OFFICE',
+      }, tx)
+      : null
+    return { check, recorded }
+  })
+
+  // dostava obvestila PO uspešnem commitu (ognjevarna — nikoli ne vrže napake)
+  if (recorded) await deliverEvent(recorded)
 
   return NextResponse.json({ data: check }, { status: 201 })
 }

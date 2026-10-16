@@ -53,22 +53,27 @@ export async function POST (req: NextRequest) {
   if (!parsed.ok) return parsed.response
   const data = parsed.data
 
-  const customer = await db.customer.create({
-    data: {
-      name: data.name,
-      email: data.email,
-      phone: data.phone,
-      address: data.address,
-      city: data.city,
-      taxId: data.taxId,
-      note: data.note,
-    },
-    include: { _count: { select: { projects: true, quotes: true } } },
-  })
+  // R537 (transakcijska celovitost): stranka + revizija v ENI transakciji —
+  // padec revizije NE pusti stranke brez sledi.
+  const customer = await db.$transaction(async (tx) => {
+    const customer = await tx.customer.create({
+      data: {
+        name: data.name,
+        email: data.email,
+        phone: data.phone,
+        address: data.address,
+        city: data.city,
+        taxId: data.taxId,
+        note: data.note,
+      },
+      include: { _count: { select: { projects: true, quotes: true } } },
+    })
 
-  await writeAudit({
-    userId: auth.user.id, action: 'CUSTOMER_CREATE', entity: 'customer', entityId: customer.id,
-    detail: { name: customer.name },
+    await writeAudit({
+      userId: auth.user.id, action: 'CUSTOMER_CREATE', entity: 'customer', entityId: customer.id,
+      detail: { name: customer.name },
+    }, tx)
+    return customer
   })
   return NextResponse.json({ data: customer }, { status: 201 })
 }

@@ -110,8 +110,18 @@ def bun_out (script):
 
 
 def read_src (relpath):
-    with open(os.path.join(REPO, relpath), encoding='utf-8') as f:
-        return f.read()
+        # R537: veliki moduli so razbiti v podmapo (modul.tsx + modul/*) —
+        # statični pregled velja za celo funkcionalnost, ne samo datoteko.
+        p = os.path.join(REPO, relpath)
+        with open(p, encoding='utf-8') as f:
+            besedilo = f.read()
+        podmapa = p.rsplit('.', 1)[0]
+        if os.path.isdir(podmapa):
+            for ime in sorted(os.listdir(podmapa)):
+                if ime.endswith(('.ts', '.tsx')):
+                    with open(os.path.join(podmapa, ime), encoding='utf-8') as f:
+                        besedilo += '\n' + f.read()
+        return besedilo
 
 
 def src_has (relpath, needle):
@@ -630,7 +640,9 @@ for root, _dirs, files in os.walk(os.path.join(REPO, 'src')):
             text = read_src(rel)
         except Exception:
             continue
-        for m in re.finditer(r'db\.measurement\.create\(', text):
+        # R537: transakcije — create teče na tx klientu znotraj $transaction;
+        # status se še vedno nastavi eksplicitno.
+        for m in re.finditer(r'(?:db|tx)\.measurement\.create\(', text):
             okno = text[m.end():m.end() + 900]
             USTVARJALNE.append((rel, bool(re.search(r'\n\s*status:', okno))))
 chk(len(USTVARJALNE) >= 7 and all(nastavljeno for _rel, nastavljeno in USTVARJALNE),

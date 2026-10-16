@@ -54,18 +54,22 @@ export async function PATCH (req: NextRequest, { params }: Params) {
   if (!existing) return jsonError(404, 'Račun ne obstaja.')
   if (existing.status === status) return jsonError(400, 'Račun je že v tem statusu.')
 
-  const updated = await db.invoice.update({
-    where: { id },
-    data: { status },
-    include: {
-      project: { select: { code: true, title: true, customer: { select: { name: true } } } },
-      quote: { select: { code: true } },
-      payments: { orderBy: { createdAt: 'asc' } },
-    },
-  })
-  await writeAudit({
-    userId: auth.user.id, action: 'INVOICE_STATUS', entity: 'invoice', entityId: id, projectId: existing.projectId,
-    detail: { code: existing.code, from: existing.status, to: status },
+  // R537 (transakcijska celovitost): sprememba statusa + revizija v ENI transakciji.
+  const updated = await db.$transaction(async (tx) => {
+    const updated = await tx.invoice.update({
+      where: { id },
+      data: { status },
+      include: {
+        project: { select: { code: true, title: true, customer: { select: { name: true } } } },
+        quote: { select: { code: true } },
+        payments: { orderBy: { createdAt: 'asc' } },
+      },
+    })
+    await writeAudit({
+      userId: auth.user.id, action: 'INVOICE_STATUS', entity: 'invoice', entityId: id, projectId: existing.projectId,
+      detail: { code: existing.code, from: existing.status, to: status },
+    }, tx)
+    return updated
   })
   return NextResponse.json({ data: updated })
 }

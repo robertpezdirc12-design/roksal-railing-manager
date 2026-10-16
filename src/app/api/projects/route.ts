@@ -4,6 +4,7 @@ import { db } from '@/lib/db'
 import { readsAllData, requirePermission } from '@/lib/auth'
 import { nextCodeFromList } from '@/lib/codes'
 import { parseBody } from '@/lib/validate'
+import { retryOnUnique } from '@/lib/versioning'
 
 // R536: zod shema za ustvarjanje projekta — naslov obvezen (neprazno po trim),
 // status ima privzeto vrednost NACRT (kot prej, brez seznama dovoljenih),
@@ -49,19 +50,25 @@ export async function POST (req: NextRequest) {
   const data = parsed.data
 
   // R439: koda glede na zasedene (count pade ob brisanju → unikatnost ni zagotovljena)
-  const existingCodes = await db.project.findMany({ where: { code: { startsWith: 'P-' } }, select: { code: true } })
-  const code = nextCodeFromList(existingCodes.map((p) => p.code), 'P-')
+  // R537 (vzorec R535 za ponudbe): koda + zapis v ENI transakciji (koda se bere
+  // ZNOTRAJ tx); ob sočasnem P2002 (dva POST si izračunata isto kodo P-…) do
+  // 3 poskusi — read-then-create dirka je s tem zaprta. Ta ruta nima revizije
+  // (nespremenjeno — zapis revizije bi bil vedenjska sprememba).
+  const project = await retryOnUnique(() => db.$transaction(async (tx) => {
+    const existingCodes = await tx.project.findMany({ where: { code: { startsWith: 'P-' } }, select: { code: true } })
+    const code = nextCodeFromList(existingCodes.map((p) => p.code), 'P-')
 
-  const project = await db.project.create({
-    data: {
-      code,
-      title: data.title,
-      status: data.status,
-      customerId: data.customerId,
-      address: data.address,
-      note: data.note,
-    },
-    include: { customer: { select: { name: true, city: true } } },
-  })
+    return tx.project.create({
+      data: {
+        code,
+        title: data.title,
+        status: data.status,
+        customerId: data.customerId,
+        address: data.address,
+        note: data.note,
+      },
+      include: { customer: { select: { name: true, city: true } } },
+    })
+  }), 3)
   return NextResponse.json({ data: project }, { status: 201 })
 }
