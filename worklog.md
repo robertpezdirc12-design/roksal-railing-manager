@@ -4225,3 +4225,15 @@ Stage Summary:
 - Engine 1.4.0: harmonizacija barv prizora — vezani, deterministični barvni namig iz fotografije (meje ±22/kanal, jakost 35 %, nevtralen prizor = identiteta); dokazano z 32 novimi testi + pasom 41 skupin + E2E 21✓
 - Raziskava dokumentirana z iskrenimi presojami (kaj zavrnjeno in zakaj); naslednji koraki zabeleženi po vrednosti/izvedljivosti
 - GitLab še vedno čaka žeton lastnika (edina odprta sinhronizacijska točka); GitHub kanoničen
+
+---
+Task ID: R532-dodatek
+Agent: main (Z.ai Code)
+Task: Izdaja v1.56.0 (harmonizacija barv prizora, engine 1.4.0)
+
+Work Log:
+- package.json verzija 1.55.2 → 1.56.0 (manjša: nova zmožnost izrisa); bun.lock root verzija posodobljena prek bun install (frozen preverjen zelen)
+- oznaka v1.56.0 na izdajnem commitu; push na GitHub (GitLab blokiran — žeton)
+
+Stage Summary:
+- v1.56.0 = R531 + R532 (usklajena dokumentacija + harmonizacija barv + raziskava); pas 8+41, E2E 21✓
