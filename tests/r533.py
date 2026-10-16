@@ -141,9 +141,25 @@ try:
     r = run(['bash', 'ops/sync-check.sh'], env={**os.environ, 'SYNC_RETRIES': '2'}, cwd=REPO)
     if r.returncode == 2:
         print('  ⏸ oddaljeni repozitorij trenutno ni dosegljiv (prehodna blokada) — preskok, ne zeleno')
+    elif r.returncode == 0:
+        chk('── sinhronizacija: OK' in r.stdout, 'živo stanje OK (vsi na istem SHA)')
     else:
-        chk(r.returncode == 0, f'pravi origin+gitlab na istem SHA kot lokalni main (RC {r.returncode})')
-        chk('── sinhronizacija: OK' in r.stdout, 'živo stanje OK')
+        # RC 1 (DRIFT) med relejnim pasom je NORMALEN pre-push: lokalni main je
+        # kandidat izdaje, oddaljeni sta še na predniku. Pošteno preverjanje:
+        # vsak oddaljeni main mora biti PREDNIK lokalnega ( lokalno vsebuje
+        # vse, kar je bilo pushano). Oddaljeni NAPREJ lokalnega = PRAVI DRIFT.
+        import re as _re
+        oddaljeni = _re.findall(r'main @ (\w+) = ([0-9a-f]{12})', r.stdout)
+        vsi_predniki = True
+        for ime, sha12 in oddaljeni:
+            mb = run(['git', 'merge-base', '--is-ancestor', sha12, 'HEAD'])
+            if mb.returncode != 0:
+                vsi_predniki = False
+                bad(f'{ime} main {sha12} NI prednik lokalnega — pravi DRIFT (oddaljeni naprej/razhaja)')
+        if vsi_predniki and oddaljeni:
+            ok(f'pre-push stanje: oba oddaljena sta PREDNIKA lokalnega main (izdajni kandidat še ni pushan — pošteno, ne DRIFT)')
+        elif vsi_predniki and not oddaljeni:
+            bad('izpisa ni bilo mogoče razčleniti')
 except Exception as e:
     print(f'  ⏸ živi blok preskočen: {e}')
 
