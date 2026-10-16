@@ -8,6 +8,7 @@ import { db } from '@/lib/db'
 import { jsonError, requirePermission } from '@/lib/auth'
 import { nextCodeFromList } from '@/lib/codes'
 import { writeAudit } from '@/lib/audit'
+import { retryOnUnique } from '@/lib/versioning'
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -28,49 +29,57 @@ export async function POST (req: NextRequest, { params }: Params) {
     return jsonError(409, 'Izgubljenega voda ni mogoče pretvoriti.')
   }
 
-  // stranka: obstoječa ali nova iz podatkov voda (issue #1: nova strankina zahteva)
-  let customerId = lead.customerId
-  if (!customerId) {
-    const customer = await db.customer.create({
-      data: {
-        name: lead.name,
-        email: lead.email,
-        phone: lead.phone,
-        note: `Iz voda (vir: ${lead.source})${lead.note ? ` — ${lead.note}` : ''}`,
-      },
-    })
-    customerId = customer.id
-  }
-
-  // R439: koda glede na zasedene (count pade ob brisanju → unikatnost ni zagotovljena)
-  const existingCodes = await db.project.findMany({ where: { code: { startsWith: 'P-' } }, select: { code: true } })
-  const code = nextCodeFromList(existingCodes.map((p) => p.code), 'P-')
-
   const title = typeof body?.title === 'string' && body.title.trim() ? body.title.trim() : `Ograja — ${lead.name}`
   const address = typeof body?.address === 'string' && body.address.trim() ? body.address.trim() : null
 
-  const project = await db.project.create({
-    data: {
-      code,
-      title,
-      customerId,
-      address,
-      status: 'NACRT',
-      note: `Projekt odprt iz voda (${lead.source})${lead.note ? `: ${lead.note}` : ''}`,
-    },
-    include: { customer: { select: { name: true } } },
-  })
+  // R538: transakcijska celovitost — stranka + projekt + vod + revizija atomarno
+  // (vzorec R537-d). Koda P- se računa ZNOTRAJ transakcije na tx klientu
+  // (vzorec R535); ob sočasnem P2002 (dve pretvobi izračunata isto kodo)
+  // retryOnUnique okoli CELE transakcije ponovi z novo kodo.
+  const project = await retryOnUnique(() => db.$transaction(async (tx) => {
+    // stranka: obstoječa ali nova iz podatkov voda (issue #1: nova strankina zahteva)
+    let customerId = lead.customerId
+    if (!customerId) {
+      const customer = await tx.customer.create({
+        data: {
+          name: lead.name,
+          email: lead.email,
+          phone: lead.phone,
+          note: `Iz voda (vir: ${lead.source})${lead.note ? ` — ${lead.note}` : ''}`,
+        },
+      })
+      customerId = customer.id
+    }
 
-  await db.lead.update({ where: { id }, data: { status: 'PRETVORJEN', customerId } })
+    // R439: koda glede na zasedene (count pade ob brisanju → unikatnost ni zagotovljena)
+    const existingCodes = await tx.project.findMany({ where: { code: { startsWith: 'P-' } }, select: { code: true } })
+    const code = nextCodeFromList(existingCodes.map((p) => p.code), 'P-')
 
-  await writeAudit({
-    userId: user.id,
-    action: 'LEAD_CONVERT',
-    entity: 'lead',
-    entityId: id,
-    projectId: project.id,
-    detail: { leadName: lead.name, projectCode: code, customerId, title },
-  })
+    const project = await tx.project.create({
+      data: {
+        code,
+        title,
+        customerId,
+        address,
+        status: 'NACRT',
+        note: `Projekt odprt iz voda (${lead.source})${lead.note ? `: ${lead.note}` : ''}`,
+      },
+      include: { customer: { select: { name: true } } },
+    })
+
+    await tx.lead.update({ where: { id }, data: { status: 'PRETVORJEN', customerId } })
+
+    await writeAudit({
+      userId: user.id,
+      action: 'LEAD_CONVERT',
+      entity: 'lead',
+      entityId: id,
+      projectId: project.id,
+      detail: { leadName: lead.name, projectCode: code, customerId, title },
+    }, tx)
+
+    return project
+  }), 3)
 
   return NextResponse.json(
     { data: { project, leadStatus: 'PRETVORJEN' } },

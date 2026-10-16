@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { db } from '@/lib/db'
 import { jsonError, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
+import { parseBody } from '@/lib/validate'
 
 // /api/warranty — garancije projektov (route-map: GET/POST /api/warranty + /api/warranty/[id]/visits)
 // GET  (projects.read): ?projectId=… → garancije (+ obiski, projekt) z izračunom veljavnosti
@@ -9,6 +11,24 @@ import { writeAudit } from '@/lib/audit'
 //   { projectId, startsAt?, months?, note? }          → nova garancija (samo ZAKLJUCEN/ARHIV projekt)
 //   { warrantyId, visitNote: string, visitDate? }     → nov obisk garancije
 // Revizija: WARRANTY_CREATE / WARRANTY_VISIT.
+
+// R538: zod validacija (zrcali prejšnjo sprejemljivost — vzorec R536-d):
+// obe varianti delita telo — warrantyId NEPRAZEN niz odloča varianto B (prazno
+// ⇒ null ⇒ varianta A, kot prej po truthy preverbi); projectId neobvezen
+// (handler vrne 400 „Manjka projekt.“ samo v varianti A); months gre NEZNAN
+// naprej — pretvorba Number() s privzetim 24 ob neveljavnem ostaja v handlerju
+// (z.coerce.number bi neveljavne vrednosti ZAVRNIL namesto privzetja, kot prej);
+// startsAt/visitDate sta niza, ki ju handler pretvori v Date s specifičnima 400
+// sporočiloma (ista kot prej).
+const WarrantyBodySchema = z.object({
+  projectId: z.string().nullish().transform((v) => v || ''),
+  startsAt: z.string().nullish(),
+  months: z.unknown(),
+  note: z.string().trim().nullish().transform((v) => v || null),
+  warrantyId: z.string().nullish().transform((v) => v || null),
+  visitNote: z.string().trim().nullish().transform((v) => v ?? ''),
+  visitDate: z.string().nullish(),
+})
 
 const ADD_MONTHS = (d: Date, months: number): Date => {
   const r = new Date(d)
@@ -52,34 +72,37 @@ export async function POST (req: NextRequest) {
   if (auth instanceof NextResponse) return auth
   const { user } = auth
 
-  const body = await req.json().catch(() => null) as {
-    projectId?: string; startsAt?: string; months?: number; note?: string
-    warrantyId?: string; visitNote?: string; visitDate?: string
-  } | null
+  const parsed = await parseBody(req, WarrantyBodySchema)
+  if (!parsed.ok) return parsed.response
+  const data = parsed.data
 
   // ── varianta B: nov obisk obstoječe garancije ──
-  if (body?.warrantyId) {
-    const visitNote = typeof body.visitNote === 'string' ? body.visitNote.trim() : ''
+  if (data.warrantyId) {
+    const visitNote = data.visitNote
     if (!visitNote) return jsonError(400, 'Opis obiska je obvezen.')
 
-    const warranty = await db.warranty.findUnique({ where: { id: body.warrantyId }, include: { project: { select: { id: true, code: true } } } })
+    const warranty = await db.warranty.findUnique({ where: { id: data.warrantyId }, include: { project: { select: { id: true, code: true } } } })
     if (!warranty) return jsonError(404, 'Garancija ne obstaja.')
 
-    const date = body.visitDate ? new Date(body.visitDate) : new Date()
+    const date = data.visitDate ? new Date(data.visitDate) : new Date()
     if (Number.isNaN(date.getTime())) return jsonError(400, 'Neveljaven datum obiska.')
 
-    const visit = await db.warrantyVisit.create({
-      data: { warrantyId: warranty.id, date, note: visitNote, userId: user.id },
-    })
-    await writeAudit({
-      userId: user.id, action: 'WARRANTY_VISIT', entity: 'warranty', entityId: warranty.id, projectId: warranty.projectId,
-      detail: { project: warranty.project.code, note: visitNote, date: date.toISOString() },
+    // R538: transakcijska celovitost — mutate + revizija atomarno (vzorec R537-d)
+    const visit = await db.$transaction(async (tx) => {
+      const visit = await tx.warrantyVisit.create({
+        data: { warrantyId: warranty.id, date, note: visitNote, userId: user.id },
+      })
+      await writeAudit({
+        userId: user.id, action: 'WARRANTY_VISIT', entity: 'warranty', entityId: warranty.id, projectId: warranty.projectId,
+        detail: { project: warranty.project.code, note: visitNote, date: date.toISOString() },
+      }, tx)
+      return visit
     })
     return NextResponse.json({ data: visit }, { status: 201 })
   }
 
   // ── varianta A: nova garancija projekta ──
-  const projectId = typeof body?.projectId === 'string' ? body.projectId : ''
+  const projectId = data.projectId
   if (!projectId) return jsonError(400, 'Manjka projekt.')
 
   const project = await db.project.findUnique({ where: { id: projectId }, select: { id: true, code: true, status: true } })
@@ -91,22 +114,28 @@ export async function POST (req: NextRequest) {
   const existing = await db.warranty.findFirst({ where: { projectId }, select: { id: true } })
   if (existing) return jsonError(409, 'Projekt ima že garancijo.')
 
-  const months = Number(body?.months)
+  // Number() s privzetim 24 (kot prej — shema ne zavrne, ker je privzet del
+  // sprejemljivosti: neveljaven months ⇒ 24 mesecev)
+  const months = Number(data.months)
   const m = Number.isFinite(months) && months >= 1 && months <= 120 ? Math.trunc(months) : 24
-  const startsAt = body?.startsAt ? new Date(body.startsAt) : new Date()
+  const startsAt = data.startsAt ? new Date(data.startsAt) : new Date()
   if (Number.isNaN(startsAt.getTime())) return jsonError(400, 'Neveljaven začetek garancije.')
 
-  const warranty = await db.warranty.create({
-    data: {
-      projectId,
-      startsAt,
-      months: m,
-      note: typeof body?.note === 'string' && body.note.trim() ? body.note.trim() : null,
-    },
-  })
-  await writeAudit({
-    userId: user.id, action: 'WARRANTY_CREATE', entity: 'warranty', entityId: warranty.id, projectId,
-    detail: { project: project.code, months: m },
+  // R538: transakcijska celovitost — mutate + revizija atomarno (vzorec R537-d)
+  const warranty = await db.$transaction(async (tx) => {
+    const warranty = await tx.warranty.create({
+      data: {
+        projectId,
+        startsAt,
+        months: m,
+        note: data.note,
+      },
+    })
+    await writeAudit({
+      userId: user.id, action: 'WARRANTY_CREATE', entity: 'warranty', entityId: warranty.id, projectId,
+      detail: { project: project.code, months: m },
+    }, tx)
+    return warranty
   })
 
   return NextResponse.json({ data: warranty }, { status: 201 })

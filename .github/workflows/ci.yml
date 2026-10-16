@@ -230,6 +230,11 @@ jobs:
           # zaklepanje računa, scrypt N=2^17 + transparentna nadgradnja.
           # Nova skupina MORA biti tudi v tests/ci-matrix.sh.
           - grupa: r536
+          # R538: žeton seje v httpOnly piškotku `roksal_session` (XSS ga ne
+          # more prebrati; localStorage ne nosi več žetona) — Bearer pot
+          # ostaja 100 % nespremenjena za programske odjemalce in testni pas.
+          # Nova skupina MORA biti tudi v tests/ci-matrix.sh.
+          - grupa: r538
     services:
       postgres:
         image: postgres:16

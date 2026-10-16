@@ -1,9 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { db } from '@/lib/db'
-import { jsonError, requirePermission } from '@/lib/auth'
+import { requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
+import { parseBody } from '@/lib/validate'
 
 const SOURCES = ['SPLET', 'TELEFON', 'PRIPOROČILO', 'SEJEM', 'VIZUALIZATOR']
+
+// R538: zod validacija (zrcali prejšnjo sprejemljivost — vzorec R536-d):
+// ime obvezno po trim; kontakti neobvezni (prazno ⇒ null, kot prej); vir neveljaven
+// ali manjkajoč ⇒ privzet SPLET (kot prej — brez novega enuma).
+const LeadCreateSchema = z.object({
+  name: z.string().trim().min(1, 'Ime kontakta je obvezno.'),
+  email: z.string().trim().nullish().transform((v) => v || null),
+  phone: z.string().trim().nullish().transform((v) => v || null),
+  source: z.string().nullish().transform((v) => (v && SOURCES.includes(v) ? v : 'SPLET')),
+  note: z.string().trim().nullish().transform((v) => v || null),
+})
 
 // GET /api/crm — vodi in priložnosti skupaj (crm.read)
 export async function GET (req: NextRequest) {
@@ -28,25 +41,27 @@ export async function POST (req: NextRequest) {
   const auth = await requirePermission(req, 'crm.write')
   if (auth instanceof NextResponse) return auth
 
-  const body = await req.json().catch(() => null)
-  const name = typeof body?.name === 'string' ? body.name.trim() : ''
-  if (!name) return jsonError(400, 'Ime kontakta je obvezno.')
+  const parsed = await parseBody(req, LeadCreateSchema)
+  if (!parsed.ok) return parsed.response
+  const data = parsed.data
 
-  const source = typeof body?.source === 'string' && SOURCES.includes(body.source) ? body.source : 'SPLET'
+  // R538: transakcijska celovitost — mutate + revizija atomarno (vzorec R537-d)
+  const lead = await db.$transaction(async (tx) => {
+    const lead = await tx.lead.create({
+      data: {
+        name: data.name,
+        email: data.email,
+        phone: data.phone,
+        source: data.source,
+        note: data.note,
+      },
+    })
 
-  const lead = await db.lead.create({
-    data: {
-      name,
-      email: typeof body?.email === 'string' && body.email.trim() ? body.email.trim() : null,
-      phone: typeof body?.phone === 'string' && body.phone.trim() ? body.phone.trim() : null,
-      source,
-      note: typeof body?.note === 'string' && body.note.trim() ? body.note.trim() : null,
-    },
-  })
-
-  await writeAudit({
-    userId: auth.user.id, action: 'LEAD_CREATE', entity: 'lead', entityId: lead.id,
-    detail: { name, source },
+    await writeAudit({
+      userId: auth.user.id, action: 'LEAD_CREATE', entity: 'lead', entityId: lead.id,
+      detail: { name: data.name, source: data.source },
+    }, tx)
+    return lead
   })
   return NextResponse.json({ data: lead }, { status: 201 })
 }

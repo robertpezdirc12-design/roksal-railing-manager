@@ -46,15 +46,19 @@ export async function POST (req: NextRequest, { params }: Params) {
   // R535: hkrati se zapiše rok veljavnosti — prekliče se z DELETE
   const token = `jm-${randomUUID()}`
   const shareExpiresAt = new Date(Date.now() + SHARE_TTL_MS)
-  await db.measurement.update({ where: { id }, data: { shareToken: token, shareExpiresAt } })
 
-  await writeAudit({
-    userId: user.id,
-    action: 'MEASURE_SHARE',
-    entity: 'measurement',
-    entityId: id,
-    projectId: existing.projectId,
-    detail: { type: existing.type, location: existing.location, regenerate: !!existing.shareToken },
+  // R538: transakcijska celovitost — žeton + revizija atomarno (vzorec R537-d)
+  await db.$transaction(async (tx) => {
+    await tx.measurement.update({ where: { id }, data: { shareToken: token, shareExpiresAt } })
+
+    await writeAudit({
+      userId: user.id,
+      action: 'MEASURE_SHARE',
+      entity: 'measurement',
+      entityId: id,
+      projectId: existing.projectId,
+      detail: { type: existing.type, location: existing.location, regenerate: !!existing.shareToken },
+    }, tx)
   })
 
   return NextResponse.json({ data: { token, url: `/api/public/measure?token=${token}`, expiresAt: shareExpiresAt.toISOString() } }, { status: 201 })
@@ -73,15 +77,18 @@ export async function DELETE (req: NextRequest, { params }: Params) {
     return jsonError(403, 'Meritev ni v vašem obsegu.', 'Monter lahko prekliče deljenje samo svojih meritev.')
   }
 
-  await db.measurement.update({ where: { id }, data: { shareToken: null, shareExpiresAt: null } })
+  // R538: transakcijska celovitost — umik žetona + revizija atomarno (vzorec R537-d)
+  await db.$transaction(async (tx) => {
+    await tx.measurement.update({ where: { id }, data: { shareToken: null, shareExpiresAt: null } })
 
-  await writeAudit({
-    userId: user.id,
-    action: 'MEASURE_SHARE_REVOKE',
-    entity: 'measurement',
-    entityId: id,
-    projectId: existing.projectId,
-    detail: { hadToken: !!existing.shareToken },
+    await writeAudit({
+      userId: user.id,
+      action: 'MEASURE_SHARE_REVOKE',
+      entity: 'measurement',
+      entityId: id,
+      projectId: existing.projectId,
+      detail: { hadToken: !!existing.shareToken },
+    }, tx)
   })
 
   return NextResponse.json({ data: { ok: true, revoked: !!existing.shareToken } })

@@ -24,16 +24,70 @@
 //   izvirniki + zgodovina popravkov (transparentnost).
 
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { db } from '@/lib/db'
 import { jsonError, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
+import { parseBody } from '@/lib/validate'
 import {
   SCENE_CLASSES, SCENE_LIMITS, SCENE_STATUSES, STAIR_ASCENTS, SURFACE_KINDS,
   applyEdits, isDepthManifest, newSceneId, sanitizeSceneResult, serializeSceneResult,
-  type SceneElement, type SceneUnderstandingResult,
+  type SceneClass, SceneElement, SceneStatus, SceneUnderstandingResult, StairAscent, SurfaceKind,
 } from '@/lib/scene-understanding-core'
 
 type Params = { params: Promise<{ id: string }> }
+
+// R485: beli seznam razredov za ROČNO dodajanje — brez OSEBA (zasebnost §5:
+// živa zaznava oseb se NE persistira).
+const MANUAL_CLASSES = SCENE_CLASSES.filter((c) => c !== 'OSEBA')
+
+// R538: zod validacija (zrcali prejšnjo sprejemljivost — vzorec R536-d):
+// elementId obvezen niz (kot prej — brez trim), cls/status/kind/ascent: znana
+// vrednost iz seznama ⇒ vrednost, sicer tiho preskočeno (kot prej), slopeDeg:
+// veljavno število znotraj ±meje ⇒ zaokroženo na 1 decimalko, sicer preskočeno
+// (kot prej), steps: celo število 1..max ⇒ Math.round, sicer preskočeno (kot
+// prej), angleDeg: število −90..360 (izven ⇒ izrecen 400 — monter mora vedeti,
+// kot prej), measure/depth: posredovano handlerju (poslovna validacija z
+// istimi sporočili — en vir resnice, kot prej).
+const SceneElementPatchSchema = z.object({
+  elementId: z.string({ error: 'Podajte elementId.' }).min(1, 'Podajte elementId.'),
+  cls: z.unknown().transform((v) => (typeof v === 'string' && (SCENE_CLASSES as readonly string[]).includes(v) ? (v as SceneClass) : undefined)),
+  status: z.unknown().transform((v) => (typeof v === 'string' && (SCENE_STATUSES as readonly string[]).includes(v) ? (v as SceneStatus) : undefined)),
+  kind: z.unknown().transform((v) => (typeof v === 'string' && (SURFACE_KINDS as readonly string[]).includes(v) ? (v as SurfaceKind) : undefined)),
+  slopeDeg: z.unknown().transform((v) => (typeof v === 'number' && Number.isFinite(v) && Math.abs(v) <= SCENE_LIMITS.slopeAbsMax ? Math.round(v * 10) / 10 : undefined)),
+  steps: z.unknown().transform((v) => {
+    if (typeof v !== 'number' || !Number.isFinite(v)) return undefined
+    const r = Math.round(v)
+    return r >= 1 && r <= SCENE_LIMITS.maxSteps ? r : undefined
+  }),
+  ascent: z.unknown().transform((v) => (typeof v === 'string' && (STAIR_ASCENTS as readonly string[]).includes(v) ? (v as StairAscent) : undefined)),
+  angleDeg: z.unknown()
+    .superRefine((v, ctx) => {
+      if (typeof v === 'number' && (!Number.isFinite(v) || Math.abs(v) > 360)) {
+        ctx.addIssue({ code: 'custom', message: 'Neveljaven kot roba: angleDeg mora biti med −90 in 360 (stopinj).' })
+      }
+    })
+    .transform((v) => (typeof v === 'number' && Number.isFinite(v) ? Math.round(v * 10) / 10 : undefined)),
+  measure: z.unknown().optional(),
+  depth: z.unknown().optional(),
+})
+
+// R538: zod validacija (zrcali prejšnjo sprejemljivost — vzorec R536-d):
+// cls iz belega seznama brez OSEBA (neznana/ne-razred vrednost ⇒ 400 z istim
+// sporočilom, kot prej), status: iz seznama ali tihi privzetek PREPOZNANO
+// (kot prej), bbox: [x, y, w, h] z vrednostmi 0..1 in w/h > 0 (oba 400 kot
+// prej — ročni vnos se NE tiho popravlja), zaokroženo na 3 decimalke (kot
+// prej), label: trim + omejitev, prazna ⇒ izpust (kot prej).
+const SceneElementAddSchema = z.object({
+  cls: z.enum(MANUAL_CLASSES, { error: `Razred mora biti iz: ${MANUAL_CLASSES.join('/')} (OSEBA ni dovoljen — živa zaznava oseb se ne persistira).` }),
+  status: z.unknown().transform((v) => (typeof v === 'string' && (SCENE_STATUSES as readonly string[]).includes(v) ? (v as SceneStatus) : 'PREPOZNANO')),
+  bbox: z.array(z.number({ error: 'bbox mora biti [x, y, w, h] z vrednostmi 0..1.' }))
+    .length(4, 'bbox mora biti [x, y, w, h] z vrednostmi 0..1.')
+    .refine((a) => a.every((v) => Number.isFinite(v) && v >= 0 && v <= 1), 'bbox mora biti [x, y, w, h] z vrednostmi 0..1.')
+    .refine((a) => a[2] > 0 && a[3] > 0, 'bbox širina in višina morata biti večji od 0.')
+    .transform((a) => a.map((v) => Math.round(v * 1000) / 1000) as [number, number, number, number]),
+  label: z.string({ error: 'Oznaka mora biti besedilo.' }).trim().optional().transform((v) => (v ? v.slice(0, SCENE_LIMITS.elementLabelMaxLen) : undefined)),
+})
 
 function parseStored (raw: string | null): SceneUnderstandingResult | null {
   if (!raw) return null
@@ -76,36 +130,15 @@ export async function PATCH (req: NextRequest, { params }: Params) {
   const result = parseStored(snapshot.sceneJson)
   if (!result) return jsonError(404, 'Posnetek nima razumevanja prizora.')
 
-  const body = await req.json().catch(() => null)
-  if (!body || typeof body !== 'object') return jsonError(400, 'Neveljavno telo zahteve.')
-  const elementId = typeof body.elementId === 'string' && body.elementId ? body.elementId : null
-  if (!elementId) return jsonError(400, 'Podajte elementId.')
+  // R538: zod validacija (zrcali prejšnjo sprejemljivost — vzorec R536-d)
+  const parsed = await parseBody(req, SceneElementPatchSchema)
+  if (!parsed.ok) return parsed.response
+  const data = parsed.data
 
-  const cls = SCENE_CLASSES.includes(body.cls) ? body.cls : undefined
-  const status = SCENE_STATUSES.includes(body.status) ? body.status : undefined
-  const kind = SURFACE_KINDS.includes(body.kind) ? body.kind : undefined
-  // R468 (F2 §3): ročno potrjen naklon — veljavna številka znotraj meje
-  const slopeDeg = typeof body.slopeDeg === 'number' && Number.isFinite(body.slopeDeg) &&
-    Math.abs(body.slopeDeg) <= SCENE_LIMITS.slopeAbsMax
-    ? Math.round(body.slopeDeg * 10) / 10
-    : undefined
-  // R469 (F3 §4): potrjeno število nastopov (celo število 1..maxSteps) + smer
-  const stepsRaw = typeof body.steps === 'number' && Number.isFinite(body.steps) ? Math.round(body.steps) : null
-  const steps = stepsRaw != null && stepsRaw >= 1 && stepsRaw <= SCENE_LIMITS.maxSteps ? stepsRaw : undefined
-  const ascent = STAIR_ASCENTS.includes(body.ascent) ? body.ascent : undefined
-  // R485 (issue #8 §2): popravek kota ROBA — sprejme −90..360 (črta roba je
-  // neusmerjena: applyEdits normalizira mod 180 v [-90, 90]); 1 decimala.
-  // IZVEN obsega → izrecen 400 (NE tiho ignoriraj — monter mora vedeti).
-  if (typeof body.angleDeg === 'number' && (!Number.isFinite(body.angleDeg) || Math.abs(body.angleDeg) > 360)) {
-    return jsonError(400, 'Neveljaven kot roba: angleDeg mora biti med −90 in 360 (stopinj).')
-  }
-  const angleDeg = typeof body.angleDeg === 'number' && Number.isFinite(body.angleDeg)
-    ? Math.round(body.angleDeg * 10) / 10
-    : undefined
   // R470 (§5): izmerjena mera — { label, valueCm, toleranceCm? }; metodo izpelje
   // applyEdits pri prikazu (ROCNI_VNOS oz. ROCNO_POPRAVLJENO) — surov vnos se
   // shrani kot označen podatek (edit.measure), izvirni element ostaja nedotaknjen.
-  const mRaw = body.measure && typeof body.measure === 'object' ? body.measure as Record<string, unknown> : null
+  const mRaw = data.measure && typeof data.measure === 'object' ? data.measure as Record<string, unknown> : null
   let measure: { label: string; valueCm: number; toleranceCm?: number } | undefined
   if (mRaw) {
     const mLabel = typeof mRaw.label === 'string' ? mRaw.label.trim().slice(0, SCENE_LIMITS.measureLabelMaxLen) : ''
@@ -121,7 +154,7 @@ export async function PATCH (req: NextRequest, { params }: Params) {
   // Veljaven manifest je izjava izvora (enaka raven zaupanja kot referenca pri
   // kalibrirani fotografiji); method polje mere se za DEPTH_AR IGNORIRA —
   // metodo izpelje applyEdits IZKLJUČNO iz manifesta.
-  const depthRaw = body.depth != null ? body.depth : (mRaw != null && mRaw.depth != null ? mRaw.depth : null)
+  const depthRaw = data.depth != null ? data.depth : (mRaw != null && mRaw.depth != null ? mRaw.depth : null)
   let depth: ReturnType<typeof isDepthManifest> | undefined
   if (depthRaw != null) {
     depth = isDepthManifest(depthRaw)
@@ -132,47 +165,51 @@ export async function PATCH (req: NextRequest, { params }: Params) {
       return jsonError(400, 'Manifest globine zahteva tudi measure { label, valueCm }.')
     }
   }
-  if (!cls && !status && !kind && slopeDeg == null && steps == null && ascent == null && angleDeg == null && measure == null) {
+  if (!data.cls && !data.status && !data.kind && data.slopeDeg == null && data.steps == null && data.ascent == null && data.angleDeg == null && measure == null) {
     return jsonError(400, `Podajte vsaj en popravek: cls (${SCENE_CLASSES.join('/')}), status (${SCENE_STATUSES.join('/')}), kind, slopeDeg (±${SCENE_LIMITS.slopeAbsMax}°), steps (1..${SCENE_LIMITS.maxSteps}), ascent (${STAIR_ASCENTS.join('/')}), angleDeg (−90..360°) ali measure ({label, valueCm} [,{depth}]).`)
   }
 
   // element mora obstajati v izvirniku — popravek brez izvirnika je sumljiv
-  const element = result.elements.find((e) => e.id === elementId)
+  const element = result.elements.find((e) => e.id === data.elementId)
   if (!element) return jsonError(404, 'Element prizora ne obstaja na tem posnetku.')
 
   if (result.edits.length >= SCENE_LIMITS.maxEdits) {
     return jsonError(409, 'Dosežen največji število popravkov na posnetku.')
   }
 
-  const edit = { elementId, cls, status, kind, slopeDeg, steps, ascent, angleDeg, measure: measure != null ? { ...measure, ...(depth != null ? { depth } : {}) } : undefined, by: user.name || user.id, at: Date.now() }
+  const edit = { elementId: data.elementId, cls: data.cls, status: data.status, kind: data.kind, slopeDeg: data.slopeDeg, steps: data.steps, ascent: data.ascent, angleDeg: data.angleDeg, measure: measure != null ? { ...measure, ...(depth != null ? { depth } : {}) } : undefined, by: user.name || user.id, at: Date.now() }
   const updated: SceneUnderstandingResult = { ...result, edits: [...result.edits, edit] }
 
-  await db.arSnapshot.update({
-    where: { id },
-    data: { sceneJson: serializeSceneResult(updated) },
-    select: { id: true },
-  })
+  // R538: transakcijska celovitost — mutate + revizija atomarno (vzorec R537-d):
+  // zapis popravka v sceneJson + revizija SCENE_EDIT v ENI transakciji.
+  await db.$transaction(async (tx) => {
+    await tx.arSnapshot.update({
+      where: { id },
+      data: { sceneJson: serializeSceneResult(updated) },
+      select: { id: true },
+    })
 
-  await writeAudit({
-    userId: user.id,
-    action: 'SCENE_EDIT',
-    entity: 'arSnapshot',
-    entityId: id,
-    projectId: snapshot.projectId,
-    detail: {
-      edit,
-      // R471 (F4): povzetek izvora globine (sledljivost brez podvajanja)
-      ...(depth != null ? { depthSource: { provider: depth.provider, format: depth.depthFormat, width: depth.width, height: depth.height, timestamp: depth.timestamp } } : {}),
-      before: {
-        cls: element.cls, status: element.status, kind: element.kind ?? null,
-        slopeDeg: element.slopeDeg ?? null,
-        steps: element.steps ?? null,
-        ascent: element.ascent ?? null,
-        angleDeg: element.angleDeg ?? null,
-        // R470 (§5): prejšnje mere istega naziva (transparentnost popravka)
-        measures: (element.measures ?? []).map((m) => ({ label: m.label, valueCm: m.valueCm, method: m.method })),
+    await writeAudit({
+      userId: user.id,
+      action: 'SCENE_EDIT',
+      entity: 'arSnapshot',
+      entityId: id,
+      projectId: snapshot.projectId,
+      detail: {
+        edit,
+        // R471 (F4): povzetek izvora globine (sledljivost brez podvajanja)
+        ...(depth != null ? { depthSource: { provider: depth.provider, format: depth.depthFormat, width: depth.width, height: depth.height, timestamp: depth.timestamp } } : {}),
+        before: {
+          cls: element.cls, status: element.status, kind: element.kind ?? null,
+          slopeDeg: element.slopeDeg ?? null,
+          steps: element.steps ?? null,
+          ascent: element.ascent ?? null,
+          angleDeg: element.angleDeg ?? null,
+          // R470 (§5): prejšnje mere istega naziva (transparentnost popravka)
+          measures: (element.measures ?? []).map((m) => ({ label: m.label, valueCm: m.valueCm, method: m.method })),
+        },
       },
-    },
+    }, tx)
   })
 
   return NextResponse.json({ data: { ok: true, edit } })
@@ -205,35 +242,12 @@ export async function POST (req: NextRequest, { params }: Params) {
   const result = parseStored(snapshot.sceneJson)
   if (!result) return jsonError(404, 'Posnetek nima razumevanja prizora.')
 
-  const body = await req.json().catch(() => null)
-  if (!body || typeof body !== 'object') return jsonError(400, 'Neveljavno telo zahteve.')
-
-  // razred: beli seznam BREZ OSEBA (zasebnost §5 — ročna oznaka ne sme odpreti
-  // poti za persistenco podatkov o ljudeh)
-  const manualClasses = SCENE_CLASSES.filter((c) => c !== 'OSEBA')
-  const cls = manualClasses.includes(body.cls) ? body.cls : null
-  if (!cls) {
-    return jsonError(400, `Razred mora biti iz: ${manualClasses.join('/')} (OSEBA ni dovoljen — živa zaznava oseb se ne persistira).`)
-  }
-
-  // status: neobvezen iz seznama; privzeto PREPOZNANO — ročno dodana oznaka je
-  // potrjena izjava monterja (vir ROCNO, confidence 1)
-  const status = SCENE_STATUSES.includes(body.status) ? body.status : 'PREPOZNANO'
-
-  // bbox: [x, y, w, h] 0..1, w/h > 0 — ročni vnos se NE tiho popravlja
-  const bboxRaw = Array.isArray(body.bbox) ? body.bbox : null
-  if (!bboxRaw || bboxRaw.length !== 4 ||
-      bboxRaw.some((v) => typeof v !== 'number' || !Number.isFinite(v) || v < 0 || v > 1)) {
-    return jsonError(400, 'bbox mora biti [x, y, w, h] z vrednostmi 0..1.')
-  }
-  if (bboxRaw[2] <= 0 || bboxRaw[3] <= 0) {
-    return jsonError(400, 'bbox širina in višina morata biti večji od 0.')
-  }
-  const bbox = bboxRaw.map((v) => Math.round(v * 1000) / 1000) as [number, number, number, number]
-
-  // opomba monterja (neobvezna, ≤ elementLabelMaxLen znakov)
-  const labelTrim = typeof body.label === 'string' ? body.label.trim().slice(0, SCENE_LIMITS.elementLabelMaxLen) : ''
-  const label = labelTrim || undefined
+  // R538: zod validacija (zrcali prejšnjo sprejemljivost — vzorec R536-d) —
+  // razred (beli seznam brez OSEBA), status (privzetek PREPOZNANO), bbox in
+  // opomba; vso logiko glej opombo ob SceneElementAddSchema zgoraj.
+  const parsed = await parseBody(req, SceneElementAddSchema)
+  if (!parsed.ok) return parsed.response
+  const data = parsed.data
 
   if (result.elements.length >= SCENE_LIMITS.maxElements) {
     return jsonError(409, 'Doseženo največje število elementov na posnetku.')
@@ -241,33 +255,37 @@ export async function POST (req: NextRequest, { params }: Params) {
 
   const element: SceneElement = {
     id: newSceneId(),
-    cls,
-    status,
+    cls: data.cls,
+    status: data.status,
     source: 'ROCNO',
     confidence: 1,
-    bbox,
+    bbox: data.bbox,
     at: Date.now(),
-    ...(label != null ? { label } : {}),
+    ...(data.label != null ? { label: data.label } : {}),
   }
   const updated: SceneUnderstandingResult = { ...result, elements: [...result.elements, element] }
 
-  await db.arSnapshot.update({
-    where: { id },
-    data: { sceneJson: serializeSceneResult(updated) },
-    select: { id: true },
-  })
+  // R538: transakcijska celovitost — mutate + revizija atomarno (vzorec R537-d):
+  // dodajanje elementa v sceneJson + revizija SCENE_ELEMENT_ADD v ENI transakciji.
+  await db.$transaction(async (tx) => {
+    await tx.arSnapshot.update({
+      where: { id },
+      data: { sceneJson: serializeSceneResult(updated) },
+      select: { id: true },
+    })
 
-  await writeAudit({
-    userId: user.id,
-    action: 'SCENE_ELEMENT_ADD',
-    entity: 'arSnapshot',
-    entityId: id,
-    projectId: snapshot.projectId,
-    detail: {
-      element: { id: element.id, cls: element.cls, status: element.status, source: element.source, bbox: element.bbox, label: label ?? null },
-      // stanje pred dodajanjem — transparentnost koliko elementov je bilo izvirnih
-      elementsBefore: result.elements.length,
-    },
+    await writeAudit({
+      userId: user.id,
+      action: 'SCENE_ELEMENT_ADD',
+      entity: 'arSnapshot',
+      entityId: id,
+      projectId: snapshot.projectId,
+      detail: {
+        element: { id: element.id, cls: element.cls, status: element.status, source: element.source, bbox: element.bbox, label: data.label ?? null },
+        // stanje pred dodajanjem — transparentnost koliko elementov je bilo izvirnih
+        elementsBefore: result.elements.length,
+      },
+    }, tx)
   })
 
   return NextResponse.json({ data: { ok: true, element } }, { status: 201 })

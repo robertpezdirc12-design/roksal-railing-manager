@@ -4,7 +4,7 @@
 // Ena stran (/): prijava → ogrodje z IA (DANES | PROJEKTI | ZAJEM | PISARNA | PROFIL)
 
 import { useEffect, useState } from 'react'
-import { useAppStore } from '@/lib/store'
+import { useAppStore, type SessionUser } from '@/lib/store'
 import { apiGet } from '@/lib/api-client'
 import { LoginScreen } from '@/components/roksal/login-screen'
 import { AppShell } from '@/components/roksal/app-shell'
@@ -17,14 +17,21 @@ export default function Home () {
   const clearAuth = useAppStore((s) => s.clearAuth)
   const [booting, setBooting] = useState(true)
 
-  // validiraj obstoječo sejo (persist iz localStorage)
+  // R538: validacija ob zagonu za oba nosilca seje. Žeton v pomnilniku
+  // (sveža prijava → Bearer pot) ALI uporabnik brez žetona (vrneča seja prek
+  // httpOnly piškotka `roksal_session`, ki ga JS ne vidi — ista validacijska
+  // ruta prek piškotka avtenticira). Brez obojega ni kaj preverjati →
+  // prijavni zaslon. uspeh → osveži uporabnika (token je lahko null — piškotek
+  // prevzame avtentikacijo api klicev); neuspeh → clearAuth (piškotek je
+  // potekel/revociran, torej prijavni zaslon).
   useEffect(() => {
     let cancelled = false
     async function boot () {
-      if (!token) { setBooting(false); return }
+      if (!token && !useAppStore.getState().user) { setBooting(false); return }
       try {
-        const res = await apiGet<{ user: typeof user }>('/api/auth/session')
+        const res = await apiGet<{ user: SessionUser | null }>('/api/auth/session')
         if (!cancelled && res.user) setAuth(token, res.user)
+        if (!cancelled && !res.user) clearAuth()
       } catch {
         if (!cancelled) clearAuth()
       } finally {

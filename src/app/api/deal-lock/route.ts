@@ -50,10 +50,14 @@ export async function POST (req: NextRequest) {
     if (quote.status !== 'POSLAN' && quote.status !== 'SPREJET') {
       return jsonError(409, 'Zaklep ni mogoč iz trenutnega statusa.', `Ponudba ${quote.code} je v statusu ${quote.status}; zaklep je dovoljen samo iz POSLAN ali SPREJET.`)
     }
-    const updated = await db.quote.update({ where: { id: quoteId }, data: { status: 'ZAKLENJEN' } })
-    await writeAudit({
-      userId: user.id, action: 'DEAL_LOCK', entity: 'quote', entityId: quoteId, projectId: quote.projectId,
-      detail: { code: quote.code, from: quote.status, to: 'ZAKLENJEN', manual: true },
+    // R538: transakcijska celovitost — zaklep + revizija atomarno (vzorec R537-d)
+    const updated = await db.$transaction(async (tx) => {
+      const updated = await tx.quote.update({ where: { id: quoteId }, data: { status: 'ZAKLENJEN' } })
+      await writeAudit({
+        userId: user.id, action: 'DEAL_LOCK', entity: 'quote', entityId: quoteId, projectId: quote.projectId,
+        detail: { code: quote.code, from: quote.status, to: 'ZAKLENJEN', manual: true },
+      }, tx)
+      return updated
     })
     return NextResponse.json({ data: updated })
   }
@@ -65,10 +69,14 @@ export async function POST (req: NextRequest) {
   if (quote._count.invoices > 0) {
     return jsonError(409, 'Zaklenjene ponudbe z izdanimi računi ni mogoče odkleniti.', `Ponudba ${quote.code} ima ${quote._count.invoices} račun(ov).`)
   }
-  const updated = await db.quote.update({ where: { id: quoteId }, data: { status: 'SPREJET' } })
-  await writeAudit({
-    userId: user.id, action: 'DEAL_UNLOCK', entity: 'quote', entityId: quoteId, projectId: quote.projectId,
-    detail: { code: quote.code, from: 'ZAKLENJEN', to: 'SPREJET' },
+  // R538: transakcijska celovitost — odklep + revizija atomarno (vzorec R537-d)
+  const updated = await db.$transaction(async (tx) => {
+    const updated = await tx.quote.update({ where: { id: quoteId }, data: { status: 'SPREJET' } })
+    await writeAudit({
+      userId: user.id, action: 'DEAL_UNLOCK', entity: 'quote', entityId: quoteId, projectId: quote.projectId,
+      detail: { code: quote.code, from: 'ZAKLENJEN', to: 'SPREJET' },
+    }, tx)
+    return updated
   })
   return NextResponse.json({ data: updated })
 }

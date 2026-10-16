@@ -20,24 +20,30 @@ export async function POST (req: NextRequest, { params }: Params) {
   const existing = await db.vizProject.findUnique({ where: { id } })
   if (!existing) return jsonError(404, 'Vizualizacijski projekt ne obstaja.')
 
-  const copy = await db.vizProject.create({
-    data: {
-      name: `${existing.name} (kopija)`.slice(0, 120),
-      projectId: existing.projectId,
-      authorId: user.id,
-      tip: existing.tip,
-      params: existing.params,
-      note: existing.note,
-    },
-  })
+  // R538: transakcijska celovitost — mutate + revizija atomarno (vzorec R537-d):
+  // podvajanje (kopija podeduje tip/params/projectId/note) + revizija
+  // VIZ_PROJECT_DUPLICATE v ENI transakciji — delna kopija ne more nastati.
+  const copy = await db.$transaction(async (tx) => {
+    const copy = await tx.vizProject.create({
+      data: {
+        name: `${existing.name} (kopija)`.slice(0, 120),
+        projectId: existing.projectId,
+        authorId: user.id,
+        tip: existing.tip,
+        params: existing.params,
+        note: existing.note,
+      },
+    })
 
-  await writeAudit({
-    userId: user.id,
-    action: 'VIZ_PROJECT_DUPLICATE',
-    entity: 'vizProject',
-    entityId: copy.id,
-    projectId: copy.projectId,
-    detail: { from: existing.id, fromName: existing.name, name: copy.name },
+    await writeAudit({
+      userId: user.id,
+      action: 'VIZ_PROJECT_DUPLICATE',
+      entity: 'vizProject',
+      entityId: copy.id,
+      projectId: copy.projectId,
+      detail: { from: existing.id, fromName: existing.name, name: copy.name },
+    }, tx)
+    return copy
   })
 
   return NextResponse.json({ data: copy }, { status: 201 })

@@ -25,14 +25,23 @@ export async function POST (req: NextRequest) {
   const header = req.headers.get('authorization') ?? ''
   const currentToken = header.slice(7).trim()
 
-  // R536: novi hash je vedno scrypt v2 (N=2^17) — asinhrona izdelava
-  await db.user.update({ where: { id: user.id }, data: { passwordHash: await hashPassword(next) } })
-  // preklic vseh ostalih sej (varnost: geslo se je spremenilo); trenutna se
-  // obvaruje v OBEH oblikah (zgoščena + zgodovinska surova — R534 #21 §4)
-  const removed = await db.session.deleteMany({
-    where: { userId: user.id, NOT: { token: { in: [sessionTokenHash(currentToken), currentToken] } } },
-  })
-  await writeAudit({ userId: user.id, action: 'PASSWORD_CHANGE', entity: 'user', entityId: user.id, detail: { sessionsRevoked: removed.count } })
+  // R536: novi hash je vedno scrypt v2 (N=2^17) — asinhrona izdelava;
+  // R538: dragi scrypt izračun PREDAJ transakcijo (telo tx ostane kratko)
+  const passwordHash = await hashPassword(next)
 
-  return NextResponse.json({ ok: true, sessionsRevoked: removed.count })
+  // R538: transakcijska celovitost — geslo + preklic sej + revizija atomarno
+  // (vzorec R537-d): prej bi padec med koraki pustil novo geslo brez preklica
+  // sej (oz. obratno).
+  const sessionsRevoked = await db.$transaction(async (tx) => {
+    await tx.user.update({ where: { id: user.id }, data: { passwordHash } })
+    // preklic vseh ostalih sej (varnost: geslo se je spremenilo); trenutna se
+    // obvaruje v OBEH oblikah (zgoščena + zgodovinska surova — R534 #21 §4)
+    const removed = await tx.session.deleteMany({
+      where: { userId: user.id, NOT: { token: { in: [sessionTokenHash(currentToken), currentToken] } } },
+    })
+    await writeAudit({ userId: user.id, action: 'PASSWORD_CHANGE', entity: 'user', entityId: user.id, detail: { sessionsRevoked: removed.count } }, tx)
+    return removed.count
+  })
+
+  return NextResponse.json({ ok: true, sessionsRevoked })
 }

@@ -810,15 +810,15 @@
       "note": ""
     },
     "POST /api/deliveries": {
-      "status": "PASS",
-      "http": 201,
+      "status": "PASS_VALIDATION",
+      "http": 400,
       "permission": "projects.write",
       "roles": [
         "ADMIN",
         "VODJA",
         "MONTER"
       ],
-      "note": ""
+      "note": "allow=201 dobil=400"
     },
     "GET /api/digital-twin/as-built": {
       "status": "PASS",
@@ -2676,14 +2676,14 @@
       "note": ""
     },
     "POST /api/projects/:id/viz-link": {
-      "status": "PASS",
-      "http": 201,
+      "status": "PASS_VALIDATION",
+      "http": 400,
       "permission": "portal.manage",
       "roles": [
         "ADMIN",
         "VODJA"
       ],
-      "note": ""
+      "note": "allow=201 dobil=400"
     },
     "DELETE /api/projects/:id/viz-link": {
       "status": "PASS_VALIDATION",
@@ -9169,9 +9169,9 @@
   "summary": {
     "endpoints": 297,
     "smoke": {
-      "PASS": 147,
+      "PASS": 145,
       "SKIPPED_SAFE": 9,
-      "PASS_VALIDATION": 123,
+      "PASS_VALIDATION": 125,
       "NO_FIXTURE": 18
     },
     "rbacChecks": 645,

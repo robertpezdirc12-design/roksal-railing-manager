@@ -9,11 +9,28 @@
 //      Revizija DELIVERY_CREATE s projectId.
 
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { db } from '@/lib/db'
 import { jsonError, readsAllData, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
 import { nextCodeFromList } from '@/lib/codes'
+import { retryOnUnique } from '@/lib/versioning'
+import { parseBody } from '@/lib/validate'
 import { DELIVERY_INCLUDE } from '@/lib/delivery-core'
+
+// R538: zod validacija (zrcali prejšnjo sprejemljivost — vzorec R536-d):
+// vezave (projekt/nalog/picking) neobvezne (prazno ⇒ null, kot prej — obstoj
+// preverja handler s 404); plannedAt se pretvori v Date V HANDLERJU (prej
+// `new Date(String(…))` s specifičnim 400 — ohranjen, ne z.coerce.date, da
+// sporočilo ostane enako); naslov/opomba neobvezna (prazno ⇒ null, z rezino).
+const DeliveryCreateSchema = z.object({
+  projectId: z.string().nullish().transform((v) => v || null),
+  workOrderId: z.string().nullish().transform((v) => v || null),
+  pickingListId: z.string().nullish().transform((v) => v || null),
+  plannedAt: z.unknown(),
+  address: z.string().trim().nullish().transform((v) => (v ? v.slice(0, 300) : null)),
+  note: z.string().trim().nullish().transform((v) => (v ? v.slice(0, 1000) : null)),
+})
 
 export async function GET (req: NextRequest) {
   const auth = await requirePermission(req, 'projects.read')
@@ -54,28 +71,30 @@ export async function POST (req: NextRequest) {
     return jsonError(403, 'Dostave načrtuje pisarna.', 'Ustvarjanje dostav je namenjeno pisarni, ne terenu.')
   }
 
-  const body = await req.json().catch(() => null)
+  const parsed = await parseBody(req, DeliveryCreateSchema)
+  if (!parsed.ok) return parsed.response
+  const data = parsed.data
 
   // ── vezave (vse opcione, a če so podane, morajo obstajati) ──────────────────
   let projectId: string | null = null
-  if (typeof body?.projectId === 'string' && body.projectId) {
-    const project = await db.project.findUnique({ where: { id: body.projectId }, select: { id: true } })
+  if (data.projectId) {
+    const project = await db.project.findUnique({ where: { id: data.projectId }, select: { id: true } })
     if (!project) return jsonError(404, 'Projekt ne obstaja.')
     projectId = project.id
   }
 
   let workOrderId: string | null = null
-  if (typeof body?.workOrderId === 'string' && body.workOrderId) {
-    const wo = await db.workOrder.findUnique({ where: { id: body.workOrderId }, select: { id: true } })
+  if (data.workOrderId) {
+    const wo = await db.workOrder.findUnique({ where: { id: data.workOrderId }, select: { id: true } })
     if (!wo) return jsonError(404, 'Nalog ne obstaja.')
     workOrderId = wo.id
   }
 
   let pickingListId: string | null = null
   let pickingLines: { itemId: string; sku: string; name: string; unit: string; qty: number; note: string | null }[] = []
-  if (typeof body?.pickingListId === 'string' && body.pickingListId) {
+  if (data.pickingListId) {
     const picking = await db.pickingList.findUnique({
-      where: { id: body.pickingListId },
+      where: { id: data.pickingListId },
       include: { lines: { orderBy: { sortOrder: 'asc' }, include: { item: true } } },
     })
     if (!picking) return jsonError(404, 'Picking lista ne obstaja.')
@@ -90,47 +109,55 @@ export async function POST (req: NextRequest) {
   }
 
   // ── preprosta polja ─────────────────────────────────────────────────────────
+  // plannedAt: neprazna vrednost ⇒ new Date(String(v)) — neveljaven datum ⇒ 400
+  // (enako kot prej; prazno/null/undefined ⇒ brez termina)
   let plannedAt: Date | null = null
-  if (body?.plannedAt !== undefined && body?.plannedAt !== null && body.plannedAt !== '') {
-    const t = new Date(String(body.plannedAt))
+  if (data.plannedAt !== undefined && data.plannedAt !== null && data.plannedAt !== '') {
+    const t = new Date(String(data.plannedAt))
     if (Number.isNaN(t.getTime())) return jsonError(400, 'Neveljaven načrtovani čas dostave.')
     plannedAt = t
   }
-  const address = typeof body?.address === 'string' && body.address.trim() ? body.address.trim().slice(0, 300) : null
-  const note = typeof body?.note === 'string' && body.note.trim() ? body.note.trim().slice(0, 1000) : null
+  const address = data.address
+  const note = data.note
 
-  // ── koda DEL-{leto}-NNN (odpor na vrzeli — R439 vzorec) ─────────────────────
-  const existing = await db.delivery.findMany({ where: { code: { startsWith: 'DEL-' } }, select: { code: true } })
-  const code = nextCodeFromList(existing.map((d) => d.code), 'DEL-')
+  // R538: transakcijska celovitost — koda + zapis (+ vrstice) + revizija
+  // atomarno (vzorec R537-d); koda DEL- se bere ZNOTRAJ tx, sočasen P2002 na
+  // Delivery.code (@unique) → do 3 poskusi (retryOnUnique).
+  const delivery = await retryOnUnique(() => db.$transaction(async (tx) => {
+    // ── koda DEL-{leto}-NNN (odpor na vrzeli — R439 vzorec) ─────────────────
+    const existing = await tx.delivery.findMany({ where: { code: { startsWith: 'DEL-' } }, select: { code: true } })
+    const code = nextCodeFromList(existing.map((d) => d.code), 'DEL-')
 
-  const delivery = await db.delivery.create({
-    data: {
-      code,
-      status: 'NACRTOVANO',
-      projectId,
-      pickingListId,
-      workOrderId,
-      plannedAt,
-      address,
-      note,
-      createdBy: user.id,
-      items: {
-        create: pickingLines.map((l) => ({
-          itemId: l.itemId,
-          description: `${l.sku} — ${l.name}`,
-          qty: l.qty,
-          unit: l.unit,
-          note: l.note,
-        })),
+    const delivery = await tx.delivery.create({
+      data: {
+        code,
+        status: 'NACRTOVANO',
+        projectId,
+        pickingListId,
+        workOrderId,
+        plannedAt,
+        address,
+        note,
+        createdBy: user.id,
+        items: {
+          create: pickingLines.map((l) => ({
+            itemId: l.itemId,
+            description: `${l.sku} — ${l.name}`,
+            qty: l.qty,
+            unit: l.unit,
+            note: l.note,
+          })),
+        },
       },
-    },
-    include: DELIVERY_INCLUDE,
-  })
+      include: DELIVERY_INCLUDE,
+    })
 
-  await writeAudit({
-    userId: user.id, action: 'DELIVERY_CREATE', entity: 'delivery', entityId: delivery.id,
-    projectId,
-    detail: { code, pickingListId, workOrderId, projectId, vrstic: pickingLines.length },
-  })
+    await writeAudit({
+      userId: user.id, action: 'DELIVERY_CREATE', entity: 'delivery', entityId: delivery.id,
+      projectId,
+      detail: { code, pickingListId, workOrderId, projectId, vrstic: pickingLines.length },
+    }, tx)
+    return delivery
+  }), 3)
   return NextResponse.json({ data: delivery }, { status: 201 })
 }

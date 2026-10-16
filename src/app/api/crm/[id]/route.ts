@@ -30,10 +30,14 @@ export async function PATCH (req: NextRequest, { params }: Params) {
     if (!existing) return jsonError(404, 'Vod ne obstaja.')
     if (existing.status === status) return jsonError(400, 'Vod je že v tem statusu.')
 
-    const updated = await db.lead.update({ where: { id }, data: { status } })
-    await writeAudit({
-      userId: auth.user.id, action: 'LEAD_STATUS', entity: 'lead', entityId: id,
-      detail: { name: existing.name, from: existing.status, to: status },
+    // R538: transakcijska celovitost — mutate + revizija atomarno (vzorec R537-d)
+    const updated = await db.$transaction(async (tx) => {
+      const updated = await tx.lead.update({ where: { id }, data: { status } })
+      await writeAudit({
+        userId: auth.user.id, action: 'LEAD_STATUS', entity: 'lead', entityId: id,
+        detail: { name: existing.name, from: existing.status, to: status },
+      }, tx)
+      return updated
     })
     return NextResponse.json({ data: updated })
   }
@@ -58,10 +62,14 @@ export async function PATCH (req: NextRequest, { params }: Params) {
   if (typeof body?.note === 'string') patch.note = body.note.trim() || null
   if (Object.keys(patch).length === 0) return jsonError(400, 'Ni sprememb za izvedbo.')
 
-  const updated = await db.opportunity.update({ where: { id }, data: patch })
-  await writeAudit({
-    userId: auth.user.id, action: 'OPPORTUNITY_STAGE', entity: 'opportunity', entityId: id,
-    detail: { title: existing.title, from: existing.stage, to: updated.stage, ...patch },
+  // R538: transakcijska celovitost — mutate + revizija atomarno (vzorec R537-d)
+  const updated = await db.$transaction(async (tx) => {
+    const updated = await tx.opportunity.update({ where: { id }, data: patch })
+    await writeAudit({
+      userId: auth.user.id, action: 'OPPORTUNITY_STAGE', entity: 'opportunity', entityId: id,
+      detail: { title: existing.title, from: existing.stage, to: updated.stage, ...patch },
+    }, tx)
+    return updated
   })
   return NextResponse.json({ data: updated })
 }

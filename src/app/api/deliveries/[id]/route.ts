@@ -96,10 +96,14 @@ export async function PATCH (req: NextRequest, { params }: Params) {
     }
     if (Object.keys(patch).length === 0) return jsonError(400, 'Ni sprememb za izvedbo (vehicleId | driverId | plannedAt | address).')
 
-    const updated = await db.delivery.update({ where: { id }, data: patch, include: DELIVERY_INCLUDE })
-    await writeAudit({
-      userId: user.id, action: 'DELIVERY_PLAN', entity: 'delivery', entityId: id, projectId: delivery.projectId,
-      detail: { code: delivery.code, polja: Object.keys(patch) },
+    // R538: transakcijska celovitost — mutate + revizija atomarno (vzorec R537-d)
+    const updated = await db.$transaction(async (tx) => {
+      const updated = await tx.delivery.update({ where: { id }, data: patch, include: DELIVERY_INCLUDE })
+      await writeAudit({
+        userId: user.id, action: 'DELIVERY_PLAN', entity: 'delivery', entityId: id, projectId: delivery.projectId,
+        detail: { code: delivery.code, polja: Object.keys(patch) },
+      }, tx)
+      return updated
     })
     return NextResponse.json({ data: updated })
   }
@@ -108,12 +112,16 @@ export async function PATCH (req: NextRequest, { params }: Params) {
   if (action === 'prepare') {
     if (!office) return jsonError(403, 'Pripravo dostav ureja pisarna.')
     if (delivery.status !== 'NACRTOVANO') return wrongStatus('NACRTOVANO')
-    const updated = await db.delivery.update({
-      where: { id }, data: { status: 'PRIPRAVLJENO' }, include: DELIVERY_INCLUDE,
-    })
-    await writeAudit({
-      userId: user.id, action: 'DELIVERY_STATUS', entity: 'delivery', entityId: id, projectId: delivery.projectId,
-      detail: { code: delivery.code, from: 'NACRTOVANO', to: 'PRIPRAVLJENO' },
+    // R538: transakcijska celovitost — mutate + revizija atomarno (vzorec R537-d)
+    const updated = await db.$transaction(async (tx) => {
+      const updated = await tx.delivery.update({
+        where: { id }, data: { status: 'PRIPRAVLJENO' }, include: DELIVERY_INCLUDE,
+      })
+      await writeAudit({
+        userId: user.id, action: 'DELIVERY_STATUS', entity: 'delivery', entityId: id, projectId: delivery.projectId,
+        detail: { code: delivery.code, from: 'NACRTOVANO', to: 'PRIPRAVLJENO' },
+      }, tx)
+      return updated
     })
     return NextResponse.json({ data: updated })
   }
@@ -129,24 +137,32 @@ export async function PATCH (req: NextRequest, { params }: Params) {
       if (!delivery.vehicleId) {
         return jsonError(409, `Dostava ${delivery.code} nima dodeljenega vozila.`, 'Pred natovarjanjem dodelite vozilo (plan → vozilo).')
       }
-      const updated = await db.delivery.update({
-        where: { id }, data: { status: 'NATOVARJENO', loadedAt: new Date() }, include: DELIVERY_INCLUDE,
-      })
-      await writeAudit({
-        userId: user.id, action: 'DELIVERY_STATUS', entity: 'delivery', entityId: id, projectId: delivery.projectId,
-        detail: { code: delivery.code, from: 'PRIPRAVLJENO', to: 'NATOVARJENO' },
+      // R538: transakcijska celovitost — mutate + revizija atomarno (vzorec R537-d)
+      const updated = await db.$transaction(async (tx) => {
+        const updated = await tx.delivery.update({
+          where: { id }, data: { status: 'NATOVARJENO', loadedAt: new Date() }, include: DELIVERY_INCLUDE,
+        })
+        await writeAudit({
+          userId: user.id, action: 'DELIVERY_STATUS', entity: 'delivery', entityId: id, projectId: delivery.projectId,
+          detail: { code: delivery.code, from: 'PRIPRAVLJENO', to: 'NATOVARJENO' },
+        }, tx)
+        return updated
       })
       return NextResponse.json({ data: updated })
     }
 
     if (action === 'depart') {
       if (delivery.status !== 'NATOVARJENO') return wrongStatus('NATOVARJENO')
-      const updated = await db.delivery.update({
-        where: { id }, data: { status: 'NA_POTI', departedAt: new Date() }, include: DELIVERY_INCLUDE,
-      })
-      await writeAudit({
-        userId: user.id, action: 'DELIVERY_STATUS', entity: 'delivery', entityId: id, projectId: delivery.projectId,
-        detail: { code: delivery.code, from: 'NATOVARJENO', to: 'NA_POTI' },
+      // R538: transakcijska celovitost — mutate + revizija atomarno (vzorec R537-d)
+      const updated = await db.$transaction(async (tx) => {
+        const updated = await tx.delivery.update({
+          where: { id }, data: { status: 'NA_POTI', departedAt: new Date() }, include: DELIVERY_INCLUDE,
+        })
+        await writeAudit({
+          userId: user.id, action: 'DELIVERY_STATUS', entity: 'delivery', entityId: id, projectId: delivery.projectId,
+          detail: { code: delivery.code, from: 'NATOVARJENO', to: 'NA_POTI' },
+        }, tx)
+        return updated
       })
       return NextResponse.json({ data: updated })
     }
@@ -156,14 +172,18 @@ export async function PATCH (req: NextRequest, { params }: Params) {
     const recipientNote = typeof body?.recipientNote === 'string' && body.recipientNote.trim()
       ? body.recipientNote.trim().slice(0, 300)
       : null
-    const updated = await db.delivery.update({
-      where: { id },
-      data: { status: 'DOSTAVLJENO', deliveredAt: new Date(), ...(recipientNote ? { recipientNote } : {}) },
-      include: DELIVERY_INCLUDE,
-    })
-    await writeAudit({
-      userId: user.id, action: 'DELIVERY_STATUS', entity: 'delivery', entityId: id, projectId: delivery.projectId,
-      detail: { code: delivery.code, from: 'NA_POTI', to: 'DOSTAVLJENO', recipientNote },
+    // R538: transakcijska celovitost — mutate + revizija atomarno (vzorec R537-d)
+    const updated = await db.$transaction(async (tx) => {
+      const updated = await tx.delivery.update({
+        where: { id },
+        data: { status: 'DOSTAVLJENO', deliveredAt: new Date(), ...(recipientNote ? { recipientNote } : {}) },
+        include: DELIVERY_INCLUDE,
+      })
+      await writeAudit({
+        userId: user.id, action: 'DELIVERY_STATUS', entity: 'delivery', entityId: id, projectId: delivery.projectId,
+        detail: { code: delivery.code, from: 'NA_POTI', to: 'DOSTAVLJENO', recipientNote },
+      }, tx)
+      return updated
     })
     return NextResponse.json({ data: updated })
   }
@@ -178,12 +198,16 @@ export async function PATCH (req: NextRequest, { params }: Params) {
     const note = cancelNote
       ? [delivery.note, `Preklic: ${cancelNote}`].filter(Boolean).join(' · ')
       : delivery.note
-    const updated = await db.delivery.update({
-      where: { id }, data: { status: 'PREKLICANA', note }, include: DELIVERY_INCLUDE,
-    })
-    await writeAudit({
-      userId: user.id, action: 'DELIVERY_STATUS', entity: 'delivery', entityId: id, projectId: delivery.projectId,
-      detail: { code: delivery.code, from: delivery.status, to: 'PREKLICANA', note: cancelNote },
+    // R538: transakcijska celovitost — mutate + revizija atomarno (vzorec R537-d)
+    const updated = await db.$transaction(async (tx) => {
+      const updated = await tx.delivery.update({
+        where: { id }, data: { status: 'PREKLICANA', note }, include: DELIVERY_INCLUDE,
+      })
+      await writeAudit({
+        userId: user.id, action: 'DELIVERY_STATUS', entity: 'delivery', entityId: id, projectId: delivery.projectId,
+        detail: { code: delivery.code, from: delivery.status, to: 'PREKLICANA', note: cancelNote },
+      }, tx)
+      return updated
     })
     return NextResponse.json({ data: updated })
   }

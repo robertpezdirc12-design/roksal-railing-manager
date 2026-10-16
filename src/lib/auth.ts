@@ -1,5 +1,11 @@
 // auth — REKONSTRUKCIJA R431
-// Seje: Authorization: Bearer <token> (CSRF-varen dizajn, kot original).
+// Seje: DVA nosilca žetona (R538):
+//   1) Authorization: Bearer <token> — programski odjemalci + testni pas
+//      (CSRF-varen dizajn, kot original; 45 skupin pasa odvisnih od njega);
+//   2) httpOnly piškotek `roksal_session` — brskalnik (XSS ga ne more prebrati,
+//      zato izluščitev skripta NE pomeni izluščitve seje).
+// Oba izvora gresta čez ISTO sha256 pot (findSessionByToken) — smeti padajo
+// na iskanje po zgoščenem ključu → fail-closed 401.
 // Uporaba v API rutah:
 //   const auth = await requirePermission(req, 'projects.read')
 //   if (auth instanceof NextResponse) return auth
@@ -12,7 +18,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { permissionsForRole, type Permission } from '@/lib/permissions-core'
 
-const SESSION_DAYS = 7
+// R538: izvoženo — login/setup/demo ga rabijo za maxAge piškotka
+// (604800 s), da življenjska doba piškotka ostane USKLAJENA s sejno pogodbo.
+export const SESSION_DAYS = 7
 
 // ─── Sejna pogodba (R534, issue #21 §4 — pregled + uskladitev) ───────────────
 // ŽIVLJENJSKA DOBA: 7 dni od prijave (SESSION_DAYS zgoraj). Dokumentacija
@@ -147,9 +155,53 @@ export async function deleteSessionsByToken (token: string): Promise<number> {
   return r.count
 }
 
-export async function getSessionUser (req: NextRequest): Promise<SessionUser | null> {
+// ─── httpOnly piškotek seje (R538 — XSS ne more prebrati žetona) ─────────────
+// Brskalnik ne potrebuje dostopa do žetona: enakonamen fetch piškotek pošlje
+// sam, httpOnly pa JavaScriptu branje PREPREČI. Programska pot (testi, skripte)
+// še naprej uporablja Bearer glavo — telo prijave žeton še vedno vrača.
+export const SESSION_COOKIE = 'roksal_session'
+
+/** Prebere surov žeton seje iz zahteve: Bearer glava (programski odjemalci,
+ *  testi) ALI piškotek `roksal_session` (brskalnik). Bearer ima PREDNOST —
+ *  če je glava prisotna, a neveljavna, se NE pademo na piškotek (fail-closed). */
+export function readSessionToken (req: NextRequest): string | null {
   const header = req.headers.get('authorization') ?? ''
-  const token = header.startsWith('Bearer ') ? header.slice(7).trim() : null
+  if (header.startsWith('Bearer ')) {
+    const bearer = header.slice(7).trim()
+    if (bearer) return bearer
+  }
+  const cookie = req.cookies.get(SESSION_COOKIE)?.value.trim()
+  return cookie || null
+}
+
+/** R538: nastavi httpOnly piškotek seje na odgovor (prijava/setup/demo).
+ *  maxAge = SESSION_DAYS dni (604800 s) — v usklajenju s sejno pogodbo R534. */
+export function setSessionCookie (res: NextResponse, token: string): void {
+  res.cookies.set(SESSION_COOKIE, token, {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    path: '/',
+    maxAge: SESSION_DAYS * 86400,
+  })
+}
+
+/** R538: počisti piškotek seje (odjava) — enaki zastavice, maxAge 0. */
+export function clearSessionCookie (res: NextResponse): void {
+  res.cookies.set(SESSION_COOKIE, '', {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: process.env.NODE_ENV === 'production',
+    path: '/',
+    maxAge: 0,
+  })
+}
+
+export async function getSessionUser (req: NextRequest): Promise<SessionUser | null> {
+  // R538: žeton seje prihaja iz Bearer glave (programski odjemalci/testi) ALI
+  // iz httpOnly piškotka (brskalnik — XSS ga ne more prebrati); enaka sha256
+  // pot za oba, smeti → zgrešeno iskanje → null (fail-closed).
+  const token = readSessionToken(req)
   if (!token) return null
   const session = await findSessionByToken(token)
   if (!session || session.expiresAt < new Date() || !session.user.active) return null
@@ -165,7 +217,7 @@ export type AuthResult = { user: SessionUser; perms: string[] } | NextResponse
 /** Vrata 1/1: zahtevana pravica (fail-closed). */
 export async function requirePermission (req: NextRequest, perm: Permission): Promise<AuthResult> {
   const user = await getSessionUser(req)
-  if (!user) return jsonError(401, 'Ni prijave.', 'Zahtevan je veljaven Authorization: Bearer žeton.')
+  if (!user) return jsonError(401, 'Ni prijave.', 'Zahtevan je veljaven Authorization: Bearer žeton ali seja prek piškotka.')
   if (!user.perms.includes(perm)) {
     return jsonError(403, `Dostop zavrnjen — manjka pravica ${perm}.`, 'Vrata določa permissions-core katalog.')
   }

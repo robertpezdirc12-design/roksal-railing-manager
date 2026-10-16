@@ -28,10 +28,13 @@ export async function DELETE (req: NextRequest, { params }: Params) {
     }
   }
 
-  await db.session.delete({ where: { id } })
-  await writeAudit({
-    userId: user.id, action: 'SESSION_REVOKE', entity: 'session', entityId: id,
-    detail: { owner: session.userId, current: session.token === (req.headers.get('authorization') ?? '').slice(7).trim() },
+  // R538: transakcijska celovitost — preklic seje + revizija atomarno (vzorec R537-d)
+  await db.$transaction(async (tx) => {
+    await tx.session.delete({ where: { id } })
+    await writeAudit({
+      userId: user.id, action: 'SESSION_REVOKE', entity: 'session', entityId: id,
+      detail: { owner: session.userId, current: session.token === (req.headers.get('authorization') ?? '').slice(7).trim() },
+    }, tx)
   })
   return NextResponse.json({ ok: true })
 }

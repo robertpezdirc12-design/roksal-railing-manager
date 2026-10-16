@@ -4,10 +4,18 @@
 //   MONTER ima sicer projects.write, a ekipe/podizvajalce vodi pisarna (fail-closed).
 
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { db } from '@/lib/db'
 import { jsonError, readsAllData, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
+import { parseBody } from '@/lib/validate'
 import { parseCrewBody } from '@/lib/crew-core'
+
+// R538: zod validacija (zrcali prejšnjo sprejemljivost — vzorec R536-d):
+// samo formalizacija OBLIKE telesa (JSON objekt, vsa polja NEZNANA → naprej) —
+// vsebino še naprej validira skupni crew-core (parseCrewBody), katerega
+// slovenska sporočila so vir resnice za POST in PATCH (lib je izven lastništva).
+const CrewBodySchema = z.looseObject({})
 
 export async function GET (req: NextRequest) {
   const auth = await requirePermission(req, 'projects.read')
@@ -37,14 +45,19 @@ export async function POST (req: NextRequest) {
     return jsonError(403, 'Ekipe ureja pisarna.', 'Ustvarjanje ekip/podizvajalcev je namenjeno pisarni, ne terenu.')
   }
 
-  const body = await req.json().catch(() => null)
-  const parsed = parseCrewBody(body)
-  if (!parsed.ok) return jsonError(400, parsed.error)
+  const parsed = await parseBody(req, CrewBodySchema)
+  if (!parsed.ok) return parsed.response
+  const crewParsed = parseCrewBody(parsed.data)
+  if (!crewParsed.ok) return jsonError(400, crewParsed.error)
 
-  const crew = await db.crew.create({ data: parsed.data })
-  await writeAudit({
-    userId: auth.user.id, action: 'CREW_CREATE', entity: 'crew', entityId: crew.id,
-    detail: { name: crew.name, type: crew.type, region: crew.region },
+  // R538: transakcijska celovitost — mutate + revizija atomarno (vzorec R537-d)
+  const crew = await db.$transaction(async (tx) => {
+    const crew = await tx.crew.create({ data: crewParsed.data })
+    await writeAudit({
+      userId: auth.user.id, action: 'CREW_CREATE', entity: 'crew', entityId: crew.id,
+      detail: { name: crew.name, type: crew.type, region: crew.region },
+    }, tx)
+    return crew
   })
   return NextResponse.json({ data: crew }, { status: 201 })
 }

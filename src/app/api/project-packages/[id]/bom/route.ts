@@ -1,14 +1,35 @@
 import { NextRequest, NextResponse } from 'next/server'
+import type { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 import { jsonError, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
-import { nextBomCode, planBom } from '@/lib/product-core'
+import { planBom } from '@/lib/product-core'
 import { invalidateQuotesForPackage } from '@/lib/quote-invalidation'
 import { normalizeSegments, SEGMENT_BOM_VERSION, type RawSegmentRow } from '@/lib/segment-bom'
 import { GEOMETRY_SOURCE_VERSION, izberiGeometrijo, type OdlokGeometrije } from '@/lib/measure-geometry-source'
 import { MEASUREMENT_STATUS_LABELS, measurementStatusAllowsBusiness, type MeasurementStatus } from '@/lib/measure-engine'
+import { retryOnUnique } from '@/lib/versioning'
 
 type Params = { params: Promise<{ id: string }> }
+
+/** Koda kosovnice (BOM-<leto>-###) na podanem klientu — DOBESEDNO zrcalo
+ * nextBomCode iz product-core (skupna služba na globalnem db, klicana tudi iz
+ * /api/import — izven lastništva R538, zato tu ločena tx-aware različica,
+ * vzorec R535): enaka logika, a bere prek tx klienta ZNOTRAJ transakcije,
+ * da vidi tudi lastne (nezavezane) brise nadomeščene kosovnice. */
+async function nextBomCodeOn (client: Pick<Prisma.TransactionClient, 'bom'>): Promise<string> {
+  const year = new Date().getFullYear()
+  const count = await client.bom.count({ where: { code: { startsWith: `BOM-${year}-` } } })
+  let n = count + 1
+  // preskoči zasedene kode (ob zgodovinskih vrzelih)
+  for (let i = 0; i < 500; i++) {
+    const code = `BOM-${year}-${String(n).padStart(3, '0')}`
+    const exists = await client.bom.findUnique({ where: { code } })
+    if (!exists) return code
+    n++
+  }
+  return `BOM-${year}-${Date.now()}`
+}
 
 // POST /api/project-packages/[id]/bom — generiraj in SHRANI kosovnico paketa
 // (quotes.create → revizija BOM_GENERATE)
@@ -106,6 +127,8 @@ export async function POST (req: NextRequest, { params }: Params) {
   // rezervacije, povezane picking liste ali je material že poraban, bi izbris
   // prelomil invarianto FIZIČNA ≠ REZERVIRANA ≠ RAZPOLOŽLJIVA (osirotele
   // rezervacije z bomId=null bi za vedno držale zalogo).
+  // R538: vrata so PREDBRANJE in ostajajo IZVEN tx (enako pravilo kot R537-d);
+  // sam izbris pa teče ZNOTRAJ transakcije spodaj.
   if (pkg.bom) {
     const activeRes = await db.stockReservation.count({ where: { bomId: pkg.bom.id, status: 'AKTIVNA' } })
     if (activeRes > 0) {
@@ -118,30 +141,9 @@ export async function POST (req: NextRequest, { params }: Params) {
     if (pkg.bom.status === 'REZERVIRAN' || pkg.bom.status === 'PORABLJEN') {
       return jsonError(409, `Kosovnica ${pkg.bom.code} je ${pkg.bom.status.toLowerCase()} — nadomeščanje ni mogoče. Ustvarite nov paket za ponovno konfiguracijo.`)
     }
-    await db.bomLine.deleteMany({ where: { bomId: pkg.bom.id } })
-    await db.bom.delete({ where: { id: pkg.bom.id } })
   }
 
-  const bom = await db.bom.create({
-    data: {
-      code: await nextBomCode(),
-      packageId: pkg.id,
-      productId: pkg.productId,
-      variantId: pkg.variantId,
-      qty: pkg.qty,
-      unit: pkg.unit,
-      status: 'OSNUTEK',
-      note: `Generirano iz predloge ${plan.product.sku}${plan.variant ? ` / ${plan.variant.sku}` : ''}${geometrija?.odlok === 'TEKOC' && geometrija.fenceRunId ? ` — obseg iz potrjenega tekača ${geometrija.fenceRunId}` : ''}${geometrija?.odlok === 'PREDLOGA' ? ` — obseg tekač ne more dokazati: ${geometrija.razlog}` : ''}`,
-      lines: {
-        create: plan.lines.map((l, i) => ({
-          itemId: l.itemId, qty: l.qty, unit: l.unit, note: l.note, sortOrder: i,
-          segmentKey: l.segmentKey, group: l.group, wastePct: l.wastePct, sourceRule: l.sourceRule,
-        })),
-      },
-    },
-  })
-
-  // kalkulacija se shrani na paket (marža ostane v pisarni — issue #7 §12)
+  // kalkulacija se shrani na paket (marža ostaja v pisarni — issue #7 §12)
   // R447: strukturirane VHODE konfiguratorja (calcJson.inputs) ohranimo čez
   // regeneracijo — izmera/segmenti so izvor količine in ne smejo biti izgubljeni.
   let preservedInputs: unknown = null
@@ -180,29 +182,70 @@ export async function POST (req: NextRequest, { params }: Params) {
     } : {}),
     ...(preservedInputs ? { inputs: preservedInputs } : {}),
   }
-  await db.projectPackage.update({
-    where: { id: pkg.id },
-    data: {
-      calcJson: JSON.stringify(calc),
-      status: pkg.status === 'KONFIGURACIJA' || pkg.status === 'IZMERA' ? 'KONFIGURACIJA' : pkg.status,
-    },
-  })
 
-  await writeAudit({
-    userId: auth.user.id, action: 'BOM_GENERATE', entity: 'bom', entityId: bom.id,
-    projectId: pkg.projectId,
-    detail: {
-      code: bom.code, package: pkg.code, product: plan.product.sku,
-      qty: plan.qty, unit: plan.unit, lines: plan.lines.length,
-      materialCost: plan.materialCost, totalSale: plan.totalSale, marginPct: plan.marginPct,
-      ...(plan.segmentsApplied > 0 ? { segmentsApplied: plan.segmentsApplied, segmentEngine: plan.segmentEngine } : {}),
-      // R511: vir geometrije je del revizijske sledi (kje so količine nastale)
-      ...(geometrija ? { geometrijaOdlok: geometrija.odlok, geometrijaRun: geometrija.fenceRunId, geometrijaRazlog: geometrija.razlog.slice(0, 200) } : {}),
-    },
-  })
+  // R538: transakcijska celovitost — nadomestitev + ustvarjanje kosovnice +
+  // kalkulacija na paketu + revizija atomarno (vzorec R537-d): prej bi padec po
+  // brisanju stare kosovnice pustil paket BREZ nje (oz. brez kalkulacije/revizije).
+  // Koda BOM- se računa ZNOTRAJ tx na tx klientu (vzorec R535 — nextBomCodeOn,
+  // zrcalo skupne službe iz product-core, ki je izven lastništva); ob sočasnem
+  // P2002 (dve generaciji izračunata isto kodo) retryOnUnique okoli CELE
+  // transakcije ponovi z novo kodo. planBom/invalidateQuotesForPackage sta
+  // skupni službi na globalnem db — ostajata IZVEN tx (enako kot R537-d).
+  const bom = await retryOnUnique(() => db.$transaction(async (tx) => {
+    if (pkg.bom) {
+      // nadomestitev stare kosovnice (vrata so se preverila nad tx)
+      await tx.bomLine.deleteMany({ where: { bomId: pkg.bom.id } })
+      await tx.bom.delete({ where: { id: pkg.bom.id } })
+    }
+
+    const bom = await tx.bom.create({
+      data: {
+        code: await nextBomCodeOn(tx),
+        packageId: pkg.id,
+        productId: pkg.productId,
+        variantId: pkg.variantId,
+        qty: pkg.qty,
+        unit: pkg.unit,
+        status: 'OSNUTEK',
+        note: `Generirano iz predloge ${plan.product.sku}${plan.variant ? ` / ${plan.variant.sku}` : ''}${geometrija?.odlok === 'TEKOC' && geometrija.fenceRunId ? ` — obseg iz potrjenega tekača ${geometrija.fenceRunId}` : ''}${geometrija?.odlok === 'PREDLOGA' ? ` — obseg tekač ne more dokazati: ${geometrija.razlog}` : ''}`,
+        lines: {
+          create: plan.lines.map((l, i) => ({
+            itemId: l.itemId, qty: l.qty, unit: l.unit, note: l.note, sortOrder: i,
+            segmentKey: l.segmentKey, group: l.group, wastePct: l.wastePct, sourceRule: l.sourceRule,
+          })),
+        },
+      },
+    })
+
+    await tx.projectPackage.update({
+      where: { id: pkg.id },
+      data: {
+        calcJson: JSON.stringify(calc),
+        status: pkg.status === 'KONFIGURACIJA' || pkg.status === 'IZMERA' ? 'KONFIGURACIJA' : pkg.status,
+      },
+    })
+
+    await writeAudit({
+      userId: auth.user.id, action: 'BOM_GENERATE', entity: 'bom', entityId: bom.id,
+      projectId: pkg.projectId,
+      detail: {
+        code: bom.code, package: pkg.code, product: plan.product.sku,
+        qty: plan.qty, unit: plan.unit, lines: plan.lines.length,
+        materialCost: plan.materialCost, totalSale: plan.totalSale, marginPct: plan.marginPct,
+        ...(plan.segmentsApplied > 0 ? { segmentsApplied: plan.segmentsApplied, segmentEngine: plan.segmentEngine } : {}),
+        // R511: vir geometrije je del revizijske sledi (kje so količine nastale)
+        ...(geometrija ? { geometrijaOdlok: geometrija.odlok, geometrijaRun: geometrija.fenceRunId, geometrijaRazlog: geometrija.razlog.slice(0, 200) } : {}),
+      },
+    }, tx)
+
+    return bom
+  }), 3)
 
   // R474 (issue #9 §5): regeneracija kosovnice = nov obseg → povezane ponudbe
-  // invalidiramo (OSNUTEK/POSLAN → OSNUTEK; SPREJET/ZAKLENJEN samo zastavica)
+  // invalidiramo (OSNUTEK/POSLAN → OSNUTEK; SPREJET/ZAKLENJEN samo zastavica).
+  // R538: OSTAJA izven tx — invalidateQuotesForPackage je skupna služba na
+  // globalnem db (klicana tudi iz measurements/import — izven lastništva R538),
+  // enaka zavestna odločitev kot R537-d za fence-run-service.
   const invalidated = await invalidateQuotesForPackage(
     { id: pkg.id, code: pkg.code, projectId: pkg.projectId },
     `Kosovnica paketa ${pkg.code} je bila ponovno generirana — količine/cene so se lahko spremenile.`,

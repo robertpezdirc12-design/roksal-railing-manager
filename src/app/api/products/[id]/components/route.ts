@@ -1,10 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { db } from '@/lib/db'
 import { jsonError, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
+import { parseBody } from '@/lib/validate'
 import { SEGMENT_ROLES } from '@/lib/segment-bom'
 
 type Params = { params: Promise<{ id: string }> }
+
+// R538: zod validacija (zrcali prejšnjo sprejemljivost — vzorec R536-d):
+// componentId obvezen niz (kot prej — brez trim), segmentRole: veljavna vloga
+// | null (odvzem) | nedoločeno (brez spremembe) — neznana vrednost ⇒ 400 z
+// istim sporočilom (kot prej); qty (če je podan) mora biti pozitivno število
+// (kot prej — niz, ki ni število, se zavrne, brez coerce).
+const ComponentRoleSchema = z.object({
+  componentId: z.string({ error: 'Manjka componentId.' }).min(1, 'Manjka componentId.'),
+  segmentRole: z.enum(SEGMENT_ROLES, { error: `Neznana segmentna vloga. Dovoljene: ${SEGMENT_ROLES.join(', ')} ali null.` }).nullable().optional(),
+  qty: z.number({ error: 'Količina (množitelj na enoto vloge) mora biti pozitivno število.' }).positive('Količina (množitelj na enoto vloge) mora biti pozitivno število.').optional(),
+})
 
 // PATCH /api/products/[id]/components — R475 (issue #9 §5): dodeljevanje
 // SEGMENTNE VLOGE komponenti BOM predloge (catalog.write).
@@ -20,44 +33,38 @@ export async function PATCH (req: NextRequest, { params }: Params) {
   if (auth instanceof NextResponse) return auth
   const { id } = await params
 
-  const body = await req.json().catch(() => null)
-  const componentId = typeof body?.componentId === 'string' ? body.componentId : ''
-  if (!componentId) return jsonError(400, 'Manjka componentId.')
-
-  const role = body?.segmentRole === null ? null : body?.segmentRole
-  if (role != null && !(SEGMENT_ROLES as readonly string[]).includes(role)) {
-    return jsonError(400, `Neznana segmentna vloga. Dovoljene: ${SEGMENT_ROLES.join(', ')} ali null.`)
-  }
-  let qty: number | undefined
-  if (body?.qty !== undefined) {
-    if (typeof body.qty !== 'number' || !Number.isFinite(body.qty) || body.qty <= 0) {
-      return jsonError(400, 'Količina (množitelj na enoto vloge) mora biti pozitivno število.')
-    }
-    qty = body.qty
-  }
+  // R538: zod validacija (zrcali prejšnjo sprejemljivost — vzorec R536-d)
+  const parsed = await parseBody(req, ComponentRoleSchema)
+  if (!parsed.ok) return parsed.response
+  const data = parsed.data
 
   const comp = await db.productComponent.findUnique({
-    where: { id: componentId },
+    where: { id: data.componentId },
     include: { product: { select: { id: true, sku: true } }, item: { select: { sku: true, name: true } } },
   })
   if (!comp || comp.productId !== id) return jsonError(404, 'Komponenta ne pripada temu izdelku.')
 
-  const updated = await db.productComponent.update({
-    where: { id: componentId },
-    data: {
-      segmentRole: role,
-      ...(qty !== undefined ? { qty } : {}),
-    },
-  })
+  // R538: transakcijska celovitost — mutate + revizija atomarno (vzorec R537-d):
+  // dodelitev vloge + revizija COMPONENT_ROLE_SET v ENI transakciji.
+  const updated = await db.$transaction(async (tx) => {
+    const updated = await tx.productComponent.update({
+      where: { id: data.componentId },
+      data: {
+        segmentRole: data.segmentRole,
+        ...(data.qty !== undefined ? { qty: data.qty } : {}),
+      },
+    })
 
-  await writeAudit({
-    userId: auth.user.id, action: 'COMPONENT_ROLE_SET', entity: 'productComponent', entityId: componentId,
-    projectId: null,
-    detail: {
-      productSku: comp.product.sku, itemSku: comp.item.sku,
-      before: { segmentRole: comp.segmentRole, qty: comp.qty },
-      after: { segmentRole: updated.segmentRole, qty: updated.qty },
-    },
+    await writeAudit({
+      userId: auth.user.id, action: 'COMPONENT_ROLE_SET', entity: 'productComponent', entityId: data.componentId,
+      projectId: null,
+      detail: {
+        productSku: comp.product.sku, itemSku: comp.item.sku,
+        before: { segmentRole: comp.segmentRole, qty: comp.qty },
+        after: { segmentRole: updated.segmentRole, qty: updated.qty },
+      },
+    }, tx)
+    return updated
   })
 
   return NextResponse.json({ data: { id: updated.id, segmentRole: updated.segmentRole, qty: updated.qty } })

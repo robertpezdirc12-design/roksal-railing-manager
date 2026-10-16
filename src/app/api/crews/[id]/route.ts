@@ -4,12 +4,20 @@
 //   MONTER ima sicer projects.write, a ekipe/podizvajalce vodi pisarna (fail-closed).
 
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { db } from '@/lib/db'
 import { jsonError, readsAllData, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
+import { parseBody } from '@/lib/validate'
 import { parseCrewPatch } from '@/lib/crew-core'
 
 type Params = { params: Promise<{ id: string }> }
+
+// R538: zod validacija (zrcali prejšnjo sprejemljivost — vzorec R536-d):
+// samo formalizacija OBLIKE telesa (JSON objekt, polja NEZNANA → naprej) —
+// delni PATCH še naprej validira skupni crew-core (parseCrewPatch, sporočila
+// so vir resnice; lib je izven lastništva te naloge).
+const CrewPatchSchema = z.looseObject({})
 
 export async function GET (req: NextRequest, { params }: Params) {
   const auth = await requirePermission(req, 'projects.read')
@@ -44,14 +52,19 @@ export async function PATCH (req: NextRequest, { params }: Params) {
   const crew = await db.crew.findUnique({ where: { id } })
   if (!crew) return jsonError(404, 'Ekipa ne obstaja.')
 
-  const body = await req.json().catch(() => null)
-  const parsed = parseCrewPatch(body)
-  if (!parsed.ok) return jsonError(400, parsed.error)
+  const parsed = await parseBody(req, CrewPatchSchema)
+  if (!parsed.ok) return parsed.response
+  const crewParsed = parseCrewPatch(parsed.data)
+  if (!crewParsed.ok) return jsonError(400, crewParsed.error)
 
-  const updated = await db.crew.update({ where: { id }, data: parsed.data })
-  await writeAudit({
-    userId: auth.user.id, action: 'CREW_UPDATE', entity: 'crew', entityId: id,
-    detail: { name: updated.name, polja: Object.keys(parsed.data) },
+  // R538: transakcijska celovitost — mutate + revizija atomarno (vzorec R537-d)
+  const updated = await db.$transaction(async (tx) => {
+    const updated = await tx.crew.update({ where: { id }, data: crewParsed.data })
+    await writeAudit({
+      userId: auth.user.id, action: 'CREW_UPDATE', entity: 'crew', entityId: id,
+      detail: { name: updated.name, polja: Object.keys(crewParsed.data) },
+    }, tx)
+    return updated
   })
   return NextResponse.json({ data: updated })
 }

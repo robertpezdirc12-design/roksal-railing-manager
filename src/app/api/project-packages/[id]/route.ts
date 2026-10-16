@@ -1,11 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { db } from '@/lib/db'
 import { jsonError, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
+import { parseBody } from '@/lib/validate'
 import { PACKAGE_STATUSES } from '@/lib/product-core'
 import { invalidateQuotesForPackage } from '@/lib/quote-invalidation'
 
 type Params = { params: Promise<{ id: string }> }
+
+// R538: zod validacija (zrcali prejšnjo sprejemljivost — vzorec R536-d):
+// delni PATCH — vsa polja neobvezna; neznana status se tiho preskoči (kot prej),
+// prazno ime se izpusti (kot prej), opomba ⇒ trim ali null (kot prej),
+// qty (če je podan kot število) mora biti pozitiven — sicer 400 (kot prej),
+// measurementId: neprazen niz ⇒ vrednost (obstoj preverja handler, kot prej).
+const PackagePatchSchema = z.object({
+  status: z.unknown().transform((v) => (typeof v === 'string' && (PACKAGE_STATUSES as readonly string[]).includes(v) ? v : undefined)),
+  name: z.string({ error: 'Ime mora biti besedilo.' }).trim().optional().transform((v) => v || undefined),
+  note: z.string({ error: 'Opomba mora biti besedilo.' }).nullish().transform((v) => (v === undefined ? undefined : v?.trim() || null)),
+  qty: z.number({ error: 'Količina mora biti pozitivno število.' }).positive('Količina mora biti pozitivno število.').nullish().transform((v) => v ?? undefined),
+  measurementId: z.string({ error: 'measurementId mora biti besedilo.' }).optional().transform((v) => v || undefined),
+})
 
 // GET /api/project-packages/[id] — podrobnost paketa (projects.read; kalkulacija samo pisarna)
 export async function GET (req: NextRequest, { params }: Params) {
@@ -37,27 +52,36 @@ export async function PATCH (req: NextRequest, { params }: Params) {
   const existing = await db.projectPackage.findUnique({ where: { id } })
   if (!existing) return jsonError(404, 'Paket ne obstaja.')
 
-  const body = await req.json().catch(() => null)
+  // R538: zod validacija (zrcali prejšnjo sprejemljivost — vzorec R536-d)
+  const parsed = await parseBody(req, PackagePatchSchema)
+  if (!parsed.ok) return parsed.response
+  const data = parsed.data
+
   const patch: Record<string, unknown> = {}
-  if (typeof body?.status === 'string' && (PACKAGE_STATUSES as readonly string[]).includes(body.status)) patch.status = body.status
-  if (typeof body?.name === 'string' && body.name.trim()) patch.name = body.name.trim()
-  if (typeof body?.note === 'string') patch.note = body.note.trim() || null
-  if (typeof body?.qty === 'number') {
-    if (!Number.isFinite(body.qty) || body.qty <= 0) return jsonError(400, 'Količina mora biti pozitivno število.')
-    patch.qty = body.qty
-  }
-  if (typeof body?.measurementId === 'string' && body.measurementId) {
-    const m = await db.measurement.findUnique({ where: { id: body.measurementId } })
+  if (data.status !== undefined) patch.status = data.status
+  if (data.name !== undefined) patch.name = data.name
+  if (data.note !== undefined) patch.note = data.note
+  if (data.qty !== undefined) patch.qty = data.qty
+  if (data.measurementId !== undefined) {
+    const m = await db.measurement.findUnique({ where: { id: data.measurementId } })
     if (!m) return jsonError(404, 'Izmera ne obstaja.')
-    patch.measurementId = body.measurementId
+    patch.measurementId = data.measurementId
   }
   if (Object.keys(patch).length === 0) return jsonError(400, 'Ni sprememb za izvedbo.')
 
-  const updated = await db.projectPackage.update({ where: { id }, data: patch })
-  await writeAudit({
-    userId: auth.user.id, action: 'PACKAGE_UPDATE', entity: 'projectPackage', entityId: id,
-    projectId: existing.projectId,
-    detail: { code: existing.code, from: existing.status, ...patch },
+  // R538: transakcijska celovitost — mutate + revizija atomarno (vzorec R537-d):
+  // posodobitev paketa + revizija PACKAGE_UPDATE v ENI transakciji.
+  // Invalidacija povezanih ponudb (invalidateQuotesForPackage) teče po commitu
+  // na globalnem klientu — služba piše prek globalnega db (izven tx, enako
+  // kot R537-d pri meritvah).
+  const updated = await db.$transaction(async (tx) => {
+    const updated = await tx.projectPackage.update({ where: { id }, data: patch })
+    await writeAudit({
+      userId: auth.user.id, action: 'PACKAGE_UPDATE', entity: 'projectPackage', entityId: id,
+      projectId: existing.projectId,
+      detail: { code: existing.code, from: existing.status, ...patch },
+    }, tx)
+    return updated
   })
 
   // R474 (issue #9 §5): sprememba obsega (količina/izmera) invalidira povezane

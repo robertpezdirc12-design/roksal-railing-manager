@@ -41,17 +41,20 @@ export async function POST (req: NextRequest, { params }: Params) {
       return jsonError(400, 'Neveljaven rok veljavnosti.', `validDays mora biti število 1–${MAX_VALID_DAYS} (ali izpuščen = brez roka).`)
     }
     const expiresAt = hasDays ? new Date(Date.now() + Math.trunc(d) * 86400000) : null
-    await db.project.update({
-      where: { id },
-      data: {
-        photoConsentAt: now,
-        photoConsentById: user.id,
-        photoConsentExpiresAt: expiresAt,
-      },
-    })
-    await writeAudit({
-      userId: user.id, action: 'CONSENT_SET', entity: 'project', entityId: id, projectId: id,
-      detail: { project: project.code, expiresAt: expiresAt ? expiresAt.toISOString() : null }, // BREZ prostega teksta soglasja
+    // R538: transakcijska celovitost — soglasje + revizija atomarno (vzorec R537-d)
+    await db.$transaction(async (tx) => {
+      await tx.project.update({
+        where: { id },
+        data: {
+          photoConsentAt: now,
+          photoConsentById: user.id,
+          photoConsentExpiresAt: expiresAt,
+        },
+      })
+      await writeAudit({
+        userId: user.id, action: 'CONSENT_SET', entity: 'project', entityId: id, projectId: id,
+        detail: { project: project.code, expiresAt: expiresAt ? expiresAt.toISOString() : null }, // BREZ prostega teksta soglasja
+      }, tx)
     })
     return NextResponse.json({
       data: { projectId: id, consent: consentStatus({ photoConsentAt: now, photoConsentExpiresAt: expiresAt }), photoConsentAt: now.toISOString(), photoConsentExpiresAt: expiresAt ? expiresAt.toISOString() : null },
@@ -59,13 +62,16 @@ export async function POST (req: NextRequest, { params }: Params) {
   }
 
   // CLEAR
-  await db.project.update({
-    where: { id },
-    data: { photoConsentAt: null, photoConsentById: null, photoConsentExpiresAt: null },
-  })
-  await writeAudit({
-    userId: user.id, action: 'CONSENT_CLEAR', entity: 'project', entityId: id, projectId: id,
-    detail: { project: project.code }, // BREZ prostega teksta soglasja
+  // R538: transakcijska celovitost — umik soglasja + revizija atomarno (vzorec R537-d)
+  await db.$transaction(async (tx) => {
+    await tx.project.update({
+      where: { id },
+      data: { photoConsentAt: null, photoConsentById: null, photoConsentExpiresAt: null },
+    })
+    await writeAudit({
+      userId: user.id, action: 'CONSENT_CLEAR', entity: 'project', entityId: id, projectId: id,
+      detail: { project: project.code }, // BREZ prostega teksta soglasja
+    }, tx)
   })
   return NextResponse.json({
     data: { projectId: id, consent: 'MANJKA', photoConsentAt: null, photoConsentExpiresAt: null },

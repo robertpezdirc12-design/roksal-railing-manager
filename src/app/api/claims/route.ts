@@ -9,11 +9,30 @@
 //      tujega projekta → 409. Revizija CLAIM_CREATE s projectId.
 
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { db } from '@/lib/db'
 import { jsonError, readsAllData, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
 import { nextCodeFromList } from '@/lib/codes'
+import { retryOnUnique } from '@/lib/versioning'
+import { parseBody } from '@/lib/validate'
 import { CLAIM_CHANNELS, CLAIM_INCLUDE } from '@/lib/service-core'
+
+// R538: zod validacija (zrcali prejšnjo sprejemljivost — vzorec R536-d):
+// stranka/projekt obvezna (neprazna niza, brez trim — kot prej), naslov in opis
+// obvezna po trim; paket/garancija/prijavitelj neobvezna (prazno ⇒ null);
+// kanal s privzetim TELEFON (prazen niz ⇒ privzet, kot prej) — dovoljene
+// vrednosti kanala še vedno preverja handler s seznamom v detail.
+const ClaimCreateSchema = z.object({
+  customerId: z.string().min(1, 'Manjka stranka.'),
+  projectId: z.string().min(1, 'Manjka projekt.'),
+  packageId: z.string().nullish().transform((v) => v || null),
+  warrantyId: z.string().nullish().transform((v) => v || null),
+  title: z.string().trim().min(1, 'Naslov reklamacije je obvezen.'),
+  desc: z.string().trim().min(1, 'Opis težave je obvezen.'),
+  channel: z.string().nullish().transform((v) => v || 'TELEFON'),
+  reportedBy: z.string().trim().nullish().transform((v) => (v ? v.slice(0, 120) : null)),
+})
 
 export async function GET (req: NextRequest) {
   const auth = await requirePermission(req, 'projects.read')
@@ -54,16 +73,13 @@ export async function POST (req: NextRequest) {
     return jsonError(403, 'Reklamacije odpira pisarna.', 'Terenski uporabniki nimajo dostopa do reklamacij strank.')
   }
 
-  const body = await req.json().catch(() => null) as {
-    customerId?: string; projectId?: string; packageId?: string; warrantyId?: string
-    title?: string; desc?: string; channel?: string; reportedBy?: string
-  } | null
+  const parsed = await parseBody(req, ClaimCreateSchema)
+  if (!parsed.ok) return parsed.response
+  const data = parsed.data
 
   // ── obvezna eksplicitna vezava: stranka + projekt ──────────────────────────
-  const customerId = typeof body?.customerId === 'string' ? body.customerId : ''
-  const projectId = typeof body?.projectId === 'string' ? body.projectId : ''
-  if (!customerId) return jsonError(400, 'Manjka stranka.')
-  if (!projectId) return jsonError(400, 'Manjka projekt.')
+  const customerId = data.customerId
+  const projectId = data.projectId
 
   const customer = await db.customer.findUnique({ where: { id: customerId }, select: { id: true, name: true } })
   if (!customer) return jsonError(404, 'Stranka ne obstaja.')
@@ -76,8 +92,8 @@ export async function POST (req: NextRequest) {
 
   // ── opcijski paket (del projekta) ──────────────────────────────────────────
   let packageId: string | null = null
-  if (typeof body?.packageId === 'string' && body.packageId) {
-    const pkg = await db.projectPackage.findUnique({ where: { id: body.packageId }, select: { id: true, projectId: true, name: true } })
+  if (data.packageId) {
+    const pkg = await db.projectPackage.findUnique({ where: { id: data.packageId }, select: { id: true, projectId: true, name: true } })
     if (!pkg) return jsonError(404, 'Paket projekta ne obstaja.')
     if (pkg.projectId !== projectId) return jsonError(409, 'Paket pripada drugemu projektu.')
     packageId = pkg.id
@@ -85,49 +101,53 @@ export async function POST (req: NextRequest) {
 
   // ── opcijska garancija (mora pripadati ISTEMU projektu) ─────────────────────
   let warrantyId: string | null = null
-  if (typeof body?.warrantyId === 'string' && body.warrantyId) {
-    const warranty = await db.warranty.findUnique({ where: { id: body.warrantyId }, select: { id: true, projectId: true } })
+  if (data.warrantyId) {
+    const warranty = await db.warranty.findUnique({ where: { id: data.warrantyId }, select: { id: true, projectId: true } })
     if (!warranty) return jsonError(404, 'Garancija ne obstaja.')
     if (warranty.projectId !== projectId) return jsonError(409, 'Garancija pripada drugemu projektu.')
     warrantyId = warranty.id
   }
 
-  // ── besedilo ────────────────────────────────────────────────────────────────
-  const title = typeof body?.title === 'string' ? body.title.trim() : ''
-  const desc = typeof body?.desc === 'string' ? body.desc.trim() : ''
-  if (!title) return jsonError(400, 'Naslov reklamacije je obvezen.')
-  if (!desc) return jsonError(400, 'Opis težave je obvezen.')
+  // ── besedilo (obvezno po trim — shema) + kanal ──────────────────────────────
+  const title = data.title
+  const desc = data.desc
 
-  const channel = typeof body?.channel === 'string' && body.channel ? body.channel : 'TELEFON'
+  const channel = data.channel
   if (!(CLAIM_CHANNELS as readonly string[]).includes(channel)) {
     return jsonError(400, 'Neveljaven kanal prijave.', 'Veljavni kanali: TELEFON, EMAIL, PORTAL, OSEBNO.')
   }
 
-  const reportedBy = typeof body?.reportedBy === 'string' && body.reportedBy.trim() ? body.reportedBy.trim().slice(0, 120) : null
+  const reportedBy = data.reportedBy
 
-  // ── koda REK-{leto}-NNN (odporna na vrzeli — R439 vzorec) ───────────────────
-  const existing = await db.claim.findMany({ where: { code: { startsWith: 'REK-' } }, select: { code: true } })
-  const code = nextCodeFromList(existing.map((c) => c.code), 'REK-')
+  // R538: transakcijska celovitost — koda + zapis + revizija atomarno (vzorec
+  // R537-d); koda REK- se bere ZNOTRAJ tx, sočasen P2002 na Claim.code
+  // (@unique) → do 3 poskusi (retryOnUnique — koda izračunana v ponovljenem fn).
+  const claim = await retryOnUnique(() => db.$transaction(async (tx) => {
+    // ── koda REK-{leto}-NNN (odporna na vrzeli — R439 vzorec) ───────────────
+    const existing = await tx.claim.findMany({ where: { code: { startsWith: 'REK-' } }, select: { code: true } })
+    const code = nextCodeFromList(existing.map((c) => c.code), 'REK-')
 
-  const claim = await db.claim.create({
-    data: {
-      code,
-      customerId,
-      projectId,
-      packageId,
-      warrantyId,
-      title: title.slice(0, 200),
-      desc: desc.slice(0, 4000),
-      channel,
-      reportedBy,
-      status: 'NOVA',
-    },
-    include: CLAIM_INCLUDE,
-  })
+    const claim = await tx.claim.create({
+      data: {
+        code,
+        customerId,
+        projectId,
+        packageId,
+        warrantyId,
+        title: title.slice(0, 200),
+        desc: desc.slice(0, 4000),
+        channel,
+        reportedBy,
+        status: 'NOVA',
+      },
+      include: CLAIM_INCLUDE,
+    })
 
-  await writeAudit({
-    userId: user.id, action: 'CLAIM_CREATE', entity: 'claim', entityId: claim.id, projectId,
-    detail: { code, project: project.code, stranka: customer.name, kanal: channel, garancija: !!warrantyId },
-  })
+    await writeAudit({
+      userId: user.id, action: 'CLAIM_CREATE', entity: 'claim', entityId: claim.id, projectId,
+      detail: { code, project: project.code, stranka: customer.name, kanal: channel, garancija: !!warrantyId },
+    }, tx)
+    return claim
+  }), 3)
   return NextResponse.json({ data: claim }, { status: 201 })
 }

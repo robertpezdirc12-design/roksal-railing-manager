@@ -4,7 +4,7 @@ import { db } from '@/lib/db'
 import { authRateLimited } from '@/lib/rate-limit'
 import {
   AUTH_LOCKOUT_MAX, AUTH_LOCKOUT_MINUTES,
-  createSession, hashPassword, jsonError, passwordNeedsRehash, toSessionUser, verifyPassword,
+  createSession, hashPassword, jsonError, passwordNeedsRehash, setSessionCookie, toSessionUser, verifyPassword,
 } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
 import { parseBody } from '@/lib/validate'
@@ -16,6 +16,9 @@ import { parseBody } from '@/lib/validate'
 // (AUTH_LOCKOUT_* v auth.ts; uspešna prijava števec resetira).
 // R536: scrypt v2 — po uspešnem verifyPassword se starejši hash TIHO nadgradi
 // (passwordNeedsRehash; LOGIN revizija že pokriva dogodek).
+// R538: ob uspehu sejo izdamo TUDI kot httpOnly piškotek `roksal_session`
+// (brskalnik — XSS ga ne more prebrati); telo ODGOVORA še vedno nosi žeton —
+// programska Bearer pot (testni pas, skripte) ostaja 100 % nespremenjena.
 
 const LoginSchema = z.object({
   // zod v4 idiom: vrhnji z.email() (z.string().email() je opuščen)
@@ -84,5 +87,7 @@ export async function POST (req: NextRequest) {
 
   const token = await createSession(user.id)
   await writeAudit({ userId: user.id, action: 'LOGIN', entity: 'user', entityId: user.id })
-  return NextResponse.json({ token, user: toSessionUser(user) })
+  const res = NextResponse.json({ token, user: toSessionUser(user) })
+  setSessionCookie(res, token) // R538: httpOnly piškotek za brskalnik (7 dni, R534)
+  return res
 }

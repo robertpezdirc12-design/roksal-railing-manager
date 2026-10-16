@@ -310,6 +310,27 @@ for g in $(bash tests/ci-matrix.sh --list); do
     fi
     continue
   fi
+  # R538: peskovniški jedrni OOM ubijalec ob prevajanju vseh 195 rut včasih
+  # ustreli dev strežnik sredi pasa (dokazano 3,2 GB anon-rss kljub varovalki
+  # --max-old-space-size=1536 — zunanji pomnilnik @napi-rs/canvas/enginov NI
+  # pod V8 omejitvijo; 7 ubojev v dneh R536–R538). Mrtvo okno med ubojem in
+  # naslednjim zagonom sicer pokoplje VSE nadaljnje skupine z »prijava: 0«.
+  # Zato pas svoj strežnik PRED vsako skupino zdravstveno preveri in ga po
+  # potrebi ponovno zažene (zunanji strežnik in r464-notifications imata
+  # svoji veji zgoraj — tu je samo lastni strežnik pasu).
+  if [ "$START_DEV" = 1 ] && [ -n "$DEV_PID" ]; then
+    if ! curl -sf --max-time 5 "$BASE_URL/api/public/health" >/dev/null 2>&1; then
+      echo "  ⚠ dev strežnik mrtev pred $g (OOM ubijalec?) — ponovni zagon"
+      ustavi_dev
+      rm -f .next/dev/lock # ustaveli zaklep ubitega procesa (Next sicer noče zagnati)
+      zazeni_dev
+      if ! cekaj_health "$BASE_URL" 120; then
+        echo "✗ strežnika ni bilo mogoče oživiti pred $g — skupina preskočena kot rdeča"
+        Rdece=$((Rdece+1)); PADLE="$PADLE $g"
+        continue
+      fi
+    fi
+  fi
   if bash tests/ci-matrix.sh "$g" > "$LOGS/$g.log" 2>&1; then
     printf '  ✓ %-22s %s\n' "$g" "$(grep -E '^═══' "$LOGS/$g.log" | tail -1)"
   else

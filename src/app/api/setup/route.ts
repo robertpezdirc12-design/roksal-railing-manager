@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { authRateLimited } from '@/lib/rate-limit'
-import { createSession, hashPassword, jsonError, toSessionUser } from '@/lib/auth'
+import { createSession, hashPassword, jsonError, setSessionCookie, toSessionUser } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
 
 // /api/setup — začetna namestitev (route-map izvirnika: /setup)
@@ -20,6 +20,9 @@ import { writeAudit } from '@/lib/audit'
 // revizija so ENA atomska enota; sočasni zahtevi čakata na isti ključ, druga
 // dobi P2002 po zavezi zmagovalke in prejme 403. Vrstico zapiše tudi demo-seed
 // (seed.cjs) — zato delno pobrisana baza NE more ponovno odpreti javnih vrat.
+// R538: prvi prevzem poleg žetona v telesu (201) nastavi TUDI httpOnly piškotek
+// `roksal_session` (enako kot prijava) — novi skrbnik je takoj prijavljen v
+// brskalniku brez shranjevanja žetona v localStorage.
 
 export const dynamic = 'force-dynamic'
 
@@ -82,7 +85,9 @@ export async function POST (req: NextRequest) {
     })
 
     const token = await createSession(user.id)
-    return NextResponse.json({ data: { token, user: toSessionUser(user) } }, { status: 201 })
+    const res = NextResponse.json({ data: { token, user: toSessionUser(user) } }, { status: 201 })
+    setSessionCookie(res, token) // R538: httpOnly piškotek za brskalnik (7 dni, R534)
+    return res
   } catch (e) {
     if (e instanceof KonecNamestitve) {
       return jsonError(403, 'Namestitev je že zaključena.', 'Obstajajoči uporabniki se prijavijo običajno.')

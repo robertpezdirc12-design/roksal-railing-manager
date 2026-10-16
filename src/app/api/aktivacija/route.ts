@@ -1,12 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { db } from '@/lib/db'
 import { jsonError, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
+import { parseBody } from '@/lib/validate'
 
 // /api/aktivacija — licenca aplikacije (route-map izvirnika: /aktivacija)
 // GET  (security.read): stanje licence (status, maskirani ključ, datum aktivacije)
 // POST (security.read): { key } → preveri obliko RS-XXXXX-XXXXX-XXXXX + kontrolno vsoto
 //   mod 97; ob uspehu shrani v Setting in zapiši revizijo ACTIVATION.
+
+// R538: zod validacija (zrcali prejšnjo sprejemljivost — vzorec R536-d): ključ
+// neobvezen niz (trim + velike črke, kot prej; manjkajoč ⇒ '' → handlerjev 400
+// s specifičnim sporočilom). Oblika in kontrolna vsota (422) sta poslovni
+// zavrnitvi handlerja. OPOMBA: ruta NE GENERIRA kod — ključ vnese uporabnik,
+// nastavitveni ključi so fiksni (upsert) → retryOnUnique NI potreben.
+const ActivationSchema = z.object({
+  key: z.string().trim().toUpperCase().nullish().transform((v) => v ?? ''),
+})
 
 const KEY_RE = /^RS-[A-Z0-9]{5}-[A-Z0-9]{5}-[A-Z0-9]{5}$/
 
@@ -49,8 +60,10 @@ export async function POST (req: NextRequest) {
   if (auth instanceof NextResponse) return auth
   const { user } = auth
 
-  const body = await req.json().catch(() => null) as { key?: string } | null
-  const key = typeof body?.key === 'string' ? body.key.trim().toUpperCase() : ''
+  const parsed = await parseBody(req, ActivationSchema)
+  if (!parsed.ok) return parsed.response
+  const key = parsed.data.key
+
   if (!key) return jsonError(400, 'Vnesite aktivacijski ključ.')
 
   if (!keyValid(key)) {
@@ -58,14 +71,18 @@ export async function POST (req: NextRequest) {
   }
 
   const now = new Date().toISOString()
+  // R538: transakcijska celovitost — 4 upserti nastavitve + revizija atomarno
+  // (vzorec R537-d); branje stanja (readLicence) po commitu, pred odgovorom.
   // upsert (SQLite ne podpira skipDuplicates pri createMany)
-  await Promise.all([
-    db.setting.upsert({ where: { key: 'licence.key' }, create: { key: 'licence.key', value: key }, update: { value: key } }),
-    db.setting.upsert({ where: { key: 'licence.status' }, create: { key: 'licence.status', value: 'AKTIVNA' }, update: { value: 'AKTIVNA' } }),
-    db.setting.upsert({ where: { key: 'licence.activatedAt' }, create: { key: 'licence.activatedAt', value: now }, update: { value: now } }),
-    db.setting.upsert({ where: { key: 'licence.activatedBy' }, create: { key: 'licence.activatedBy', value: user.email }, update: { value: user.email } }),
-  ])
+  await db.$transaction(async (tx) => {
+    await Promise.all([
+      tx.setting.upsert({ where: { key: 'licence.key' }, create: { key: 'licence.key', value: key }, update: { value: key } }),
+      tx.setting.upsert({ where: { key: 'licence.status' }, create: { key: 'licence.status', value: 'AKTIVNA' }, update: { value: 'AKTIVNA' } }),
+      tx.setting.upsert({ where: { key: 'licence.activatedAt' }, create: { key: 'licence.activatedAt', value: now }, update: { value: now } }),
+      tx.setting.upsert({ where: { key: 'licence.activatedBy' }, create: { key: 'licence.activatedBy', value: user.email }, update: { value: user.email } }),
+    ])
 
-  await writeAudit({ userId: user.id, action: 'ACTIVATION', entity: 'sistem', detail: { key: key.slice(0, 8) + '…' } })
+    await writeAudit({ userId: user.id, action: 'ACTIVATION', entity: 'sistem', detail: { key: key.slice(0, 8) + '…' } }, tx)
+  })
   return NextResponse.json({ data: await readLicence() })
 }

@@ -7,11 +7,38 @@
 //      tip: OGRAJA | BALUSTRADA | NAGIB; params so JSON niz naše viz.tsx.
 
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { db } from '@/lib/db'
 import { jsonError, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
+import { parseBody } from '@/lib/validate'
 
 const TIPS = ['OGRAJA', 'BALUSTRADA', 'NAGIB']
+
+// R538: zod validacija (zrcali prejšnjo sprejemljivost — vzorec R536-d):
+// ime obvezno po trim + omejitev 120 znakov (kot prej), tip ima tihi privzetek
+// OGRAJA ob neznani vrednosti (kot prej), params: obvezen neprazen niz, ki se
+// razčleni kot JSON objekt (kot prej — niz, ki ni JSON, ⇒ 400), projectId
+// neobvezen (obstoj preverja handler, kot prej), opomba: trim/500, prazna ⇒ null
+// (kot prej).
+const VizProjectCreateSchema = z.object({
+  name: z.string({ error: 'Manjka ime projekta.' }).trim().min(1, 'Manjka ime projekta.').transform((v) => v.slice(0, 120)),
+  tip: z.unknown().transform((v) => (typeof v === 'string' && TIPS.includes(v) ? v : 'OGRAJA')),
+  params: z.string({ error: 'Manjkajo params konfiguratorja (JSON).' }).trim().min(1, 'Manjkajo params konfiguratorja (JSON).')
+    .refine((v) => {
+      try {
+        const parsed = JSON.parse(v) as unknown
+        return !!parsed && typeof parsed === 'object'
+      } catch {
+        return false
+      }
+    }, 'Params niso veljaven JSON.'),
+  projectId: z.string({ error: 'projectId mora biti besedilo.' }).optional().transform((v) => v || undefined),
+  note: z.string({ error: 'Opomba mora biti besedilo.' }).nullish().transform((v) => {
+    const t = v?.trim().slice(0, 500)
+    return t ? t : null
+  }),
+})
 
 export async function GET (req: NextRequest) {
   const auth = await requirePermission(req, 'projects.read')
@@ -37,44 +64,35 @@ export async function POST (req: NextRequest) {
   if (auth instanceof NextResponse) return auth
   const { user } = auth
 
-  const body = await req.json().catch(() => null)
-  if (!body || typeof body !== 'object') return jsonError(400, 'Neveljavno telo zahteve.')
-
-  const name = typeof body.name === 'string' ? body.name.trim().slice(0, 120) : ''
-  if (!name) return jsonError(400, 'Manjka ime projekta.')
-
-  const tip = typeof body.tip === 'string' && TIPS.includes(body.tip) ? body.tip : 'OGRAJA'
-
-  const params = typeof body.params === 'string' && body.params.trim() ? body.params.trim() : ''
-  if (!params) return jsonError(400, 'Manjkajo params konfiguratorja (JSON).')
-  try {
-    const parsed = JSON.parse(params) as unknown
-    if (!parsed || typeof parsed !== 'object') throw new Error('ni objekt')
-  } catch {
-    return jsonError(400, 'Params niso veljaven JSON.')
-  }
+  // R538: zod validacija (zrcali prejšnjo sprejemljivost — vzorec R536-d)
+  const parsed = await parseBody(req, VizProjectCreateSchema)
+  if (!parsed.ok) return parsed.response
+  const data = parsed.data
 
   // projectId (neobvezno, a če je → mora obstajati — eksplicitna ID povezava §15)
   let projectId: string | null = null
-  if (typeof body.projectId === 'string' && body.projectId) {
-    const project = await db.project.findUnique({ where: { id: body.projectId }, select: { id: true } })
+  if (data.projectId) {
+    const project = await db.project.findUnique({ where: { id: data.projectId }, select: { id: true } })
     if (!project) return jsonError(404, 'Projekt ne obstaja.')
     projectId = project.id
   }
 
-  const note = typeof body.note === 'string' ? body.note.trim().slice(0, 500) || null : null
+  // R538: transakcijska celovitost — mutate + revizija atomarno (vzorec R537-d):
+  // shranitev konfiguracije + revizija VIZ_PROJECT_CREATE v ENI transakciji.
+  const created = await db.$transaction(async (tx) => {
+    const created = await tx.vizProject.create({
+      data: { name: data.name, projectId, authorId: user.id, tip: data.tip, params: data.params, note: data.note },
+    })
 
-  const created = await db.vizProject.create({
-    data: { name, projectId, authorId: user.id, tip, params, note },
-  })
-
-  await writeAudit({
-    userId: user.id,
-    action: 'VIZ_PROJECT_CREATE',
-    entity: 'vizProject',
-    entityId: created.id,
-    projectId,
-    detail: { name, tip, note },
+    await writeAudit({
+      userId: user.id,
+      action: 'VIZ_PROJECT_CREATE',
+      entity: 'vizProject',
+      entityId: created.id,
+      projectId,
+      detail: { name: data.name, tip: data.tip, note: data.note },
+    }, tx)
+    return created
   })
 
   return NextResponse.json({ data: created }, { status: 201 })

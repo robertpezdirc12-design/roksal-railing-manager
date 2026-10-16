@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { authRateLimited } from '@/lib/rate-limit'
-import { createSession, jsonError, toSessionUser } from '@/lib/auth'
+import { createSession, jsonError, setSessionCookie, toSessionUser } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
 
 // /api/auth/demo — demo dostop (route-map izvirnika; zahteva DEMO_ACCESS=on)
@@ -11,6 +11,8 @@ import { writeAudit } from '@/lib/audit'
 // GET  (javno): { enabled, accounts } — brez gesel; enabled = DEMO_ACCESS=on
 // POST (javno): { email } → seja, SAMO za naštete račune in SAMO z vključenim stikalom
 // Revizija: LOGIN_DEMO.
+// R538: uspešna demo prijava poleg žetona v telesu nastavi TUDI httpOnly
+// piškotek `roksal_session` (enako kot navadna prijava).
 
 export const dynamic = 'force-dynamic'
 
@@ -57,5 +59,7 @@ export async function POST (req: NextRequest) {
     userId: user.id, action: 'LOGIN_DEMO', entity: 'user', entityId: user.id,
     detail: { note: 'Demo prijava prek /api/auth/demo (DEMO_ACCESS=on)', ip: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? null },
   })
-  return NextResponse.json({ data: { token, user: toSessionUser(user) } })
+  const res = NextResponse.json({ data: { token, user: toSessionUser(user) } })
+  setSessionCookie(res, token) // R538: httpOnly piškotek za brskalnik (7 dni, R534)
+  return res
 }
