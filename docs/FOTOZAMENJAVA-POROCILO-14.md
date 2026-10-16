@@ -1,5 +1,12 @@
 # Poročilo fotozamenjave (issue #14) — kaj je dejansko fotorealistično, kje je potreben ročni poseg in katera originalna gradiva manjkajo
 
+> **Zaključek (16. 10. 2026):** issue #14 je ZAPRT po odločitvi lastnika —
+> aplikacijska stran je zaključena (dokazi: tests/r527 19✓, E2E 21✓, relejni pas
+> 8+40 ZELENO, vse v zaključnem komentarju zadeve). Oskrbne točke iz §5 ostajajo
+> zapisane kot DEJSTVA o uradnih virih, ne delovne naloge (zadeva #6 — oskrba — je
+> zaprta že 12. 10. 2026; njen rešeni del je prinesel linijo iz roksal.com, 85
+> preverjenih sredstev R493–R495).
+
 Izdaja: R527, 2026-10-15 (posodobitev izdaje R523: kakovost teksture KUBO iz uradne
 lestvice v izvirni ločljivosti, manjkajoči uradni materiali, ureditev variant po
 namenski lestvici POLNA 57/32; R524: DETAJL čipi za ograje; R527: izrecna oznaka

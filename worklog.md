@@ -4183,3 +4183,20 @@ Stage Summary:
 - Vseh 15 GitHub zadev sedaj zaprtih (0 odprtih); zaključni komentarji so pošteni zapisi stanja, ne trditve o nedokončanem delu
 - Kanonični zapis ostankov sedaj živi v: zaključnih komentarjih zadev + docs/FOTOZAMENJAVA-POROCILO-14.md §5 + README »Odprte točke«
 - Če lastnik kdaj želi nadaljevati katero koli temo, novi krog odpre z novo zadevo z sklicom na zaključni komentar
+
+---
+Task ID: R531
+Agent: main (Z.ai Code)
+Task: Uskladitev dokumentacije z zaprtjem vseh zadev (R530) — odstranitev stale trditev »issue ostaja odprt« iz živečih poročil
+
+Work Log:
+- PREGLED VSEH DOKUMENTOV (docs/*.md + README) po vzorcih »ostaja odprt« (velike/male črke — prvi pregled z malimi je stale trditev v SMART-VISION-8 spregledal, drugi z -i ujel): natančno ENA stale trditev o stanju zadeve + dve dokumenti brez oznake, da so zgodovinski
+- POPRAVEK 1 — docs/SMART-VISION-8.md sklep §4: »Issue #8 ostaja odprt dokler terenska validacija…« → usklajeno z resnico: #8 ZAPRTA 12. 10. 2026 po odločitvi lastnika (jedro zmožnosti izvedeno in dokazano; terenska validacija ostaja kot dokumentirana operativna naloga — protokol §3) — preverjeno po API-ju (closed_at 2026-10-12T08:28:58Z, zadnji komentar: isti vzorec kot R530)
+- POPRAVEK 2 — docs/RECOVERY-STATUS.md glava: dodana opomba »Poznejše stanje (16. 10. 2026)« — dokument je ZGODOVINSKI posnetek revizije R484 (11. 10.) in se ne posodablja; vse zadeve 1–15 zaprte; GitLab blokada odpravljena (račun aktiven, ogledalo markec-group1); oskrba stekla iz roksal.com (0 manjkajočih za FOTO_IZDELEK, 85 preverjenih sredstev R493–R495); preostale lastnikove postavke iz §6 (Vercel billing, Neon baza, rotacija poverilnic) ostajajo zapisane kot dejstva; za trenutno sliko README
+- POPRAVEK 3 — docs/FOTOZAMENJAVA-POROCILO-14.md glava: dodana opomba »Zaključek (16. 10. 2026)« — issue #14 ZAPRT po odločitvi lastnika (aplikacijska stran zaključena: tests/r527 19✓, E2E 21✓, pas 8+40 ZELENO); oskrbne točke §5 ostajajo DEJSTVA o uradnih virih, ne delovne naloge; #6 (oskrba) zaprta že 12. 10. (preverjeno po API-ju: closed_at 2026-10-12T17:27:34Z)
+- NAČELO: ZGODOVINSKI zapis se NE prepiše — worklog ostaja nedotaknjen, poročila dobijo le oznake trenutnega stanja; INTEGRATIONS-9.md:96 omemba »odprtih kosovnic« je zaloga (ne zadeva) — puščeno
+- PREVERBA: lint 0 napak (2 stari znani opozorili); brez sprememb aplikacijske kode
+
+Stage Summary:
+- Dokumentacija sedaj povsod govori isto resnico: vseh 15 zadev zaprtih, oskrbne/terenske postavke so zapisana dejstva v zaključnih komentarjih, README »Odprte točke«, RECOVERY-STATUS (zgodovinski posnetek z opombo) in poročilih po modulih
+- Izvedljivo delo brez lastnika je s tem izčrpano: ostajata samo GitLab sinhronizacija (čaka žeton) in morebitna prihodnja navodila

@@ -6,6 +6,16 @@
 > NE nadomešča `docs/RECOVERY.md` (DR runbook, R441) ali `docs/RECOVERY-REPORT.md`
 > (rekonstrukcija na nivoju API poti, R437) — ta dokument je POPIS STANJA virov.
 
+> **Poznejše stanje (16. 10. 2026):** ta dokument je ZGODOVINSKI posnetek revizije
+> R484 (11. 10. 2026) in se ne posodablja. Do 16. 10. 2026 so bile VSE GitHub zadeve
+> (1–15) zaključene in ZAPRTE — zadnjih 5 (#2, #3, #7, #15, #14) po odločitvi
+> lastnika, s poštenimi zaključnimi komentarji. GitLab blokada je bila odpravljena
+> (račun aktiven, ogledalo markec-group1); oskrba gradiv je stekla iz roksal.com
+> (matrika profil×barva 0 manjkajočih za FOTO_IZDELEK, 85 preverjenih sredstev —
+> R493–R495). Preostale lastnikove postavke iz §6 (Vercel billing, Neon baza,
+> rotacija poverilnic) ostajajo zapisane kot dejstva, ne delovne naloge. Za trenutno
+> sliko projekta glej `README.md`.
+
 **Ključna ugotovitev (pošteno):** izvirna koda revizij R120–R430 **ni dosegljiva in ni
 bila obnovljena** (GitHub 404, GitLab račun blokiran, Vercel API nedosegljiv, ni forkov
 ali PR-ov). Vsa živeča koda v `main` je **rekonstrukcija R431+** (165 commitov,

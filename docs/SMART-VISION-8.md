@@ -213,8 +213,10 @@ issue #8 kot povzetek PO razredih in napravah.
 | 11 | Testi z dejanskimi izidi/omejitvami; ne trdimo, da kamera vidi vse | ✅ | 350 kontrol scene suite (r467–r471, r483, r485) z zelenimi/temno opisanimi mejami; §2 tega dokumenta izrecno našteva, česa kamera NE vidi. |
 | 12 | Integrirano v obstoječi tok, brez podvajanja | ✅ | Živi v AR modulu (OPERATIVA → AR); hrani se v obstoječih AR posnetkih + tekač/merilni engine/katalog/AR sistem NISO podvojeni. |
 
-**Sklep:** 10/12 točk pošteno zelenih, točki 9–10 terenski (⛔/🟡). Issue #8 ostaja odprt
-dokler terenska validacija ne potrdi ali popravi omejitev iz §2.
+**Sklep:** 10/12 točk pošteno zelenih, točki 9–10 terenski (⛔/🟡). Issue #8 je bil
+zaprta 12. 10. 2026 po odločitvi lastnika (ocena: jedro zmožnosti izvedeno in
+dokazano; terenska fizična validacija ostaja kot dokumentirana operativna naloga —
+protokol §3).
 
 ## 5. Prihodnje izboljšave (brez obljub)
 
