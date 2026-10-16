@@ -150,13 +150,16 @@ ImageMagick, poppler) — podrobno v `tests/ci-local.sh` glavi.
 
 ## Odprte točke
 
-- **Issue #14 (fotomontaža)** — aplikacijska stran zaključena; odprto ostaja
-  **oskrba** (težava #6 — lastnikova stran): scenski posnetek RWA 57/32 in
-  `PROFIL_PRESEK` za POLNA/DESKA v uradnih virih **ne obstajata** (preverjeno
-  R524); generični demo izdelki so **izrecno označeni** (R527 — »generični
-  izdelek, ni ROKSALOV original« v izbiri, opozorilu, rezultatu POTEM, seznamu
+- **Vse GitHub zadeve so ZAPRTE po odločitvi lastnika (16. 10. 2026)** —
+  zaključni komentarji vsake zadeve pošteno navajajo, kaj je dokazano in kaj
+  ostaja zapisano. Oskrbne postavke (dejstva o uradnih virih, ne delovne
+  naloge) ostajajo: scenski posnetek RWA 57/32 in `PROFIL_PRESEK` za
+  POLNA/DESKA v uradnih virih **ne obstajata** (preverjeno R524); generični
+  demo izdelki so **izrecno označeni** (R527 — »generični izdelek, ni
+  ROKSALOV original« v izbiri, opozorilu, rezultatu POTEM, seznamu
   shranjenih in javnem pregledu stranke); ozadje rež KUBO je lastnikova
-  odločitev. Seznam v
+  odločitev; benchmark fizičnih meritev (faza 7) zahteva pravo napravo.
+  Seznam v
   [`docs/FOTOZAMENJAVA-POROCILO-14.md`](docs/FOTOZAMENJAVA-POROCILO-14.md) §5.
 
 ## Tehnologija

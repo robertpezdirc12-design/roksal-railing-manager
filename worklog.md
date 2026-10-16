@@ -4165,3 +4165,21 @@ Work Log:
 Stage Summary:
 - Poročalska vrzel na #14 zaprta — lastnik zdaj vidi celotno pot R524–R528 z dokazi in iskrenimi mejami; issue ostaja odprt samo za oskrbo (lastnikova stran)
 - GitLab še vedno čaka na nov žeton (gl. R528); GitHub kanoničen na b486db5 + ta zapis
+
+---
+Task ID: R530
+Agent: main (Z.ai Code)
+Task: Zaprtje VSEH odprtih GitHub zadev po izrecnem ukazu lastnika (»odlicno zapri vse issue ki so odprti«)
+
+Work Log:
+- STANJE PREVERJENO NA ZAČETKU: main 3169f3d (R529), drevo čisto, strežnik GET / 200; odprtih 5 zadev: #15, #14, #7, #3, #2 (zadnji komentarji prebrani vsi, telesa pridobljena v /tmp/issue-*.json)
+- ZA VSAKO ZADEVO SESTAVLJEN POŠTEN ZAKLJUČNI KOMENTAR (kaj je DOKAZANO z komiti/testi, kaj OSTAJA ZAPISANO in se nikoli ni trdilo kot rešeno) — načelo: zaprtje po lastnikovi odločitvi NE pomeni trditve, da so odprte postavke rešene; zapis ostaja za prihodnost
+- OBJAVLJENI KOMENTARJI (id): #2 → 6210815649 (rekonstrukcija R431–R439 dokončana, popis izgub, off-site dokazan, RTO 65 s; odprto: izvirnik ni najden — odločitev lastnika), #3 → 6210815888 (modul Zajem, R487 konsolidacija s konfliktnimi vrati, dvojček as-built; odprto: terenski test s pravo napravo, primerjava Hover nemerjena), #7 → 6210816123 (monterjeva pot R508–R511, detajl slike R522, cenovni uvoz R516; odprto: fizične naprave, migracija različic), #15 → 6210816366 (faze 0–6 z dokazi, homografija R513, cenovni del R516; odprto: faza 7 benchmark ≥5 montažerjev — edini neizpolnjen kriterij, zahteva pravo napravo), #14 → 6210816614 (sklic na zaključno poročilo R529 iz prejšnjega koraka; odprto: oskrba 5 točk)
+- ZADEVE ZAPRTE (PATCH state=closed): #2, #3, #7, #15, #14 — vse zaprto 2026-10-16 07:55 UTC; PREVERJENO: odprtih zadev 0, odprtih PR 0
+- README »Odprte točke« usklajen: zadeve zaprte po lastnikovi odločitvi; oskrbne postavke ostajajo zapisane kot DEJSTVA o uradnih virih (RWA 57/32, PROFIL_PRESEK, oznaka generičnih, reže KUBO, faza 7) — zaprtje zadeve ne ustvari gradiv
+- BREZ sprememb aplikacijske kode (stalna usmeritev)
+
+Stage Summary:
+- Vseh 15 GitHub zadev sedaj zaprtih (0 odprtih); zaključni komentarji so pošteni zapisi stanja, ne trditve o nedokončanem delu
+- Kanonični zapis ostankov sedaj živi v: zaključnih komentarjih zadev + docs/FOTOZAMENJAVA-POROCILO-14.md §5 + README »Odprte točke«
+- Če lastnik kdaj želi nadaljevati katero koli temo, novi krog odpre z novo zadevo z sklicom na zaključni komentar
