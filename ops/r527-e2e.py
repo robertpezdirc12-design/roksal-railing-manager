@@ -14,7 +14,7 @@ R523/R524, tokrat GENERIČNI demo izdelek OGR-K-001 (brez preverjenih gradiv):
   OPOMBOZORILO »Generični izdelek, ni ROKSALOV original« (data-testid) →
   PREJ/POTEM (barvni približek) → rezultat: vrstica oznake + pošten napis
   NI_PREVERJENO → SHRANI → seznam shranjenih pokaže »(generični)« → BAZA:
-  izdelek OGR-K-001 · BREZ gradiva (dokaz.gradivo null) · engine 1.3.0 →
+  izdelek OGR-K-001 · BREZ gradiva (dokaz.gradivo null) · engine 1.4.0 →
   počiščeno (r459 disciplina).
 
 Vsak korak se PREVERI po značilnem besedilu, ne slepi kliki (metodologija
@@ -359,7 +359,7 @@ def main ():
         shot('r527-e2e-6-shranjeno.png')
 
         # ── 10) preverba v bazi ──
-        print('── 10) preverba zapisa v bazi (OGR-K-001 · BREZ gradiva · engine 1.3.0) ──')
+        print('── 10) preverba zapisa v bazi (OGR-K-001 · BREZ gradiva · engine 1.4.0) ──')
         r = subprocess.run(
             ['bun', '-e', '''
 const { PrismaClient } = require("@prisma/client")
@@ -398,10 +398,10 @@ await db.$disconnect()
                 ok('BREZ originalnega gradiva v dokazni verigi (deterministično — generični ga nima)')
             else:
                 bad(f"gradivo zapisan, a ga generični ne sme imeti: {out.get('gradivo')}")
-            if out.get('engine') == '1.3.0':
-                ok('engineVersion 1.3.0 zapisan (§13)')
+            if out.get('engine') == '1.4.0':
+                ok('engineVersion 1.4.0 zapisan (§13 — R532)')
             else:
-                bad(f"engineVersion: {out.get('engine')} (pričakovano 1.3.0)")
+                bad(f"engineVersion: {out.get('engine')} (pričakovano 1.4.0)")
             if out.get('tip') == 'POKOCNA':
                 ok(f"tip polnila {out.get('tip')} (družina OGRAJA_POKOCNA)")
             else:

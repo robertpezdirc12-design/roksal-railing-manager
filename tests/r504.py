@@ -623,7 +623,7 @@ chk('MASKA_NEKRITA' not in h.get('brezMaske', []), 'H: brez maske (stari vhod) n
 chk('MERA_ODSTOPA' in h.get('meraOdstopa', []), 'H: prikazna dolžina ≠ potrjena mera → opozorilo ostane (§6/§15)')
 chk(h.get('maskaZaIzris') is True, 'H: maskaZaIzris brez ročne maske = quad (en vir resnice za UI in test)')
 chk(h.get('zig') == 'VIZUALIZACIJA ZA PREDSTAVITEV', 'H: obvezni žig §15 nespremenjen')
-chk(h.get('engine') == '1.3.0', f'H: ENGINE_VERSION dvignjen na 1.3.0 — R524: čipi uradnih lestvic za ograje + izmera/rotacija vlaken (dejansko {h.get("engine")})')
+chk(h.get('engine') == '1.4.0', f'H: ENGINE_VERSION dvignjen na 1.4.0 — R532: harmonizacija barv prizora (dejansko {h.get("engine")})')
 
 # ══ I. nabor resničnih fotografij ══════════════════════════════════════════
 print('── I) fixture nabor: resnične fotografije + maska + gradivo ──')
@@ -886,7 +886,7 @@ else:
     chk(shranjeni.get('maska', {}).get('ograja', []), 'K: maska je SHRAMNJENA v renderParams (2 obliki ograje)')
     chk(len(shranjeni.get('maska', {}).get('prednji', [])) == 1, 'K: prednji plan je shranjen')
     chk(len(shranjeni.get('quad', [])) == 4, 'K: quad je ostal (navzaj združljiv vhod)')
-    chk(d.get('data', {}).get('engineVersion') == '1.3.0', 'K: različica pogona 1.3.0 zapisana')
+    chk(d.get('data', {}).get('engineVersion') == '1.4.0', 'K: različica pogona 1.4.0 zapisana')
 
     s, d = callj('POST', '/api/photo-visualization', admin, body())
     chk(s == 201, f'K: STARI vhod brez maske je veljaven ({s})')

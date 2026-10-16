@@ -32,7 +32,13 @@ import {
 // 24 DETAJL gradiv po varianti) — mreža celic kot doslej (izoliran poskus:
 // 9/10 proti 6/10 za podizrez+zrcalo), UI pa vir rotira po izmeri smeri
 // vlaken (izmeriSmerVlaken), da vlakna tečejo VZDOLŽ palice/deskе.
-export const ENGINE_VERSION = '1.3.0'
+// R532 (1.4.0): HARMONIZACIJA BARV PRIZORA (raziskava 16. 10. 2026 — issue #14
+// §4 »umerjanje … svetlosti in senc, ki temelji na fotografiji«, razširjeno na
+// barvni ton): vezani barvni namig iz pasov neba/tal okoli označenega območja —
+// nevtralen prizor pusti barvo izdelka NEDOTIKNJENO, topel/hladen prizor pa
+// zamakne osnovni ton za največ HARMONIZACIJA_MEJE.zamik po kanalu (jakost 35 %).
+// Deterministično, brez AI; meje spodaj.
+export const ENGINE_VERSION = '1.4.0'
 
 /** §15: obvezni žig na vsaki POTEM sliki in zaslonu. */
 export const VIZ_ZIG = 'VIZUALIZACIJA ZA PREDSTAVITEV'
@@ -558,8 +564,129 @@ export function oceniSvetlobo (ctx: CanvasRenderingContext2D, W: number, H: numb
   return { smer, svetlost, zgoraj: hexBarva(zgoraj), spodaj: hexBarva(spodajCela) }
 }
 
-// ─── Barvni pomočniki ────────────────────────────────────────────────────────
+// ─── R532: harmonizacija barv prizora (1.4.0, issue #14 §4) ──────────────────
 
+/**
+ * Statistika barv vzorca po kanalih: sredina (r/g/b) in standardni odklon
+ * (dr/dg/db), vse v 0..255. `dr` NI kvadrat — imensko ločeno od sredine.
+ */
+export interface StatBarv {
+  r: number; g: number; b: number
+  dr: number; dg: number; db: number
+}
+
+/**
+ * Vezane meje harmonizacije (R532) — vsaka vrednost je namerno konservativna:
+ * - zamik: največji zamik sredine kanala (0..255);
+ * - jakost: delež izračunanega barvnega namiga, ki se dejansko uporabi;
+ * - raztegMin/raztegMax: dovoljeno razmerje kontrasta po kanalu (za teksture);
+ * - minStd: odstopanje vzorca pod tem je šum → kanal se ne razteguje;
+ * - minVzorcev: manj vzorčenih pikslov → statistika NI ZANESLJIVA (null).
+ */
+export const HARMONIZACIJA_MEJE = {
+  zamik: 22,
+  jakost: 0.35,
+  raztegMin: 0.85,
+  raztegMax: 1.18,
+  minStd: 4,
+  minVzorcev: 8,
+} as const
+
+/** Vezana preslikava po kanalih: v′ = (v − m_v)·s + m_v + d. */
+export interface HarmonizacijskaMapa {
+  s: [number, number, number]
+  d: [number, number, number]
+}
+
+/**
+ * Ocení barvno statistiko PRIZORA iz pasov OKOLI označenega območja:
+ * pas nad zgornjim robom (nebo) in pod spodnjim (tla) — isti vzorčni pasovi
+ * kot `oceniSvetlobo`, a zbiramo sredino IN odmikan po kanalih. Vzorčenje je
+ * deterministično (vsak 2. piksel, kot `vzorciBarvo`). Vrne `null`, če
+ * `getImageData` ni na voljo ali je vzorcev premalo (< MEJE.minVzorcev).
+ */
+export function oceniBarvoPrizora (
+  ctx: CanvasRenderingContext2D,
+  W: number,
+  H: number,
+  quadPx: [Tocka, Tocka, Tocka, Tocka]
+): StatBarv | null {
+  let data: Uint8ClampedArray
+  try {
+    data = ctx.getImageData(0, 0, W, H).data
+  } catch {
+    return null
+  }
+  const pas = Math.max(8, Math.round(H * 0.04))
+  const pasNeba: [number, number, number, number] = [quadPx[3].x, quadPx[2].x, quadPx[3].y - pas, quadPx[3].y - 2]
+  const pasTal: [number, number, number, number] = [quadPx[0].x, quadPx[1].x, quadPx[0].y + 2, quadPx[0].y + pas]
+  let sr = 0, sg = 0, sb = 0, sr2 = 0, sg2 = 0, sb2 = 0, n = 0
+  for (const [x0, x1, y0, y1] of [pasNeba, pasTal]) {
+    const xa = Math.max(0, Math.floor(Math.min(x0, x1)))
+    const xb = Math.min(W - 1, Math.ceil(Math.max(x0, x1)))
+    const ya = Math.max(0, Math.floor(Math.min(y0, y1)))
+    const yb = Math.min(H - 1, Math.ceil(Math.max(y0, y1)))
+    for (let y = ya; y <= yb; y += 2) {
+      for (let x = xa; x <= xb; x += 2) {
+        const i = (y * W + x) * 4
+        if (i + 2 >= data.length) continue
+        const r = data[i], g = data[i + 1], b = data[i + 2]
+        sr += r; sg += g; sb += b
+        sr2 += r * r; sg2 += g * g; sb2 += b * b
+        n++
+      }
+    }
+  }
+  if (n < HARMONIZACIJA_MEJE.minVzorcev) return null
+  const m = [sr / n, sg / n, sb / n]
+  const m2 = [sr2 / n, sg2 / n, sb2 / n]
+  const sd = m2.map((v, k) => Math.sqrt(Math.max(0, v - m[k] * m[k])))
+  return { r: m[0], g: m[1], b: m[2], dr: sd[0], dg: sd[1], db: sd[2] }
+}
+
+/** Svetlost barvne sredine (0..255, enaka utež kot `lum` v oceniSvetlobo). */
+function lumSredine (s: { r: number; g: number; b: number }): number {
+  return 0.2126 * s.r + 0.7152 * s.g + 0.0722 * s.b
+}
+
+/**
+ * Izračunaj VEZANO harmonizacijsko preslikavo (R532):
+ * - zamik `d` po kanalu = delež (jakost) barvnega odklona PRIZORA od njegove
+ *   lastne svetlosti (kromatičnost osvetlitve) — zamik nebeškega/talnega pasu,
+ *   NE primerjava z barvo izdelka: nevtralen prizor pusti izdelek pri miru,
+ *   topel prizor zamakne vse kanale proti toplemu, cap ±MEJE.zamik;
+ * - razteg `s` po kanalu = razmerje odmikov (samo kadar sta vzorca in prizor
+ *   dovolj raznolika — sicer 1); za enobarvne tone je odmik 0 → s = 1.
+ * Vrne `null`, če katerikoli podatek manjka.
+ */
+export function harmonizacijskaMapa (prizor: StatBarv | null, vir?: StatBarv | null): HarmonizacijskaMapa | null {
+  if (!prizor) return null
+  const mp = [prizor.r, prizor.g, prizor.b]
+  const lp = lumSredine(prizor)
+  const d = [0, 1, 2].map((k) => {
+    const kroma = (mp[k] - lp) * HARMONIZACIJA_MEJE.jakost
+    return Math.max(-HARMONIZACIJA_MEJE.zamik, Math.min(HARMONIZACIJA_MEJE.zamik, kroma))
+  }) as [number, number, number]
+  const sp = [prizor.dr, prizor.dg, prizor.db]
+  const sv = vir ? [vir.dr, vir.dg, vir.db] : null
+  const s = [0, 1, 2].map((k) => {
+    if (!sv || sv[k] < HARMONIZACIJA_MEJE.minStd || sp[k] < HARMONIZACIJA_MEJE.minStd) return 1
+    const raz = sp[k] / sv[k]
+    return Math.max(HARMONIZACIJA_MEJE.raztegMin, Math.min(HARMONIZACIJA_MEJE.raztegMax, raz))
+  }) as [number, number, number]
+  return { s, d }
+}
+
+/** Uporabi preslikavo na eni barvi (hex → hex). Brez preslikave → nespremenjeno. */
+export function harmonizirajHex (hex: string, m: HarmonizacijskaMapa | null): string {
+  if (!m) return hex
+  const { r, g, b } = hexToRgb(hex)
+  const v = [r, g, b]
+  const izh = v.map((x, k) => Math.max(0, Math.min(255, Math.round(x + m.d[k]))))
+  return '#' + izh.map((x) => x.toString(16).padStart(2, '0')).join('')
+}
+
+// ─── Barvni pomočniki ────────────────────────────────────────────────────────
 export function hexToRgb (hex: string): { r: number; g: number; b: number } {
   const h = hex.replace('#', '')
   const v = h.length === 3 ? h.split('').map((c) => c + c).join('') : h
@@ -720,6 +847,9 @@ export interface IzrisOpcije {
   ozadje?: OzadjeSloj | null
   /** R507 §1: sloj PREDNJEGA plana iz originala — riše se zadnji */
   prednji?: { sloj: CanvasImageSource } | null
+  /** R532 (1.4.0): harmonizacija barv prizora (privzeto VKLJUČENA) — vezani
+   *  barvni namig iz pasov neba/tal; `false` = izris kot pred 1.4.0 (A/B). */
+  harmonizacija?: boolean
 }
 
 /** Kvadrilateralna pot za 4 točke. */
@@ -764,6 +894,12 @@ export function izrisiOgrajo (
 
   const ghost = Math.max(0.05, Math.min(1, opcije.ghost ?? 1))
   const rnd = prng(opcije.seme ?? 1234)
+
+  // R532 §4: harmonizacija barv — statistiko prizora izluščimo PRED risanjem
+  // (pasovi neba/tal OKOLI območja so zunaj quada, a krok 1 (kadrovanje
+  // preliva) riše tudi pasova nad in pod — vzorčenje mora videti ORIGINAL).
+  const statPrizora = opcije.harmonizacija === false ? null : oceniBarvoPrizora(ctx, W, H, quadPx)
+  const mapaBarv = harmonizacijskaMapa(statPrizora)
 
   ctx.save()
   ctx.globalAlpha = ghost
@@ -862,7 +998,10 @@ export function izrisiOgrajo (
 
   // ── materialni odtenki (svetloba prizora prilagodi barvo) ──────────────────
   const exposure = 0.82 + svetloba.svetlost * 0.36 // temen prizor → temnejša ograja
-  const osnovna = prilagodiSvetlosti(barvaHex, exposure)
+  // R532 §4: osnovni ton izdelka dobi VEZANI barvni namig prizora (nevtralen
+  // prizor → nedotaknjena barva; opcije.harmonizacija=false = izris pred 1.4.0)
+  const barvaH = harmonizirajHex(barvaHex, mapaBarv)
+  const osnovna = prilagodiSvetlosti(barvaH, exposure)
   const svetla = zamesaj(osnovna, svetloba.zgoraj, 0.28 + material.sijaj * 0.22)
   const temna = zamesaj(osnovna, '#0b0d10', 0.32 - material.sijaj * 0.1)
 

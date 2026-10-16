@@ -213,8 +213,11 @@ jobs:
           # ROK- predpona kot točen klasifikator (9 generičnih brez gradiv,
           # 8 originalov z gradivi), oznaka na 5 mestih UI (izbira, opozorilo,
           # rezultat POTEM, shranjene, javni pregled).
+          # R532: harmonizacija barv prizora (issue #14 §4) — čiste funkcije,
+          # žičenje v izris, meje ±22, determinizem, živi API engineVersion 1.4.0.
           # Nova skupina MORA biti tudi v tests/ci-matrix.sh.
           - grupa: r527
+          - grupa: r532
     services:
       postgres:
         image: postgres:16

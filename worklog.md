@@ -4200,3 +4200,28 @@ Work Log:
 Stage Summary:
 - Dokumentacija sedaj povsod govori isto resnico: vseh 15 zadev zaprtih, oskrbne/terenske postavke so zapisana dejstva v zaključnih komentarjih, README »Odprte točke«, RECOVERY-STATUS (zgodovinski posnetek z opombo) in poročilih po modulih
 - Izvedljivo delo brez lastnika je s tem izčrpano: ostajata samo GitLab sinhronizacija (čaka žeton) in morebitna prihodnja navodila
+
+---
+Task ID: R532
+Agent: main (Z.ai Code)
+Task: Naročilo lastnika: sinhronizacija GitHub/GitLab + spletna raziskava izboljšav (kamera, fotomontaža, meritve) + razvoj najboljše izvedljive izboljšave
+
+Work Log:
+- SINHRONIZACIJA: GitHub ČIST (origin/main = 31212b3 = lokalno, preverjeno z ls-remote); GitLab ŠE VEDNO BLOKIRAN (žeton glpat-h-…wb285NQ8 iz R514-reza: git ls-remote 401 HTTP Basic Access denied) — brez novega žetona lastnika push NI mogoč (pošteno sporočeno; disciplina skrivnostnega pregleda: žetonov ne shranjujemo v repo)
+- RAZISKAVA PO SPLETU (web-search, 6+2 poizvedb, 52 zadetkov, /tmp/raziskava/): inpainting (Telea/NS/FSR primerjalne), Poisson seamless cloning (JS implementacija takuti), PatchMatch (Barnes 2009, klasično), Reinhard color transfer, seam carving; meritve: utežena 1D homografija (Duan 2024), perspektivna korektura (Wang 2025), EXIF goriščna/SubjectDistance (scantips, phototour); kamera: focusMode nadzor (dynamisoft 7/2026), ImageCapture API (MDN), torch/ločljivost (že imamo); zmogljivost: WebGPU filtri 10×+ (a nismo filter-vezani)
+- PRESOJA (vsota omejitev: brez AI, brez plačljivih API, deterministično): IZVEDENO harmonizacija barv (spec #14 §4 »umerjanje … svetlosti in senc, ki temelji na fotografiji« — dosledno razširjeno na ton); Poisson = prihodnja možnost; PatchMatch = zavrnjen zaradi pogodbe poštenosti (sintetizirana vsebina); WebGL migracija = zavrnjena utemeljeno; kamera fokus = NEPREVERLJIVA v peskovniku (ni fizične kamere) — zabeležen načrt po vzorcu torch
+- IZVEDBA (engine 1.3.0 → 1.4.0, src/lib/photo-replace-core.ts): oceniBarvoPrizora (sredina+odmik po kanalih iz pasov neba/tal, isti pasovi kot oceniSvetlobo, vzorčenje vsak 2. piksel, < 8 vzorcev → null fail-closed), harmonizacijskaMapa (zamik = 35 % kromatičnosti osvetlitve prizora, VEZAN ±22/255 po kanalu; razteg [0.85, 1.18] z varnostjo std < 4 → 1), harmonizirajHex (osnovni ton SKOZI preslikavo pred obstoječo adaptacijo svetlosti); statistika PRED risanjem (kadrovanje preliva riše tudi pasova nad/pod — past ujeta pred zagonom testov); opcija harmonizacija=false = bajtno identičen izris PRED 1.4.0 (A/B)
+- NAČELO (zakaj ne polni Reinhard): polni prenos vira→cilja bi na nevtralni fotografiji RAZVODIL barvo izdelka (spec #14 §3 prepoveduje »spremeni izdelek v generično ograjo«) — preslikava nosi SAMO kromatičnost osvetlitve, nikoli primerjavo z barvo izdelka; nevtralna scena = NIČ spremembe (identiteta barve izdelka je dokaz)
+- TESTI: tests/r532.py NOV — 32 ✓ / 0 ✗ (A čiste funkcije: smer/meje ±22/razteg 0.85-1.18/varnost std/determinizem/identiteta na nevtralnem; B žičenje @napi-rs/canvas: topla slika toploti izdelek [140,131,119]→[169,139,103] r↑ b↓, bajtni determinizem, izklop = pred-1.4.0, brez novih opozoril; C vir: verzija/meje/možnost/vrstni red; D živi API: FASADA krog zapiše engineVersion 1.4.0 + čiščenje); registriran kot 41. skupina (ci-matrix.sh + ci.yml sinhrono 41 = 41)
+- POSODOBLJENI PRIKLOPI (1.3.0 → 1.4.0): tests/r504.py (2), tests/r523.py (1), tests/r524.py (3), ops/r523-e2e.py (3), ops/r524-e2e.py (2), ops/r527-e2e.py (4), docs/FOTOZAMENJAVA-POROCILO-14.md (3 + glava R532); zgodovinski dokazi (ops/ci-dokaz-*.out, changelog komentarji) NEDOTIKNJENI
+- PRIZADETI SUITE PONOVNO: r504 216✓/0✗, r523 66✓/0✗, r524 107✓/0✗
+- RELEJNI PAS: 8 statičnih + 41 skupin ZELENO EXIT 0 (ops/r532-pas.out) — r532 zadnja, 41. skupina
+- E2E SKOZI PRAVO APLIKACIJO: ops/r527-e2e.py 21 ✓ / 0 ✗ (živi izris z harmonizacijo; BAZA: engineVersion 1.4.0 zapisan — §13)
+- VIZUALNI DOKAZ: ops/r532-harmonizacija-dokaz.png — ISTA ograja na treh prizorih: nevtralen (138,128,116) / topel (169,137,98 r↑b↓) / hladen (138,137,136 b↑); izmerjeno iz dokazne slike
+- DOKUMENTACIJA: docs/RAZISKAVA-IZBOLJSAVE-2026-10.md NOV (celotna raziskava s presojo vsake najdbe + naslednji koraki: EXIF predvidba, Poisson rob maske, fokus po terenskem testu, utežena konsolidacija); README: engine 1.4.0 + harmonizacija + 41 skupin
+- LINT 0 napak (2 stari opozorili), typecheck 0 napak
+
+Stage Summary:
+- Engine 1.4.0: harmonizacija barv prizora — vezani, deterministični barvni namig iz fotografije (meje ±22/kanal, jakost 35 %, nevtralen prizor = identiteta); dokazano z 32 novimi testi + pasom 41 skupin + E2E 21✓
+- Raziskava dokumentirana z iskrenimi presojami (kaj zavrnjeno in zakaj); naslednji koraki zabeleženi po vrednosti/izvedljivosti
+- GitLab še vedno čaka žeton lastnika (edina odprta sinhronizacijska točka); GitHub kanoničen

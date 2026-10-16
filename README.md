@@ -5,7 +5,7 @@ fasad in teras: CRM, ponudbe s podpisom, proizvodnja, teren (tudi brez signala),
 računi in **fotomontaža PREJ/POTEM** iz uradnih Roksalovih gradiv.
 
 > **Stanje:** rekonstrukcija zaključena in presežena · izdaja **v1.55.1** ·
-> GitLab CI **zelen** (zasebni runner) · **39 testnih skupin + E2E skozi pravo
+> GitLab CI **zelen** (zasebni runner) · **41 testnih skupin + E2E skozi pravo
 > aplikacijo** · GitLab je kanonični vir, GitHub zrcalo sinhrono ·
 > [docs/](docs/) vsebuje poročila za vsako fazo.
 
@@ -22,7 +22,7 @@ računi in **fotomontaža PREJ/POTEM** iz uradnih Roksalovih gradiv.
    vsi moduli, RBAC, terenski tok, offline PWA, portal stranke (dogodbeno
    `README-REKONSTRUKCIJA.md` iz tega obdobja).
 4. **Nadaljnji razvoj** (R440–R525): kakovost, varnost, fotomontaža (GitLab
-   issue #14), relejni pas 39 skupin, obnovitev CI po izčrpani kvoti (R525).
+   issue #14), relejni pas 41 skupin (R532: harmonizacija barv), obnovitev CI po izčrpani kvoti (R525).
 
 ## Kaj aplikacija počne
 
@@ -62,7 +62,12 @@ plan in referenco (220 cm) → izbere Roksalov izdelek in odtenek → **PREJ/POT
 - **Poštena meja:** pikslov, ki jih obnova ozadja ne doseže, se šrafira;
   `zahtevaRočniPoseg` pove, kdaj masko zožati. Izris nosi žig
   »VIZUALIZACIJA ZA PREDSTAVITEV«.
-- Pogonik ENGINE **1.3.0** (`src/lib/photo-replace-*.ts`); celotno odkritenje
+- Pogonik ENGINE **1.4.0** (`src/lib/photo-replace-*.ts`) — od R532 tudi
+  **harmonizacija barv prizora**: vezani barvni namig iz pasov neba/tal
+  (nevtralen prizor pusti barvo izdelka nedotaknjeno, meja ±22/kanal,
+  deterministično, brez AI; raziskava
+  [`docs/RAZISKAVA-IZBOLJSAVE-2026-10.md`](docs/RAZISKAVA-IZBOLJSAVE-2026-10.md));
+  celotno odkritenje
   poročilo: [`docs/FOTOZAMENJAVA-POROCILO-14.md`](docs/FOTOZAMENJAVA-POROCILO-14.md).
 
 ## Varnost
@@ -143,7 +148,7 @@ ImageMagick, poppler) — podrobno v `tests/ci-local.sh` glavi.
 | `src/lib/` | 72 knjižnic: photo-replace-{mask,texture,core,engine}, permissions-core, nav-registry, audit, … |
 | `prisma/` | shema + 12 migracij + semenske skripte (`db:seed` veriga) |
 | `public/assets/roksal/src/` | uradni Roksalovi viri, `MANIFEST.json` s SHA-256 |
-| `tests/` | 39 skupin + `ci-local.sh` / `ci-matrix.sh` + fixtures |
+| `tests/` | 41 skupin + `ci-local.sh` / `ci-matrix.sh` + fixtures |
 | `ops/` | E2E skripte, izrisi-dokazi, backup/restore/drill, secret-audit |
 | `docs/` | poročila po fazah (RECOVERY, FOTOZAMENJAVA, E2E, …) |
 | `.zscripts/` | vzdrževanje peskovnika: dev-detach, git-retry, ci-mirror |

@@ -320,10 +320,10 @@ await db.$disconnect()
                + (' — ČIP uradne lestvice, DETAJL pred FOTO_IZDELEK' if chk1 else ''))
             if not chk1:
                 bad(f'gradivo NI čip (pričakovano roksal-kubo-cip-roak.png): {out.get("gradivo")}')
-            if out.get('engine') == '1.3.0':
-                ok('engineVersion 1.3.0 zapisan (§13 — R524 dvig iz 1.2.0)')
+            if out.get('engine') == '1.4.0':
+                ok('engineVersion 1.4.0 zapisan (§13 — R532 dvig iz 1.3.0)')
             else:
-                bad(f'engineVersion: {out.get("engine")} (pričakovano 1.3.0)')
+                bad(f'engineVersion: {out.get("engine")} (pričakovano 1.4.0)')
             subprocess.run(
                 ['bun', '-e', f'''
 const {{ PrismaClient }} = require("@prisma/client")

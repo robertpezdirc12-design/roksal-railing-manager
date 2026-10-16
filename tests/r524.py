@@ -22,10 +22,10 @@ Zakaj ta suite (odprta točka issue #14: »manjkajoči DETAJL za ograje«):
      determinizem (isti seme → isti izris); tekstura prisotna na ograji.
   F) revizijsko poročilo ops/r524-cipi.json (izrezi, barvne razdalje, rotacije).
   G) žičenje: seed-r524 v verigi db:seed, UI rotira vir po izmeri smeri vlaken,
-     ENGINE_VERSION 1.3.0, dokazni izris zrcali UI pot.
+     ENGINE_VERSION 1.4.0 (R532: harmonizacija barv prizora), dokazni izris zrcali UI pot.
   H) dokazni artefakti: 5 primerov × (potem + primerjava + zoom) + tabela čipov.
   I) živi API (samo ob delujočem strežniku): POST tip POKOCNA preživi krog —
-     lamelaMm 57/rezaMm 20 nespremenjena, engineVersion 1.3.0, nato
+     lamelaMm 57/rezaMm 20 nespremenjena, engineVersion 1.4.0, nato
      idempotentno čiščenje.
 
 Iskreno zapisane odločitve (issue #14 ostaja odprt):
@@ -336,8 +336,8 @@ chk(src_has('src/components/roksal/modules/foto-replace.tsx', "rctx.rotate(Math.
     'UI rotira vir DETAJL čipa za 90°, kadar vlakna tečejo čez element')
 chk(src_has('src/components/roksal/modules/foto-replace.tsx', "g.kind === 'DETAJL'"),
     'rotacija vezana SAMO na DETAJL vire (scenične fotografije ostanejo neprizadete)')
-chk(src_has('src/lib/photo-replace-core.ts', "ENGINE_VERSION = '1.3.0'"),
-    'ENGINE_VERSION 1.3.0 (§13)')
+chk(src_has('src/lib/photo-replace-core.ts', "ENGINE_VERSION = '1.4.0'"),
+    'ENGINE_VERSION 1.4.0 (§13 — R532 dvig)')
 chk(src_has('ops/r524-render.mjs', 'izmeriSmerVlaken'),
     'dokazni izris (ops/r524-render.mjs) zrcali UI pot (ista izmera + rotacija)')
 chk(src_has('src/lib/photo-replace-core.ts', 'struktura(palica.xCm, 0, palica.xCm + palica.sirinaCm, cfg.heightCm - 4)'),
@@ -407,7 +407,7 @@ await db.$disconnect()
 ''')
             chk(V.get('tip') == 'POKOCNA' and V.get('lamela') == 57, f'tip POKOCNA + lamela 57 mm preživi krog (dejansko {V.get("tip")}/{V.get("lamela")})')
             chk(V.get('reza') == 20 and V.get('višina') == 120, f'razmik 20 mm + višina 120 preživita krog (dejansko {V.get("reza")}/{V.get("višina")})')
-            chk(V.get('engine') == '1.3.0', f'engineVersion 1.3.0 zapisan (§13, dejansko {V.get("engine")})')
+            chk(V.get('engine') == '1.4.0', f'engineVersion 1.4.0 zapisan (§13, dejansko {V.get("engine")})')
             for _ in range(2):
                 C2 = bun_db(f'''
 import {{ PrismaClient }} from '@prisma/client'

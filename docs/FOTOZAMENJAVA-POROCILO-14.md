@@ -10,7 +10,8 @@
 Izdaja: R527, 2026-10-15 (posodobitev izdaje R523: kakovost teksture KUBO iz uradne
 lestvice v izvirni ločljivosti, manjkajoči uradni materiali, ureditev variant po
 namenski lestvici POLNA 57/32; R524: DETAJL čipi za ograje; R527: izrecna oznaka
-generičnih demo izdelkov po alternativi (b) iz §5).
+generičnih demo izdelkov po alternativi (b) iz §5; R532: harmonizacija barv prizora —
+vezani barvni namig iz pasov neba/tal, engine 1.4.0, raziskava docs/RAZISKAVA-IZBOLJSAVE-2026-10.md).
 Viri teh trditev: koda (`src/lib/photo-replace-{mask,texture,core,engine}.ts`,
 `sirinaIzTecha`/`rezaIzTecha`/`sirinaIzImena` v jedru), suite `tests/r504.py` (216 trditev),
 `tests/r517.py` (66), `tests/r518.py` (69), `tests/r520.py` (83), `tests/r523.py` (66)
@@ -105,10 +106,10 @@ E2E skozi pravo aplikacijo (prijava → nalaganje → maska → referenca → iz
 PREJ/POTEM → SHRANI → preverba zapisa v bazi → čiščenje): `ops/r517-ui-*`,
 `ops/r518-e2e.py` (14 ✓ / 0 ✗), `ops/r520-e2e.py` (14 ✓ / 0 ✗), **`ops/r523-e2e.py`
 (13 ✓ / 0 ✗ — FASADA: tip FASADA · letvica 80 mm · razmik 20 mm · gradivo
-roksal-kubo-cip-roak.png (DETAJL) · engine 1.3.0), **`ops/r524-e2e.py` (15 ✓ /
+roksal-kubo-cip-roak.png (DETAJL) · engine 1.4.0), **`ops/r524-e2e.py` (15 ✓ /
 0 ✗ — OGRAJA: tip POKOCNA · lamela 57 mm · razmik 20 mm · gradivo
 roksal-polna57-cip-rwa.png (DETAJL — varianta, ki je v R518 padla v
-SAMO_DRUZINA) · engine 1.3.0)**.
+SAMO_DRUZINA) · engine 1.4.0)**.
 
 ## 5. Kaj je treba še pridobiti (težava #6 — oskrba, ne aplikacija)
 
@@ -140,7 +141,7 @@ SAMO_DRUZINA) · engine 1.3.0)**.
    (data-testid), »(generični)« v seznamu shranjenih vizualizacij in v javnem
    pregledu povezav (vidi ga stranka). Dokaz: `tests/r527.py` (19✓/0✗) +
    `ops/r527-e2e.py` (21✓/0✗ skozi pravo aplikacijo — OGR-K-001: brez gradiva v
-   dokazni verigi, engine 1.3.0, pošten napis barvnega približka).
+   dokazni verigi, engine 1.4.0, pošten napis barvnega približka).
 6. Ozadje za KUBO fasado: reže med letvicami prikazujejo pošteno šrafuro nedokončane
    obnove (R507 §2). Realna KUBO namestitev ima v režah temno podkonstrukcijo — barvo
    bi bilo mogoče izpeljati iz lastnih pikslov rež na izvirni fotografiji (dokazljiv vir);

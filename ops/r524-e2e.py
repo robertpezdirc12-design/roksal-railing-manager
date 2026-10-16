@@ -13,7 +13,7 @@ SAMO_DRUZINA — sedaj UPORABLJENO z uradnim čipom površine):
   izdelek ROK-OGP-POLNA-57 + Rustic walnut → PREVERI: lamela 57 mm (širina
   profila) + razmik 20 mm → PREJ/POTEM → SHRANI → BAZA: tip POKOCNA · 57/20 ·
   gradivo roksal-polna57-cip-rwa.png (DETAJL — čip uradne namenske lestvice
-  57/32) · engine 1.3.0 → počiščeno (r459 disciplina).
+  57/32) · engine 1.4.0 → počiščeno (r459 disciplina).
 
 Vsak korak se PREVERI po značilnem besedilu, ne slepi kliki (metodologija
 r518/r520/r523: radix Select opcije kliknjene prek DOM; posnetek potrebuje
@@ -333,10 +333,10 @@ await db.$disconnect()
                + (' — ČIP uradne lestvice 57/32, DETAJL pred FOTO_IZDELEK (v R518 ta varianta padla v SAMO_DRUZINA)' if chk1 else ''))
             if not chk1:
                 bad(f'gradivo NI čip (pričakovano roksal-polna57-cip-rwa.png): {out.get("gradivo")}')
-            if out.get('engine') == '1.3.0':
-                ok('engineVersion 1.3.0 zapisan (§13)')
+            if out.get('engine') == '1.4.0':
+                ok('engineVersion 1.4.0 zapisan (§13 — R532)')
             else:
-                bad(f'engineVersion: {out.get("engine")} (pričakovano 1.3.0)')
+                bad(f'engineVersion: {out.get("engine")} (pričakovano 1.4.0)')
             subprocess.run(
                 ['bun', '-e', f'''
 const {{ PrismaClient }} = require("@prisma/client")

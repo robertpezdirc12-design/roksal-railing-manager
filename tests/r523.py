@@ -376,7 +376,7 @@ await db.$disconnect()
 ''')
             chk(V.get('tip') == 'FASADA' and V.get('lamela') == 80, f'tip FASADA + letvica 80 mm (uradno) preživi krog (dejansko {V.get("tip")}/{V.get("lamela")})')
             chk(V.get('reza') == 20 and V.get('višina') == 285, f'razmik 20 mm + višina 285 preživita krog (dejansko {V.get("reza")}/{V.get("višina")})')
-            chk(V.get('engine') == '1.3.0', f'engineVersion 1.3.0 zapisan (§13 — R524 dvig, dejansko {V.get("engine")})')
+            chk(V.get('engine') == '1.4.0', f'engineVersion 1.4.0 zapisan (§13 — R532 dvig, dejansko {V.get("engine")})')
             for _ in range(2):
                 C2 = bun_db(f'''
 import {{ PrismaClient }} from '@prisma/client'
