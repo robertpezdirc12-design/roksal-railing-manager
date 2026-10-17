@@ -9,6 +9,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import type { ZodType } from 'zod'
 
+// R541: dovoljeni statusi projekta — ena sama množica za zod validacijo
+// (POST/PATCH /api/projects) in CHECK omejitev v bazi (migracija
+// 20261023000000_r541_status_check). Prej je z.string() spustil poljuben niz.
+export const PROJECT_STATUSES = ['NACRT', 'AKTIVNI', 'TEREN', 'ZAKLJUCEN', 'ARHIV'] as const
+
 export type ParsedOk<T> = { ok: true; data: T; response?: undefined }
 export type ParsedErr = { ok: false; data?: undefined; response: NextResponse }
 

@@ -4,14 +4,14 @@ Poslovno-operativni sistem za Roksal — od prvega voda do zaključene montaže 
 fasad in teras: CRM, ponudbe s podpisom, proizvodnja, teren (tudi brez signala),
 računi in **fotomontaža PREJ/POTEM** iz uradnih Roksalovih gradiv.
 
-> **Stanje:** rekonstrukcija zaključena in presežena · izdaja **v1.59.0** ·
-> **47 testnih skupin + E2E skozi pravo aplikacijo** · GitHub je kanonični vir
+> **Stanje:** rekonstrukcija zaključena in presežena · izdaja **v1.60.0** ·
+> **48 testnih skupin + E2E skozi pravo aplikacijo** · GitHub je kanonični vir
 > (zadeve + release vrata), GitLab zrcalo, sinhronizacija po SHA (`ops/sync-check.sh`) ·
 > [docs/](docs/) vsebuje poročila za vsako fazo.
 
 ---
 
-## Zgodovina v petih stavkih
+## Zgodovina v šestih stavkih
 
 1. **Izvirnik** (~430 iteracij, R120–R430) je bil razvit v Z.ai kontejnerjih in
    sinhroniziran na GitHub; račun/repo je bil izbrisan 6. 10. 2026.
@@ -31,6 +31,12 @@ računi in **fotomontaža PREJ/POTEM** iz uradnih Roksalovih gradiv.
    in razbitje velikih modulov (R537); sejni piškotek httpOnly (R538);
    transakcijska celovitost preostalih družin (R539); zadnji ostanki — dvojček,
    kodne dirke PR-/SRV-/OR- (R540). Belt 8 statičnih + 47 skupin.
+6. **Podatkovna celovitost statusnih polj (R541, izdaja v1.60.0):** 36 CHECK
+   omejitev v bazi (množice = shemski komentarji ∪ pisni kraji ∪ dejanske
+   vrednosti, inventura R541-a) + zod enumeracija statusa projekta
+   (`PROJECT_STATUSES` — edina 2 surovi pass-through kraja zaprta, neveljaven
+   status → 400) + testna skupina r541 (48. skupina). Belt 8 statičnih + 48
+   skupin.
 
 ## Kaj aplikacija počne
 
@@ -117,9 +123,9 @@ plan in referenco (220 cm) → izbere Roksalov izdelek in odtenek → **PREJ/POT
   15 min, `PRISMA_LOG_QUERIES_MS`) in izpisuje SAMO SQL-besedilo in trajanje —
   nikoli vrednosti parametrov.
 
-### Transakcijska celovitost in utrditev prijav (R535–R540)
+### Transakcijska in podatkovna celovitost, utrditev prijav (R535–R541)
 
-Po temeljiti reviziji v1.58.0 je sledilo šest sklopov popravkov po prioriteti
+Po temeljiti reviziji v1.58.0 je sledilo sedem sklopov popravkov po prioriteti
 tveganja:
 
 - **Vse poslovne verige z več pisanji so ATOMARNE (~140 rut, R537–R540):**
@@ -133,13 +139,21 @@ tveganja:
 - **Avtentikacija (R536):** porazdeljeni tempomat v bazi (prijave na IP,
   odporen na restart), zaklepanje računa po zaporednih neuspelih prijavah,
   scrypt N=2¹⁷ s transparentno nadgradnjo starejših hashov ob prijavi.
-- **Vhodna validacija (R536/R538):** zod sheme po API-ju — napaken vnos
-  nikoli ne pride do baze.
+- **Vhodna validacija (R536/R538/R541):** zod sheme po API-ju — napačen vnos
+  nikoli ne pride do baze (R541: status projekta enumeriran prek
+  `PROJECT_STATUSES`, neveljaven → 400).
 - **CSP Report-Only** glava (R536) — opazovalno obdobje pred izvrševanjem;
   poročila se pregledajo pred preklopom v `Content-Security-Policy`.
 - **ErrorBoundary + 29 manjkajočih FK indeksov** (R535) — padec modula ne
   zruši celotne aplikacije; poizvedbe po tujih ključih ne delajo tabelnih
   pregledov.
+- **CHECK omejitve statusnih polj (R541):** vsa statusna polja (36 modelov)
+  imajo v bazi CHECK constraint z dovoljeno množico vrednosti (množice iz
+  inventure R541-a: shemski komentarji ∪ pisni kraji v kodi ∪ dejanske
+  vrednosti v bazi) — tudi če bi plast API-ja kdaj prespala, baza zavrne
+  nedovoljeno vrednost. Prisma DSL ne pozna CHECK constraintov — ročno
+  dopolnjena migracija je dokumentirana pot (`prisma migrate dev`
+  ne-modeliranih objektov ne odstrani).
 - **Razbitje velikih modulov (R537):** meritve-kamera 3021 → 16 datotek,
   AR 2215 → 12, foto-replace 1953 → 7 (dobesedne selitve z dokazi).
 
@@ -166,7 +180,7 @@ hitro demo prijavo se izrišejo samo z `DEMO_ACCESS=on`.
 
 ```bash
 bash tests/ci-local.sh        # ENO VSTOPNO MESTO: typecheck + lint + migracije + seed
-                              # + živa aplikacija + VSE skupine (47); logi v .ci-local-logs/
+                              # + živa aplikacija + VSE skupine (48); logi v .ci-local-logs/
 bash tests/ci-matrix.sh --list    # seznam skupin — edini vir resnice
 bash tests/ci-matrix.sh r524       # ena skupina (točno tako jih poganja CI)
 ```
@@ -195,7 +209,7 @@ ImageMagick, poppler) — podrobno v `tests/ci-local.sh` glavi.
   smart-HTTP z job-tokenom). Zasebni runner kvote **ne** porablja.
 - **Release vrata (obvezna pred vsako izdajo):** relejni pas
   `bash tests/ci-local.sh` na TOČNO tistem commitu, ki se izdaja (8 statičnih
-  korakov + vseh 47 skupin, EXIT 0), nato `bash ops/sync-check.sh` = OK na
+  korakov + vseh 48 skupin, EXIT 0), nato `bash ops/sync-check.sh` = OK na
   obeh sistemih, šele nato oznaka + push. GitLab pipeline (`verify`) je
   drugotna potrditev istega SHA — ne nadomestilo pasu.
 - **Vercel (produkcija) — pošteno:** iz peskovnika NI dostopa do Vercel API-ja
@@ -230,7 +244,7 @@ ImageMagick, poppler) — podrobno v `tests/ci-local.sh` glavi.
 | `src/lib/` | 75 knjižnic: photo-replace-{mask,texture,core,engine}, permissions-core, nav-registry, audit, notify (outbox), … |
 | `prisma/` | shema (93 modelov) + 15 migracij + semenske skripte (`db:seed` veriga) |
 | `public/assets/roksal/src/` | uradni Roksalovi viri, `MANIFEST.json` s SHA-256 |
-| `tests/` | 47 skupin + `ci-local.sh` / `ci-matrix.sh` + fixtures |
+| `tests/` | 48 skupin + `ci-local.sh` / `ci-matrix.sh` + fixtures |
 | `ops/` | E2E skripte, izrisi-dokazi, backup/restore/drill, secret-audit |
 | `docs/` | poročila po fazah (RECOVERY, FOTOZAMENJAVA, E2E, …) |
 | `.zscripts/` | vzdrževanje peskovnika: dev-detach, git-retry, ci-mirror |
@@ -248,11 +262,12 @@ ImageMagick, poppler) — podrobno v `tests/ci-local.sh` glavi.
   odločitev; benchmark fizičnih meritev (faza 7) zahteva pravo napravo.
   Seznam v
   [`docs/FOTOZAMENJAVA-POROCILO-14.md`](docs/FOTOZAMENJAVA-POROCILO-14.md) §5.
-- **Revizija v1.58.0 (7,9/10) — Top-10 popravki izvedeni (R535–R540).** Še
-  odprto za naslednje kroge (po prioriteti): JSONB/enum omejitve statusnih
-  polj (shemska migracija), CSP preklop iz Report-Only v Enforce (čaka
-  poročila z opazovalnega obdobja na produkciji), `DEMO_ACCESS=on` v
-  produkcjskem okolju (lastnikova odločitev ob namestitvi).
+- **Revizija v1.58.0 (7,9/10) — Top-10 popravki izvedeni (R535–R541).** Še
+  odprto za naslednje kroge (po prioriteti): pretvorba JSON stolpcev iz TEXT
+  v pravi JSONB tip (statusna polja so zdaj CHECK-omejena — R541), CSP preklop
+  iz Report-Only v Enforce (čaka poročila z opazovalnega obdobja na
+  produkciji), `DEMO_ACCESS=on` v produkcjskem okolju (lastnikova odločitev ob
+  namestitvi).
 
 ## Tehnologija
 

@@ -4,15 +4,18 @@ import { db } from '@/lib/db'
 import { jsonError, readsAllData, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
 import { deliverEvent, recordEvent, type RecordedEvent } from '@/lib/notify'
-import { parseBody } from '@/lib/validate'
+import { parseBody, PROJECT_STATUSES } from '@/lib/validate'
 
 type Params = { params: Promise<{ id: string }> }
 
 // R536: zod shema za urejanje projekta — delni PATCH: vsa polja neobvezna;
 // nizi se (kot prej) ne stiskajo; customerId sprejme tudi null (počisti).
+// R541: status je zdaj enumeriran (PROJECT_STATUSES — prej gol z.string(),
+// ki je spustil poljuben niz; neveljaven status zdaj → 400, skladno z
+// CHECK omejitvijo Project_status_check v bazi).
 const ProjectPatchSchema = z.object({
   title: z.string().optional(),
-  status: z.string().optional(),
+  status: z.enum(PROJECT_STATUSES, { error: `Neveljaven status projekta. Dovoljeni: ${PROJECT_STATUSES.join(', ')}.` }).optional(),
   address: z.string().optional(),
   note: z.string().optional(),
   customerId: z.string().nullable().optional().transform((v) => (v === undefined ? undefined : v || null)),

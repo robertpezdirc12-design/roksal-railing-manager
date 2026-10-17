@@ -3,15 +3,17 @@ import { z } from 'zod'
 import { db } from '@/lib/db'
 import { readsAllData, requirePermission } from '@/lib/auth'
 import { nextCodeFromList } from '@/lib/codes'
-import { parseBody } from '@/lib/validate'
+import { parseBody, PROJECT_STATUSES } from '@/lib/validate'
 import { retryOnUnique } from '@/lib/versioning'
 
 // R536: zod shema za ustvarjanje projekta — naslov obvezen (neprazno po trim),
-// status ima privzeto vrednost NACRT (kot prej, brez seznama dovoljenih),
 // customerId je neobvezen (null ⇒ brez stranke; UI pošilja null za „brez").
+// R541: status je zdaj enumeriran (PROJECT_STATUSES — prej gol z.string(),
+// ki je spustil poljuben niz; neveljaven status zdaj → 400, skladno z
+// CHECK omejitvijo Project_status_check v bazi).
 const ProjectCreateSchema = z.object({
   title: z.string().trim().min(1, 'Naslov projekta je obvezen.'),
-  status: z.string().nullish().transform((v) => v ?? 'NACRT'),
+  status: z.enum(PROJECT_STATUSES, { error: `Neveljaven status projekta. Dovoljeni: ${PROJECT_STATUSES.join(', ')}.` }).nullish().transform((v) => v ?? 'NACRT'),
   customerId: z.string().nullish().transform((v) => v || null),
   address: z.string().nullish().transform((v) => v ?? null),
   note: z.string().nullish().transform((v) => v ?? null),

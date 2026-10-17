@@ -174,7 +174,7 @@ export function AppShell () {
             ) : null}
           </div>
 
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1 sm:gap-1.5">
             {/* R439 (issue #6): stanje signala + vrsta offline operacij */}
             <OfflineBadge />
 

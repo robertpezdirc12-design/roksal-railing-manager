@@ -249,6 +249,12 @@ jobs:
           # interaktivna tx, service-cases) + equipment P2002 → prijazen 409.
           # Nova skupina MORA biti tudi v tests/ci-matrix.sh.
           - grupa: r540
+          # R541: CHECK omejitve statusnih polj — 36 CHECK constraintov
+          # (migracija 20261023000000_r541_status_check, množice iz inventure
+          # R541-a) + zod enumeracija statusa projekta (PROJECT_STATUSES,
+          # POST/PATCH /api/projects neveljaven status → 400).
+          # Nova skupina MORA biti tudi v tests/ci-matrix.sh.
+          - grupa: r541
     services:
       postgres:
         image: postgres:16

@@ -1638,7 +1638,7 @@ model PlaybookDef {
   key           String // OGRAJA | KERAMIKA | STREHA | FASADA | MONTAZA
   name          String
   version       Int // zaporedna verzija (1, 2, …)
-  status        String   @default("DRAFT")
+  status        String   @default("DRAFT") // DRAFT | ACTIVE | RETIRED
   effectiveFrom DateTime @default(now())
   authorId      String?
   author        User?    @relation("playbookAuthor", fields: [authorId], references: [id], onDelete: SetNull)
@@ -1689,7 +1689,7 @@ model PlaybookStepRun {
   runId           String
   run             PlaybookRun @relation(fields: [runId], references: [id], onDelete: Cascade)
   stepId          String // id koraka iz definicije (stable identifier)
-  status          String      @default("PENDING")
+  status          String      @default("PENDING") // PENDING | IN_PROGRESS | COMPLETED | NI_PRIMERNO | BLOKIRANO | NEUSPESNO
   evidence        String? // JSON dokazil (§10)
   exceptionReason String? // §6: obvezni razlog za NI_PRIMERNO / BLOKIRANO
   attempts        Int         @default(0) // število poskusov (retry podpora)
