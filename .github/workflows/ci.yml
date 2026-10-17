@@ -277,6 +277,12 @@ jobs:
           # Brez DB sprememb (CspReport shramba že od R543).
           # Nova skupina MORA biti tudi v tests/ci-matrix.sh.
           - grupa: r545
+          # R546: razbitje velikanov — konfigurator (1752), pregled (1728),
+          # projekti (1642) kirurško razbiti v 12 poddatotek BREZ spremembe
+          # obnašanja (refactoring: 0 odvisnosti, 0 DB sprememb, enosmerni
+          # uvozni graf, sidra r488/r511/r464 sledijo novi strukturi).
+          # Nova skupina MORA biti tudi v tests/ci-matrix.sh.
+          - grupa: r546
     services:
       postgres:
         image: postgres:16

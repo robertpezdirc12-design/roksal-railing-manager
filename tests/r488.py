@@ -562,10 +562,13 @@ chk(s == 201 and sm == 200, f'monter z nalogom bere model 200 (nalog {s}, model 
 
 # ══ J. P2 KONTROLA VIRA (konfigurator prefill) ══════════════════════════════
 print('── J) P2 — konfiguratorjev prefill prenaša segmente tekača ──')
-chk(src_has('src/components/roksal/modules/konfigurator.tsx', 'runSegmentsFromParams')
-    and src_has('src/components/roksal/modules/konfigurator.tsx', 'params.fenceRunId + params.segments'),
+# R546: refactoring velikana — helper je fizično v konfigurator-shared.ts (en vir),
+# uporablja ga konfigurator-meritve.tsx (korak Meritve); obnašanje nespremenjeno.
+chk(src_has('src/components/roksal/modules/konfigurator-shared.ts', 'runSegmentsFromParams')
+    and src_has('src/components/roksal/modules/konfigurator-meritve.tsx', 'params.fenceRunId + params.segments')
+    and src_has('src/components/roksal/modules/konfigurator-meritve.tsx', 'runSegmentsFromParams'),
     'KONFIGURATOR: helper za PRAVE segmente tekača (params.fenceRunId + params.segments)')
-chk(src_has('src/components/roksal/modules/konfigurator.tsx', 'iz potrjenih tekačev (seg-1 … seg-N)')
+chk(src_has('src/components/roksal/modules/konfigurator-meritve.tsx', 'iz potrjenih tekačev (seg-1 … seg-N)')
     and src_has('src/app/api/fence-run/[id]/confirm/route.ts', 'calcJson: { inputs }'),
     'CONFIRM: handoff zapiše calcJson.inputs (brez plan); prefill sporoča prenos segmentov')
 

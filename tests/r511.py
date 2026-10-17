@@ -192,7 +192,7 @@ chk('obseg tekač ne more dokazati' in bom, 'opombo pove tudi, kadar obseg NI do
 chk('...(geometrija ? { geometrija } : {})' in bom, 'odlok je vrnjen pisarni v odgovoru, ne samo shranjen')
 chk('const MAX_VIEWS = 4' in src('src/app/api/measurement/confirm/route.ts'), 'CONFIRM: merilo sprejetja r455 (MAX_VIEWS = 4) ostaja nedotaknjeno')
 
-ui = src('src/components/roksal/modules/projekti.tsx')
+ui = src('src/components/roksal/modules/projekti-bom.tsx')  # R546: PackageBomDialog izvlečen iz projekti.tsx (razbitje velikana)
 chk('?.geometrija ?? null' in ui, 'UI: dialog kosovnice prebere vir geometrije iz kalkulacije')
 chk('Vir obsega:' in ui, 'UI: pisarna vidi naslov "Vir obsega" — ne samo število vrstic')
 chk('dokazanega obsega ni' in ui, 'UI: padec na predlogo je napisan z besedami, ne samo z kodo')

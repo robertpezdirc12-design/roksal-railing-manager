@@ -4,8 +4,8 @@ Poslovno-operativni sistem za Roksal — od prvega voda do zaključene montaže 
 fasad in teras: CRM, ponudbe s podpisom, proizvodnja, teren (tudi brez signala),
 računi in **fotomontaža PREJ/POTEM** iz uradnih Roksalovih gradiv.
 
-> **Stanje:** rekonstrukcija zaključena in presežena · izdaja **v1.64.0** ·
-> **52 testnih skupin + E2E skozi pravo aplikacijo** · GitHub je kanonični vir
+> **Stanje:** rekonstrukcija zaključena in presežena · izdaja **v1.65.0** ·
+> **53 testnih skupin + E2E skozi pravo aplikacijo** · GitHub je kanonični vir
 > (zadeve + release vrata), GitLab zrcalo, sinhronizacija po SHA (`ops/sync-check.sh`) ·
 > [docs/](docs/) vsebuje poročila za vsako fazo.
 
@@ -74,6 +74,17 @@ računi in **fotomontaža PREJ/POTEM** iz uradnih Roksalovih gradiv.
    („0 kršitev — opazovalno obdobje je čisto“ = znak za preklop v
    Enforce) in opombo o 7-dnevnem TTL (job `csp-gc`). Testna skupina
    r545 (52. skupina). Belt 8 statičnih + 52 skupin.
+11. **Razbitje velikanov (R546, izdaja v1.65.0):** trije največji moduli —
+   konfigurator (1752 vrstic), pregled (1728) in projekti (1642) — so
+   kirurško razbiti v 12 poddatotek BREZ spremembe obnašanja (refactoring:
+   0 novih odvisnosti, 0 DB sprememb): `konfigurator-{shared,steps,meritve}`
+   (glavni 643), `pregled-{shared,views,cards,share}` (glavni 507),
+   `projekti-{shared,sections,packages,portal,bom}` (glavni 232).
+   Enosmerno-uvozni graf (shared = list, 0 krožnih), nalagalnik modulov
+   NEDOTAKNJEN (poddatoteke so gradniki, ne zavihki), sidra sosednjih
+   skupin (r488 segmenti tekača, r511 vir obsega, r464 cenovne konstante)
+   so sledila novi strukturi pošteno. Testna skupina r546
+   (53. skupina). Belt 8 statičnih + 53 skupin.
 
 ## Kaj aplikacija počne
 
@@ -310,11 +321,11 @@ ImageMagick, poppler) — podrobno v `tests/ci-local.sh` glavi.
 | Pot | Vsebina |
 |---|---|
 | `src/app/api/` | 195 API rut (App Router) |
-| `src/components/roksal/` | 50 modulov + ogrodje (app-shell, module-view) |
+| `src/components/roksal/` | 50 modulov + ogrodje (app-shell, module-view) + 12 gradnikov velikanov (`konfigurator/pregled/projekti-*`, R546) |
 | `src/lib/` | 78 knjižnic: photo-replace-{mask,texture,core,engine}, permissions-core, nav-registry, audit, notify (outbox), json (jsonb pomožniki), csp (en vir CSP politike), deep-link (URL odraz zavihka), … |
 | `prisma/` | shema (94 modelov) + 17 migracij + semenske skripte (`db:seed` veriga) |
 | `public/assets/roksal/src/` | uradni Roksalovi viri, `MANIFEST.json` s SHA-256 |
-| `tests/` | 52 skupin + `ci-local.sh` / `ci-matrix.sh` + fixtures |
+| `tests/` | 53 skupin + `ci-local.sh` / `ci-matrix.sh` + fixtures |
 | `ops/` | E2E skripte, izrisi-dokazi, backup/restore/drill, secret-audit |
 | `docs/` | poročila po fazah (RECOVERY, FOTOZAMENJAVA, E2E, …) |
 | `.zscripts/` | vzdrževanje peskovnika: dev-detach, git-retry, ci-mirror |
@@ -332,6 +343,11 @@ ImageMagick, poppler) — podrobno v `tests/ci-local.sh` glavi.
   odločitev; benchmark fizičnih meritev (faza 7) zahteva pravo napravo.
   Seznam v
   [`docs/FOTOZAMENJAVA-POROCILO-14.md`](docs/FOTOZAMENJAVA-POROCILO-14.md) §5.
+- **Tehnični dolg — velikani razbiti (R546), ostanejo srednji moduli.** Trije
+  največji (konfigurator/pregled/projekti) so razbiti v 12 poddatotek; če
+  bo treba, isti vzorec čaka srednje module (zajem 1372, servis 1283,
+  ogradnja 1211) — po potrebi v prihodnjih krogih, po istem receptu
+  (shared list → gradniki → tanka lupina, sidra testov posodobljena pošteno).
 - **Revizija v1.58.0 (7,9/10) — Top-10 popravki izvedeni (R535–R543).** Še
   odprto za naslednje kroge (po prioriteti): CSP Enforce — zmožnost je
   pripravljena (`CSP_MODE=enforce`, `config/ENV-VARS.md`) in odločitev je
