@@ -27,7 +27,9 @@ import { cn } from '@/lib/utils'
 import { useAppStore } from '@/lib/store'
 import { useToast } from '@/hooks/use-toast'
 import { ROLE_LABELS, type Role } from '@/lib/permissions-core'
-import { SECTIONS, tabVisible } from '@/lib/nav-registry'
+import { SECTIONS, sectionForTab, tabById, tabVisible } from '@/lib/nav-registry'
+// R544: globoka povezava ?m= — URL odraz zavihka + zgodovina (back gumb)
+import { tabFromSearch, pushTabState, clearTabState } from '@/lib/deep-link'
 import { apiGet, apiPost, fmtDateTime, useApi } from '@/lib/api-client'
 import {
   bindOfflineUser, clearOfflineData, dismissOp, getOfflineState, initOfflineSync, listUnsynced, syncNow, useOnline,
@@ -113,10 +115,37 @@ export function AppShell () {
   // R536: ob odklopu komponente počistimo morebitni čakajoči iskalni timeout
   useEffect(() => () => { if (searchTimer.current) clearTimeout(searchTimer.current) }, [])
 
+  // R544: URL odraz zavihka (?m=). Inicialni sync ob mountu — URL zmaga nad
+  // persistom (roksal-session): globoka povezava /?m=nalogi odpre Nalogi tudi
+  // po prijavi (LoginScreen ne navigira, ?m preživi). Neveljaven ?m (neznan id
+  // ali zavihek brez pravice — tabVisible fail-closed) → clearTabState, stanje
+  // ostane na persistanem zavihku. popstate → enak sync za BACK gumb.
+  useEffect(() => {
+    const syncFromUrl = () => {
+      const wanted = tabFromSearch(window.location.search)
+      if (!wanted) return // brez ?m → brez spremembe (persist prevzame)
+      const tab = tabById(wanted)
+      const sec = sectionForTab(wanted)
+      if (!tab || !sec || !tabVisible(useAppStore.getState().user?.perms, tab)) {
+        clearTabState()
+        return
+      }
+      const st = useAppStore.getState()
+      if (st.section !== sec.id || st.tab !== tab.id) {
+        st.setSection(sec.id)
+        st.setTab(tab.id)
+      }
+    }
+    syncFromUrl()
+    window.addEventListener('popstate', syncFromUrl)
+    return () => { window.removeEventListener('popstate', syncFromUrl) }
+  }, [])
+
   function goToHit (hit: SearchHit) {
     setSearchOpen(false)
     setSection(hit.section)
     setTab(hit.tab)
+    pushTabState(hit.tab)
   }
 
   if (!user) return null
@@ -125,7 +154,9 @@ export function AppShell () {
     setSection(id)
     const sec = SECTIONS.find((s) => s.id === id)
     const first = sec?.tabs.find((t) => tabVisible(user?.perms, t))
-    if (first) setTab(first.id)
+    // R544: prvi videni zavihek gremo v URL (pushState); sekcija brez vidnih
+    // zavihkov → odstranimo ?m iz naslova.
+    if (first) { setTab(first.id); pushTabState(first.id) } else { clearTabState() }
   }
 
   function openNotifications (open: boolean) {
@@ -254,7 +285,7 @@ export function AppShell () {
                   </Badge>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => { setSection('profil'); setTab('profil') }}>
+                <DropdownMenuItem onClick={() => { setSection('profil'); setTab('profil'); pushTabState('profil') }}>
                   <Ruler className="size-4" aria-hidden /> Moj profil
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
@@ -322,7 +353,7 @@ export function AppShell () {
                     {tabs.map((t) => (
                       <li key={t.id}>
                         <button
-                          type="button" onClick={() => { setSection(sec.id); setTab(t.id) }}
+                          type="button" onClick={() => { setSection(sec.id); setTab(t.id); pushTabState(t.id) }}
                           className={cn(
                             'w-full rounded-lg px-3 py-2 text-left text-sm font-medium transition',
                             tab === t.id
@@ -351,7 +382,7 @@ export function AppShell () {
                 <button
                   key={t.id} type="button" role="tab"
                   aria-selected={tab === t.id}
-                  onClick={() => setTab(t.id)}
+                  onClick={() => { setTab(t.id); pushTabState(t.id) }}
                   className={cn(
                     'shrink-0 rounded-full border px-3.5 py-1.5 text-xs font-semibold transition',
                     tab === t.id

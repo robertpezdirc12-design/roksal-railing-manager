@@ -4,14 +4,14 @@ Poslovno-operativni sistem za Roksal — od prvega voda do zaključene montaže 
 fasad in teras: CRM, ponudbe s podpisom, proizvodnja, teren (tudi brez signala),
 računi in **fotomontaža PREJ/POTEM** iz uradnih Roksalovih gradiv.
 
-> **Stanje:** rekonstrukcija zaključena in presežena · izdaja **v1.62.0** ·
-> **50 testnih skupin + E2E skozi pravo aplikacijo** · GitHub je kanonični vir
+> **Stanje:** rekonstrukcija zaključena in presežena · izdaja **v1.63.0** ·
+> **51 testnih skupin + E2E skozi pravo aplikacijo** · GitHub je kanonični vir
 > (zadeve + release vrata), GitLab zrcalo, sinhronizacija po SHA (`ops/sync-check.sh`) ·
 > [docs/](docs/) vsebuje poročila za vsako fazo.
 
 ---
 
-## Zgodovina v osmih stavkih
+## Zgodovina v devetih stavkih
 
 1. **Izvirnik** (~430 iteracij, R120–R430) je bil razvit v Z.ai kontejnerjih in
    sinhroniziran na GitHub; račun/repo je bil izbrisan 6. 10. 2026.
@@ -53,10 +53,20 @@ računi in **fotomontaža PREJ/POTEM** iz uradnih Roksalovih gradiv.
    > 7 dni) — opazovalno obdobje je izmerljivo; `src/instrumentation.ts`
    opozori na `DEMO_ACCESS=on` v produkciji. Testna skupina r543
    (50. skupina). Belt 8 statičnih + 50 skupin.
+9. **PWA deep-linking + zgodovina (R544, izdaja v1.63.0):** URL odraz
+   zavihka `/?m=<id>` (nov čist lib `src/lib/deep-link.ts`; sekcijo izpelje
+   `sectionForTab` iz ENEGA vira `nav-registry`) — mobilne bližznice iz
+   manifesta (Danes/Nalogi/Meritve/Projekti) zdaj odprejo PRIPADNI modul,
+   ne golo "/"; URL zmaga nad persistom ob zagonu (globoka povezava deluje
+   tudi po prijavi — LoginScreen ne navigira, `?m` preživi); vsak klik
+   navigacije naredi `pushState` → BACK gumb odvija preklope (prej 0
+   zgodovine); neveljaven/nedovoljen `?m` → fail-closed `clearTabState`
+   (modulska vrata ostajajo glavna obramba). Testna skupina r544
+   (51. skupina). Belt 8 statičnih + 51 skupin.
 
 ## Kaj aplikacija počne
 
-Informacijska arhitektura po R429 — **5 sekcij, 29 zavihkov**, vsak z vrati
+Informacijska arhitektura (IA R448) — **11 sekcij, 41 zavihkov**, vsak z vrati
 (`src/lib/nav-registry.ts`):
 
 | Sekcija | Vsebina |
@@ -246,7 +256,7 @@ ImageMagick, poppler) — podrobno v `tests/ci-local.sh` glavi.
   smart-HTTP z job-tokenom). Zasebni runner kvote **ne** porablja.
 - **Release vrata (obvezna pred vsako izdajo):** relejni pas
   `bash tests/ci-local.sh` na TOČNO tistem commitu, ki se izdaja (8 statičnih
-  korakov + vseh 50 skupin, EXIT 0), nato `bash ops/sync-check.sh` = OK na
+  korakov + vseh 51 skupin, EXIT 0), nato `bash ops/sync-check.sh` = OK na
   obeh sistemih, šele nato oznaka + push. GitLab pipeline (`verify`) je
   drugotna potrditev istega SHA — ne nadomestilo pasu.
 - **Vercel (produkcija) — pošteno:** iz peskovnika NI dostopa do Vercel API-ja
@@ -278,10 +288,10 @@ ImageMagick, poppler) — podrobno v `tests/ci-local.sh` glavi.
 |---|---|
 | `src/app/api/` | 195 API rut (App Router) |
 | `src/components/roksal/` | 49 modulov + ogrodje (app-shell, module-view) |
-| `src/lib/` | 77 knjižnic: photo-replace-{mask,texture,core,engine}, permissions-core, nav-registry, audit, notify (outbox), json (jsonb pomožniki), csp (en vir CSP politike), … |
+| `src/lib/` | 78 knjižnic: photo-replace-{mask,texture,core,engine}, permissions-core, nav-registry, audit, notify (outbox), json (jsonb pomožniki), csp (en vir CSP politike), deep-link (URL odraz zavihka), … |
 | `prisma/` | shema (94 modelov) + 17 migracij + semenske skripte (`db:seed` veriga) |
 | `public/assets/roksal/src/` | uradni Roksalovi viri, `MANIFEST.json` s SHA-256 |
-| `tests/` | 50 skupin + `ci-local.sh` / `ci-matrix.sh` + fixtures |
+| `tests/` | 51 skupin + `ci-local.sh` / `ci-matrix.sh` + fixtures |
 | `ops/` | E2E skripte, izrisi-dokazi, backup/restore/drill, secret-audit |
 | `docs/` | poročila po fazah (RECOVERY, FOTOZAMENJAVA, E2E, …) |
 | `.zscripts/` | vzdrževanje peskovnika: dev-detach, git-retry, ci-mirror |

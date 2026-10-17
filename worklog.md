@@ -5272,3 +5272,42 @@ Stage Summary:
 - Od analize ostaja: CSP Enforce stikalo na produkciji (lastnikova odločitev po čistem opazovalnem obdobju — zdaj izmerljivo), DEMO_ACCESS produkcija (lastnikova odločitev, opozorilo nameščeno).
 - PRODUKCIJA ZAOSTAJA 4 IZDAJE (R539–R542, v1.59.0–v1.62.0) + 4 migracije na Neonu (r539?, r540?, r541 CHECK, r542 jsonb — zadnji dve NEPREVERJENI na produkcijskih podatkih!) — potrebni: nov GitHub PAT → push → Vercel build → Neon backup + migrate deploy + preverba. OPOMNIK UPORABNIKU ob zaključku.
 - Naslednji krog R544 (kandidati): razbitje velikanskih modulov (konfigurator 1752, pregled 1728, projekti 1642 — R536-era), PWA deep-linking (manifest shortcuts kažejo vsi na /), DEMO_ACCESS dvojna vrata (env + Setting z expiresAt + admin toggle), produkcijska sinhronizacija (odvisna od GitHub PAT).
+
+---
+Task ID: R544-a
+Agent: R544-a (Explore, glavni agent zapisal namesto njega — prompt je bil samo-branje)
+Task: R544 raziskava — PWA deep-linking stanje (manifest shortcuts vsi na /), URL state arhitektura, history/back.
+
+Work Log:
+- Pregled PWA: public/manifest.webmanifest (edini manifest, NI manifest.ts) — 3 shortcuti (Danes/Nalogi/Meritve) VSI z url "/" (vrstice 24/31/38), start_url "/", display standalone, ikone 192/512/maskable; SW public/sw.js (VERSION 18, SHELL_URLS ['/','/offline.html'], API bypass, asseti cache-first, navigacija network-first + offline fallback pod ključ '/'); registracija src/components/pwa-register.tsx SAMO v produkciji (NODE_ENV), PRECACHE samo '/'.
+- URL state: zustand src/lib/store.ts (section+tab, persist 'roksal-session' v localStorage — section+tab se persistata!) — NOBEN URL odraz; navigacijski register src/lib/nav-registry.ts: 11 sekcij/41 zavihkov (komentar "29" ZASTAREL), tabVisible fail-closed, sectionForTab :175; preslikka module-view.tsx MODULES 41 vnosov, key={tab.id} reset.
+- Klična mesta (vsa ločena, brez centralne funkcije): app-shell.tsx pickSection :124 (klici :160 logo, :312 desktop, :387 mobilna, :434 Sheet Več — izbere PRVI VIDENI zavihek), tab klik :325 (setSection+setTab), tabletke :354 (setTab), goToHit :116, profil :257.
+- History/back: NIČ (0 popstate/hashchange/pushState/useSearchParams v src/; window.location le v pwa-register, meritve:428 share, error fallback href='/'). LoginScreen po prijavi ne navigira — globoka povezava pred prijavo se ohrani v URL (AppShell mount po prijavi prebere ?m).
+- Varnostna vrata: neznan zavihek → fail-closed "Neznani zavihek" (module-view:66), brez pravice → "Dostop zavrnjen" (:69) — deep-link NE more odpreti prepovedanega zavihka (tabVisible + ModuleView vrata).
+- Id-past: vezaji v id-jih (foto-replace, material-v5, vodja-ekipa) — dovoljeni v query vrednostih brez encodinga; id≠ime (logistika→"Plan", varnost→"Revizija") — shema se veže na id-je.
+- Gateway: Caddy reverse_proxy prenaša query nedotaknjen — ?m= gre skozi; manifest URL-ji korensko-relativni.
+- Tveganja zapisana: persist rehidracija tekmuje z URL (prednost: URL zmaga ob mount), useSearchParams bi zahteval Suspense mejo (izognemo: window.location v useEffect), SW PRECACHE samo '/' (globoke povezave so isti dokument — ni nova potrebna), obstoječe namestitve si manifest prebere ob osvežitvi.
+
+Stage Summary:
+- Podlaga za R544-b: shema ?m=<tabId> (tab določi sekcijo prek sectionForTab), centralna navigacijska funkcija v app-shell z pushState + popstate listener, inicialni sync ob mount z replaceState (URL zmaga nad persist), neveljaven/neviden ?m → ignoriran + replaceState na čist '/'; manifest shortcuts → globoke povezave (?m=danes/nalogi/meritve/ + 4. dodan), back gumb podprta zgodovina.
+
+---
+Task ID: R544-b
+Agent: main (Z.ai Code) — implementacija po raziskavi R544-a (glavni agent kirurgo, brez subagentov: 8 kirurških mest na enem modulu + čist lib + statični manifest)
+Task: R544 implementacija — PWA deep-linking (?m=) + zgodovina (back gumb) + manifest bližznice na globoke povezave.
+
+Work Log:
+- HIGIENA OKOLJA PRED DELOM: dev strežnik je bil MRTEV (health 000) → zagnan prek dev-detach.py + eksplicitni DATABASE_URL (v1.62.0 potrjen); delovno dreves je imelo 989 MODE-ONLY sprememb (100644→100755 — okoljski šum peskovnika) → git config core.fileMode false (lokalna nastavitev, status čist razen .zscripts/dev.pid).
+- NOV src/lib/deep-link.ts (čist lib, 0 uvozov): TAB_PARAM 'm'; tabFromSearch (URLSearchParams nad nizi — testabilno, trim → null za prazne); urlForTab (/?m=<encodeURIComponent(id)> — vezaji foto-replace/material-v5/vodja-ekipa preživijo); pushTabState (history.pushState z {rokTab} — nova entrate za BACK); clearTabState (replaceState '/' — odstranitev neveljavnega ?m). Oba stranska učinka imata try/catch varovalko (SSR/izolirani testi brez window.history).
+- app-shell.tsx (8 mest): (1) uvoz deep-link + sectionForTab/tabById dodan k uvozu nav-registry; (2) NOV R544 useEffect (deps []): syncFromUrl bere ?m → tabById + sectionForTab + tabVisible(getState().user?.perms) — neveljaven/neviden → clearTabState (fail-closed, stanje ostane na persistanem zavihku); veljaven → setSection+setTab prek getState() (sveže branje, handler stalno veljaven); inicialni klic syncFromUrl() = URL ZMAGA nad persistom (roksal-session) ob mountu — globoka povezava deluje tudi PO PRIJAVI (LoginScreen ne navigira, ?m preživi v naslovu, AppShell se montira šele z user); popstate listener = BACK gumb odvija preklope; cleanup removeEventListener; (3) goToHit + pushTabState(hit.tab); (4) pickSection: prvi videni zavihek → pushTabState(first.id), sekcija brez vidnih → clearTabState; (5) Moj profil + pushTabState('profil'); (6) desktop zavihek + pushTabState(t.id); (7) tabletke znotraj sekcije + pushTabState(t.id). Komentar R544 z utemeljitvami na vsakem mestu.
+- public/manifest.webmanifest: 3 bližznice preusmerjene (/?m=danes, /?m=nalogi, /?m=meritve — prej VSE na goli "/") + NOVA 4. Projekti (/?m=projekti, opis "Projekti ogred — od meritve do montaže"); JSON veljaven (json.load). Chrome na domačem zaslonu prikaže do 4 bližznic — 4. je smiselna izbira (najširši modul).
+- DOKUMENTACIJSKA USKLADITEV (raziskava je odkrila zastarelo številko): nav-registry.ts komentar 29 → 41 zavihkov v 11 sekcijah (2 mesti) + README IA vrstica "po R429 — 5 sekcij, 29 zavihkov" → "(IA R448) — 11 sekcij, 41 zavihkov" (dejansko stanje po registru; komentar je vodil napačne ugotovitve prihodnjih agentov).
+- tests/r544.py NOV (51. skupina, 41 preverb): A statično 24 (deep-link čist 0 uvozov + try/catch; app-shell uvoz/popstate/syncFromUrl/clearTabState/≥5 pushTabState mest/sectionForTab+tabById EN VIR/4 konkretna klična mesta dobesedno; manifest 4 bližznice vse /?m= nobena goli /; varnost: ModuleView "Neznani zavihek" fail-closed NEZAMENJAN + effect preverja tabVisible); B živi bun klic 9 (tabFromSearch 5 primerov vključno ?m=%20→null in ?m=material-v5&x=1; urlForTab 3 primeri z vezaji; TAB_PARAM); C živi HTTP 5 (/?m=nalogi 200, &x=1 200, neveljaven-xyz 200 — fail-closed v klientu, /manifest.webmanifest 200 + 4 bližznice prek HTTP); D registracija 3 (ci-matrix GRUPE regex + CLANI, ci.yml — vse pozicijsko neodvisno po lekciji R541/R542).
+- NAPAKA NAREJENA IN POPRAVLJENA (iskreno): 1. verzija r544.py je imela import re NA DNU (uporaba v D razdelku pred njim → NameError) — opaženo pred zagonom, uvoz premaknjen na vrh; trditev A11 ≥7 pushTabState je bila NAPAČNO FORMIRANA (štela sem uvoz/komentarje, ki nimajo oklepaja; dejanskih mest klikov je 5: goToHit, pickSection, profil, desktop, tabletke) — popravljen na ≥5 z razlago. Po popravkih 41✓/0✗/0⏸ (2×).
+- REGISTRACIJA: ci-matrix.sh GRUPE + CLANI[r544] (bash -n OK, 51 skupin --list); .github/workflows/ci.yml matrika + komentar R544 (51 × "grupa:", zadnja r544).
+- README v1.63.0: glava (51 skupin), zgodovina "osmih" → "devetih stavkov" + stavek 9 (R544: deep-link.ts, bližznice na PRIPADNI modul, URL zmaga nad persistom, BACK gumb, fail-closed clearTabState, r544 51. skupina), release vrata 50 → 51 (2 mesti), struktura: src/lib 77 → 78 (+ deep-link), tests 50 → 51, IA vrstica 11/41.
+- package.json 1.62.0 → 1.63.0; tsc 0; lint 0 (2 znani opozorili ops/r517-render.mjs, kot R540–R543).
+
+Stage Summary:
+- R544 implementacija DOKONČANA: /?m=<id> URL odraz + BACK zgodovina + 4 manifest bližznice na globoke povezave; fail-closed na 3 ravneh (tabVisible v effectu, clearTabState za smeti v naslovu, ModuleView vrata nezamenjana).
+- ČAKA: relejni pas 8+51 (teče), browser verifikacija (globoka povezava prek prijave, BACK gumb, tabletke), commit + tag v1.63.0 + push GitLab.

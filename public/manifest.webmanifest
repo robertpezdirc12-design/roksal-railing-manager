@@ -21,21 +21,28 @@
       "name": "Danes",
       "short_name": "Danes",
       "description": "Operativni vhod — terenski tok dneva",
-      "url": "/",
+      "url": "/?m=danes",
       "icons": [{ "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" }]
     },
     {
       "name": "Nalogi",
       "short_name": "Nalogi",
       "description": "Delovni nalogi — osrednji center",
-      "url": "/",
+      "url": "/?m=nalogi",
       "icons": [{ "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" }]
     },
     {
       "name": "Meritve",
       "short_name": "Meritve",
       "description": "Merjenje ograj po terenu (kamera)",
-      "url": "/",
+      "url": "/?m=meritve",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" }]
+    },
+    {
+      "name": "Projekti",
+      "short_name": "Projekti",
+      "description": "Projekti ogred — od meritve do montaže",
+      "url": "/?m=projekti",
       "icons": [{ "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" }]
     }
   ]

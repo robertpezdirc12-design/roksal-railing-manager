@@ -267,6 +267,11 @@ jobs:
           # 7 dni) + DEMO_ACCESS opozorilo v instrumentation.ts.
           # Nova skupina MORA biti tudi v tests/ci-matrix.sh.
           - grupa: r543
+          # R544: PWA deep-linking — URL odraz zavihka /?m=<id> (deep-link.ts
+          # čist lib; app-shell R544 effect s popstate = back gumb; manifest
+          # 4 bližznice na globoke povezave). Brez DB sprememb.
+          # Nova skupina MORA biti tudi v tests/ci-matrix.sh.
+          - grupa: r544
     services:
       postgres:
         image: postgres:16

@@ -1,7 +1,7 @@
 // nav-registry — REKONSTRUKCIJA R431 → IA R448 (issue #7 §11, ciljna struktura)
 // EN VIR navigacije. Čist client-safe lib — NIČ strežniških uvozov.
 // IA (R448 §11): DANES | PRODAJA | PROJEKTI | OPERATIVA | SKLADIŠČE | KATALOG |
-// FINANCE | SERVIS | POROČILA | VARNOST | PROFIL — 29 zavihkov v 11 sekcijah
+// FINANCE | SERVIS | POROČILA | VARNOST | PROFIL — 41 zavihkov v 11 sekcijah (R544: številka usklajena z dejanskim registrom)
 // (R481: +Integracije v Varnost).
 // Zavihki (id + gate) so NEspremenjeni — spreminja se samo razvrstitev.
 
@@ -24,7 +24,7 @@ export interface SectionDef {
   tabs: TabDef[]
 }
 
-// 29 zavihkov v 11 sekcijah — ciljna poslovna IA (R448, issue #7 §11; R481: +1)
+// 41 zavihkov v 11 sekcijah — ciljna poslovna IA (R448; R481 +Integracije; R544 številka usklajena)
 export const SECTIONS: SectionDef[] = [
   {
     id: 'danes',
