@@ -5013,3 +5013,23 @@ Stage Summary:
 - IZDAJA v1.59.0 LOKALNO DOKONČANA: commit 86bae61 + tag v1.59.0 + zelen pas 8+47 na izdajnem SHA + browser verifikacija. PUSH NA ČAKANJU: potreben NOV GitHub PAT (repo scope) — stari je preklican (401); za GitLab zrcalo tudi nov glpat. Ukaz po prispetju žetona: git remote set-url origin https://<NOV_PAT>@github.com/… && git push origin main v1.59.0 (GitLab: git remote add gitlab https://oauth2:<GLPAT>@gitlab.com/markec-group/roksal-railing-manager.git && git push gitlab main v1.59.0), nato bash ops/sync-check.sh za dokaz OK.
 - Varnostno opažanje: izpostavljeni žeton je MRTV (dober izid — rotacija deluje); .git/config sedaj ČIST (brez žetona).
 - Ostanki za R541 (po prioriteti): JSONB/enum omejitve statusnih polj (shemska migracija), CSP Enforce (opazovalno obdobje na produkciji), DEMO_ACCESS produkcija (lastnikova odločitev), GitHub Actions minute (izčrpane do 1. 11. 2026 — belt ostaja lokalni dokaz).
+
+---
+Task ID: R540-push
+Agent: main (Z.ai Code)
+Task: Dopolnitev izdaje v1.59.0 — uporabnik je poslal nov GitLab žeton (glpat-RIDN…); push main + tag na GitLab, poskus GitHub, dokaz sinhronizacije na ravni SHA.
+
+Work Log:
+- Overitev žetona prek API: GET /api/v4/user → robertpezdirc8 (id 43141577, state active) — žeton VELJAVEN. Stara pot markec-group/roksal-railing-manager vrne 404 Project Not Found — UGOTOVITEV: skupina je bila preimenovana, nova pot je markec-group1/roksal-railing-manager (API /projects?owned=true: id 87474527, default_branch main, private, group_access level 50 = Owner — polne pravice push).
+- Cloudflare verjetnostna blokada iz peskovnice potrjena tudi danes (1. poskus 403 z HTML stranjo »Blocked — GitLab«, po ~20 s naslednji poskus uspešen — znano vedenje od R519+, retriji so obvezni).
+- Pred pushom preverjena sorodnost: GitLab main = f48baae (R534-dodatek, izdaja v1.58.0) je PREDNIK lokalnega dd0964b — čisti FAST-FORWARD, 9 commitov (celotna revizija R535–R540), zgodovina NE divergirana (R537 čiščenje zgodovine je na GitLabu usklajeno).
+- PUSH gitlab main + v1.59.0: f48baae..dd0964b main → main, nov tag v1.59.0 → v1.59.0 (anotirana oznaka d7895e2 na commitu 86bae61). Uspešno v 2. poskusu.
+- sync-check (SYNC_REMOTES=gitlab): OK — main @ gitlab = dd0964b (lokalno), v1.59.0 @ gitlab = d7895e2; exit 0 — sinhronizacija dokazana na ravni SHA.
+- GitHub poskus z existing PAT (ghp_RiaF…bkAF): »remote: Invalid username or token.« — žeton je še vedno preklican; push na GitHub OSTAJA BLOKIRAN, potreben nov PAT z repo scope.
+- Higiena: po pushu žeton odstranjen iz .git/config (git remote set-url gitlab na čist URL brez poverilnic); r441 pregled čist — žetoni se v datotekah ne pojavljajo.
+
+Stage Summary:
+- IZDAJA v1.59.0 DOKONČANA NA GITLABU: main + tag v1.59.0 sinhrona z lokalnim repozitorijem (SHA dokaz, sync-check OK). GitLab (markec-group1/roksal-railing-manager) je trenutno edini posodobljeni oddaljeni repozitorij — kanonično ogledalo izdaje.
+- POMEMBNO ZA PRIHODNJE: skupina je preimenovana markec-group → markec-group1; stari URL ne preusmerja (404). Vsi ukazi naj uporabljajo markec-group1.
+- GitHub ČAKA na nov PAT: git remote set-url origin https://<NOV_PAT>@github.com/robertpezdirc12-design/roksal-railing-manager.git && git push origin main v1.59.0, nato bash ops/sync-check.sh (brez SYNC_REMOTES omejitve) za dokaz OBEH strani OK.
+- Strežnik dev med tem teče neprekinjeno (health v1.59.0). Naslednji krog: R541 po prioritetah iz R540 sinteze.
