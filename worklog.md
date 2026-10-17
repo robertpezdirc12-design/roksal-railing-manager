@@ -5311,3 +5311,24 @@ Work Log:
 Stage Summary:
 - R544 implementacija DOKONČANA: /?m=<id> URL odraz + BACK zgodovina + 4 manifest bližznice na globoke povezave; fail-closed na 3 ravneh (tabVisible v effectu, clearTabState za smeti v naslovu, ModuleView vrata nezamenjana).
 - ČAKA: relejni pas 8+51 (teče), browser verifikacija (globoka povezava prek prijave, BACK gumb, tabletke), commit + tag v1.63.0 + push GitLab.
+
+---
+Task ID: R544 (sinteza)
+Agent: main (Z.ai Code)
+Task: Izdaja v1.63.0 — PWA deep-linking (?m=) + zgodovina (back gumb): raziskava (R544-a), implementacija (R544-b, glavni agent), dvakratni pas, browser verifikacija (5 dokazov), commit + tag; push blokiran (GitLab žeton preklican).
+
+Work Log:
+- OKOLJE NA ZAČETKU: dev strežnik mrtev (health 000) → zagnan (dev-detach + eksplicitni DATABASE_URL, v1.62.0); 989 mode-only sprememb (100644→100755, okoljski šum) → git config core.fileMode false (lokalno, brez dotika repozitorija — status čist razen .zscripts/dev.pid).
+- VRSTNI RED: R544-a Explore (kompakten prompt — preprečena past dolgih promptov; agent ni pisal worklog po svoji zasnovi, vnos dodan takoj — preprečena R543-a "TODO zamuda") → R544-b main (8 kirurških mest + čist lib + manifest + dokumentacijska uskladitev) → tsc/lint → r544.py (41✓ po 2 popravkih svojih napak, iskreno zapisana) → registracija → README/verzija → PAS.
+- PAST OKOLJA (nova, zabeležena): relejni pas zagnan prek nohup v ozadju je UBIT s strani peskovniškega watchdog-a po ~4 min (11 vrstic outputa, brez sledi napake skripte) → ponovljen DIREKTNO v Bash klicu (kot prejšnji pasovi) → uspel. Prihodnji krogi: pas vedno direktno, nikoli v ozadju.
+- POLNI PAS 2× ZELEN na izdajnem drevesu (ops/r544-pas.out + ops/r544-pas2.out): 8 statičnih + 51/51 skupin, EXIT 0, brez rdečih v 1. teku (krhke trditve po lekciji R541/R542: vse registracije pozicijsko neodvisne regex — vzorec drži 3. izdajo zapored).
+- BROWSER VERIFIKACIJA (agent-browser, 5 dokazov, vključno z invalidacijo trditve "ne morem preveriti": globoko povezavo SEM preveril prek prijave): (1) /?m=nalogi na LoginScreen — URL preživi prijavo; (2) lažni persist finance/racuni v localStorage → reload /?m=nalogi → operativa/nalogi + persist POSODOBLJEN (URL zmagal, ne zgolj prikaz); (3) klik Ponudbe → URL /?m=ponudbe (pushState) in BACK vrača Nalogi BREZ reloada (popstate, aria-current Operativa/Nalogi, h1 Nalogi); (4) /?m=neveljaven-hack-xyz → URL očiščen na / (clearTabState), h1 ostane Nalogi (stanje ni padlo v "Neznani zavihek"); (5) mobilni 390px: scrollWidth=390 brez izliva, footer točno na dnu (844=vh), /?m=meritve odpre Meritve (glava Projekti); 0 page errors, 0 console errors/warnings; pred prijavo localStorage prazen — dokaz (2) je bil namenjen (lažni persist vpišem po prijavi).
+- COMMIT adf1f28 (avtor IN komitent Robert Pezdirc po R498), tag v1.63.0. Secret audit 4/4 čisto (271 commitov zgodovine). Delovno drevo po commitu čisto (razen okoljski dev.pid).
+- PUSH BLOKIRAN: GitLab žeton glpat-RIDN…cx (veljaven pri R540-push in R543) zdaj NEVELJAVEN — ls-remote 403, push "HTTP Basic: Access denied" (preklican ali potekel). Po pravilih brez ponavljanja poskusov. GitLab main ostaja na 06c3cbd (R543-dodatek) — ČAKA 1 commit (adf1f28) + tag v1.63.0.
+- GitHub: PAT še vedno preklican (od R540) — zaostanek sedaj 7 commitov (dd0964b…adf1f28) + 4 tagi (v1.60.0–v1.63.0).
+
+Stage Summary:
+- IZDAJA v1.63.0 DOKONČANA LOKALNO: PWA bližznice odpirajo PRIPADNI modul (?m=), URL zmaga nad persistom (deluje tudi prek prijave), BACK gumb odvija preklope, neveljaven/neviden ?m fail-closed (3 ravni obrambe: tabVisible v effectu, clearTabState, ModuleView vrata); 51. testna skupina r544 (41 preverb); dokumentacijska uskladitev IA (29→41 zavihkov).
+- NADZOR KVALITETE: 2× zelen pas, 5-dokazna browser verifikacija, audit 4/4; lastne napake (import re, A11) odkrite in popravljene PRED pasom, iskreno zapisane.
+- NASLEDNJI KROG R545 (kandidati): razbitje velikanskih modulov (konfigurator 1752, pregled 1728, projekti 1642 — iz sinteze R543), DEMO_ACCESS dvojna vrata (env + Setting + admin toggle + expiresAt), produkcijska sinhronizacija (odvisna od žetonov).
+- OPOMNIKI LASTNIKU: (1) NOV GitLab PAT (push 1 commit + tag čaka); (2) NOV GitHub PAT (7 commitov + 4 tagi zaostanka); (3) PRODUKCIJA zaostaja 5 izdaj (v1.59.0–v1.63.0) + 5 migracij na Neonu (r539?, r540?, r541 CHECK, r542 jsonb, r543 CspReport — NEPREVERJENI na produkcijskih podatkih!) — vrstni red: novi žetoni → push → Vercel build → Neon backup + migrate deploy + health preverba; (4) rotacija žetonov po objavi (oba sta bila uporabljena v URL-jih).
