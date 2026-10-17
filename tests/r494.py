@@ -157,13 +157,14 @@ legenda = d.get('legenda', {}).get('barve', '')
 chk('lestvic' in legenda, 'matrika: legenda omenja lestvice kot vir potrditve')
 
 # ── 8. UI nizi ──
-kat = src('src/components/roksal/modules/katalog.tsx')
-chk('Uradna barvna lestvica' in kat, 'UI: naslov Uradna barvna lestvica')
-chk('Imena odtenkov' in kat, 'UI: aria-label Imena odtenkov')
-chk('object-contain' in kat, 'UI: lestvica neskrčena (object-contain)')
+# R548: blok gradiv se je fizično preselil iz katalog.tsx v katalog-gradiva.tsx (razbitje srednjih modulov) — sidra posodobljena pošteno.
+grad = src('src/components/roksal/modules/katalog-gradiva.tsx')
+chk('Uradna barvna lestvica' in grad, 'UI: naslov Uradna barvna lestvica')
+chk('Imena odtenkov' in grad, 'UI: aria-label Imena odtenkov')
+chk('object-contain' in grad, 'UI: lestvica neskrčena (object-contain)')
 # R495: opomba posodobljena (galerijske fotografije 2026-10-13 dodane k virom potrditve)
-chk('2026-10-12' in kat and 'galerijskih fotografij' in kat, 'UI: iskrena opomba o viru potrditve (lestvice + galerije)')
-chk('Golden teak in White' in kat, 'UI: opomba omejitve (Golden teak/White samo s slike)')
+chk('2026-10-12' in grad and 'galerijskih fotografij' in grad, 'UI: iskrena opomba o viru potrditve (lestvice + galerije)')
+chk('Golden teak in White' in grad, 'UI: opomba omejitve (Golden teak/White samo s slike)')
 
 # ── 9. seed idempotenca (baza prek tests/dbenv.py verige) ──
 subenv = dbenv.seed_env(REPO)

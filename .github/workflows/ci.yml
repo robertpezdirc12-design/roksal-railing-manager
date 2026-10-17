@@ -289,6 +289,13 @@ jobs:
           # aciklični graf shared→verify→carovnik; sidro r486 sledi zajem-detail).
           # Nova skupina MORA biti tudi v tests/ci-matrix.sh.
           - grupa: r547
+          # R548: razbitje naslednje vrste — katalog (1099), danes (1096),
+          # viz (1061), nalogi (1057) kirurško razbiti v 14 poddatotek BREZ
+          # spremembe obnašanja (viz main ostane ~731 — koheziven stanjski del,
+          # prag <760; sidra r486/r493/r494/r495/r516 sledijo novim lokacijam,
+          # r464-pricing ostaja na viz.tsx in JE preživel razbitje).
+          # Nova skupina MORA biti tudi v tests/ci-matrix.sh.
+          - grupa: r548
     services:
       postgres:
         image: postgres:16

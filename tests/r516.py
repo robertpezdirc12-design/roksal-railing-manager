@@ -223,8 +223,9 @@ core_src = open(os.path.join(REPO, core), encoding='utf-8').read()
 cene_v_kodi = re.findall(r"price\s*[:=]\s*(\d+(?:[.,]\d+)?)\b(?!_)", core_src)
 cena_literali = [c for c in cene_v_kodi if float(c.replace(',', '.')) > 0]
 chk(len(cena_literali) == 0, f'v core NI hardkodiranih cen (našel {cena_literali}) — pogodba »cene so podatek« drži')
-chk(src_has('src/components/roksal/modules/katalog.tsx', '/api/import/cenik'), 'UI kataloga kliče uvoz cenika')
-chk(src_has('src/components/roksal/modules/katalog.tsx', 'Uvozi cenik'), 'UI ima gumb za uvoz cenika')
+# R548: uvoz cenika se je fizično preselil iz katalog.tsx v katalog-ceniki.tsx (razbitje srednjih modulov) — sidra posodobljena pošteno.
+chk(src_has('src/components/roksal/modules/katalog-ceniki.tsx', '/api/import/cenik'), 'UI kataloga kliče uvoz cenika')
+chk(src_has('src/components/roksal/modules/katalog-ceniki.tsx', 'Uvozi cenik'), 'UI ima gumb za uvoz cenika')
 
 # ═══ F) živi API — samo če strežnik teče ═══════════════════════════════════
 try:

@@ -143,12 +143,14 @@ pričakovane = {'Amazon wood', 'Ash wood', 'Golden teak', 'Burma teak', 'Oak woo
 chk(barve == pričakovane, f'imena barv točno po uradnih lestvicah (dejansko: {barve})')
 
 # ── 9. UI — iskreni nizi v katalogu ──
-kat = src('src/components/roksal/modules/katalog.tsx')
-chk('Produktna gradiva' in kat, 'UI: razdelek Produktna gradiva')
-chk('VLM ocena, ni uradno ime' in kat, 'UI: VLM približek IZRECNO označen kot neuraden')
-chk('Preverjeno' in kat and 'V preverjanju' in kat and 'Manjka datoteka' in kat, 'UI: statusi Preverjeno/V preverjanju/Manjka')
-chk('Uradna barvna lestvica' in kat, 'UI: R494 — lestvica prikazana čez celo širino z naslovom')
-chk('približek' in kat, 'UI: beseda približek prisotna (ločitev od uradnega)')
+# R548: bloki so se fizično preselili iz katalog.tsx (razbitje srednjih modulov) — sidra posodobljena pošteno.
+grad = src('src/components/roksal/modules/katalog-gradiva.tsx')
+izd = src('src/components/roksal/modules/katalog-izdelki.tsx')
+chk('Produktna gradiva' in grad, 'UI: razdelek Produktna gradiva')
+chk('VLM ocena, ni uradno ime' in grad, 'UI: VLM približek IZRECNO označen kot neuraden')
+chk('Preverjeno' in grad and 'V preverjanju' in grad and 'Manjka datoteka' in grad, 'UI: statusi Preverjeno/V preverjanju/Manjka')
+chk('Uradna barvna lestvica' in grad, 'UI: R494 — lestvica prikazana čez celo širino z naslovom')
+chk('približek' in izd, 'UI: beseda približek prisotna (ločitev od uradnega)')
 
 # ── 10. RAL_HEX ostaja označen kot približek v jedru ──
 core = src('src/lib/photo-replace-core.ts')

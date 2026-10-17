@@ -152,11 +152,22 @@ chk(zak and zak[0]['bytes'] == 2564, 'zaključna letev: izvirnik 2564 B (edina o
 # ── 8. BREZ samodejnega vnosa cen (navodilo lastnika) ──
 seed = src('prisma/seed-r495.cjs')
 chk('Cene: IZRECNO BREZ samodejnega vnosa cen' in seed, 'seed: izrecna izjava o ročnih cenah')
-kat = src('src/components/roksal/modules/katalog.tsx')
-chk('samodejn' not in kat.lower(), 'UI katalog: brez samodejnega vnosa cen')
-chk('Uredi pravilo' in kat, 'UI katalog: ročno urejanje cenikov ostaja')
-chk('galerijskih fotografij' in kat and '2026-10-13' in kat, 'UI katalog: opomba omenja galerijske fotografije kot vir potrditve')
-chk('barva: {a.colorName} (potrjena)' in kat or '(potrjena)' in kat, 'UI katalog: oznaka potrjene barve iz naslova vira')
+# R548: katalog.tsx razbit v družino — negativna trditev velja za VSE datoteke družine
+# (sidra posodobljena pošteno ob razbitju srednjih modulov).
+KATALOG_DRUZINA = [
+    'src/components/roksal/modules/katalog.tsx',
+    'src/components/roksal/modules/katalog-shared.ts',
+    'src/components/roksal/modules/katalog-izdelki.tsx',
+    'src/components/roksal/modules/katalog-ceniki.tsx',
+    'src/components/roksal/modules/katalog-gradiva.tsx',
+]
+for fam in KATALOG_DRUZINA:
+    chk('samodejn' not in src(fam).lower(), f'UI katalog ({fam.split("/")[-1]}): brez samodejnega vnosa cen')
+cen = src('src/components/roksal/modules/katalog-ceniki.tsx')
+grad = src('src/components/roksal/modules/katalog-gradiva.tsx')
+chk('Uredi pravilo' in cen, 'UI katalog: ročno urejanje cenikov ostaja')
+chk('galerijskih fotografij' in grad and '2026-10-13' in grad, 'UI katalog: opomba omenja galerijske fotografije kot vir potrditve')
+chk('barva: {a.colorName} (potrjena)' in grad or '(potrjena)' in grad, 'UI katalog: oznaka potrjene barve iz naslova vira')
 
 # ── 9. API: product-assets vrača podatke ──
 s, d = callj('GET', '/api/product-assets?status=VERIFIED', tok_adm)

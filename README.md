@@ -4,8 +4,8 @@ Poslovno-operativni sistem za Roksal — od prvega voda do zaključene montaže 
 fasad in teras: CRM, ponudbe s podpisom, proizvodnja, teren (tudi brez signala),
 računi in **fotomontaža PREJ/POTEM** iz uradnih Roksalovih gradiv.
 
-> **Stanje:** rekonstrukcija zaključena in presežena · izdaja **v1.66.0** ·
-> **54 testnih skupin + E2E skozi pravo aplikacijo** · GitHub je kanonični vir
+> **Stanje:** rekonstrukcija zaključena in presežena · izdaja **v1.67.0** ·
+> **55 testnih skupin + E2E skozi pravo aplikacijo** · GitHub je kanonični vir
 > (zadeve + release vrata), GitLab zrcalo, sinhronizacija po SHA (`ops/sync-check.sh`) ·
 > [docs/](docs/) vsebuje poročila za vsako fazo.
 
@@ -94,6 +94,18 @@ računi in **fotomontaža PREJ/POTEM** iz uradnih Roksalovih gradiv.
    shared). Sidro r486 (shrinkThumb/„Dodaj posnetek") je sledilo premiku v
    zajem-detail pošteno. Testna skupina r547 (54. skupina).
    Belt 8 statičnih + 54 skupin.
+13. **Razbitje naslednje vrste (R548, izdaja v1.67.0):** katalog (1099), danes
+   (1096), viz (1061) in nalogi (1057) po istem receptu razbiti v 14 poddatotek
+   (katalog 43, danes 207, viz 731, nalogi 304): `katalog-{shared,izdelki,ceniki,
+   gradiva}`, `danes-{shared,detail,sekcije,vreme}` (detail je podkoren — sestavlja
+   sekcije + kamera dialog; PlaybookStrip v detail, sicer krog kartice→detail),
+   `viz-{shared,risanje}` (viz main ostane ~731 — koheziven stanjski del, prag
+   <760; kirurško izrezano risalno jedro computeGeometry/RailingSvg),
+   `nalogi-{shared,detail,offline,create}`. Sidra r486 (danes blok), r493/r494/
+   r516 (katalog družina — negativna »samodejn« na vseh 5 datotekah) so sledila
+   premikom pošteno; r464-pricing OSTAJA na viz.tsx in JE preživel razbitje
+   (strežniški klic cenika ni bil odnesen). Testna skupina r548 (55. skupina).
+   Belt 8 statičnih + 55 skupin.
 
 ## Kaj aplikacija počne
 
@@ -330,11 +342,11 @@ ImageMagick, poppler) — podrobno v `tests/ci-local.sh` glavi.
 | Pot | Vsebina |
 |---|---|
 | `src/app/api/` | 195 API rut (App Router) |
-| `src/components/roksal/` | 50 modulov + ogrodje (app-shell, module-view) + 26 gradnikov razbitij (12 velikanov `konfigurator/pregled/projekti-*` R546 + 14 srednjih `zajem/servis/ogradnja-*` R547) |
+| `src/components/roksal/` | 50 modulov + ogrodje (app-shell, module-view) + 40 gradnikov razbitij (12 velikanov R546 + 14 srednjih R547 + 14 naslednje vrste `katalog/danes/viz/nalogi-*` R548) |
 | `src/lib/` | 78 knjižnic: photo-replace-{mask,texture,core,engine}, permissions-core, nav-registry, audit, notify (outbox), json (jsonb pomožniki), csp (en vir CSP politike), deep-link (URL odraz zavihka), … |
 | `prisma/` | shema (94 modelov) + 17 migracij + semenske skripte (`db:seed` veriga) |
 | `public/assets/roksal/src/` | uradni Roksalovi viri, `MANIFEST.json` s SHA-256 |
-| `tests/` | 54 skupin + `ci-local.sh` / `ci-matrix.sh` + fixtures |
+| `tests/` | 55 skupin + `ci-local.sh` / `ci-matrix.sh` + fixtures |
 | `ops/` | E2E skripte, izrisi-dokazi, backup/restore/drill, secret-audit |
 | `docs/` | poročila po fazah (RECOVERY, FOTOZAMENJAVA, E2E, …) |
 | `.zscripts/` | vzdrževanje peskovnika: dev-detach, git-retry, ci-mirror |
@@ -352,10 +364,11 @@ ImageMagick, poppler) — podrobno v `tests/ci-local.sh` glavi.
   odločitev; benchmark fizičnih meritev (faza 7) zahteva pravo napravo.
   Seznam v
   [`docs/FOTOZAMENJAVA-POROCILO-14.md`](docs/FOTOZAMENJAVA-POROCILO-14.md) §5.
-- **Tehnični dolg — srednji moduli razbiti (R547), ostaja naslednja vrsta.**
-  Velikani (R546) in srednji (R547: zajem/servis/ogradnja) so razbiti; isti
-  vzorec čaka naslednjo vrsto po potrebi (katalog 1099, danes 1095, viz 1060,
-  nalogi 1056) — po istem receptu (shared list → gradniki → tanka lupina,
+- **Tehnični dolg — tri vrste razbite (R546–R548), ostaja zadnja vrsta (~950).**
+  Velikani, srednji in naslednja vrsta (katalog/danes/viz/nalogi) so razbiti
+  (viz main ~731 je zavedna izjema — koheziven stanjski del); isti vzorec čaka
+  zadnjo vrsto po potrebi (playbook 971, dostave 931, meritve-kamera 902,
+  montaza-qa 850) — po istem receptu (shared list → gradniki → tanka lupina,
   sidra testov posodobljena pošteno).
 - **Revizija v1.58.0 (7,9/10) — Top-10 popravki izvedeni (R535–R543).** Še
   odprto za naslednje kroge (po prioriteti): CSP Enforce — zmožnost je

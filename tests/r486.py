@@ -326,12 +326,14 @@ chk(s == 200 and d.get('data', {}).get('duplicate') is True, f'idempotenten clie
 
 print('── F) UI-nizi (source grep)')
 ui = [
-    ('src/components/roksal/modules/danes.tsx', 'ZAČNI MERITEV', 'DANES: primarni gumb ZAČNI MERITEV'),
-    ('src/components/roksal/modules/danes.tsx', 'Nadaljuj nedokončano', 'DANES: Nadaljuj nedokončano'),
-    ('src/components/roksal/modules/danes.tsx', 'Dodaj fotografijo', 'DANES: Dodaj fotografijo (§3)'),
-    ('src/components/roksal/modules/danes.tsx', 'KameraMeritevDialog', 'DANES: kamera dialog montiran'),
-    ('src/components/roksal/modules/danes.tsx', 'setMeasureCtx', 'DANES: setMeasureCtx klic'),
-    ('src/components/roksal/modules/danes.tsx', 'initialWorkOrderId', 'DANES: kontekst naloga posredovan dialogu'),
+    # R548: danes blok se je fizično preselil iz danes.tsx v danes-detail.tsx
+    # (razbitje srednjih modulov) — sidra posodobljena pošteno.
+    ('src/components/roksal/modules/danes-detail.tsx', 'ZAČNI MERITEV', 'DANES: primarni gumb ZAČNI MERITEV'),
+    ('src/components/roksal/modules/danes-detail.tsx', 'Nadaljuj nedokončano', 'DANES: Nadaljuj nedokončano'),
+    ('src/components/roksal/modules/danes-detail.tsx', 'Dodaj fotografijo', 'DANES: Dodaj fotografijo (§3)'),
+    ('src/components/roksal/modules/danes-detail.tsx', 'KameraMeritevDialog', 'DANES: kamera dialog montiran'),
+    ('src/components/roksal/modules/danes-detail.tsx', 'setMeasureCtx', 'DANES: setMeasureCtx klic'),
+    ('src/components/roksal/modules/danes-detail.tsx', 'initialWorkOrderId', 'DANES: kontekst naloga posredovan dialogu'),
     ('src/components/roksal/modules/meritve-kamera.tsx', 'Imaš nedokončano meritev', 'KAMERA: pasica nedokončane meritve'),
     ('src/components/roksal/modules/meritve-kamera.tsx', 'NADALJUJ', 'KAMERA: gumb NADALJUJ'),
     ('src/components/roksal/modules/meritve-kamera.tsx', 'ZAČNI NOVO', 'KAMERA: gumb ZAČNI NOVO'),
