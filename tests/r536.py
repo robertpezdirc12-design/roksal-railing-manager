@@ -289,6 +289,18 @@ except urllib.error.HTTPError as e:
     smeti_status = e.code
 chk(smeti_status == 204, f'POST z neveljavnim JSON → 204 (dejansko {smeti_status})')
 
+# R543: sprevzemnik zdaj zapiše VELJAVNO in DELNO poročilo v tabelo CspReport
+# (smeti brez razumljivega telesa NE). Pas higiena: ti dve testni vrstici
+# pobrišemo, da tabela ostane čista (disciplina r459 — ponovljivost).
+r = bun_e("""
+const { PrismaClient } = require('@prisma/client')
+const db = new PrismaClient()
+const res = await db.cspReport.deleteMany({ where: { documentUri: { in: ['https://app.roksal.si/', 'x'] } } })
+await db.$disconnect()
+console.log('počiščenih: ' + res.count)
+""")
+chk(r.returncode == 0, 'R543: testni CspReport vrstici (veljavno + delno poročilo) počiščeni')
+
 # ═══ E) enote: hashPassword/verifyPassword/passwordNeedsRehash ═══════════════
 print('── E) enote auth.ts (scrypt v2) ──')
 r = bun_e("""

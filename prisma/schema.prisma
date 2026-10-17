@@ -796,6 +796,25 @@ model JobRun {
   user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
 }
 
+// ─── CSP poročila (R543: opazovalno obdobje Report-Only glave postane izmerljivo) ─
+
+// Ena vrstica = eno poročilo brskalnika o kršitvi Content-Security-Policy
+// (report-uri /api/csp-report). Do R543 so šla SAMO v dnevnik — ni bilo mogoče
+// pregledati, kaj se na produkciji dejansko krši. raw = CELO telo poročila
+// (jsonb OBJEKT direktno, ne stringify — konvencija R542). Diagnostični, ne
+// poslovni podatek: job csp-gc (jobs.ts) briše vrstice starejše od 7 dni.
+model CspReport {
+  id                String   @id @default(cuid())
+  documentUri       String // kje se je kršitev zgodila (porezano na 200 znakov)
+  violatedDirective String // katera direktiva je bila kršena
+  blockedUri        String? // kaj je bilo blokirano (neobvezno)
+  raw               Json // celotno telo poročila (objekt)
+  userAgent         String? // glava User-Agent zahteve (porezana)
+  createdAt         DateTime @default(now())
+
+  @@index([createdAt]) // čistilna naloga csp-gc briše > 7 dni
+}
+
 // ─── Nabava materiala (R437: /api/material-orders iz route-mape izvirnika) ──
 
 model MaterialOrder {

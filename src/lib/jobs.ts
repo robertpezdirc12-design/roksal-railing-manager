@@ -3,6 +3,7 @@
 // Vsak zagon se zabeleži v JobRun dnevnik + revizija MAINTENANCE_RUN.
 // R438 (issue #5): nov job obvestila-retry (retryPending iz src/lib/notify.ts).
 // R441 (issue #3): nov job varnostna-kopija (ops/backup.sh — šifrirana + off-site).
+// R543: nov job csp-gc (brisanje CSP poročil > 7 dni — tabela CspReport).
 
 import { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
@@ -25,6 +26,7 @@ export const JOB_DEFS: JobDef[] = [
   { job: 'obvestila-gc', label: 'Čiščenje obvestil', desc: 'Izbriše prebrana obvestila, starejša od 30 dni.', cron: 'vsak dan 03:10 (izvirnik)' },
   { job: 'obvestila-retry', label: 'Ponovitev obvestil', desc: 'Ponovi neuspešne/čakajoče dostave obvestil (max 3 poskusi, varno pred podvajanjem).', cron: 'vsakih 15 min (issue #5)' },
   { job: 'webhook-retry', label: 'Ponovitev webhookov', desc: 'Ponovi neuspešne webhook dostave partnerjem (backoff 1/5/30 min, mrtvo pismo po 5 poskusih — R481 issue #9 §9).', cron: 'dnevno ob 03:30 (jobs/run) — zamuda dokumentirana v docs/webhooks.md' },
+  { job: 'csp-gc', label: 'Čiščenje CSP poročil', desc: 'Izbriše poročila o kršitvah Content-Security-Policy, starejša od 7 dni (tabela CspReport — diagnostični dnevnik, ne poslovni podatek).', cron: 'dnevno ob 03:30 (jobs/run — R543)' },
   { job: 'varnostna-kopija', label: 'Varnostna kopija', desc: 'Šifrirana kopija (baza + cel repozitorij) z off-site nalaganjem na GitLab — recovery v docs/RECOVERY.md.', cron: 'ROČNO (ops/backup.sh, issue #3) — ne v cronu: potrebuje tar/openssl in GitLab žeton, kar serverless nima' },
 ]
 
@@ -38,7 +40,7 @@ export function isKnownJob (key: string): boolean {
  * POST /api/jobs, ker potrebuje GitLab žeton za off-site nalaganje in zunanje orodje
  * (tar/openssl), kar v serverless funkciji ni zanesljivo na voljo.
  */
-export const CRON_JOB_KEYS = ['seje-gc', 'portal-gc', 'obvestila-gc', 'obvestila-retry', 'webhook-retry']
+export const CRON_JOB_KEYS = ['seje-gc', 'portal-gc', 'obvestila-gc', 'obvestila-retry', 'webhook-retry', 'csp-gc']
 
 export interface RunJobResult {
   job: string
@@ -83,6 +85,13 @@ export async function runJob (key: string, userId: string | null): Promise<RunJo
       const res = await retryWebhookDeliveries(50)
       affected = res.processed
       detail = { obdelanih: res.processed, poslanih: res.sent, spodletelih: res.failed, mrtvih: res.dead }
+    } else if (key === 'csp-gc') {
+      // R543: CSP poročila so diagnostični dnevnik — 7 dni zadostuje za pregled
+      // opazovalnega obdobja; brez čiščenja bi tabela rasla z vsakim brskalnikom.
+      const cutoff7 = new Date(Date.now() - 7 * 86400000)
+      const res = await db.cspReport.deleteMany({ where: { createdAt: { lt: cutoff7 } } })
+      affected = res.count
+      detail = { izbrisanih_csp_porocil: affected }
     } else if (key === 'varnostna-kopija') {
       // R441 (issue #3): šifrirana varnostna kopija + off-site nalaganje (ops/backup.sh)
       const res = await runBackup()

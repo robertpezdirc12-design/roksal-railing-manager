@@ -261,6 +261,12 @@ jobs:
           # prehodov (niz → 400) + API pogodba objektov end-to-end.
           # Nova skupina MORA biti tudi v tests/ci-matrix.sh.
           - grupa: r542
+          # R543: CSP enforce način (env stikalo CSP_MODE, privzeto report)
+          # + frame-src 'self' blob: (PDF predogled) + poročila v tabelo
+          # CspReport (migracija 20261025000000_r543_csp_report, job csp-gc
+          # 7 dni) + DEMO_ACCESS opozorilo v instrumentation.ts.
+          # Nova skupina MORA biti tudi v tests/ci-matrix.sh.
+          - grupa: r543
     services:
       postgres:
         image: postgres:16

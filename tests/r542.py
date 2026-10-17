@@ -193,12 +193,13 @@ def json_polja_sheme ():
 
 
 shemski = json_polja_sheme()
-chk(len(shemski) == 42,
-    f'schema.prisma ima TOČNO 42 polj tipa Json (dejansko {len(shemski)})')
+# R543: podmnožična trditev — kasnejši krogi smejo dodajati NOVA Json polja
+# (npr. CspReport.raw), množica R542 migracije (42) pa mora ostati tipa Json.
 manjkajoca = [f'{t}.{c}' for (t, c) in POLJA if (t, c) not in shemski]
-prevec = [f'{t}.{c}' for (t, c) in shemski if (t, c) not in POLJA]
-chk(not manjkajoca and not prevec,
-    f'shemska množica Json polj = migracijska množica (manjka: {manjkajoca or "—"}, odveč: {prevec or "—"})')
+chk(len(manjkajoca) == 0 and len(POLJA) == 42,
+    f'vseh 42 migriranih polj R542 je tipa Json v shemi (manjka: {manjkajoca or "—"})')
+chk(all((t, c) in shemski for (t, c) in POLJA),
+    f'migracijska množica ⊆ shemska množica Json polj — novejša Json polja kasnejših krogov so dovoljena (shema: {len(shemski)}, R542: 42)')
 
 schema = src('prisma/schema.prisma')
 

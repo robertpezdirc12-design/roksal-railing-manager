@@ -4,14 +4,14 @@ Poslovno-operativni sistem za Roksal — od prvega voda do zaključene montaže 
 fasad in teras: CRM, ponudbe s podpisom, proizvodnja, teren (tudi brez signala),
 računi in **fotomontaža PREJ/POTEM** iz uradnih Roksalovih gradiv.
 
-> **Stanje:** rekonstrukcija zaključena in presežena · izdaja **v1.61.0** ·
-> **49 testnih skupin + E2E skozi pravo aplikacijo** · GitHub je kanonični vir
+> **Stanje:** rekonstrukcija zaključena in presežena · izdaja **v1.62.0** ·
+> **50 testnih skupin + E2E skozi pravo aplikacijo** · GitHub je kanonični vir
 > (zadeve + release vrata), GitLab zrcalo, sinhronizacija po SHA (`ops/sync-check.sh`) ·
 > [docs/](docs/) vsebuje poročila za vsako fazo.
 
 ---
 
-## Zgodovina v sedmih stavkih
+## Zgodovina v osmih stavkih
 
 1. **Izvirnik** (~430 iteracij, R120–R430) je bil razvit v Z.ai kontejnerjih in
    sinhroniziran na GitHub; račun/repo je bil izbrisan 6. 10. 2026.
@@ -44,6 +44,15 @@ računi in **fotomontaža PREJ/POTEM** iz uradnih Roksalovih gradiv.
    400 s slovenskim sporočilom), API pogodba niz→objekt atomarno s frontendom
    (pisanja, branja, rute, seedi). Testna skupina r542 (49. skupina).
    Belt 8 statičnih + 49 skupin.
+8. **CSP enforce način + poročila v bazo (R543, izdaja v1.62.0):** politiko
+   gradi en vir `src/lib/csp.ts` — privzeto Report-Only (nespremenjeno),
+   izvršilni način je env stikalo `CSP_MODE=enforce`; popravek `frame-src
+   'self' blob:` (PDF predogled), `frame-ancestors` samo izrecno
+   (`CSP_FRAME_ANCESTORS`), `unsafe-eval` samo v razvoju; poročila se
+   zapisujejo v tabelo `CspReport` (raw kot jsonb objekt, job `csp-gc` briše
+   > 7 dni) — opazovalno obdobje je izmerljivo; `src/instrumentation.ts`
+   opozori na `DEMO_ACCESS=on` v produkciji. Testna skupina r543
+   (50. skupina). Belt 8 statičnih + 50 skupin.
 
 ## Kaj aplikacija počne
 
@@ -150,8 +159,19 @@ tveganja:
   nikoli ne pride do baze (R541: status projekta enumeriran prek
   `PROJECT_STATUSES`, neveljaven → 400; R542: `params`/`analysis` sprejemata
   SAMO JSON objekt — niz → 400).
-- **CSP Report-Only** glava (R536) — opazovalno obdobje pred izvrševanjem;
-  poročila se pregledajo pred preklopom v `Content-Security-Policy`.
+- **CSP (R536 → R543):** politiko gradi en vir `src/lib/csp.ts`; privzeto
+  teče **Report-Only** glava (opazovalno obdobje nadaljuje), preklop v
+  izvršilno `Content-Security-Policy` je env stikalo `CSP_MODE=enforce`
+  (dokumentirano v `config/ENV-VARS.md`). R543: `frame-src 'self' blob:`
+  popravi PDF predogled (blob: v iframe bi podedoval `default-src 'self'`
+  in bil blokiran), `frame-ancestors` je privzeto IZPUŠČEN (vgrajeni
+  predogled bi ga prelomil; clickjacking zaščita teče prek
+  `X-Frame-Options: SAMEORIGIN`, izrecna vrednost prek
+  `CSP_FRAME_ANCESTORS`), `unsafe-eval` samo v razvoju. Poročila se
+  **zapisujejo v bazo** (tabela `CspReport`, `raw` kot jsonb objekt —
+  konvencija R542; job `csp-gc` briše > 7 dni) — opazovalno obdobje je
+  končno izmerljivo, odločitev o preklopu pa je na pregledu zbranih
+  poročil, ne na ugibanju.
 - **ErrorBoundary + 29 manjkajočih FK indeksov** (R535) — padec modula ne
   zruši celotne aplikacije; poizvedbe po tujih ključih ne delajo tabelnih
   pregledov.
@@ -197,7 +217,7 @@ hitro demo prijavo se izrišejo samo z `DEMO_ACCESS=on`.
 
 ```bash
 bash tests/ci-local.sh        # ENO VSTOPNO MESTO: typecheck + lint + migracije + seed
-                              # + živa aplikacija + VSE skupine (49); logi v .ci-local-logs/
+                              # + živa aplikacija + VSE skupine (50); logi v .ci-local-logs/
 bash tests/ci-matrix.sh --list    # seznam skupin — edini vir resnice
 bash tests/ci-matrix.sh r524       # ena skupina (točno tako jih poganja CI)
 ```
@@ -226,7 +246,7 @@ ImageMagick, poppler) — podrobno v `tests/ci-local.sh` glavi.
   smart-HTTP z job-tokenom). Zasebni runner kvote **ne** porablja.
 - **Release vrata (obvezna pred vsako izdajo):** relejni pas
   `bash tests/ci-local.sh` na TOČNO tistem commitu, ki se izdaja (8 statičnih
-  korakov + vseh 49 skupin, EXIT 0), nato `bash ops/sync-check.sh` = OK na
+  korakov + vseh 50 skupin, EXIT 0), nato `bash ops/sync-check.sh` = OK na
   obeh sistemih, šele nato oznaka + push. GitLab pipeline (`verify`) je
   drugotna potrditev istega SHA — ne nadomestilo pasu.
 - **Vercel (produkcija) — pošteno:** iz peskovnika NI dostopa do Vercel API-ja
@@ -258,10 +278,10 @@ ImageMagick, poppler) — podrobno v `tests/ci-local.sh` glavi.
 |---|---|
 | `src/app/api/` | 195 API rut (App Router) |
 | `src/components/roksal/` | 49 modulov + ogrodje (app-shell, module-view) |
-| `src/lib/` | 76 knjižnic: photo-replace-{mask,texture,core,engine}, permissions-core, nav-registry, audit, notify (outbox), json (jsonb pomožniki), … |
-| `prisma/` | shema (93 modelov) + 16 migracij + semenske skripte (`db:seed` veriga) |
+| `src/lib/` | 77 knjižnic: photo-replace-{mask,texture,core,engine}, permissions-core, nav-registry, audit, notify (outbox), json (jsonb pomožniki), csp (en vir CSP politike), … |
+| `prisma/` | shema (94 modelov) + 17 migracij + semenske skripte (`db:seed` veriga) |
 | `public/assets/roksal/src/` | uradni Roksalovi viri, `MANIFEST.json` s SHA-256 |
-| `tests/` | 49 skupin + `ci-local.sh` / `ci-matrix.sh` + fixtures |
+| `tests/` | 50 skupin + `ci-local.sh` / `ci-matrix.sh` + fixtures |
 | `ops/` | E2E skripte, izrisi-dokazi, backup/restore/drill, secret-audit |
 | `docs/` | poročila po fazah (RECOVERY, FOTOZAMENJAVA, E2E, …) |
 | `.zscripts/` | vzdrževanje peskovnika: dev-detach, git-retry, ci-mirror |
@@ -279,11 +299,13 @@ ImageMagick, poppler) — podrobno v `tests/ci-local.sh` glavi.
   odločitev; benchmark fizičnih meritev (faza 7) zahteva pravo napravo.
   Seznam v
   [`docs/FOTOZAMENJAVA-POROCILO-14.md`](docs/FOTOZAMENJAVA-POROCILO-14.md) §5.
-- **Revizija v1.58.0 (7,9/10) — Top-10 popravki izvedeni (R535–R542).** Še
-  odprto za naslednje kroge (po prioriteti): CSP preklop
-  iz Report-Only v Enforce (čaka poročila z opazovalnega obdobja na
-  produkciji), `DEMO_ACCESS=on` v produkcjskem okolju (lastnikova odločitev ob
-  namestitvi).
+- **Revizija v1.58.0 (7,9/10) — Top-10 popravki izvedeni (R535–R543).** Še
+  odprto za naslednje kroge (po prioriteti): CSP Enforce — zmožnost je
+  pripravljena (`CSP_MODE=enforce`, `config/ENV-VARS.md`), čaka lastnikovo
+  stikalo po opazovalnem obdobju na produkciji (poračila se od R543 zbirajo
+  v tabeli `CspReport`), `DEMO_ACCESS=on` v produkcjskem okolju (lastnikova
+  odločitev ob namestitvi; ob zagonu strežnika ga zdaj glasno opozori
+  `src/instrumentation.ts`).
 
 ## Tehnologija
 
