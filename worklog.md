@@ -5375,3 +5375,31 @@ Stage Summary:
 - PRODUKCIJA v polnem koraku z main (v1.64.0) — prvič po 5 izdajah; cron jobi odprti in preverjeni.
 - OPOMNIKI LASTNIKU: (1) rotacija žetonov ob zaključku seje (GitHub ghp_VZHq…, GitLab glpat-ae7r…, Vercel vcp_3Xwo… — vsi uporabljeni v URL-jih/glavah); (2) CSP Enforce: opazuj zavihek CSP poročila — ko je čisto (npr. 2 tedna brez resničnih kršitev), preklopi CSP_MODE=enforce na Vercelu; (3) utripajoča napaka r489 — če se ponovi v prihodnjih pasih, globja raziskava (sum: timing prve kompilacije route v dev načinu).
 - NASLEDNJI KROG R546 (kandidati): razbitje velikanskih modulov (konfigurator 1752, pregled 1728, projekti 1642 — tehnični dolg iz sinteze R543/R544), DEMO_ACCESS dvojna vrata (env + Setting + admin toggle + expiresAt).
+
+---
+Task ID: R546
+Agent: main (Z.ai Code)
+Task: Izdaja v1.65.0 — razbitje velikanov (konfigurator/pregled/projekti): kirurški refactoring v 12 poddatotek brez spremembe obnašanja + testi + pas + browser verifikacija + commit/push oba remote-a.
+
+Work Log:
+- IZHODIŠČE: oba remote-a usklajena (main e6744a1 = v1.64.0 + tag; GitHub IN GitLab ista SHA — GitLab žeton deluje S pripono .01.1704ktceh, ta NI bila pasta-artefakt ampak del žetona).
+- RAZISKOVA (main, ne subagent — kirurška natančnost s sidri): velikosti konfigurator 1752 / pregled 1728 / projekti 1642; notranje meje že čiste (Step*/sekcije so ločene funkcije); testna sidra: r488 (3 nizi na konfigurator.tsx), r511 (4 nizi na projekti.tsx — PackageBomDialog), r464 (negativne), r447/r448/r490 (neškodljive); module-view eksplicitna mapa (nove datoteke ne vplivajo).
+- TEHNIKA: sed-ekstrakcija bajtno-identičnih segmentov (740-902, 1341-1752 …) + Write glav z uvozi → 0 napak pretipkavanja; export dodan na 20+ komponent; tsc po vsakem velikanu.
+- KONFIGURATOR 1752→643+597+426+128: shared (tipi+formTypeOf+PODLAGE/NACINI+parseNum/round2/pos+runSegmentsFromParams), steps (koraki 1,2,4,5,6+SummaryTile+SaveResultPanel), meritve (korak 3 — največji izrez z R455/R488 prefill).
+- PREGLED 1728→507+337+468+320+154: shared (API tipi+STROKE/PIN_TONE/NODE_GLYPH+fmt/pinSnapshotSummary+niceStep/range), views (tloris/profil/3D/javni tloris/merilo), cards (fotografije/pin dialogi/replay), share (javna delitev+GDPR).
+- PROJEKTI 1642→232+381+427+229+69+389: shared, sections (tok/kronologija/nov/garancija/3D), packages (paketi+primerjave), portal, bom (PackageBomDialog+ImportBomDialog — izvlečen tudi za rešitev krožnega uvoza packages↔glavni; glavni 232 vrstic).
+- GRAF: enosmerno (shared=list; poddatoteke uvozijo SAMO shared, viz-3d legitimna zunanja; glavni=koren); nalagalnik NEDOTAKNJEN (3 poti, 0 novih vnosov — poddatoteke so gradniki ne zavihki).
+- SIDRA POSODOBLJENA POŠTENO: r488 (runSegments definicija→shared; JSDoc 'params.fenceRunId + params.segments' + 'iz potrjenih tekačev'→meritve — niza sta živela v RAZLIČNIH segmentih izvirnika), r511 (4 sidra→projekti-bom.tsx), r464 negativne nedotaknjene.
+- tests/r546.py NOV (53. skupina, 106 preverjanj: A struktura/B sidra/C HTTP/D registracija) — prvi tek 3 rdeče (štetje 31≠33 izrezov; viz-3d uvoz neznan; B1 napačna lokacija JSDoc) → vse 3 pošteno popravljene → 106✓/0✗.
+- POLNI PAS: prvi poskus ubit v ozadju (setsid+nohup NE zadostujeta — gateway mori otroke po DREVESU, enako kot R544 past) → REŠITEV: .zscripts/dev-detach.py dvojni fork (prvnuk PPID 1) → ZELEN V PRVEM TEKU (ops/r546-pas.out: 8 statičnih + 53/53 skupin EXIT 0; r488/r511 z novimi sidri zeleni).
+- BROWSER VERIFIKACIJA (5+1 dokazov, 0 page/console napak): (1) /?m=konfigurator preživi prijavo — stepper 6 korakov, (2) interakcija 1→2 (StepProjekt P-2026-010 → StepIzdelek 22 izdelkov + prefill gumb; vratar brez izdelka zavrne), (3) korak 3 Meritve (Segmenti ograje/Prevzemi iz izmere/Razmik/Skupna dolžina), (4) /?m=pregled (izbire+prazno stanje), (5) projekti podrobnost P-2026-010 — POSLOVNI TOK 2/13 + 3D PREDOGLED + PRODUKTNI PAKETI + Garancija (vseh 5 sekcij živi; lažni negativiv iz velikih črk 'POSLOVNI TOK' pojasnjeni), (6) 390px: 0 preliva, footer kratka 844=vh sticky / dolga naravno potisnjen; dokaza ops/r546-konfigurator-{desktop,mobilni}.png.
+- SKRIVNOSTI: audit 4/4 čisto (276 commitov); žetoni uporabljeni v URL-jih, config ostaja čist.
+- COMMIT c1f82af (avtor+komitent Robert Pezdirc po R498), tag v1.65.0; PUSH GitHub (e6744a1..c1f82af + tag) in GitLab (isti, BREZ Cloudflare blokade).
+- PRODUKCIJA v1.65.0 ŽIVA: GitHub push sprožil dpl_2VYU… → READY na c1f82af; health roksal-railing-manager.vercel.app: status ok, db ok, verzija 1.65.0.
+
+Stage Summary:
+- TRIJE VELIKANI RAZBITI: 5122 vrstic v 3 datotekah → 12 poddatotek + 3 tanke lupine (643/507/232) — 0 sprememb obnašanja, 0 odvisnosti, 0 DB sprememb; vzorec R537 (meritve-kamera) ponovljiv za srednje module (zajem 1372, servis 1283, ogradnja 1211 — zapisano v odprtih točkah README).
+- 53. testna skupina (106 preverjanj) + posodobljeni sidri r488/r511 dokazujejo, da refactoring ohranja obnašanje (pas zelen v prvem teku).
+- LEKCIJA ZA PASE: dolgi ozadjski procesi (pas ~13 min) MORAJO iti čez .zscripts/dev-detach.py (dvojni fork) — setsid/nohup ubijeta moravca po drevesu; zabeleženo v sintezi in uporabljeno.
+- PRODUKCIJA v polnem koraku (v1.65.0 ŽIVA na c1f82af, db ok); CSP opazovalno obdobje še teče (zavihek CSP poročila).
+- OPOMNIKI: (1) rotacija žetonov ob zaključku seje (GitHub ghp_VZHq…, GitLab glpat-ae7r…, Vercel vcp_3Xwo…); (2) naslednji kandidati R547: srednji moduli po istem receptu ALI DEMO_ACCESS dvojna vrata (env+Setting+admin toggle+expiresAt).
