@@ -5354,3 +5354,24 @@ Stage Summary:
 - Produkcija je NEKOČ tekla 5+ izdaj za lokalnim main (žetoni) — sedaj v koraku; opazovalno obdobje CSP (R543) zdaj dejansko zbirá poročila na produkciji.
 - Žetoni uporabljeni v URL-jih/glavah — ob zaključku seje priporočam rotacijo (GitHub ghp_VZHq…, GitLab glpat-ae7r…, Vercel vcp_3Xwo…).
 - Sledi: R545 = admin pogled CSP poročil (zavihek v Varnost) — CspReport ima shrambo+GC a NOBENEGA UI; poročila bodo pritekla iz produkcije.
+
+---
+Task ID: R545 (sinteza)
+Agent: main (Z.ai Code)
+Task: Izdaja v1.64.0 — CSP poročila (ADMIN pregled v aplikaciji): implementacija + testi + pas + browser verifikacija + commit/push; pred tem (R545-0) produkcijska sinhronizacija z novimi žetoni.
+
+Work Log:
+- VRSTNI RED: R545-0 (produkcija: smetni commit zavzžen, higiena dev.pid, push GitHub+GitLab, Neon preverba, CRON_SECRET, ROKSAL_BUILD) → R545 implementacija (backend route + modul + vezava na 3 mesta) → r545.py 42 preverb (zeleno V PRVEM TEKU — vzorec pozicijsko neodvisnih trditev drži) → README/verzija → PAS.
+- IMPLEMENTACIJA: GET/DELETE /api/csp-reports (security.read; mode/povzetek/seznam brez raw; DELETE transakcijsko z revizijo CSP_REPORTS_CLEAR) + modul csp.tsx (42. zavihek Varnost; prazno stanje = znak za Enforce) + nav-registry/module-view/ACTION_LABELS + komentarja 41→42.
+- PAS 4 TEKI: tek 1 ZELEN; tek 2 UTRIPAJOČA NAPAKA r489 (PATCH /qa/check 404 — obsegNaloga 'Nalog ne obstaja' MID-TEST, kljub GET 200 milisekunde prej; dev.log: prvi 404 po 2.9s prve kompilacije route; ne reproducira se ne samostojno ne v teku 3; koda r489 in R545 se ne dotikata — dokumentirano pošteno, če se ponovi, zasluži poglobljeno raziskavo); tek 3 ZELEN; KONČNI PAS na izdajnem drevesu (po CSS popravku) ZELEN 8 statičnih + 52/52 (ops/r545-pas-koncni.out).
+- BROWSER VERIFIKACIJA 5 DOKAZOV: globoka povezava /?m=csp (breadcrumb), prikaz posejanega poročila v vseh pogledih, Počisti vse (confirm → toast → prazno stanje), MOBILNA NAJDBA: preliv 451>390px (grid min-content izpuh kartic + truncate brez min-w-0) → popravek min-w-0 na 3 kartice + min-w-0 flex-1 na URL span + shrink-0 badge + overflow-auto na tabelo → 390 točno, footer na dnu (1391.5=1392); 0 napak. Dokaza ops/r545-csp-{desktop,mobile}.png. LEKCIJA: prazno stanje NI dokaz odzivnosti — preliv se pokaže še z PODATKI (prvi mobilni pregled po praznem brisanju je bil 390, s podatki 451).
+- SKRIVNOSTI: audit 4/4 čisto (274 commitov); Neon URL in CRON_SECRET nikoli v repozitoriju (temp datoteke pobrisane).
+- COMMIT 7f57af0 (avtor IN komitent Robert Pezdirc po R498), tag v1.64.0; PUSH GitHub (f9aa8e3..7f57af0 + tag) in GitLab (HTTP/1.1; 1. poskus 403 prehodna Cloudflare HKG blokada, 2. poskus po 20s uspel).
+- PRODUKCIJA v1.64.0 ŽIVA: GitHub push je sprožil samodejni deploy dpl_Goai… (READY), health main-7f57af0 db ok, /?m=csp 200, /api/jobs/run brez pooblastila 401 (fail-closed), deploy-status USKLAJENO. Opazovalno obdobje CSP zdaj zbirá poročila IN je vidno lastniku v aplikaciji.
+
+Stage Summary:
+- ZANKA R536→R543→R545 ZAKLJUČENA: politika (Report-Only/Enforce stikalo) → shramba poročil (CspReport + TTL GC + javna točka) → ADMIN pregled (zavihek + agregaciji + revizirano čiščenje). Preklop v Enforce je zdaj PODATKOVNA odločitev lastnika.
+- 52. testna skupina (42 preverb), 42. zavihek, 50. modul, 195→196 API rut (nova GET/DELETE /api/csp-reports).
+- PRODUKCIJA v polnem koraku z main (v1.64.0) — prvič po 5 izdajah; cron jobi odprti in preverjeni.
+- OPOMNIKI LASTNIKU: (1) rotacija žetonov ob zaključku seje (GitHub ghp_VZHq…, GitLab glpat-ae7r…, Vercel vcp_3Xwo… — vsi uporabljeni v URL-jih/glavah); (2) CSP Enforce: opazuj zavihek CSP poročila — ko je čisto (npr. 2 tedna brez resničnih kršitev), preklopi CSP_MODE=enforce na Vercelu; (3) utripajoča napaka r489 — če se ponovi v prihodnjih pasih, globja raziskava (sum: timing prve kompilacije route v dev načinu).
+- NASLEDNJI KROG R546 (kandidati): razbitje velikanskih modulov (konfigurator 1752, pregled 1728, projekti 1642 — tehnični dolg iz sinteze R543/R544), DEMO_ACCESS dvojna vrata (env + Setting + admin toggle + expiresAt).
