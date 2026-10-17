@@ -4,14 +4,14 @@ Poslovno-operativni sistem za Roksal — od prvega voda do zaključene montaže 
 fasad in teras: CRM, ponudbe s podpisom, proizvodnja, teren (tudi brez signala),
 računi in **fotomontaža PREJ/POTEM** iz uradnih Roksalovih gradiv.
 
-> **Stanje:** rekonstrukcija zaključena in presežena · izdaja **v1.58.0** ·
-> **43 testnih skupin + E2E skozi pravo aplikacijo** · GitHub je kanonični vir
+> **Stanje:** rekonstrukcija zaključena in presežena · izdaja **v1.59.0** ·
+> **47 testnih skupin + E2E skozi pravo aplikacijo** · GitHub je kanonični vir
 > (zadeve + release vrata), GitLab zrcalo, sinhronizacija po SHA (`ops/sync-check.sh`) ·
 > [docs/](docs/) vsebuje poročila za vsako fazo.
 
 ---
 
-## Zgodovina v štirih stavkih
+## Zgodovina v petih stavkih
 
 1. **Izvirnik** (~430 iteracij, R120–R430) je bil razvit v Z.ai kontejnerjih in
    sinhroniziran na GitHub; račun/repo je bil izbrisan 6. 10. 2026.
@@ -24,7 +24,13 @@ računi in **fotomontaža PREJ/POTEM** iz uradnih Roksalovih gradiv.
 4. **Nadaljnji razvoj** (R440–R534): kakovost, varnost, fotomontaža (GitLab
    issue #14), harmonizacija barv (R532), enoten vir kode po SHA (GitHub #20,
    R533), varnostna utrditev pred produkcijo (GitHub #21, R534: seed-varovalo,
-   atomska namestitev, SHA-256 seje, izklop query-dnevnika) — relejni pas 43 skupin.
+   atomska namestitev, SHA-256 seje, izklop query-dnevnika).
+5. **Utrditev po reviziji v1.58.0** (R535–R540, šest sklopov): ErrorBoundary +
+   MONTER obseg + 29 FK indeksov (R535); tempomat v bazi + zaklepanje računa +
+   scrypt N=2¹⁷ + zod validacija + CSP Report-Only (R536); transakcijski outbox
+   in razbitje velikih modulov (R537); sejni piškotek httpOnly (R538);
+   transakcijska celovitost preostalih družin (R539); zadnji ostanki — dvojček,
+   kodne dirke PR-/SRV-/OR- (R540). Belt 8 statičnih + 47 skupin.
 
 ## Kaj aplikacija počne
 
@@ -83,7 +89,9 @@ plan in referenco (220 cm) → izbere Roksalov izdelek in odtenek → **PREJ/POT
   bazo → **skrivnostni pregled delovne kopije in celotne zgodovine**
   (`ops/secret-audit.sh`) → sintaksa ops skript.
 - **Varnostne glave** (HSTS, X-Frame-Options, Referrer-Policy, …), omejitev
-  prijav na IP, seje kot nosilni žetoni `Authorization: Bearer` — v bazi je
+  prijav na IP, seje kot nosilni žetoni `Authorization: Bearer` **ali httpOnly
+  piškotek `roksal_session`** (R538 — XSS iz shrambe ne more izluščiti žetona;
+  programska Bearer pot nespremenjena) — v bazi je
   shranjena SAMO SHA-256 zgoščena oblika, veljavnost **7 dni**, preklic z
   odjavo/spremembo gesla/pregledom sej; stara (nezgoščena) zapisa se ob
   prvem branju samodejno nadgradijo (R534, issue #21).
@@ -109,6 +117,32 @@ plan in referenco (220 cm) → izbere Roksalov izdelek in odtenek → **PREJ/POT
   15 min, `PRISMA_LOG_QUERIES_MS`) in izpisuje SAMO SQL-besedilo in trajanje —
   nikoli vrednosti parametrov.
 
+### Transakcijska celovitost in utrditev prijav (R535–R540)
+
+Po temeljiti reviziji v1.58.0 je sledilo šest sklopov popravkov po prioriteti
+tveganja:
+
+- **Vse poslovne verige z več pisanji so ATOMARNE (~140 rut, R537–R540):**
+  mutacija + revizija + dogodek-outbox v ENI `$transaction`; obvestila
+  (IN_APP/EMAIL/SMS/WHATSAPP) in webhook dostava tečejo PO commitu
+  (ognjevareno — padec dostave ne razveljavi posla). `retryOnUnique` SAMO
+  okoli cele transakcije (P2002 znotraj PG transakcije je neobnovljiv);
+  generirane kode (N-, PR-, SRV-, REK-, DEL-, PAK- …) se berejo znotraj tx.
+  Zavestno izpuščene (dokumentirano v testih): logout, administrativna
+  orodja, SAGA/kompenzacijske poti.
+- **Avtentikacija (R536):** porazdeljeni tempomat v bazi (prijave na IP,
+  odporen na restart), zaklepanje računa po zaporednih neuspelih prijavah,
+  scrypt N=2¹⁷ s transparentno nadgradnjo starejših hashov ob prijavi.
+- **Vhodna validacija (R536/R538):** zod sheme po API-ju — napaken vnos
+  nikoli ne pride do baze.
+- **CSP Report-Only** glava (R536) — opazovalno obdobje pred izvrševanjem;
+  poročila se pregledajo pred preklopom v `Content-Security-Policy`.
+- **ErrorBoundary + 29 manjkajočih FK indeksov** (R535) — padec modula ne
+  zruši celotne aplikacije; poizvedbe po tujih ključih ne delajo tabelnih
+  pregledov.
+- **Razbitje velikih modulov (R537):** meritve-kamera 3021 → 16 datotek,
+  AR 2215 → 12, foto-replace 1953 → 7 (dobesedne selitve z dokazi).
+
 ## Zagon
 
 ```bash
@@ -132,7 +166,7 @@ hitro demo prijavo se izrišejo samo z `DEMO_ACCESS=on`.
 
 ```bash
 bash tests/ci-local.sh        # ENO VSTOPNO MESTO: typecheck + lint + migracije + seed
-                              # + živa aplikacija + VSE skupine (42); logi v .ci-local-logs/
+                              # + živa aplikacija + VSE skupine (47); logi v .ci-local-logs/
 bash tests/ci-matrix.sh --list    # seznam skupin — edini vir resnice
 bash tests/ci-matrix.sh r524       # ena skupina (točno tako jih poganja CI)
 ```
@@ -161,7 +195,7 @@ ImageMagick, poppler) — podrobno v `tests/ci-local.sh` glavi.
   smart-HTTP z job-tokenom). Zasebni runner kvote **ne** porablja.
 - **Release vrata (obvezna pred vsako izdajo):** relejni pas
   `bash tests/ci-local.sh` na TOČNO tistem commitu, ki se izdaja (8 statičnih
-  korakov + vseh 43 skupin, EXIT 0), nato `bash ops/sync-check.sh` = OK na
+  korakov + vseh 47 skupin, EXIT 0), nato `bash ops/sync-check.sh` = OK na
   obeh sistemih, šele nato oznaka + push. GitLab pipeline (`verify`) je
   drugotna potrditev istega SHA — ne nadomestilo pasu.
 - **Vercel (produkcija) — pošteno:** iz peskovnika NI dostopa do Vercel API-ja
@@ -192,11 +226,11 @@ ImageMagick, poppler) — podrobno v `tests/ci-local.sh` glavi.
 | Pot | Vsebina |
 |---|---|
 | `src/app/api/` | 195 API rut (App Router) |
-| `src/components/roksal/` | 45 modulov + ogrodje (app-shell, module-view) |
-| `src/lib/` | 72 knjižnic: photo-replace-{mask,texture,core,engine}, permissions-core, nav-registry, audit, … |
-| `prisma/` | shema + 12 migracij + semenske skripte (`db:seed` veriga) |
+| `src/components/roksal/` | 49 modulov + ogrodje (app-shell, module-view) |
+| `src/lib/` | 75 knjižnic: photo-replace-{mask,texture,core,engine}, permissions-core, nav-registry, audit, notify (outbox), … |
+| `prisma/` | shema (93 modelov) + 15 migracij + semenske skripte (`db:seed` veriga) |
 | `public/assets/roksal/src/` | uradni Roksalovi viri, `MANIFEST.json` s SHA-256 |
-| `tests/` | 43 skupin + `ci-local.sh` / `ci-matrix.sh` + fixtures |
+| `tests/` | 47 skupin + `ci-local.sh` / `ci-matrix.sh` + fixtures |
 | `ops/` | E2E skripte, izrisi-dokazi, backup/restore/drill, secret-audit |
 | `docs/` | poročila po fazah (RECOVERY, FOTOZAMENJAVA, E2E, …) |
 | `.zscripts/` | vzdrževanje peskovnika: dev-detach, git-retry, ci-mirror |
@@ -214,6 +248,11 @@ ImageMagick, poppler) — podrobno v `tests/ci-local.sh` glavi.
   odločitev; benchmark fizičnih meritev (faza 7) zahteva pravo napravo.
   Seznam v
   [`docs/FOTOZAMENJAVA-POROCILO-14.md`](docs/FOTOZAMENJAVA-POROCILO-14.md) §5.
+- **Revizija v1.58.0 (7,9/10) — Top-10 popravki izvedeni (R535–R540).** Še
+  odprto za naslednje kroge (po prioriteti): JSONB/enum omejitve statusnih
+  polj (shemska migracija), CSP preklop iz Report-Only v Enforce (čaka
+  poročila z opazovalnega obdobja na produkciji), `DEMO_ACCESS=on` v
+  produkcjskem okolju (lastnikova odločitev ob namestitvi).
 
 ## Tehnologija
 

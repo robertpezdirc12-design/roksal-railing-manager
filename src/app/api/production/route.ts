@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { jsonError, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
 import { nextCodeFromList } from '@/lib/codes'
+import { retryOnUnique } from '@/lib/versioning'
 
 // GET /api/production — proizvodni nalogi s projektom, sortiranje po roku (production.read)
 export async function GET (req: NextRequest) {
@@ -45,13 +46,16 @@ export async function POST (req: NextRequest) {
     if (Number.isNaN(dueAt.getTime())) return jsonError(400, 'Neveljaven rok izdelave.')
   }
 
-  // R439: koda glede na zasedene (count pade ob brisanju → unikatnost ni zagotovljena)
-  const existingCodes = await db.productionOrder.findMany({ where: { code: { startsWith: 'PR-' } }, select: { code: true } })
-  const code = nextCodeFromList(existingCodes.map((w) => w.code), 'PR-')
+  // R540 (transakcijska celovitost + dirka kod PR-): nalog + revizija atomarno
+  // (vzorec R537-d); koda PR- se bere ZNOTRAJ tx na tx klientu — sočasen POST,
+  // ki izračuna isto kodo, sproži P2002 na ProductionOrder.code (@unique),
+  // kar retryOnUnique okoli CELE transakcije reši z do 3 poskusi (koda se v
+  // ponovljenem fn izračuna znova; vzorec REK-/DEL- R538-c, nalog R537).
+  const order = await retryOnUnique(() => db.$transaction(async (tx) => {
+    // R439: koda glede na zasedene (count pade ob brisanju → unikatnost ni zagotovljena)
+    const existingCodes = await tx.productionOrder.findMany({ where: { code: { startsWith: 'PR-' } }, select: { code: true } })
+    const code = nextCodeFromList(existingCodes.map((w) => w.code), 'PR-')
 
-  // R539 (transakcijska celovitost): nalog + revizija atomarno (vzorec R537-d;
-  // predbranje zasedenih kod ostaja izven tx).
-  const order = await db.$transaction(async (tx) => {
     const order = await tx.productionOrder.create({
       data: { code, title, projectId, dueAt },
       include: { project: { select: { code: true, title: true } } },
@@ -62,6 +66,6 @@ export async function POST (req: NextRequest) {
       detail: { code, title, dueAt },
     }, tx)
     return order
-  })
+  }), 3)
   return NextResponse.json({ data: order }, { status: 201 })
 }

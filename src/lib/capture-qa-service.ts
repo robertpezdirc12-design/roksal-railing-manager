@@ -310,8 +310,9 @@ export async function finishCaptureSession (
 // ─── Digitalni dvojček: snapshoti (§8–§12/§22) ──────────────────────────────
 
 /** R539 (transakcijska celovitost): neobvezen klient — verzija (branje zadnje)
- * in create tečeta čes njega; privzeto globalni db (obstoječi klici iz
- * build*Snapshot funkcij so nespremenjeni). Verzija je read-then-create —
+ * in create tečeta čes njega; privzeto globalni db (z klientom ga od R539
+ * podaja finish ruta, od R540 pa tudi build*Snapshot veriga iz transakcije
+ * snapshot POST). Verzija je read-then-create —
  * znotraj $transaction jo P2002 aborta celo tx, zato retry vodi KLICATELJ
  * (retryOnUnique okoli cele transakcije, vzorec R536/R539). */
 export async function createTwinSnapshotRow (args: {
@@ -345,9 +346,13 @@ export async function createTwinSnapshotRow (args: {
   return { id: created.id, version }
 }
 
-/** Zadnji snapshot dane vrste (ali null). */
-export async function latestSnapshot (projectId: string, kind: string): Promise<{ id: string; version: number; data: TwinSnapshotData | null } | null> {
-  const s = await db.digitalTwinSnapshot.findFirst({
+/** Zadnji snapshot dane vrste (ali null).
+ * R540 (transakcijska celovitost digitalnega dvojčka): neobvezen klient —
+ * privzeto globalni db (obstoječi klici twinDiff + production/from-twin
+ * ostanejo nespremenjeni); buildProduced/InstalledSnapshot ga podata naprej,
+ * da je branje AS-DESIGNED v isti transakciji kot zapis nove vrstice. */
+export async function latestSnapshot (projectId: string, kind: string, client: Prisma.TransactionClient = db): Promise<{ id: string; version: number; data: TwinSnapshotData | null } | null> {
+  const s = await client.digitalTwinSnapshot.findFirst({
     where: { projectId, kind },
     orderBy: { version: 'desc' },
   })
@@ -360,9 +365,14 @@ export async function latestSnapshot (projectId: string, kind: string): Promise<
  * statusom POTRJEN — če obstaja, se uporabi najnovejši POTRJENI; sicer pade
  * nazaj na najnovejšega katerikoli (obstoječe obnašanje) + runStatus pove,
  * da je vir osnutek (klicatelj zapiše opozorilo v snapshot). Ostali
- * klicatelji (twinOverview) obnašanja NE spreminjajo. */
-export async function segmentsZaProjekt (projectId: string, opts?: { confirmedFirst?: boolean }): Promise<{ segments: GateSegment[]; measurementId: string | null; totalCm: number; runStatus: string | null }> {
-  const runQuery = (status?: string) => db.fenceRun.findMany({
+ * klicatelji (twinOverview) obnašanja NE spreminjajo.
+ * R540 (transakcijska celovitost digitalnega dvojčka): TRETJI neobvezen
+ * parameter klienta — privzeto globalni db (obstoječi klici twinOverview +
+ * montaza-qa-core 2× ostanejo nespremenjeni); buildDesignedSnapshot ga
+ * podata naprej, da so branja tekačev/meritev v isti transakciji
+ * kot zapis vrstice snapshot-a. */
+export async function segmentsZaProjekt (projectId: string, opts?: { confirmedFirst?: boolean }, client: Prisma.TransactionClient = db): Promise<{ segments: GateSegment[]; measurementId: string | null; totalCm: number; runStatus: string | null }> {
+  const runQuery = (status?: string) => client.fenceRun.findMany({
     where: { projectId, ...(status ? { status } : {}) },
     orderBy: { updatedAt: 'desc' },
     include: { segments: { orderBy: { order: 'asc' } } },
@@ -387,7 +397,7 @@ export async function segmentsZaProjekt (projectId: string, opts?: { confirmedFi
     }
   }
   // brez tekača: zadnja kanonična meritev kot en segment
-  const m = await db.measurement.findFirst({
+  const m = await client.measurement.findFirst({
     where: { projectId },
     orderBy: { createdAt: 'desc' },
   })
@@ -408,17 +418,24 @@ export async function segmentsZaProjekt (projectId: string, opts?: { confirmedFi
 
 // ─── AS-DESIGNED iz projektnega paketa (§10) ────────────────────────────────
 
+/** R540 (transakcijska celovitost digitalnega dvojčka): neobvezen klient —
+ * privzeto globalni db (klici brez argumenta ostanejo nespremenjeni); snapshot
+ * POST poda tx klienta, da so VSA branja (paket, foto-viz, segmenti tekača)
+ * IN zapis vrstice v isti transakciji — padec srednjega koraka ne pusti
+ * snapshot-a brez revizije. Verzija je read-then-create — P2002 znotraj tx
+ * aborta celo tx, retry (retryOnUnique okoli cele transakcije) vodi
+ * KLICATELJ (vzorec R536/R539-b). */
 export async function buildDesignedSnapshot (args: {
   projectId: string
   packageId: string
   fotoVizId?: string | null
   reason: string
   userId: string
-}): Promise<
+}, client: Prisma.TransactionClient = db): Promise<
   | { ok: true; snapshotId: string; version: number }
   | { ok: false; status: number; error: string; detail?: string }
 > {
-  const pkg = await db.projectPackage.findUnique({
+  const pkg = await client.projectPackage.findUnique({
     where: { id: args.packageId },
     include: { product: true, variant: true, measurement: true },
   })
@@ -427,7 +444,7 @@ export async function buildDesignedSnapshot (args: {
 
   let fotoViz: { id: string; variantLabel: string; engineVersion: string } | null = null
   if (args.fotoVizId) {
-    const pv = await db.photoVisualization.findUnique({ where: { id: args.fotoVizId } })
+    const pv = await client.photoVisualization.findUnique({ where: { id: args.fotoVizId } })
     if (!pv) return { ok: false, status: 404, error: 'Foto-vizualizacija ne obstaja.' }
     if (pv.projectId !== args.projectId) return { ok: false, status: 400, error: 'Foto-vizualizacija pripada drugemu projektu.' }
     // §19: vizualizacija MORA biti vezana na ISTO konfiguracijo (paket)
@@ -443,7 +460,7 @@ export async function buildDesignedSnapshot (args: {
   // R488 (P5): AS-DESIGNED PREFERIRA POTRJENEGA tekača (vir izmere, ki je
   // prešel quality gate) — osnutek se uporabi samo, če potrjenega ni, in to
   // ostane VIDNO zapisano v meta snapshot-a (runDraftWarning).
-  const base = await segmentsZaProjekt(args.projectId, { confirmedFirst: true })
+  const base = await segmentsZaProjekt(args.projectId, { confirmedFirst: true }, client)
   let config: Record<string, unknown> | null = null
   if (pkg.calcJson) {
     try { config = JSON.parse(pkg.calcJson) as Record<string, unknown> } catch { config = null }
@@ -483,12 +500,19 @@ export async function buildDesignedSnapshot (args: {
     reason: args.reason,
     createdFrom: pkg.id,
     userId: args.userId,
-  })
+  }, client)
   return { ok: true, snapshotId: snap.id, version: snap.version }
 }
 
 // ─── AS-PRODUCED iz kosovnice (§11) ────────────────────────────────────────
 
+/** R540 (transakcijska celovitost digitalnega dvojčka): neobvezen klient —
+ * privzeto globalni db (klici brez argumenta ostanejo nespremenjeni); snapshot
+ * POST poda tx klienta, da so VSA branja (kosovnica, zadnji AS-DESIGNED) IN
+ * zapis vrstice v isti transakciji — padec srednjega koraka ne pusti
+ * snapshot-a brez revizije. Verzija je read-then-create — P2002 znotraj tx
+ * aborta celo tx, retry (retryOnUnique okoli cele transakcije) vodi
+ * KLICATELJ (vzorec R536/R539-b). */
 export async function buildProducedSnapshot (args: {
   projectId: string
   bomId: string
@@ -497,11 +521,11 @@ export async function buildProducedSnapshot (args: {
   userId: string
   /** R462 §11: eksplicitni overridi mer (ključi seg-N iz AS-DESIGNED) */
   segmentOverrides?: { key: string; lengthCm?: number | null; heightCm?: number | null }[] | null
-}): Promise<
+}, client: Prisma.TransactionClient = db): Promise<
   | { ok: true; snapshotId: string; version: number }
   | { ok: false; status: number; error: string; detail?: string }
 > {
-  const bom = await db.bom.findUnique({
+  const bom = await client.bom.findUnique({
     where: { id: args.bomId },
     include: { package: true, lines: { select: { id: true } } },
   })
@@ -512,7 +536,7 @@ export async function buildProducedSnapshot (args: {
   if (!['POTRJEN', 'REZERVIRAN', 'PORABLJEN'].includes(bom.status)) {
     return { ok: false, status: 409, error: 'Kosovnica ni potrjena za proizvodnjo.', detail: `Status ${bom.status} — sprejemljivi: POTRJEN, REZERVIRAN, PORABLJEN.` }
   }
-  const designed = await latestSnapshot(args.projectId, 'AS_DESIGNED')
+  const designed = await latestSnapshot(args.projectId, 'AS_DESIGNED', client)
   if (!designed || !designed.data) {
     return { ok: false, status: 409, error: 'Manjka AS-DESIGNED snapshot.', detail: '§11: proizvodnja se primerja z načrtom — najprej ustvarite AS-DESIGNED.' }
   }
@@ -537,12 +561,19 @@ export async function buildProducedSnapshot (args: {
     reason: args.reason,
     createdFrom: bom.id,
     userId: args.userId,
-  })
+  }, client)
   return { ok: true, snapshotId: snap.id, version: snap.version }
 }
 
 // ─── AS-INSTALLED po montaži (§12) ─────────────────────────────────────────
 
+/** R540 (transakcijska celovitost digitalnega dvojčka): neobvezen klient —
+ * privzeto globalni db (klici brez argumenta ostanejo nespremenjeni); snapshot
+ * POST poda tx klienta, da so VSA branja (zadnji AS-DESIGNED, nalog) IN
+ * zapis vrstice v isti transakciji — padec srednjega koraka ne pusti
+ * snapshot-a brez revizije. Verzija je read-then-create — P2002 znotraj tx
+ * aborta celo tx, retry (retryOnUnique okoli cele transakcije) vodi
+ * KLICATELJ (vzorec R536/R539-b). */
 export async function buildInstalledSnapshot (args: {
   projectId: string
   finalSegments: { key: string; label?: string; lengthCm?: number | null; heightCm?: number | null }[]
@@ -551,11 +582,11 @@ export async function buildInstalledSnapshot (args: {
   photoCount?: number
   reason: string
   userId: string
-}): Promise<
+}, client: Prisma.TransactionClient = db): Promise<
   | { ok: true; snapshotId: string; version: number }
   | { ok: false; status: number; error: string; detail?: string }
 > {
-  const designed = await latestSnapshot(args.projectId, 'AS_DESIGNED')
+  const designed = await latestSnapshot(args.projectId, 'AS_DESIGNED', client)
   if (!designed || !designed.data) {
     return { ok: false, status: 409, error: 'Manjka AS-DESIGNED snapshot.', detail: '§12: montaža se primerja z načrtom — najprej ustvarite AS-DESIGNED.' }
   }
@@ -567,7 +598,7 @@ export async function buildInstalledSnapshot (args: {
   }
   let workOrderId: string | null = null
   if (args.workOrderId) {
-    const wo = await db.workOrder.findUnique({ where: { id: args.workOrderId }, select: { id: true, projectId: true } })
+    const wo = await client.workOrder.findUnique({ where: { id: args.workOrderId }, select: { id: true, projectId: true } })
     if (!wo) return { ok: false, status: 404, error: 'Nalog ne obstaja.' }
     if (wo.projectId && wo.projectId !== args.projectId) return { ok: false, status: 400, error: 'Nalog pripada drugemu projektu.' }
     workOrderId = wo.id
@@ -595,7 +626,7 @@ export async function buildInstalledSnapshot (args: {
     reason: args.reason,
     createdFrom: workOrderId,
     userId: args.userId,
-  })
+  }, client)
   return { ok: true, snapshotId: snap.id, version: snap.version }
 }
 

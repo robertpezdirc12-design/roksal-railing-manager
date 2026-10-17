@@ -243,6 +243,12 @@ jobs:
           # ar-analyze/digital-twin.
           # Nova skupina MORA biti tudi v tests/ci-matrix.sh.
           - grupa: r539
+          # R540: zadnji transakcijski ostanki — digital-twin/snapshot POST
+          # (build*Snapshot klient skozi verigo + revizija V tx + retryOnUnique
+          # okoli cele tx) + kodne dirke PR-/SRV- (production, from-twin ENA
+          # interaktivna tx, service-cases) + equipment P2002 → prijazen 409.
+          # Nova skupina MORA biti tudi v tests/ci-matrix.sh.
+          - grupa: r540
     services:
       postgres:
         image: postgres:16

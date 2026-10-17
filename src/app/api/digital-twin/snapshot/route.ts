@@ -6,6 +6,13 @@
 //      AS_INSTALLED: { projectId, kind, finalSegments, notes, workOrderId?, reason }
 //      AS_MEASURED se ustvari SAMO prek zaključka zajema (/capture-session/:id/finish).
 //      Vsaka nova verzija ima povezavo na prejšnjo + obvezen razlog (§22).
+//      R540 (transakcijska celovitost): vsak POST — snapshot (build*Snapshot na
+//      tx klientu: VSA branja verige + zapis vrstice) + revizija
+//      TWIN_SNAPSHOT_CREATE v ENI $transaction; retryOnUnique ZUNAJ okoli nje
+//      (verzija snapshot-a je read-then-create na @@unique([projectId, kind,
+//      version]) — P2002 v PG transakciji aborta celo tx, ugotovitev R536).
+//      Vrata ok:false ne pišejo nič — prazna tx se potrdi, odgovor napake je
+//      identičen prejšnjemu (semantika R539-b finish).
 
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
@@ -14,6 +21,7 @@ import { writeAudit } from '@/lib/audit'
 import { parseTwinData, TWIN_KINDS } from '@/lib/capture-qa-engine'
 import { projektDostopen } from '@/lib/capture-qa-access'
 import { buildDesignedSnapshot, buildInstalledSnapshot, buildProducedSnapshot } from '@/lib/capture-qa-service'
+import { retryOnUnique } from '@/lib/versioning'
 import type { SessionUser } from '@/lib/auth'
 
 async function requireTwinWrite (req: NextRequest): Promise<{ user: SessionUser } | NextResponse> {
@@ -101,11 +109,35 @@ export async function POST (req: NextRequest) {
     | { ok: true; snapshotId: string; version: number }
     | { ok: false; status: number; error: string; detail?: string }
 
+  // ── R540 (transakcijska celovitost): build + revizija v ENI tx ─────────
+  // build*Snapshot prejme tx klienta (VSA branja verige + create vrstice
+  // čes njega — padec srednjega koraka ne pusti snapshot-a brez revizije).
+  // Verzija snapshot-a je read-then-create na @@unique([projectId, kind,
+  // version]): P2002 znotraj PG transakcije aborta celo tx (neobnovljiv,
+  // R536), zato retryOnUnique ZUNAJ okoli nje — ponovni poskus verzijo
+  // izračuna znova. Vrata ok:false NE pišejo ničesar: prazna tx se potrdi,
+  // odgovor napake IZVEN tx je identičen prejšnjemu (semantika R539-b
+  // finish). IDOR (projektDostopen) ostaja pred tx.
+
   if (kind === 'AS_DESIGNED') {
     const packageId = typeof body.packageId === 'string' && body.packageId ? body.packageId : null
     if (!packageId) return jsonError(400, 'Manjka packageId.', 'AS-DESIGNED izhaja iz projektnega paketa (§10).')
     const fotoVizId = typeof body.fotoVizId === 'string' && body.fotoVizId ? body.fotoVizId : null
-    result = await buildDesignedSnapshot({ projectId, packageId, fotoVizId, reason, userId: user.id })
+    // R540: vzorec zgoraj — build + revizija atomarno (retryOnUnique zunaj).
+    result = await retryOnUnique(() => db.$transaction(async (tx) => {
+      const res = await buildDesignedSnapshot({ projectId, packageId, fotoVizId, reason, userId: user.id }, tx)
+      if (res.ok) {
+        await writeAudit({
+          userId: user.id,
+          action: 'TWIN_SNAPSHOT_CREATE',
+          entity: 'digitalTwinSnapshot',
+          entityId: res.snapshotId,
+          projectId,
+          detail: { kind, version: res.version, reason },
+        }, tx)
+      }
+      return res
+    }))
   } else if (kind === 'AS_PRODUCED') {
     const bomId = typeof body.bomId === 'string' && body.bomId ? body.bomId : null
     if (!bomId) return jsonError(400, 'Manjka bomId.', 'AS-PRODUCED izhaja iz kosovnice (§11).')
@@ -125,7 +157,21 @@ export async function POST (req: NextRequest) {
             heightCm: typeof o.heightCm === 'number' ? o.heightCm : null,
           }))
       : null
-    result = await buildProducedSnapshot({ projectId, bomId, spremembe, reason, userId: user.id, segmentOverrides })
+    // R540: vzorec zgoraj — build + revizija atomarno (retryOnUnique zunaj).
+    result = await retryOnUnique(() => db.$transaction(async (tx) => {
+      const res = await buildProducedSnapshot({ projectId, bomId, spremembe, reason, userId: user.id, segmentOverrides }, tx)
+      if (res.ok) {
+        await writeAudit({
+          userId: user.id,
+          action: 'TWIN_SNAPSHOT_CREATE',
+          entity: 'digitalTwinSnapshot',
+          entityId: res.snapshotId,
+          projectId,
+          detail: { kind, version: res.version, reason },
+        }, tx)
+      }
+      return res
+    }))
   } else {
     // AS_INSTALLED
     const finalRaw = body.finalSegments
@@ -149,21 +195,27 @@ export async function POST (req: NextRequest) {
       : []
     const workOrderId = typeof body.workOrderId === 'string' && body.workOrderId ? body.workOrderId : null
     const photoCount = typeof body.photoCount === 'number' && Number.isFinite(body.photoCount) ? Math.max(0, Math.round(body.photoCount)) : undefined
-    result = await buildInstalledSnapshot({ projectId, finalSegments, notes, workOrderId, photoCount, reason, userId: user.id })
+    // R540: vzorec zgoraj — build + revizija atomarno (retryOnUnique zunaj).
+    result = await retryOnUnique(() => db.$transaction(async (tx) => {
+      const res = await buildInstalledSnapshot({ projectId, finalSegments, notes, workOrderId, photoCount, reason, userId: user.id }, tx)
+      if (res.ok) {
+        await writeAudit({
+          userId: user.id,
+          action: 'TWIN_SNAPSHOT_CREATE',
+          entity: 'digitalTwinSnapshot',
+          entityId: res.snapshotId,
+          projectId,
+          detail: { kind, version: res.version, reason },
+        }, tx)
+      }
+      return res
+    }))
   }
 
   if (!result.ok) {
     return jsonError(result.status, result.error, result.detail)
   }
 
-  await writeAudit({
-    userId: user.id,
-    action: 'TWIN_SNAPSHOT_CREATE',
-    entity: 'digitalTwinSnapshot',
-    entityId: result.snapshotId,
-    projectId,
-    detail: { kind, version: result.version, reason },
-  })
-
+  // R540: revizija je zapisana v isti transakciji kot snapshot (zgoraj).
   return NextResponse.json({ data: { id: result.snapshotId, kind, version: result.version } }, { status: 201 })
 }

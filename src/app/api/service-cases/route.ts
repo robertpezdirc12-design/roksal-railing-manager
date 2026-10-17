@@ -12,6 +12,7 @@ import { db } from '@/lib/db'
 import { jsonError, readsAllData, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
 import { nextCodeFromList } from '@/lib/codes'
+import { retryOnUnique } from '@/lib/versioning'
 import { SERVICE_CASE_INCLUDE } from '@/lib/service-core'
 
 export async function GET (req: NextRequest) {
@@ -90,12 +91,18 @@ export async function POST (req: NextRequest) {
     claimCode = claim.code
   }
 
-  // ── koda SRV-{leto}-NNN (odporna na vrzeli — R439 vzorec) ───────────────────
-  const existing = await db.serviceCase.findMany({ where: { code: { startsWith: 'SRV-' } }, select: { code: true } })
-  const code = nextCodeFromList(existing.map((c) => c.code), 'SRV-')
+  // R540 (dirka kod SRV-): ustvarjanje + premik claima v V_OBRAVNAVI + revizija
+  // v ENI transakciji (vzorec R537+); koda SRV- se bere ZNOTRAJ tx na tx
+  // klientu — sočasen POST, ki izračuna isto kodo, sproži P2002 na
+  // ServiceCase.code (@unique), kar retryOnUnique okoli CELE transakcije reši
+  // z do 3 poskusi (koda se v ponovljenem fn izračuna znova; vzorec REK-/DEL-
+  // R538-c). Revizija SPRINJA v isti tx — padec ne more pustiti servisni
+  // primer brez revizijskega zapisa (sinteza R540).
+  const serviceCase = await retryOnUnique(() => db.$transaction(async (tx) => {
+    // ── koda SRV-{leto}-NNN (odporna na vrzeli — R439 vzorec) ───────────────
+    const existing = await tx.serviceCase.findMany({ where: { code: { startsWith: 'SRV-' } }, select: { code: true } })
+    const code = nextCodeFromList(existing.map((c) => c.code), 'SRV-')
 
-  // ustvarjanje + premik claima v V_OBRAVNAVI v ENI transakciji
-  const created = await db.$transaction(async (tx) => {
     const serviceCase = await tx.serviceCase.create({
       data: {
         code,
@@ -111,12 +118,12 @@ export async function POST (req: NextRequest) {
     if (claimId) {
       await tx.claim.update({ where: { id: claimId }, data: { status: 'V_OBRAVNAVI' } })
     }
+    await writeAudit({
+      userId: user.id, action: 'SERVICE_CASE_CREATE', entity: 'serviceCase', entityId: serviceCase.id, projectId,
+      detail: { code, project: project.code, claim: claimCode, garancija: !!warrantyId },
+    }, tx)
     return serviceCase
-  })
+  }), 3)
 
-  await writeAudit({
-    userId: user.id, action: 'SERVICE_CASE_CREATE', entity: 'serviceCase', entityId: created.id, projectId,
-    detail: { code, project: project.code, claim: claimCode, garancija: !!warrantyId },
-  })
-  return NextResponse.json({ data: created }, { status: 201 })
+  return NextResponse.json({ data: serviceCase }, { status: 201 })
 }

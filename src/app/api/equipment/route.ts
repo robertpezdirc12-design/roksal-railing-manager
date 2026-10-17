@@ -68,27 +68,40 @@ export async function POST (req: NextRequest) {
 
   // R539 (transakcijska celovitost): novo orodje + revizija atomarno (vzorec
   // R537-d; predbranje dupleta `existing` ostaja izven tx).
-  const equipment = await db.$transaction(async (tx) => {
-    const equipment = await tx.equipment.create({
-      data: {
-        code,
-        name,
-        category,
-        serialNumber: typeof body?.serialNumber === 'string' && body.serialNumber.trim() ? body.serialNumber.trim() : null,
-        location: typeof body?.location === 'string' && body.location.trim() ? body.location.trim() : null,
-        calibrationDue,
-        note: typeof body?.note === 'string' && body.note.trim() ? body.note.trim() : null,
-      },
-      include: {
-        holder: { select: { id: true, name: true } },
-        checkouts: { where: { inAt: null }, include: { user: { select: { id: true, name: true } } } },
-      },
+  // R540 (dirka kode OR-): koda je UPORABNIŠKI VNOS — retryOnUnique tu nima
+  // pomena (ponovni poskus bi znova poskusil isto kodo). Prijazna predpreverba
+  // 409 ostaja izven tx; dirki med njo in transakcijo (sočasen POST z isto
+  // kodo) pa zdaj ne pušča več surovega 500 — P2002 iz tx ujamemo in vrnemo
+  // NATANČNO enako zavrnitev kot predpreverba (idiom setup/nalog).
+  try {
+    const equipment = await db.$transaction(async (tx) => {
+      const equipment = await tx.equipment.create({
+        data: {
+          code,
+          name,
+          category,
+          serialNumber: typeof body?.serialNumber === 'string' && body.serialNumber.trim() ? body.serialNumber.trim() : null,
+          location: typeof body?.location === 'string' && body.location.trim() ? body.location.trim() : null,
+          calibrationDue,
+          note: typeof body?.note === 'string' && body.note.trim() ? body.note.trim() : null,
+        },
+        include: {
+          holder: { select: { id: true, name: true } },
+          checkouts: { where: { inAt: null }, include: { user: { select: { id: true, name: true } } } },
+        },
+      })
+      await writeAudit({
+        userId: auth.user.id, action: 'EQUIP_CREATE', entity: 'equipment', entityId: equipment.id,
+        detail: { code, name, category, calibrationDue },
+      }, tx)
+      return equipment
     })
-    await writeAudit({
-      userId: auth.user.id, action: 'EQUIP_CREATE', entity: 'equipment', entityId: equipment.id,
-      detail: { code, name, category, calibrationDue },
-    }, tx)
-    return equipment
-  })
-  return NextResponse.json({ data: equipment }, { status: 201 })
+    return NextResponse.json({ data: equipment }, { status: 201 })
+  } catch (e) {
+    // P2002 na Equipment.code (@unique) = predpreverbo je prehitel sočasen POST
+    if (typeof e === 'object' && e !== null && (e as { code?: string }).code === 'P2002') {
+      return jsonError(409, `Orodje s kodo ${code} že obstaja.`, 'Koda mora biti enolična.')
+    }
+    throw e
+  }
 }

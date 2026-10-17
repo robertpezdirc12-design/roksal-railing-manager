@@ -202,7 +202,8 @@ for d, razlog in [
     ('security/rate-limit', 'administrativno orodje (reset tempomata)'),
     ('webhooks/retry', 'retry knjižnica ima lastne posodobitve z backoffom'),
     ('ar/analyze', 'samo 1 pisanje audit-a — nič za atomizirati'),
-    ('digital-twin/snapshot', 'lib build*Snapshot tuja last — naslednji krog'),
+    # digital-twin/snapshot: ODSTRANJEN iz E v R540 — build*Snapshot so dobile
+    # klienta, POST teče v $transaction + retryOnUnique (trditve v tests/r540.py)
 ]:
     chk(TX not in ruta(d), f'{d}: brez $transaction ({razlog})')
 
