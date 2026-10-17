@@ -272,6 +272,11 @@ jobs:
           # 4 bližznice na globoke povezave). Brez DB sprememb.
           # Nova skupina MORA biti tudi v tests/ci-matrix.sh.
           - grupa: r544
+          # R545: CSP poročila — ADMIN pregled kršitev v aplikaciji (GET/DELETE
+          # /api/csp-reports + zavihek Varnost; zanka R536→R543→R545).
+          # Brez DB sprememb (CspReport shramba že od R543).
+          # Nova skupina MORA biti tudi v tests/ci-matrix.sh.
+          - grupa: r545
     services:
       postgres:
         image: postgres:16

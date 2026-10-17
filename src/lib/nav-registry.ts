@@ -1,7 +1,7 @@
 // nav-registry — REKONSTRUKCIJA R431 → IA R448 (issue #7 §11, ciljna struktura)
 // EN VIR navigacije. Čist client-safe lib — NIČ strežniških uvozov.
 // IA (R448 §11): DANES | PRODAJA | PROJEKTI | OPERATIVA | SKLADIŠČE | KATALOG |
-// FINANCE | SERVIS | POROČILA | VARNOST | PROFIL — 41 zavihkov v 11 sekcijah (R544: številka usklajena z dejanskim registrom)
+// FINANCE | SERVIS | POROČILA | VARNOST | PROFIL — 42 zavihkov v 11 sekcijah (R544 uskladitev; R545 +CSP poročila)
 // (R481: +Integracije v Varnost).
 // Zavihki (id + gate) so NEspremenjeni — spreminja se samo razvrstitev.
 
@@ -24,7 +24,7 @@ export interface SectionDef {
   tabs: TabDef[]
 }
 
-// 41 zavihkov v 11 sekcijah — ciljna poslovna IA (R448; R481 +Integracije; R544 številka usklajena)
+// 42 zavihkov v 11 sekcijah — ciljna poslovna IA (R448; R481 +Integracije; R544 uskladitev; R545 +CSP poročila)
 export const SECTIONS: SectionDef[] = [
   {
     id: 'danes',
@@ -155,6 +155,9 @@ export const SECTIONS: SectionDef[] = [
       // R481 (issue #9 §9): INTEGRACIJE — webhook naročnine za partnerje
       // (integrations.manage = ADMIN/VODJA, vzorec portal.manage).
       { id: 'integracije', label: 'Integracije', gate: 'integrations.manage', desc: 'Webhook naročnine (R481)' },
+      // R545: CSP POROČILA — pregled kršitev politike (shramba R543); vrata
+      // security.read = ADMIN (diagnostika varnostne politike, ne poslovni podatek).
+      { id: 'csp', label: 'CSP poročila', gate: 'security.read', desc: 'Kršitve Content-Security-Policy (R545)' },
     ],
   },
   {

@@ -4,14 +4,14 @@ Poslovno-operativni sistem za Roksal — od prvega voda do zaključene montaže 
 fasad in teras: CRM, ponudbe s podpisom, proizvodnja, teren (tudi brez signala),
 računi in **fotomontaža PREJ/POTEM** iz uradnih Roksalovih gradiv.
 
-> **Stanje:** rekonstrukcija zaključena in presežena · izdaja **v1.63.0** ·
-> **51 testnih skupin + E2E skozi pravo aplikacijo** · GitHub je kanonični vir
+> **Stanje:** rekonstrukcija zaključena in presežena · izdaja **v1.64.0** ·
+> **52 testnih skupin + E2E skozi pravo aplikacijo** · GitHub je kanonični vir
 > (zadeve + release vrata), GitLab zrcalo, sinhronizacija po SHA (`ops/sync-check.sh`) ·
 > [docs/](docs/) vsebuje poročila za vsako fazo.
 
 ---
 
-## Zgodovina v devetih stavkih
+## Zgodovina v desetih stavkih
 
 1. **Izvirnik** (~430 iteracij, R120–R430) je bil razvit v Z.ai kontejnerjih in
    sinhroniziran na GitHub; račun/repo je bil izbrisan 6. 10. 2026.
@@ -63,10 +63,21 @@ računi in **fotomontaža PREJ/POTEM** iz uradnih Roksalovih gradiv.
    zgodovine); neveljaven/nedovoljen `?m` → fail-closed `clearTabState`
    (modulska vrata ostajajo glavna obramba). Testna skupina r544
    (51. skupina). Belt 8 statičnih + 51 skupin.
+10. **CSP poročila — ADMIN pregled (R545, izdaja v1.64.0):** zanka
+   R536→R543→R545 je zaključena — poročila brskalnikov o kršitvah politike
+   so zdaj vidna V aplikaciji: `GET /api/csp-reports` (vrata
+   `security.read` = ADMIN) vrača povzetek (skupno/24h/7d, razčlenbo po
+   direktivah in straneh, trenutni način `report`/`enforce`) + zadnja
+   poročila BREZ `raw` telesa; `DELETE` pobriše vso diagnostiko
+   atomarno z revizijo `CSP_REPORTS_CLEAR`; novi zavihek **CSP poročila**
+   v sekciji Varnost (42. zavihek) s praznim stanjem, ki pove pomen
+   („0 kršitev — opazovalno obdobje je čisto“ = znak za preklop v
+   Enforce) in opombo o 7-dnevnem TTL (job `csp-gc`). Testna skupina
+   r545 (52. skupina). Belt 8 statičnih + 52 skupin.
 
 ## Kaj aplikacija počne
 
-Informacijska arhitektura (IA R448) — **11 sekcij, 41 zavihkov**, vsak z vrati
+Informacijska arhitektura (IA R448) — **11 sekcij, 42 zavihkov**, vsak z vrati
 (`src/lib/nav-registry.ts`):
 
 | Sekcija | Vsebina |
@@ -169,7 +180,7 @@ tveganja:
   nikoli ne pride do baze (R541: status projekta enumeriran prek
   `PROJECT_STATUSES`, neveljaven → 400; R542: `params`/`analysis` sprejemata
   SAMO JSON objekt — niz → 400).
-- **CSP (R536 → R543):** politiko gradi en vir `src/lib/csp.ts`; privzeto
+- **CSP (R536 → R545):** politiko gradi en vir `src/lib/csp.ts`; privzeto
   teče **Report-Only** glava (opazovalno obdobje nadaljuje), preklop v
   izvršilno `Content-Security-Policy` je env stikalo `CSP_MODE=enforce`
   (dokumentirano v `config/ENV-VARS.md`). R543: `frame-src 'self' blob:`
@@ -181,7 +192,11 @@ tveganja:
   **zapisujejo v bazo** (tabela `CspReport`, `raw` kot jsonb objekt —
   konvencija R542; job `csp-gc` briše > 7 dni) — opazovalno obdobje je
   končno izmerljivo, odločitev o preklopu pa je na pregledu zbranih
-  poročil, ne na ugibanju.
+  poročil, ne na ugibanju. R545: ADMIN zavihek **CSP poročila** (Varnost,
+  `security.read`) pokaže povzetek + zadnja poročila (`GET
+  /api/csp-reports`, brez `raw` telesa), ročni izbris vse diagnostike je
+  reviziran (`CSP_REPORTS_CLEAR`); prazna tabela je znak za varan preklop
+  v Enforce.
 - **ErrorBoundary + 29 manjkajočih FK indeksov** (R535) — padec modula ne
   zruši celotne aplikacije; poizvedbe po tujih ključih ne delajo tabelnih
   pregledov.
@@ -256,18 +271,26 @@ ImageMagick, poppler) — podrobno v `tests/ci-local.sh` glavi.
   smart-HTTP z job-tokenom). Zasebni runner kvote **ne** porablja.
 - **Release vrata (obvezna pred vsako izdajo):** relejni pas
   `bash tests/ci-local.sh` na TOČNO tistem commitu, ki se izdaja (8 statičnih
-  korakov + vseh 51 skupin, EXIT 0), nato `bash ops/sync-check.sh` = OK na
+  korakov + vseh 52 skupin, EXIT 0), nato `bash ops/sync-check.sh` = OK na
   obeh sistemih, šele nato oznaka + push. GitLab pipeline (`verify`) je
   drugotna potrditev istega SHA — ne nadomestilo pasu.
-- **Vercel (produkcija) — pošteno:** iz peskovnika NI dostopa do Vercel API-ja
-  (noben žeton; lastnikovo dejanje). Preverjanje po izdaji opravi lastnik:
-  alias → `READY` na izdajnem SHA + `GET /api/health` na produkciji. Pri
+- **Vercel (produkcija) — pošteno:** dostop je MOGOČ, a le z lastnikovim
+  žetonom (dodeljen ob produkcjski sinhronizaciji 17. 10. 2026: push GitHub
+  je sprožil samodejni deploy main → Vercel build poganja `prisma migrate
+  deploy` v produkciji; tedaj so bili preverjeni Neon (17/17 migracij, 43
+  jsonb stolpcev), odprt cron `CRON_SECRET` (6 jobov end-to-end) in
+  odstranjena zastarela `ROKSAL_BUILD` oznaka). Brez žetona v peskovniku
+  velja prejšnje pravilo: preverjanje po izdaji opravi lastnik — alias →
+  `READY` na izdajnem SHA + `GET /api/public/health` na produkciji;
+  enostavna preverba: `bash ops/deploy-status.sh` (USKLAJENO/ZASTARELO).
+  Pri
   izdaji v1.56.0 je lastnik (issue #20) potrdil alias na d9bf4cf; stanje
   vsake izdaje se zapiše v worklog ob izdaji. GitHub Actions minute so
   izčrpane do 1. 11. 2026 — do takrat je relejni pas lokalni (dokaz v
   `ops/r5xx-pas.out`).
-- Vzdrževalni cron: `vercel.json` → `GET /api/jobs/run` 03:30 UTC (zaželen samo
-  s `CRON_SECRET`; brez njega 401 — opravila se poganjajo ročno).
+- Vzdrževalni cron: `vercel.json` → `GET /api/jobs/run` 03:30 UTC — odprl ga
+  je `CRON_SECRET` na produkciji (17. 10. 2026, 6 jobov preverjenih
+  end-to-end); brez njega vrata ostanejo zaprta (401, fail-closed).
 
 ## Varnostne kopije in obnovitvena pripravljenost
 
@@ -287,11 +310,11 @@ ImageMagick, poppler) — podrobno v `tests/ci-local.sh` glavi.
 | Pot | Vsebina |
 |---|---|
 | `src/app/api/` | 195 API rut (App Router) |
-| `src/components/roksal/` | 49 modulov + ogrodje (app-shell, module-view) |
+| `src/components/roksal/` | 50 modulov + ogrodje (app-shell, module-view) |
 | `src/lib/` | 78 knjižnic: photo-replace-{mask,texture,core,engine}, permissions-core, nav-registry, audit, notify (outbox), json (jsonb pomožniki), csp (en vir CSP politike), deep-link (URL odraz zavihka), … |
 | `prisma/` | shema (94 modelov) + 17 migracij + semenske skripte (`db:seed` veriga) |
 | `public/assets/roksal/src/` | uradni Roksalovi viri, `MANIFEST.json` s SHA-256 |
-| `tests/` | 51 skupin + `ci-local.sh` / `ci-matrix.sh` + fixtures |
+| `tests/` | 52 skupin + `ci-local.sh` / `ci-matrix.sh` + fixtures |
 | `ops/` | E2E skripte, izrisi-dokazi, backup/restore/drill, secret-audit |
 | `docs/` | poročila po fazah (RECOVERY, FOTOZAMENJAVA, E2E, …) |
 | `.zscripts/` | vzdrževanje peskovnika: dev-detach, git-retry, ci-mirror |
@@ -311,9 +334,10 @@ ImageMagick, poppler) — podrobno v `tests/ci-local.sh` glavi.
   [`docs/FOTOZAMENJAVA-POROCILO-14.md`](docs/FOTOZAMENJAVA-POROCILO-14.md) §5.
 - **Revizija v1.58.0 (7,9/10) — Top-10 popravki izvedeni (R535–R543).** Še
   odprto za naslednje kroge (po prioriteti): CSP Enforce — zmožnost je
-  pripravljena (`CSP_MODE=enforce`, `config/ENV-VARS.md`), čaka lastnikovo
-  stikalo po opazovalnem obdobju na produkciji (poračila se od R543 zbirajo
-  v tabeli `CspReport`), `DEMO_ACCESS=on` v produkcjskem okolju (lastnikova
+  pripravljena (`CSP_MODE=enforce`, `config/ENV-VARS.md`) in odločitev je
+  opira na podatke: zavihek CSP poročila (R545) pokaže, kdaj je opazovalno
+  obdobje na produkciji čisto (poročila se od R543 zbirajo v tabeli
+  `CspReport`), `DEMO_ACCESS=on` v produkcjskem okolju (lastnikova
   odločitev ob namestitvi; ob zagonu strežnika ga zdaj glasno opozori
   `src/instrumentation.ts`).
 

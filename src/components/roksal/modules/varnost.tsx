@@ -49,6 +49,8 @@ const ACTION_LABELS: Record<string, string> = {
   // R435:
   PORTAL_CREATE: 'Nova povezava portala', PORTAL_REVOKE: 'Preklic povezave portala',
   MAINTENANCE_RUN: 'Vzdrževalno opravilo', ACTIVATION: 'Aktivacija licence',
+  // R545: ročno čiščenje diagnostičnih CSP poročil (zavihek CSP poročila)
+  CSP_REPORTS_CLEAR: 'Čiščenje CSP poročil',
 }
 
 export default function VarnostModule () {
