@@ -26,21 +26,18 @@ export const dynamic = 'force-dynamic'
 
 interface PlanStop { id: string; kind: string; label: string; atCm?: number; critical?: boolean }
 
-function parsePlan (raw: string | null): PlanStop[] {
-  if (!raw) return []
-  try {
-    const v = JSON.parse(raw) as unknown
-    if (!Array.isArray(v)) return []
-    return v.filter((s): s is PlanStop => {
-      if (typeof s !== 'object' || s === null) return false
-      const x = s as Record<string, unknown>
-      return typeof x.id === 'string'
-    }).map((s) => ({
-      id: s.id, kind: String(s.kind ?? ''), label: String(s.label ?? s.id),
-      atCm: typeof s.atCm === 'number' ? s.atCm : undefined,
-      critical: s.critical === true,
-    }))
-  } catch { return [] }
+// R542: plan je jsonb — branje brez JSON.parse (obramba za ne-tabelo ostaja)
+function parsePlan (raw: unknown): PlanStop[] {
+  if (!Array.isArray(raw)) return []
+  return raw.filter((s): s is PlanStop => {
+    if (typeof s !== 'object' || s === null) return false
+    const x = s as Record<string, unknown>
+    return typeof x.id === 'string'
+  }).map((s) => ({
+    id: s.id, kind: String(s.kind ?? ''), label: String(s.label ?? s.id),
+    atCm: typeof s.atCm === 'number' ? s.atCm : undefined,
+    critical: s.critical === true,
+  }))
 }
 
 export async function GET (req: NextRequest) {

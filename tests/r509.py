@@ -124,15 +124,16 @@ OCAK = hashlib.sha256(SUROVO).hexdigest()
 B = bun_js(r'''
 const { fotografiIzParametrov, originalDokaz } = await import('./src/lib/original-proof')
 const B64 = process.env.R509_B64
-const js = (o) => JSON.stringify(o)
-const a = originalDokaz({ id: 'f1', location: 'vrt', source: 'KAMERA', params: js({ photo: 'data:image/jpeg;base64,' + B64 }) })
-const ni = originalDokaz({ id: 'f2', location: null, source: 'KAMERA', params: js({ stage: 'ZAJEM' }) })
-const neSlika = originalDokaz({ id: 'f3', params: js({ photo: 'data:text/html;base64,xx' }) })
+// R542: params/posnetek so jsonb — veljavni vpisi so OBJEKTI; nizi ('{}', '{kaj')
+// ostajajo kot obrambni smetni vnisi v idSmeti spodaj
+const a = originalDokaz({ id: 'f1', location: 'vrt', source: 'KAMERA', params: { photo: 'data:image/jpeg;base64,' + B64 } })
+const ni = originalDokaz({ id: 'f2', location: null, source: 'KAMERA', params: { stage: 'ZAJEM' } })
+const neSlika = originalDokaz({ id: 'f3', params: { photo: 'data:text/html;base64,xx' } })
 console.log(JSON.stringify({
-  idGlavni: fotografiIzParametrov(js({ photoId: 'f1' })),
-  idPogledi: fotografiIzParametrov(js({ photoId: 'f1', views: [{ photoId: 'f2' }, { photoId: 'f3' }] })),
-  idPodvojeni: fotografiIzParametrov(js({ photoId: 'f1', views: [{ photoId: 'f1' }, { photoId: 'f2' }] })),
-  idSmeti: [fotografiIzParametrov(null), fotografiIzParametrov('{}'), fotografiIzParametrov('{kaj'), fotografiIzParametrov(js({ views: 'ne seznam' }))],
+  idGlavni: fotografiIzParametrov({ photoId: 'f1' }),
+  idPogledi: fotografiIzParametrov({ photoId: 'f1', views: [{ photoId: 'f2' }, { photoId: 'f3' }] }),
+  idPodvojeni: fotografiIzParametrov({ photoId: 'f1', views: [{ photoId: 'f1' }, { photoId: 'f2' }] }),
+  idSmeti: [fotografiIzParametrov(null), fotografiIzParametrov('{}'), fotografiIzParametrov('{kaj'), fotografiIzParametrov({ views: 'ne seznam' })],
   zSliko: { ...a, dataUrl: typeof a.dataUrl },
   brezSlike: ni,
   neSlika,
@@ -144,7 +145,7 @@ else:
     chk(B['idGlavni'] == ['f1'], 'samo glavni pogled → ena fotografija')
     chk(B['idPogledi'] == ['f1', 'f2', 'f3'], 'dodatni pogledi so del dokazne verige (vrstni red ohranjen)')
     chk(B['idPodvojeni'] == ['f1', 'f2'], 'podvojena fotografija se šteje ENKRAT')
-    chk(B['idSmeti'] == [[], [], [], []], 'brez params / prazen JSON / okvarjen JSON / ne-seznam → prazno in ne padec')
+    chk(B['idSmeti'] == [[], [], [], []], 'brez params / niz (staro/okvarjeno) / ne-seznam → prazno in ne padec')
     z = B['zSliko']
     chk(z['sha256'] == OCAK, f'SHA-256 sovpada z neodvisnim izračunom (hashlib): {OCAK[:12]}…')
     chk(z['bayti'] == len(SUROVO), f'velikost = {len(SUROVO)} B (dejanski bajti, ne dolžina base64)')

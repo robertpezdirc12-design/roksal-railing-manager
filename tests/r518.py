@@ -203,8 +203,9 @@ const out = {}
 for (const sku of ['ROK-OG-POLNA-128', 'ROK-OGP-POLNA-100', 'ROK-OGP-POLNA-57', 'ROK-OG-DESKA-150', 'OGR-K-002']) {
   const p = await db.product.findFirst({ where: { sku }, include: { variants: true } })
   out[sku] = {
-    profil: JSON.parse(p?.tech ?? '{}').profil ?? null,
-    razmakRaw: JSON.parse(p?.tech ?? '{}').razmakDeskMm ?? null,
+    // R542: Product.tech je jsonb objekt — brez JSON.parse
+    profil: p?.tech?.profil ?? null,
+    razmakRaw: p?.tech?.razmakDeskMm ?? null,
     reza: rezaIzTecha(p?.tech ?? null), sirina: lameleIzTecha(p?.tech ?? null),
   }
 }
@@ -351,8 +352,8 @@ import {{ PrismaClient }} from '@prisma/client'
 const db = new PrismaClient()
 const v = await db.photoVisualization.findUnique({{ where: {{ id: '{vid}' }}, }})
 const ver = await db.photoVisualizationVersion.findFirst({{ where: {{ visualizationId: '{vid}' }}, orderBy: {{ version: 'desc' }}, }})
-const rp = v ? JSON.parse(v.renderParams) : {{}}
-const meta = ver ? (JSON.parse(ver.data).meta ?? {{}}) : {{}}
+const rp = v?.renderParams ?? {{}}  // R542: jsonb objekt
+const meta = ver?.data?.meta ?? {{}}
 console.log(JSON.stringify({{
   lamela: rp.config?.lamelaMm, deska: rp.config?.deskaMm, reza: rp.config?.rezaMm, posts: rp.config?.posts,
   maskaOgraja: rp.maska?.ograja?.length, maskaIzpusti: rp.maska?.izpusti?.length, maskaPrednji: rp.maska?.prednji?.length,

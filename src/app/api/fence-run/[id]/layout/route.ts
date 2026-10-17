@@ -5,6 +5,7 @@
 // apply=true vstavi stebre (kind STEBER) → ponoven izračun + verzija + revizija.
 
 import { NextRequest, NextResponse } from 'next/server'
+import { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 import { jsonError, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
@@ -84,7 +85,11 @@ export async function POST (req: NextRequest, { params }: Params) {
   // retryOnUnique (R536) pokriva dirko verzij (P2002) — ob ponovnem poskusu
   // se CELO telo izvede znova.
   const version = await retryOnUnique(() => db.$transaction(async (tx) => {
-    await tx.fenceRun.update({ where: { id }, data: { nodes: JSON.stringify(dedup) } })
+    await tx.fenceRun.update({
+      where: { id },
+      // R542: nodes je jsonb — objekt direktno (ne JSON.stringify)
+      data: { nodes: dedup as unknown as Prisma.InputJsonValue },
+    })
     const fresh = await loadRunContext(id, tx)
     if (fresh) await syncSegments(fresh, tx)
     const version = await snapshotVersionOn(tx, id, user.id, `Vstavljenih ${dedup.length - ctx.nodes.length} stebrov (razpored)`)

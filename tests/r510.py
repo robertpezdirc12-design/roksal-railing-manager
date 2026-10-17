@@ -198,29 +198,30 @@ print('── D) branje dokaza iz posnetka: brez vere, brez laži')
 D = bun_js(r'''
 const { preberiDokaz } = await import('./src/lib/viz-provenance')
 const dok = { meritev: { status: 'CONFIRMED', verzija: 4 }, izvirnikFotografije: 'cmFoto', gradivo: { assetId: 'cmA', kind: 'LAMELA', pot: 'public/assets/roksal/a.jpg', sha256: 'a'.repeat(64) }, gradivoRazlog: null }
-const j = (o) => JSON.stringify(o)
+// R542: posnetek verzije (data) je jsonb — veljavni vnosi so OBJEKTI; nizi
+// ('', '{kaj') ostajajo kot obrambni smetni vnisi (staro zapisi/pokvarjeno).
 console.log(JSON.stringify({
   nic: [preberiDokaz(null), preberiDokaz(undefined), preberiDokaz('')],
   pokvarjen: preberiDokaz('{kaj'),
-  brezMeta: preberiDokaz(j({ renderParams: {} })),
-  brezDokaza: preberiDokaz(j({ meta: { opozorila: [] } })),
-  dokazNiPredmet: preberiDokaz(j({ meta: { dokaz: 'string' } })),
-  dokazSeznam: preberiDokaz(j({ meta: { dokaz: [] } })),
-  starZapis: preberiDokaz(j({ meta: { dokaz: { meritev: null, izvirnikFotografije: null, gradivo: null, gradivoRazlog: null } } })),
-  cel: preberiDokaz(j({ renderParams: {}, meta: { dokaz: dok } })),
-  pokvarjenGradivo: preberiDokaz(j({ meta: { dokaz: { ...dok, gradivo: { assetId: 'cmA', pot: '', sha256: 'a'.repeat(64) } } } })),
-  prekratekSah: preberiDokaz(j({ meta: { dokaz: { ...dok, gradivo: { ...dok.gradivo, sha256: 'abc' } } } })),
-  meritevBrezStatusa: preberiDokaz(j({ meta: { dokaz: { ...dok, meritev: { status: '', verzija: 'ne-stevilka' } } } })),
-  meritevNiPredmet: preberiDokaz(j({ meta: { dokaz: { ...dok, meritev: 'CONFIRMED' } } })),
-  izvirnikPredolg: preberiDokaz(j({ meta: { dokaz: { ...dok, izvirnikFotografije: 'x'.repeat(65) } } })),
-  razlogPrazen: preberiDokaz(j({ meta: { dokaz: { ...dok, gradivoRazlog: '   ' } } })),
+  brezMeta: preberiDokaz({ renderParams: {} }),
+  brezDokaza: preberiDokaz({ meta: { opozorila: [] } }),
+  dokazNiPredmet: preberiDokaz({ meta: { dokaz: 'string' } }),
+  dokazSeznam: preberiDokaz({ meta: { dokaz: [] } }),
+  starZapis: preberiDokaz({ meta: { dokaz: { meritev: null, izvirnikFotografije: null, gradivo: null, gradivoRazlog: null } } }),
+  cel: preberiDokaz({ renderParams: {}, meta: { dokaz: dok } }),
+  pokvarjenGradivo: preberiDokaz({ meta: { dokaz: { ...dok, gradivo: { assetId: 'cmA', pot: '', sha256: 'a'.repeat(64) } } } }),
+  prekratekSah: preberiDokaz({ meta: { dokaz: { ...dok, gradivo: { ...dok.gradivo, sha256: 'abc' } } } }),
+  meritevBrezStatusa: preberiDokaz({ meta: { dokaz: { ...dok, meritev: { status: '', verzija: 'ne-stevilka' } } } }),
+  meritevNiPredmet: preberiDokaz({ meta: { dokaz: { ...dok, meritev: 'CONFIRMED' } } }),
+  izvirnikPredolg: preberiDokaz({ meta: { dokaz: { ...dok, izvirnikFotografije: 'x'.repeat(65) } } }),
+  razlogPrazen: preberiDokaz({ meta: { dokaz: { ...dok, gradivoRazlog: '   ' } } }),
 }))
 ''')
 if '_err' in D:
     bad(f'bun D: {D["_err"]}')
 else:
     chk(D['nic'] == [None, None, None], 'brez posnetka → brez dokaza (null, ne izmišljena veriga)')
-    chk(D['pokvarjen'] is None, 'pokvarjen JSON posnetka → None in ne padec')
+    chk(D['pokvarjen'] is None, 'niz/kvarjen posnetek → None in ne padec')
     chk(D['brezMeta'] is None and D['brezDokaza'] is None, 'zapis pred R510 (meta brez dokaza) → None, bralec vidi, da verige ni')
     chk(D['dokazNiPredmet'] is None and D['dokazSeznam'] is None, 'dokaz kot niz ali seznam → None (česa, kar ni veriga, ne razlagamo)')
     chk(D['starZapis'] == {'meritev': None, 'izvirnikFotografije': None, 'gradivo': None, 'gradivoRazlog': None}, 'prazna veriga ostane prazna in ne postane NEPOZNANO')
@@ -283,7 +284,10 @@ chk('setDokaz(null)' in ui, 'UI: dokaz se pobere ob menjavi projekta/datoteke (s
 # ═══ F) OMEJITVE: nič novega jedra, nič migracij, poslovni blok nedotaknjen ══
 print('── F) meje: brez novega cenovnega/merilnega jedra in brez migracij')
 prov = src('src/lib/viz-provenance.ts')
-chk('import ' not in prov, 'VIZ-PROVENANCE nima UVOZOV: čist modul brez baze, DOM-a in cen (noben nov sloj)')
+# R542: modul sme uvoziti SAMO čisti pomožnik @/lib/json (asJsonObject za jsonb
+# branje) — še vedno brez baze, DOM-a, next/* in cen (namen preverjanja).
+uvozi_prov = re.findall(r"from '([^']+)'", prov)
+chk(uvozi_prov == ['@/lib/json'], f'VIZ-PROVENANCE: edini uvoz je čisti pomožnik @/lib/json (R542) — brez baze, DOM-a in cen ({uvozi_prov})')
 kod = ''.join(' ' + v for v in prov.splitlines() if not v.strip().startswith(('//', '*', '/*')))
 chk(all(q not in kod.lower() for q in ('cena', 'marža', 'marza', 'popust', 'cenik', 'neto', 'bruto', 'kosovnica', 'price')), 'VIZ-PROVENANCE v KODI ne pozna cen (issue #15: drugega cenovnega jedra ni — beseda je samo v komentarju meje)')
 chk(all(p not in prov for p in ('document.', 'window.', 'localStorage')), 'VIZ-PROVENANCE je DOM-free (testable brez brskalnika)')
@@ -312,8 +316,10 @@ chk('measurementStatusAllowsBusiness' in mer, 'MERILNO JEDRO: poslovna preverba 
 for dat in ('src/lib/viz-provenance.ts', 'src/lib/photo-replace-engine.ts',
             'src/app/api/photo-visualization/route.ts', 'src/app/api/photo-visualization/[id]/route.ts'):
     vseb = src(dat)
-    paketi = [p for p in re.findall(r"from '([^']+)'", vseb) if not (p.startswith('@/') or p.startswith('next/'))]
-    chk(not paketi, f'{dat}: nima uvoza iz katerega koli paketa (uvozi samo @/lib in next): {paketi}')
+    # R542: @prisma/client je dovoljen (tipi InputJsonValue za jsonb pisanje) —
+    # ostali paketi ostajajo prepovedani (brez AI, brez plačljivih API-jev).
+    paketi = [p for p in re.findall(r"from '([^']+)'", vseb) if not (p.startswith('@/') or p.startswith('next/') or p == '@prisma/client')]
+    chk(not paketi, f'{dat}: nima uvoza iz katerega koli paketa (uvozi samo @/lib, next in @prisma/client tipe): {paketi}')
     chk('fetch(' not in vseb, f'{dat}: nobenega zunanjega klica (brez AI, brez plačljivih API-jev)')
 
 pkg = json.loads(src('package.json'))

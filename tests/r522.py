@@ -132,9 +132,10 @@ const segmentNeg = m.normalizirajDocSegment(-3)
 const segmentFloat = m.normalizirajDocSegment(1.7)
 const segmentNull = m.normalizirajDocSegment('abc')
 const noteTrim = m.normalizirajDocNote('  abc  ')
-const merge = JSON.parse(m.zapišiDocVParams(JSON.stringify({ photo: 'x', stage: 'ZAJEM' }), { docTag: 'OVIRA', docSegmentIdx: null, docNote: 'koruza pred vhodom' }))
-const pokvarjen = JSON.parse(m.zapišiDocVParams('ni json {{{', { docTag: 'NOSILEC' }))
-const offline = JSON.parse(m.zapišiDocVParams(null, { docTag: 'PODLAGA', docOffline: true }))
+// R542: params je jsonb — zapišiDocVParams sprejema in vrača OBJEKT (brez stringify/parse ovitka)
+const merge = m.zapišiDocVParams({ photo: 'x', stage: 'ZAJEM' }, { docTag: 'OVIRA', docSegmentIdx: null, docNote: 'koruza pred vhodom' })
+const pokvarjen = m.zapišiDocVParams('ni json {{{', { docTag: 'NOSILEC' })
+const offline = m.zapišiDocVParams(null, { docTag: 'PODLAGA', docOffline: true })
 console.log(JSON.stringify({
   tags: m.DOC_TAGS, maxSlik: m.MAX_DOK_SLIK,
   labels: Object.keys(m.DOC_TAG_LABELS).length,
@@ -162,7 +163,7 @@ chk(A.get('docOfBrezTag') == 'm2', 'docOf brez taga je dovoljen (samo vezava)')
 chk(A.get('segmentNeg') is None and A.get('segmentFloat') == 2 and A.get('segmentNull') is None, 'segment: negativ → null, float → round, smet → null')
 chk(A.get('noteTrim') == 'abc', 'opomba se trima')
 chk(A.get('ohraniPhoto') is True, 'zapis v params OHRANI obstoječe ključe (photo, stage) in doda doc*')
-chk(A.get('pokvarjen') is True, 'pokvarjen JSON params ne povzroči izgeme doc polj')
+chk(A.get('pokvarjen') is True, 'ne-objekt params (obrambna veja) ne povzroči izgube doc polj')
 chk(A.get('offline') is True, 'docOffline se zapiše (offline pot brez docOf)')
 chk(A.get('prostor0') == 0 and A.get('prostor5') == 5 and A.get('prostorNeg') == 30, 'prostor: meja, rezerva in negativen vhod (fail-safe)')
 
@@ -172,7 +173,7 @@ KAMERA = 'src/components/roksal/modules/meritve-kamera.tsx'
 chk(src_has(KAMERA, 'detajli'), 'kamera ima ločen seznam detajlov (ne pogledov)')
 chk(src_has(KAMERA, 'prostorZaDokSlike(detajli.length) <= 0'), 'dodajanje dokumentacijske slike ima LASTNO mejo (ne MAX_VIEWS)')
 chk(src_has(KAMERA, 'docOfMeasurementId: meritevId'), 'potrditev pošlje detajle ZA meritvijo z docOf vezavo')
-chk(src_has(KAMERA, "JSON.stringify({ photo: d.dataUrl, stage: 'DOKUMENTACIJA' })"), 'detajl se shrani kot FOTO zapis z oznako faze DOKUMENTACIJA')
+chk(src_has(KAMERA, "params: { photo: d.dataUrl, stage: 'DOKUMENTACIJA' }"), 'detajl se shrani kot FOTO zapis z oznako faze DOKUMENTACIJA (R542: params objekt)')
 chk(src_has(KAMERA, 'docTag: d.tag'), 'offline vrsta nosi oznako detajla')
 chk(src_has(KAMERA, 'dokSlike: detajli.map'), 'osnutek prenaša dokumentacijske slike (§6 brez izgube)')
 chk(src_has(KAMERA, 'setDetajli(restoredDok)'), 'obnova osnutka vrne tudi detajle')
@@ -212,18 +213,18 @@ else:
             'AAP/aAAgBAQABBQJ//8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAgBAgEBPwF//8QAFBEBAAAAAAAAAAAAAAAAAAAA'
             'AP/aAAgBAwEBPwF//9k=')
 
-    # brez žetona → 401 (RBAC)
-    s, d = callj('POST', '/api/measurements', body={'type': 'FOTO', 'params': json.dumps({'photo': FOTO})})
+    # brez žetona → 401 (RBAC); R542: params je OBJEKT (niz → zod 400)
+    s, d = callj('POST', '/api/measurements', body={'type': 'FOTO', 'params': {'photo': FOTO}})
     chk(s == 401, f'brez žetona → 401 (dejansko {s})')
 
     # nazaj kompatibilno: star klic brez doc* → 201
-    s, stara = callj('POST', '/api/measurements', TOKEN, {'type': 'FOTO', 'params': json.dumps({'photo': FOTO, 'opomba': 'r522 stara pot'})})
+    s, stara = callj('POST', '/api/measurements', TOKEN, {'type': 'FOTO', 'params': {'photo': FOTO, 'opomba': 'r522 stara pot'}})
     chk(s == 201, f'star klic brez doc* deluje nespremenjeno ({s})')
 
     # neveljavna vrata
     s, d = callj('POST', '/api/measurements', TOKEN, {'type': 'FOTO', 'docTag': 'ZARJA'})
     chk(s == 400, f'neznana oznaka → 400 (dejansko {s})')
-    s, d = callj('POST', '/api/measurements', TOKEN, {'type': 'OGRAJA', 'docTag': 'VIJAK', 'params': json.dumps({'points': [{'x': 0, 'y': 0}]})})
+    s, d = callj('POST', '/api/measurements', TOKEN, {'type': 'OGRAJA', 'docTag': 'VIJAK', 'params': {'points': [{'x': 0, 'y': 0}]}})
     chk(s == 400 and 'tip FOTO' in json.dumps(d, ensure_ascii=False), f'tip OGRAJA z doc* → 400 z razlago (dejansko {s})')
     s, d = callj('POST', '/api/measurements', TOKEN, {'type': 'FOTO', 'docOfMeasurementId': 'neobstojec-id-123'})
     chk(s == 400 and 'Izvorna meritev ne obstaja' in json.dumps(d, ensure_ascii=False), f'neobstoječi docOf → 400 (dejansko {s})')
@@ -235,13 +236,13 @@ else:
         izvor_id = stara['data']['id']
         s, dok1 = callj('POST', '/api/measurements', TOKEN, {
             'type': 'FOTO',
-            'params': json.dumps({'photo': FOTO, 'stage': 'DOKUMENTACIJA'}),
+            'params': {'photo': FOTO, 'stage': 'DOKUMENTACIJA'},
             'docOfMeasurementId': izvor_id, 'docTag': 'VIJAK', 'docSegmentIdx': 0, 'docNote': 'M12 na betonskih sidrih',
         })
         chk(s == 201, f'dokumentacijska slika z docOf + oznako + segmentom → 201 (dejansko {s})')
         s, dok2 = callj('POST', '/api/measurements', TOKEN, {
             'type': 'FOTO',
-            'params': json.dumps({'photo': FOTO, 'stage': 'DOKUMENTACIJA'}),
+            'params': {'photo': FOTO, 'stage': 'DOKUMENTACIJA'},
             'docOfMeasurementId': izvor_id, 'docTag': 'OVIRA',
         })
         chk(s == 201, f'drug detajl na isto izvorno meritev → 201 (več slik je legitimno, dejansko {s})')
@@ -253,7 +254,7 @@ import {{ PrismaClient }} from '@prisma/client'
 const db = new PrismaClient()
 const p1 = await db.measurement.findUnique({{ where: {{ id: '{dok1['data']['id']}' }}, select: {{ params: true, type: true, status: true }} }})
 const p2 = await db.measurement.findUnique({{ where: {{ id: '{dok2['data']['id']}' }}, select: {{ params: true }} }})
-const o = JSON.parse(p1.params || '{{}}'), o2 = JSON.parse(p2.params || '{{}}')
+const o = p1.params ?? {{}}, o2 = p2.params ?? {{}}  // R542: jsonb objekt
 console.log(JSON.stringify({{
   tip: p1.type, status: p1.status,
   docOf: o.docOf, docTag: o.docTag, docSegmentIdx: o.docSegmentIdx, docNote: o.docNote, stage: o.stage,

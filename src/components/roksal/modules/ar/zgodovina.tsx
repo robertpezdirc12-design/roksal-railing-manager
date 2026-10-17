@@ -21,15 +21,12 @@ import { downloadPng } from './zajem'
 import { ManualTagForm, SceneElementRow } from './zaznave'
 import type { ManualTagValues } from './tipi'
 
-function parseAnalysis (raw: string | null | undefined): ArAnalysis | null {
+/** R542: analysis je jsonb objekt (API vrača razčlenjenega); niz ostane le kot obramba za starejše oblike. */
+function parseAnalysis (raw: Record<string, unknown> | string | null | undefined): ArAnalysis | null {
   if (!raw) return null
-  try {
-    const p = JSON.parse(raw) as ArAnalysis
-    if (!p || typeof p !== 'object' || !Array.isArray(p.placement)) return null
-    return p
-  } catch {
-    return null
-  }
+  const p = (typeof raw === 'string' ? (() => { try { return JSON.parse(raw) as unknown } catch { return null } })() : raw) as ArAnalysis | null
+  if (!p || typeof p !== 'object' || !Array.isArray(p.placement)) return null
+  return p
 }
 
 export function Zgodovina ({ canWrite, snapshots }: {
@@ -90,13 +87,13 @@ export function Zgodovina ({ canWrite, snapshots }: {
     }
     setDetailBusy(true)
     try {
-      const res = await apiGet<{ data: { id: string; params: string | null; scene: string | null; analysis: string | null; note: string | null; createdAt: string } }>(`/api/ar-snapshots/${row.id}`)
+      const res = await apiGet<{ data: { id: string; params: Record<string, unknown> | null; scene: string | null; analysis: Record<string, unknown> | null; note: string | null; createdAt: string } }>(`/api/ar-snapshots/${row.id}`)
+      // R542: params/analysis sta jsonb objekta — brez JSON.parse
       let photo: string | null = null
-      if (res.data.params) {
-        try {
-          const p = JSON.parse(res.data.params) as { photo?: unknown }
-          if (typeof p.photo === 'string' && p.photo.startsWith('data:image/')) photo = p.photo
-        } catch { /* brez fotografije */ }
+      const p = res.data.params
+      if (p && typeof p === 'object') {
+        const ph = (p as { photo?: unknown }).photo
+        if (typeof ph === 'string' && ph.startsWith('data:image/')) photo = ph
       }
       let elements: SceneElement[] | null = null
       try {

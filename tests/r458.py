@@ -83,7 +83,8 @@ const {{PrismaClient}}=require('@prisma/client');const p=new PrismaClient();
     await p.workOrderEvent.deleteMany({{where:{{workOrderId:w.id}}}});
     await p.workOrder.delete({{where:{{id:w.id}}}});
   }}
-  await p.playbookRun.deleteMany({{where:{{context:{{contains:'{TAG}'}}}}}});
+  // R542: context je jsonb — podniz po serializiranem jsonb (ista semantika contains)
+  await p.$executeRawUnsafe('DELETE FROM "PlaybookRun" WHERE "context"::text LIKE $1', '%{TAG}%');
   await p.user.deleteMany({{where:{{email:'monter2-{TAG.lower()}@roksal.si'}}}});
   const monter=await p.user.findUnique({{where:{{email:'monter@roksal.si'}}}});
   const crypto=require('crypto');
@@ -407,7 +408,8 @@ const {{PrismaClient}}=require('@prisma/client');const p=new PrismaClient();
   await p.playbookDef.deleteMany({{where:{{key:'FASADA',version:2}}}});
   await p.playbookDef.updateMany({{where:{{key:'FASADA',version:1}},data:{{status:'ACTIVE'}}}});
   await p.auditLog.deleteMany({{where:{{entityId:{{in:['{RUN_ID}','{RUN2}']}}}}}});
-  await p.auditLog.deleteMany({{where:{{detail:{{contains:'{TAG}'}}}}}});
+  // R542: detail je jsonb — podniz po serializiranem jsonb (ista semantika contains)
+  await p.$executeRawUnsafe('DELETE FROM "AuditLog" WHERE "detail"::text LIKE $1', '%{TAG}%');
   await p.syncOp.deleteMany({{where:{{id:{{contains:'{TAG}'}}}}}});
   const stari=await p.workOrder.findMany({{where:{{title:{{contains:'{TAG}'}}}},select:{{id:true}}}});
   for(const w of stari){{

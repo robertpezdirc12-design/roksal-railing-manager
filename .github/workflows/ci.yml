@@ -255,6 +255,12 @@ jobs:
           # POST/PATCH /api/projects neveljaven status → 400).
           # Nova skupina MORA biti tudi v tests/ci-matrix.sh.
           - grupa: r541
+          # R542: pretvorba 42 JSON-v-TEXT stolpcev v pravi jsonb (migracija
+          # 20261024000000_r542_text_v_jsonb, NULLIF varovalka, izključitvi
+          # WebhookDelivery.payload/Setting.value) + zod zaprtje 3 surovih
+          # prehodov (niz → 400) + API pogodba objektov end-to-end.
+          # Nova skupina MORA biti tudi v tests/ci-matrix.sh.
+          - grupa: r542
     services:
       postgres:
         image: postgres:16

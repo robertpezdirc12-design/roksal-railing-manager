@@ -341,9 +341,10 @@ chk(sc.get('basis') == 'ANIZOTROPNO' and sc.get('cmPerPxX') == 0.25 and sc.get('
     f'analyze: ločena Y referenca preživi pot do jedra ({sc.get("basis")} / X {sc.get("cmPerPxX")} / Y {sc.get("cmPerPxY")})')
 
 PHOTO = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q='
+# R542: Measurement.params je jsonb — API sprejema in vrača OBJEKT (ne niz)
 s, d = callj('POST', '/api/measurements', monter, {
     'type': 'FOTO', 'projectId': PROJ_ID, 'location': f'{TAG} teren',
-    'params': json.dumps({'photo': PHOTO}), 'note': f'{TAG} foto osnova'})
+    'params': {'photo': PHOTO}, 'note': f'{TAG} foto osnova'})
 chk(s == 201, f'FOTO osnova ustvarjena ({s})')
 photo_id = d.get('data', {}).get('id')
 foto_row = meas_row(photo_id)
@@ -386,7 +387,7 @@ chk(d0.get('data', {}).get('status') == 'ESTIMATED',
     f'brez kalibracije: strežnik vrne ESTIMATED ({d0.get("data", {}).get("status")})')
 chk(row.get('status') == 'ESTIMATED' and (row.get('statusNote') or '').strip() != '',
     f'stanje + razlog zapišeta v DB ({row.get("status")} / {str(row.get("statusNote"))[:60]})')
-prv = (json.loads(row.get('params') or '{}')).get('provenance') or {}
+prv = (row.get('params') or {}).get('provenance') or {}
 chk(prv.get('v') == 'kalibracija/2.0' and prv.get('status') == 'ESTIMATED' and prv.get('basis') == 'NEZNANO',
     f'params.provenance = strežniški izračun z verzijo pogodbe ({prv})')
 
@@ -397,7 +398,9 @@ chk(d1.get('data', {}).get('status') == 'CALIBRATED',
     f'dokazano merilo px/cm → CALIBRATED ({d1.get("data", {}).get("status")})')
 ver = callj('GET', f'/api/measurements/{ID_KAL}/verzije', admin)[1]
 v1 = [v for v in (ver.get('data') or []) if v.get('version') == 1]
-chk(bool(v1) and 'CALIBRATED' in (v1[0].get('data') or ''),
+# R542: data je jsonb objekt — podniz po serializaciji (ista namena kot prej po nizu)
+v1_niz = json.dumps(v1[0].get('data') or {}, ensure_ascii=False) if v1 else ''
+chk(bool(v1) and 'CALIBRATED' in v1_niz,
     'verzija v1 nosi stanje (zgodovina je revizijska sled)')
 
 s2, d2 = potrdi('pogledi', {'lengthCm': 316, 'views': V_OK})
@@ -450,7 +453,7 @@ offline_id = (((res.get('data') or {}).get('measurement')) or {}).get('id')
 row = meas_row(offline_id) if offline_id else {}
 chk(row.get('status') == 'CALIBRATED',
     f'offline dobi ISTO stanje kot mrežna pot ({row.get("status")})')
-chk((json.loads(row.get('params') or '{}')).get('provenance', {}).get('v') == 'kalibracija/2.0',
+chk((row.get('params') or {}).get('provenance', {}).get('v') == 'kalibracija/2.0',
     'offline zapis nosi isto verzijo kalibracijske pogodbe')
 
 s, d = sync_foto('r501-conf-1', {'views': V_BAD})
@@ -474,7 +477,8 @@ chk(res.get('status') == 'OK', f'konflikt + ročni popravek z razlogom → OK (v
 mo_id = (((res.get('data') or {}).get('measurement')) or {}).get('id')
 mo_row = meas_row(mo_id) if mo_id else {}
 chk(mo_row.get('status') == 'MANUAL', f'rešitev konflikta je ročna odgovornost → MANUAL ({mo_row.get("status")})')
-chk('multiView' in (mo_row.get('params') or '') and 'conflict' in (mo_row.get('params') or ''),
+mo_params_niz = json.dumps(mo_row.get('params') or {}, ensure_ascii=False)
+chk('multiView' in mo_params_niz and 'conflict' in mo_params_niz,
     'konflikt ostane VIDEN v params (revizija), ne izgine z rešitvijo')
 
 s, d = sync_foto('r501-nikal-1', {'calibration': None})
@@ -542,8 +546,8 @@ ID_CONFIRMED = d.get('data', {}).get('id')
 chk(s == 200 and (d.get('data') or {}).get('status') == 'CONFIRMED', f'prej: VERIFIED → CONFIRMED ({s})')
 PKG2_ID = ustvari_paket('PAK-R501-2', ID_CONFIRMED) if PROD_ID else None
 chk(bool(PKG2_ID), f'paket povezan s potrjeno meritvijo ({PKG2_ID})')
-nova_params = json.dumps({'photoId': photo_id, 'source': 'KAMERA', 'points': PTS,
-                          'calibration': {'px': 800, 'cm': 100, 'imgW': 1600, 'imgH': 1200}})
+nova_params = {'photoId': photo_id, 'source': 'KAMERA', 'points': PTS,
+               'calibration': {'px': 800, 'cm': 100, 'imgW': 1600, 'imgH': 1200}}
 s, d = callj('PATCH', f'/api/measurements/{ID_CONFIRMED}', admin, {'params': nova_params, 'status': 'CONFIRMED'})
 chk(s == 400, f'geometrija + status v istem zahtevku → 400 (najprej preračun) ({s})')
 s, d = callj('PATCH', f'/api/measurements/{ID_CONFIRMED}', admin, {'params': nova_params})
@@ -561,7 +565,7 @@ chk(s == 200 and (d.get('data') or {}).get('status') == 'MANUAL',
     f'številka brez preračuna geometrije na kamerem zapisu → MANUAL ({(d.get("data") or {}).get("status")})')
 
 s, d = callj('PATCH', f'/api/measurements/{ID_CONFIRMED}', admin,
-             {'params': json.dumps({'photoId': photo_id, 'source': 'KAMERA'})})
+             {'params': {'photoId': photo_id, 'source': 'KAMERA'}})
 chk(s == 200 and (d.get('data') or {}).get('status') == 'INVALIDATED',
     f'odstranjena geometrije → INVALIDATED, ne tiho prejšnje stanje ({(d.get("data") or {}).get("status")})')
 
@@ -672,7 +676,9 @@ const KODI=['PAK-R501-1','PAK-R501-2'];
   // javni žeton je stolpec na meritvi (Measurement.shareToken) — zbrisane z zapisi
   await p.measurement.deleteMany({where:{id:{in:ids}}});
   await p.syncOp.deleteMany({where:{deviceId:'__DEV__'}});
-  await p.auditLog.deleteMany({where:{detail:{contains:'__TAG__'}}});
+  // R542: AuditLog.detail je jsonb — Prisma `contains` tu ne velja več;
+  // podniz po serializiranem jsonb (detail::text LIKE) je ista semantika.
+  await p.$executeRawUnsafe('DELETE FROM "AuditLog" WHERE "detail"::text LIKE $1', '%' + '__TAG__' + '%');
   await p.auditLog.deleteMany({where:{entityId:{in:[...ids,'__DEV__',...KODI]}}});
   console.log('CLEAN_DONE');await p.$disconnect();
 })()

@@ -77,9 +77,8 @@ function stageRows (
 async function latestTwin (projectId: string, kind: string): Promise<{ id: string; version: number; data: TwinSnapshotData | null } | null> {
   const s = await db.digitalTwinSnapshot.findFirst({ where: { projectId, kind }, orderBy: { version: 'desc' } })
   if (!s) return null
-  let data: TwinSnapshotData | null = null
-  try { data = parseTwinData(JSON.parse(s.data)) } catch { data = null }
-  return { id: s.id, version: s.version, data }
+  // R542: data je jsonb — parseTwinData neposredno (vrne null ob napačni obliki)
+  return { id: s.id, version: s.version, data: parseTwinData(s.data) }
 }
 
 async function stageDiff (
@@ -218,11 +217,9 @@ export async function timeline4d (projectId: string): Promise<Timeline4d> {
   // T0 obstoječe stanje: prvi AS_MEASURED (ali zajem z obstoječim opisom)
   const firstMeasured = snapshots.find((s) => s.kind === 'AS_MEASURED')
   if (firstMeasured) {
-    let obstojeco = ''
-    try {
-      const d = parseTwinData(JSON.parse(firstMeasured.data))
-      obstojeco = d?.obstojeco?.opis ?? ''
-    } catch { obstojeco = '' }
+    // R542: jsonb — brez JSON.parse
+    const d = parseTwinData(firstMeasured.data)
+    const obstojeco = d?.obstojeco?.opis ?? ''
     entries.push({ t: 'T0', label: 'OBSTOJEČE STANJE', at: firstMeasured.createdAt.toISOString(), detail: obstojeco || 'posneto z zajemom' })
   }
   const firstSession = sessions[0]
@@ -284,11 +281,10 @@ export async function elementProvenance (projectId: string, key: string): Promis
   const snapshots = await db.digitalTwinSnapshot.findMany({ where: { projectId }, orderBy: { createdAt: 'asc' } })
   const snapValues: ElementProvenance['snapshots'] = []
   for (const s of snapshots) {
-    try {
-      const d = parseTwinData(JSON.parse(s.data))
-      const v = d?.segments.find((x) => x.key === key)?.lengthCm ?? null
-      snapValues.push({ kind: s.kind, version: s.version, value: v })
-    } catch { /* preskoči */ }
+    // R542: data je jsonb — brez JSON.parse (slaba oblika → null → vrednost null)
+    const d = parseTwinData(s.data)
+    const v = d?.segments.find((x) => x.key === key)?.lengthCm ?? null
+    snapValues.push({ kind: s.kind, version: s.version, value: v })
   }
   const versions = await db.fenceRunVersion.findMany({
     where: { fenceRunId: run.id },
@@ -369,17 +365,13 @@ export async function geoContext (sessionId: string): Promise<GeoContext> {
     })),
     registrations: regs.map((r) => ({
       id: r.id, version: r.version, quality: r.quality, rmsCm: r.rmsCm,
-      transform: safeJson(r.transform), createdAt: r.createdAt.toISOString(),
+      transform: r.transform, createdAt: r.createdAt.toISOString(),
     })),
     loops: loops.map((l) => ({
       id: l.id, status: l.status, positionDiffCm: l.positionDiffCm, heightDiffCm: l.heightDiffCm,
       startCode: l.startCode, endCode: l.endCode, createdAt: l.createdAt.toISOString(),
     })),
   }
-}
-
-function safeJson (s: string): unknown {
-  try { return JSON.parse(s) } catch { return null }
 }
 
 // ─── pomožno za UI preslikave ───────────────────────────────────────────────

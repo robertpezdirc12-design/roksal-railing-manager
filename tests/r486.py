@@ -245,9 +245,7 @@ console.log(JSON.stringify(r));return p.$disconnect()}})""")
     except Exception: return {}
 
 mp = meas_params(M_ID)
-pr = {}
-try: pr = json.loads(mp.get('params') or '{}')
-except Exception: pr = {}
+pr = mp.get('params') or {}  # R542: jsonb objekt (brez parse)
 chk(mp.get('lengthCm') == 412.5 and mp.get('workOrderId') == WO, f'osnovna meritev + nalog ({mp.get("lengthCm")}/{mp.get("workOrderId") == WO})')
 chk(pr.get('calibration', {}).get('px') == 250 and pr.get('calibration', {}).get('method') == 'MARKER' and pr.get('calibration', {}).get('refObject') == 'ravnilo',
     f'kalibracija v params (px/metoda/referenca) ({pr.get("calibration")})')
@@ -276,8 +274,7 @@ s, d = callj('POST', '/api/sync', monter, {'deviceId': DEV, 'ops': [{'opId': OP2
 chk(s == 200, f'legacy foto op (brez razširitev) → 200 ({s})')
 LEG_ID = d.get('data', {}).get('results', [{}])[0].get('data', {}).get('measurement', {}).get('id')
 lp = meas_params(LEG_ID)
-try: lpr = json.loads(lp.get('params') or '{}')
-except Exception: lpr = {}
+lpr = lp.get('params') or {}  # R542: jsonb objekt
 # R501 (issue #15 faza 2): offline pot dobi ISTI provenance izračun kot mrežna
 # (deriveProvenance v jedru) — zato je v params dodan `provenance`; stari ključi
 # (r439) ostanejo. Združljivost je v vrednostih, ne v odsotnosti dokaza.
@@ -291,8 +288,7 @@ s, d = callj('POST', '/api/sync', monter, {'deviceId': DEV, 'ops': [{'opId': OP3
 chk(s == 200, f'neveljavna confidence/mode se tiho izpustijo → 200 ({s})')
 BAD_ID = d.get('data', {}).get('results', [{}])[0].get('data', {}).get('measurement', {}).get('id')
 bp = meas_params(BAD_ID)
-try: bpr = json.loads(bp.get('params') or '{}')
-except Exception: bpr = {}
+bpr = bp.get('params') or {}  # R542: jsonb objekt
 chk('confidence' not in bpr and 'mode' not in bpr and 'manualOverride' not in bpr,
     f'izpuščeni neveljavni kosi ({sorted(bpr.keys())})')
 

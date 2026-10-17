@@ -22,6 +22,7 @@
 
 import { consentStatus, photosBlockedReason } from './pin-core'
 import type { ConsentStatus, PhotosBlockedReason } from './pin-core'
+import { asJsonObject, asJsonObjectLoose } from './json'
 
 // re-izvoz za enovit uvoz iz viz-core (rute/javna stran ne rabita poznati pin-core)
 export { consentStatus, photosBlockedReason }
@@ -83,34 +84,31 @@ export interface VizConfigSummary {
 
 const CONFIG_NUM_MAX = 100000
 
-/** Varno izlušči JAVNI del renderParams (config); smeti/napake → null. */
-export function vizConfigSummary (renderParams: string | null | undefined): VizConfigSummary | null {
-  if (typeof renderParams !== 'string' || !renderParams) return null
-  try {
-    const parsed = JSON.parse(renderParams) as unknown
-    if (typeof parsed !== 'object' || parsed === null) return null
-    const cfg = (parsed as Record<string, unknown>).config
-    if (typeof cfg !== 'object' || cfg === null) return null
-    const c = cfg as Record<string, unknown>
-    const num = (v: unknown): number | undefined => {
-      if (typeof v !== 'number' || !Number.isFinite(v) || Math.abs(v) > CONFIG_NUM_MAX) return undefined
-      return v
-    }
-    const summary: VizConfigSummary = {
-      tip: typeof c.tip === 'string' ? c.tip : '',
-      lengthCm: num(c.lengthCm) ?? 0,
-      heightCm: num(c.heightCm) ?? 0,
-      posts: num(c.posts) ?? 0,
-      handrail: c.handrail === true,
-      pritrditev: typeof c.pritrditev === 'string' ? c.pritrditev : '',
-      ...(num(c.lamelaMm) != null ? { lamelaMm: num(c.lamelaMm) as number } : {}),
-      ...(num(c.rezaMm) != null ? { rezaMm: num(c.rezaMm) as number } : {}),
-      ...(num(c.deskaMm) != null ? { deskaMm: num(c.deskaMm) as number } : {}),
-    }
-    return summary
-  } catch {
-    return null
+/** Varno izlušči JAVNI del renderParams (config); smeti/napake → null.
+ *  R542: renderParams je jsonb objekt (testni mostič r480 pošilja JSON niz —
+ *  asJsonObjectLoose sprejme oboje). */
+export function vizConfigSummary (renderParams: unknown): VizConfigSummary | null {
+  const parsed = asJsonObjectLoose(renderParams)
+  if (!parsed) return null
+  const cfg = asJsonObject(parsed.config)
+  if (!cfg) return null
+  const c = cfg
+  const num = (v: unknown): number | undefined => {
+    if (typeof v !== 'number' || !Number.isFinite(v) || Math.abs(v) > CONFIG_NUM_MAX) return undefined
+    return v
   }
+  const summary: VizConfigSummary = {
+    tip: typeof c.tip === 'string' ? c.tip : '',
+    lengthCm: num(c.lengthCm) ?? 0,
+    heightCm: num(c.heightCm) ?? 0,
+    posts: num(c.posts) ?? 0,
+    handrail: c.handrail === true,
+    pritrditev: typeof c.pritrditev === 'string' ? c.pritrditev : '',
+    ...(num(c.lamelaMm) != null ? { lamelaMm: num(c.lamelaMm) as number } : {}),
+    ...(num(c.rezaMm) != null ? { rezaMm: num(c.rezaMm) as number } : {}),
+    ...(num(c.deskaMm) != null ? { deskaMm: num(c.deskaMm) as number } : {}),
+  }
+  return summary
 }
 
 // ─── publicVizVisualization — projekcija za JAVNO pot (žeton) ────────────────
@@ -138,7 +136,7 @@ export function publicVizVisualization (
   v: {
     id: string
     variantLabel: string
-    renderParams?: string | null
+    renderParams?: unknown
     sourcePhoto?: string | null
     rendered?: string | null
     updatedAt?: Date | string

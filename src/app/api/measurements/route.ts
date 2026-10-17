@@ -5,6 +5,8 @@
 //      ob nastanku — enako kot /api/sync, /api/measurement/confirm, /api/railing-layout).
 
 import { NextRequest, NextResponse } from 'next/server'
+import { Prisma } from '@prisma/client'
+import { z } from 'zod'
 import { db } from '@/lib/db'
 import { jsonError, readsAllData, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
@@ -14,6 +16,11 @@ import { preveriDocPolja, zapišiDocVParams } from '@/lib/measure-doc'
 import { retryOnUnique } from '@/lib/versioning'
 
 const TYPES = ['OGRAJA', 'BALUSTRADA', 'NAGIB', 'FOTO', 'OSTANEO']
+
+// R542: params je jsonb OBJEKT (ne niz) — surovi prehod niza zaprt z zod
+// (inventura R542-a: eden od 2 surovih krajev Measurement.params). Prosto-
+// tehnični tovor (točke, kalibracija, fotografija, viz, konfigurator …).
+const ParamsSchema = z.record(z.string(), z.unknown(), { error: 'params mora biti JSON objekt (ne niz).' }).nullish()
 
 function num (v: unknown): number | null {
   return typeof v === 'number' && Number.isFinite(v) ? v : null
@@ -66,6 +73,12 @@ export async function POST (req: NextRequest) {
   const body = await req.json().catch(() => null)
   if (!body || typeof body !== 'object') return jsonError(400, 'Neveljavno telo zahteve.')
 
+  // R542: params vrata — objekt/neodvisno/null; niz (stara oblika) → 400
+  const paramsParsed = ParamsSchema.safeParse((body as { params?: unknown }).params)
+  if (!paramsParsed.success) {
+    return jsonError(400, 'Neveljavni parametri meritve.', 'params mora biti JSON objekt (točke, kalibracija, fotografija …) — ne niz.')
+  }
+
   const type = typeof body.type === 'string' && body.type ? body.type : 'OGRAJA'
   if (!TYPES.includes(type)) {
     return jsonError(400, 'Neznan tip meritve.', `Veljavni tipi: ${TYPES.join(', ')}.`)
@@ -98,10 +111,9 @@ export async function POST (req: NextRequest) {
   // R501 (issue #15 faza 2): PROVENIENCA. Ročni vnos nosi odgovornost na vpisu
   // (MANUAL), fotografski zapis brez geometrije pa ni poslovna mera (ESTIMATED).
   // Stanje izračuna jedro samo takrat, ko params res nosijo točke + merilo.
-  let paramsGeo: { points?: unknown; calibration?: unknown } | null = null
-  if (typeof body.params === 'string') {
-    try { paramsGeo = JSON.parse(body.params) } catch { paramsGeo = null }
-  }
+  // R542: params je objekt (zod zgoraj) — razčlenjevanje ni več potrebno.
+  const paramsVnos = paramsParsed.data ?? null
+  const paramsGeo = paramsVnos as { points?: unknown; calibration?: unknown } | null
   const provenance = type === 'FOTO' && !paramsGeo?.points
     ? photoRecordProvenance()
     : deriveProvenance({ points: paramsGeo?.points, calibration: paramsGeo?.calibration, legacyType: type })
@@ -126,8 +138,8 @@ export async function POST (req: NextRequest) {
     }
   }
   const paramsKoncni = (doc.docOf || doc.docTag || doc.docSegmentIdx !== null || doc.docNote)
-    ? zapišiDocVParams(typeof body.params === 'string' ? body.params : null, doc)
-    : (typeof body.params === 'string' ? body.params : null)
+    ? zapišiDocVParams(paramsVnos, doc)
+    : paramsVnos
 
   // R537 (transakcijska celovitost): meritev + verzija v1 + revizija v ENI
   // transakciji — padec srednjega koraka NE pusti meritve brez verzije/revizije.
@@ -150,7 +162,8 @@ export async function POST (req: NextRequest) {
         segments,
         handrail: typeof body.handrail === 'boolean' ? body.handrail : true,
         slopeDeg,
-        params: paramsKoncni,
+        // R542: jsonb objekt (ne niz) — null gre eksplicitno kot DB NULL
+        params: paramsKoncni ? paramsKoncni as Prisma.InputJsonValue : Prisma.DbNull,
         note: typeof body.note === 'string' && body.note.trim() ? body.note.trim() : null,
       },
       include: {
@@ -175,11 +188,12 @@ export async function POST (req: NextRequest) {
           measurementId: measurement.id,
           version: (last?.version ?? 0) + 1,
           userId: user.id,
-          data: JSON.stringify({
+          // R542: data je jsonb objekt (ne niz) — params je v njem že objekt
+          data: {
             type, lengthCm, heightCm, posts, segments, handrail: measurement.handrail, slopeDeg,
             location: measurement.location, note: measurement.note, params: measurement.params,
             status: provenance.status, statusNote: provenance.reason,
-          }),
+          },
           note: type === 'FOTO' ? 'Ročna foto meritev' : 'Ročna meritev',
         },
       })

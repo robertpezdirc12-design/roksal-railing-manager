@@ -328,7 +328,9 @@ console.log('POBRISANIH:' + n.count + ' OSTANKI:' + ostanki)
 # ═══ D) registracija skupine ═════════════════════════════════════════════════
 print('── D) registracija (matrika + CI) ──')
 matrika = src('tests/ci-matrix.sh')
-chk(' r541)' in matrika and 'CLANI[r541]="r541.py"' in matrika,
+grupe_vrstica = next((v for v in matrika.splitlines() if v.startswith('GRUPE=')), '')
+# R542: pozicijsko neodvisno — r541 ne mere biti zadnji v seznamu (bil je do R542)
+chk(re.search(r'(?<![\w-])r541(?![\w-])', grupe_vrstica) is not None and 'CLANI[r541]="r541.py"' in matrika,
     'ci-matrix.sh: skupina r541 v GRUPE seznamu in CLANI razdelitvi')
 ciyml = src('.github/workflows/ci.yml')
 chk('grupa: r541' in ciyml, 'CI workflow: skupina r541 v matriki')

@@ -16,27 +16,16 @@ const TIPS = ['OGRAJA', 'BALUSTRADA', 'NAGIB']
 
 type Params = { params: Promise<{ id: string }> }
 
-// R538: zod validacija (zrcali prejšnjo sprejemljivost — vzorec R536-d):
+// R538: zod validacija (vzorec R536-d) + R542: params je jsonb OBJEKT (prej
+// JSON niz — zadnja od 3 zod shem iz inventure R542-a):
 // delni PATCH — vsa polja neobvezna; ime (če je podano) neprazno po trim +
 // omejitev 120 (kot prej), tip iz seznama (neznani niz ⇒ 400, kot prej),
-// params morajo biti veljaven JSON objekt (kot prej — shranijo se trimani),
 // opomba: trim/500, prazna ⇒ null (kot prej), projectId: null/'' ⇒ očiščeno
 // povezava, niz ⇒ obstoj preverja handler (kot prej).
 const VizProjectPatchSchema = z.object({
   name: z.string({ error: 'Ime mora biti besedilo.' }).trim().min(1, 'Ime ne sme biti prazno.').transform((v) => v.slice(0, 120)).optional(),
   tip: z.enum(TIPS, { error: 'Neveljaven tip (OGRAJA | BALUSTRADA | NAGIB).' }).optional(),
-  params: z.unknown()
-    .superRefine((v, ctx) => {
-      if (typeof v === 'string') {
-        try {
-          const parsed = JSON.parse(v) as unknown
-          if (!parsed || typeof parsed !== 'object') ctx.addIssue({ code: 'custom', message: 'Params niso veljaven JSON.' })
-        } catch {
-          ctx.addIssue({ code: 'custom', message: 'Params niso veljaven JSON.' })
-        }
-      }
-    })
-    .transform((v) => (typeof v === 'string' ? v.trim() : undefined)),
+  params: z.record(z.string(), z.unknown(), { error: 'Params morajo biti JSON objekt (ne niz).' }).optional(),
   note: z.string({ error: 'Opomba mora biti besedilo.' }).nullish().transform((v) => {
       if (v === undefined) return undefined
       const t = v?.trim().slice(0, 500)
@@ -75,9 +64,10 @@ export async function PATCH (req: NextRequest, { params }: Params) {
   if (!parsed.ok) return parsed.response
   const data = parsed.data
 
-  const upd: Record<string, string | null> = {}
+  const upd: Record<string, unknown> = {}
   if (data.name !== undefined) upd.name = data.name
   if (data.tip !== undefined) upd.tip = data.tip
+  // R542: params je jsonb objekt
   if (data.params !== undefined) upd.params = data.params
   if (data.note !== undefined) upd.note = data.note
   if (data.projectId !== undefined) {

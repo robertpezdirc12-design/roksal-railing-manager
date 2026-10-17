@@ -9,12 +9,10 @@
 
 import { createHash } from 'node:crypto'
 
-function razcleni (params: string | null | undefined): Record<string, unknown> | null {
-  if (!params) return null
-  try {
-    const v = JSON.parse(params) as unknown
-    return v && typeof v === 'object' ? v as Record<string, unknown> : null
-  } catch { return null }
+// R542: params je jsonb objekt — razčlenjevanje ni več potrebno (vrednost je
+// že objekt); obramba za neobjektno obliko ostaja.
+function razcleni (params: unknown): Record<string, unknown> | null {
+  return params !== null && typeof params === 'object' ? params as Record<string, unknown> : null
 }
 
 /**
@@ -22,7 +20,7 @@ function razcleni (params: string | null | undefined): Record<string, unknown> |
  * dodatni pogledi (`views[].photoId` — R455). Podvojitve so odstranjene, vrstni
  * red je viden (prvi = glavni).
  */
-export function fotografiIzParametrov (params: string | null | undefined): string[] {
+export function fotografiIzParametrov (params: unknown): string[] {
   const p = razcleni(params)
   const ids: string[] = []
   if (typeof p?.photoId === 'string' && p.photoId) ids.push(p.photoId)
@@ -53,7 +51,7 @@ export interface OriginalVrsta {
   createdAt?: Date | null
   location?: string | null
   source?: string | null
-  params?: string | null
+  params?: unknown
 }
 
 /**

@@ -38,7 +38,7 @@ interface ProjectDetail extends ProjectRow {
   measurements: {
     id: string; type: string; location: string | null; lengthCm: number | null
     heightCm: number | null; posts: number | null; handrail: boolean | null
-    slopeDeg: number | null; params: string | null; createdAt: string
+    slopeDeg: number | null; params: Record<string, unknown> | null; createdAt: string // R542: jsonb objekt
   }[]
   invoices: { id: string; code: string; status: string; total: number; paid: number }[]
 }
@@ -839,7 +839,7 @@ function WarrantySection ({ projectId, projectStatus }: { projectId: string; pro
 
 interface PackageRow {
   id: string; code: string; name: string; qty: number; unit: string
-  status: string; note: string | null; calcJson: string | null
+  status: string; note: string | null; calcJson: Record<string, unknown> | null // R542: jsonb objekt
   tier: string | null; compareCode: string | null // R476: primerjalni paket
   createdAt: string
   product: { sku: string; name: string; unit: string; family: { code: string; name: string } }
@@ -1025,23 +1025,19 @@ function PackagesSection ({ projectId, projectCode, measurements }: {
 
 // ── R476: primerjalna skupina paketov (isti obseg, več nivojev) ───────────────
 
-/** Izračun iz calcJson (konfigurator { inputs, plan } ali BOM kalkulacija). */
-function parsePkgSale (calcJson: string | null): { totalSale: number | null; marginPct: number | null } {
+/** Izračun iz calcJson (konfigurator { inputs, plan } ali BOM kalkulacija). R542: jsonb objekt. */
+function parsePkgSale (calcJson: Record<string, unknown> | null): { totalSale: number | null; marginPct: number | null } {
   if (!calcJson) return { totalSale: null, marginPct: null }
-  try {
-    const parsed = JSON.parse(calcJson) as {
-      plan?: { totalSale?: number; marginPct?: number }
-      totalSale?: number
-      marginPct?: number
-    }
-    return {
-      totalSale: typeof parsed.plan?.totalSale === 'number' ? parsed.plan.totalSale
-        : typeof parsed.totalSale === 'number' ? parsed.totalSale : null,
-      marginPct: typeof parsed.plan?.marginPct === 'number' ? parsed.plan.marginPct
-        : typeof parsed.marginPct === 'number' ? parsed.marginPct : null,
-    }
-  } catch {
-    return { totalSale: null, marginPct: null }
+  const parsed = calcJson as {
+    plan?: { totalSale?: number; marginPct?: number }
+    totalSale?: number
+    marginPct?: number
+  }
+  return {
+    totalSale: typeof parsed.plan?.totalSale === 'number' ? parsed.plan.totalSale
+      : typeof parsed.totalSale === 'number' ? parsed.totalSale : null,
+    marginPct: typeof parsed.plan?.marginPct === 'number' ? parsed.plan.marginPct
+      : typeof parsed.marginPct === 'number' ? parsed.marginPct : null,
   }
 }
 
@@ -1322,8 +1318,9 @@ function PackageBomDialog ({ pkg }: { pkg: PackageRow | null }) {
   const d = bom.data?.data
   const calcJson = pkg?.calcJson
   const calc = useMemo<PackageCalc | null>(() => {
+    // R542: calcJson je jsonb objekt (brez JSON.parse)
     if (!calcJson) return null
-    try { return JSON.parse(calcJson) as PackageCalc } catch { return null }
+    return calcJson as unknown as PackageCalc
   }, [calcJson])
 
   // R475: skupine pozicij (STEBRI → ROCNIK → POLNILO → brez) z sumo materiala

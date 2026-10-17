@@ -761,10 +761,11 @@ async function main () {
     nVar++
   }
   console.log(`${MARKER} POLNA 57/32: ${nVar} variant (AMW, OKW, RWA — namenska lestvica, R523)`)
-  const tech57 = typeof p57.tech === 'string' ? JSON.parse(p57.tech) : (p57.tech || {})
+  // R542: tech je jsonb — branje vrača objekt (ali null); obramba za neobjektne ostane
+  const tech57 = (p57.tech && typeof p57.tech === 'object' && !Array.isArray(p57.tech)) ? p57.tech : {}
   tech57.barvOpomba = POLNA_57_OPOMBA
   tech57.barv = 3
-  await db.product.update({ where: { id: p57.id }, data: { tech: JSON.stringify(tech57) } })
+  await db.product.update({ where: { id: p57.id }, data: { tech: tech57 } })
 
   // ── B. fotografije: ProductAsset zapisi z dokazljivo provenienco ──
   let nAssets = 0, nSkip = 0

@@ -93,7 +93,9 @@ const {PrismaClient}=require('@prisma/client');const p=new PrismaClient();
   }
   await p.projectPackage.deleteMany({where:{note:{contains:'__TAG__'}}});
   await p.measurement.deleteMany({where:{location:{contains:'__TAG__'}}});
-  await p.auditLog.deleteMany({where:{OR:[{entity:'fenceRun',detail:{contains:'__TAG__'}},{action:{in:['FENCE_RUN_CREATE','FENCE_RUN_UPDATE','FENCE_RUN_LAYOUT','FENCE_RUN_VERIFY','FENCE_RUN_CONFIRM','FENCE_RUN_DELETE']}}]}});
+  // R542: detail je jsonb — podniz po serializiranem jsonb; ostalo ostane Prisma filter
+  await p.$executeRawUnsafe('DELETE FROM "AuditLog" WHERE "entity" = $1 AND "detail"::text LIKE $2', 'fenceRun', '%__TAG__%');
+  await p.auditLog.deleteMany({where:{action:{in:['FENCE_RUN_CREATE','FENCE_RUN_UPDATE','FENCE_RUN_LAYOUT','FENCE_RUN_VERIFY','FENCE_RUN_CONFIRM','FENCE_RUN_DELETE']}}});
   await p.user.deleteMany({where:{email:{contains:'r460'}}});
   console.log('CLEAN_DONE');return p.$disconnect();
 })()
@@ -293,8 +295,7 @@ chk(bool(PKG.get('code')), f"paket projekta {PKG.get('code')}")
 chk(audit_has(admin, 'FENCE_RUN_CONFIRM', RUN_OK, P4), 'revizija FENCE_RUN_CONFIRM')
 s, d = callj('GET', f'/api/measurements/{MEAS}', admin)
 params = {}
-try: params = json.loads(d.get('data', {}).get('params', '{}'))
-except Exception: pass
+params = d.get('data', {}).get('params') or {}  # R542: jsonb objekt (brez parse)
 chk(params.get('fenceRunId') == RUN_OK, 'params.fenceRunId povezuje na tekača (§17)')
 chk(params.get('source') == 'FENCE_RUN', 'params.source = FENCE_RUN')
 s, d = callj('GET', f'/api/fence-run/{RUN_OK}', admin)

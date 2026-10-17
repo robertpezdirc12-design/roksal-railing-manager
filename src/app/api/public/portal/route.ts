@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { rateLimited, tokenBucketKey } from '@/lib/rate-limit'
 import { consentStatus, photosBlockedReason } from '@/lib/pin-core'
+import { asJsonObject } from '@/lib/json'
 
 // /api/public/portal — JAVNI pogled portala stranke (route-map izvirnika: /p/[token])
 // Brez avtentikacije — dostop ureja neuraden žeton povezave (veljaven, ne preklican).
@@ -97,10 +98,10 @@ export async function GET (req: NextRequest) {
   const photos = consent === 'VELJAVNO'
     ? p.measurements
       .map((m) => {
-        try {
-          const params = m.params ? (JSON.parse(m.params) as { photo?: string }) : {}
-          return { location: m.location ?? 'Zaključeno delo', photo: params.photo ?? null, at: m.createdAt.toISOString() }
-        } catch { return null }
+        // R542: params je jsonb objekt — branje brez JSON.parse
+        const parsed = asJsonObject(m.params)
+        const photo = typeof parsed?.photo === 'string' ? parsed.photo : null
+        return { location: m.location ?? 'Zaključeno delo', photo, at: m.createdAt.toISOString() }
       })
       .filter((x): x is { location: string; photo: string | null; at: string } => x !== null && !!x.photo)
     : []

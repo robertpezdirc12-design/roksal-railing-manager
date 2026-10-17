@@ -55,8 +55,13 @@ async function nextCodeOn (client: SeqClient): Promise<string> {
       orderBy: { createdAt: 'desc' },
     })
     let maxSeq = 0
+    // R542: a.detail je razčlenjen jsonb objekt (ne niz) — koda NAR- se prebere
+    // neposredno iz objekta (obramba za neobjektne vrednosti ostaja).
     for (const c of [...orders.map(o => o.code), ...audit.map(a => {
-      try { return (JSON.parse(a.detail ?? '{}') as { code?: string }).code ?? '' } catch { return '' }
+      const d = a.detail
+      return d !== null && typeof d === 'object' && !Array.isArray(d) && typeof (d as { code?: unknown }).code === 'string'
+        ? (d as { code: string }).code
+        : ''
     })]) {
       const n = Number(String(c).split('-')[2])
       if (Number.isFinite(n) && n > maxSeq) maxSeq = n

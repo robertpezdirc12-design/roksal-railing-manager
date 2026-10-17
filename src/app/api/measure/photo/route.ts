@@ -57,7 +57,8 @@ export async function POST (req: NextRequest) {
         workOrderId,
         authorId: user.id,
         location: typeof body.location === 'string' && body.location.trim() ? body.location.trim() : null,
-        params: JSON.stringify({ photo: dataUrl, stage: 'ZAJEM' }),
+        // R542: jsonb — objekt direktno (ne JSON.stringify)
+        params: { photo: dataUrl, stage: 'ZAJEM' },
       },
       include: {
         author: { select: { name: true } },

@@ -3,7 +3,7 @@ import { PrismaClient } from '@prisma/client'
 const db = new PrismaClient()
 for (const sku of ['ROK-OG-ROMB-67', 'ROK-OG-POLNA-128', 'ROK-OGP-POLNA-100', 'ROK-OGP-POLNA-57', 'ROK-OG-DESKA-150']) {
   const p = await db.product.findFirst({ where: { sku } })
-  const t = JSON.parse(p.tech ?? '{}')
+  const t = p.tech ?? {}  // R542: jsonb objekt
   const kljuci = Object.keys(t).filter(k => /razm|reza|spoj|standard/i.test(k))
   console.log(sku, '→', JSON.stringify(Object.fromEntries(kljuci.map(k => [k, t[k]]))))
 }

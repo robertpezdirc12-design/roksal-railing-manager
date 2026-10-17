@@ -302,9 +302,7 @@ chk(any(l.get('sourceRule') == 'vnos:razmik' for l in dl), 'GET vrača sourceRul
 # kalkulacija paketa nosi segmentsApplied + engine + warnings
 s, d = callj('GET', f'/api/project-packages?projectId={P4}', admin)
 pkgrow = next((p for p in d.get('data', []) if p['id'] == PKG), {})
-calc = {}
-try: calc = json.loads(pkgrow.get('calcJson') or '{}')
-except Exception: pass
+calc = pkgrow.get('calcJson') or {}  # R542: calcJson je jsonb objekt (brez parse)
 chk(calc.get('segmentsApplied') == 2, f"calcJson.segmentsApplied = 2 (dejansko {calc.get('segmentsApplied')})")
 chk(calc.get('segmentEngine') == 'segment-bom/1.0', f"calcJson.segmentEngine (dejansko {calc.get('segmentEngine')})")
 inp_segs = ((calc.get('inputs') or {}).get('segments'))

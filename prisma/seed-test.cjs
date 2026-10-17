@@ -145,7 +145,7 @@ async function main () {
         authorId: opts.authorId,
         location: LOC(opts.location),
         note: opts.note ?? null,
-        params: JSON.stringify({ photo: imageDataUrl(file) })
+        params: { photo: imageDataUrl(file) }
       }
     })
   }

@@ -4,6 +4,7 @@
 // ALI zajeme projektov svojih nalog. Fail-closed: brez ustreznega obsega → 403.
 
 import type { NextResponse } from 'next/server'
+import type { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 import { jsonError } from '@/lib/auth'
 import type { SessionUser } from '@/lib/auth'
@@ -18,12 +19,12 @@ export interface CaptureSessionRow {
   name: string
   status: string
   mode: string
-  device: string | null
-  outdoor: string | null
-  plan: string | null
-  state: string | null
-  coverage: string | null
-  drift: string | null
+  device: Prisma.JsonValue
+  outdoor: Prisma.JsonValue
+  plan: Prisma.JsonValue
+  state: Prisma.JsonValue
+  coverage: Prisma.JsonValue
+  drift: Prisma.JsonValue
   snapshotId: string | null
   note: string | null
   createdAt: Date

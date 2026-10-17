@@ -845,7 +845,8 @@ const vs = await db.photoVisualization.findMany({{ where: {{ note: {{ contains: 
 for (const v of vs) await db.photoVisualization.delete({{ where: {{ id: v.id }} }})
 const ps = await db.project.findMany({{ where: {{ title: {{ contains: '{TAG}' }} }}, select: {{ id: true }} }})
 for (const x of ps) await db.project.delete({{ where: {{ id: x.id }} }})
-await db.auditLog.deleteMany({{ where: {{ detail: {{ contains: '{TAG}' }} }} }})
+// R542: detail je jsonb — podniz po serializiranem jsonb (ista semantika contains)
+await db.$executeRawUnsafe('DELETE FROM "AuditLog" WHERE "detail"::text LIKE $1', '%{TAG}%')
 console.log('CLEAN_DONE')
 await db.$disconnect()
 '''
@@ -892,7 +893,7 @@ else:
     chk(s == 201, f'K: zapis z masko sprejet ({s}: {json.dumps(d)[:140]})')
     VID = d.get('data', {}).get('id')
     s, d = callj('GET', f'/api/photo-visualization/{VID}', admin)
-    shranjeni = json.loads(d.get('data', {}).get('renderParams') or '{}')
+    shranjeni = d.get('data', {}).get('renderParams') or {}  # R542: jsonb objekt
     chk(shranjeni.get('maska', {}).get('ograja', []), 'K: maska je SHRAMNJENA v renderParams (2 obliki ograje)')
     chk(len(shranjeni.get('maska', {}).get('prednji', [])) == 1, 'K: prednji plan je shranjen')
     chk(len(shranjeni.get('quad', [])) == 4, 'K: quad je ostal (navzaj združljiv vhod)')
@@ -902,7 +903,7 @@ else:
     chk(s == 201, f'K: STARI vhod brez maske je veljaven ({s})')
     VID2 = d.get('data', {}).get('id')
     s, d = callj('GET', f'/api/photo-visualization/{VID2}', admin)
-    stari = json.loads(d.get('data', {}).get('renderParams') or '{}')
+    stari = d.get('data', {}).get('renderParams') or {}  # R542: jsonb objekt
     chk('maska' not in stari, 'K: prazna maska se NE shrani kot ključ (zapis ostane bit-enak staremu)')
 
     s, d = callj('POST', '/api/photo-visualization', admin,

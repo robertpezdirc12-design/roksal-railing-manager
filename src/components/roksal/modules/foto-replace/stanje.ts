@@ -36,15 +36,14 @@ export const toNum = (v: string, fb: number, min: number, max: number): number =
   return Math.min(max, Math.max(min, n))
 }
 
-/** Prebere params JSON meritve FOTO → data URL fotografije (ali null). */
-export function fotoIzMeritve (params: string | null): string | null {
+/** Prebere params meritve FOTO (R542: jsonb objekt) → data URL fotografije (ali null);
+ *  niz ostaja le kot obramba za starejše oblike. */
+export function fotoIzMeritve (params: Record<string, unknown> | string | null): string | null {
   if (!params) return null
-  try {
-    const p = JSON.parse(params) as { photo?: unknown }
-    return typeof p.photo === 'string' && p.photo.startsWith('data:image/') ? p.photo : null
-  } catch {
-    return null
-  }
+  const p: unknown = typeof params === 'string' ? (() => { try { return JSON.parse(params) as unknown } catch { return null } })() : params
+  if (!p || typeof p !== 'object') return null
+  const photo = (p as { photo?: unknown }).photo
+  return typeof photo === 'string' && photo.startsWith('data:image/') ? photo : null
 }
 
 /** Deterministično seme iz id-ja (FNV-1a) — zrno izrisa za ZAPISE BREZ

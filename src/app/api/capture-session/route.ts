@@ -13,6 +13,8 @@ import {
 } from '@/lib/capture-qa-engine'
 import { parseNodes, parseTerrain } from '@/lib/fence-run-engine'
 import { captureProjectIds } from '@/lib/capture-qa-access'
+import { asJsonObject } from '@/lib/json'
+import { Prisma } from '@prisma/client'
 
 export async function GET (req: NextRequest) {
   const auth = await requirePermission(req, 'measurements.read')
@@ -39,10 +41,9 @@ export async function GET (req: NextRequest) {
   })
 
   const data = sessions.map((s) => {
-    let coverage: { gateOk?: boolean; zones?: unknown[] } = {}
-    try { coverage = s.coverage ? JSON.parse(s.coverage) : {} } catch { /* prazno */ }
-    let drift: { status?: string } = {}
-    try { drift = s.drift ? JSON.parse(s.drift) : {} } catch { /* prazno */ }
+    // R542: coverage/drift sta jsonb objekta — branje brez JSON.parse
+    const coverage = asJsonObject(s.coverage) ?? {}
+    const drift = asJsonObject(s.drift) ?? {}
     const conflicts = s.references.filter((r) => r.status === 'KONFLIKT').length
     return {
       id: s.id, name: s.name, status: s.status, mode: s.mode, updatedAt: s.updatedAt,
@@ -52,7 +53,7 @@ export async function GET (req: NextRequest) {
       refConflicts: conflicts,
       coverageOk: coverage.gateOk === true,
       coverageZones: Array.isArray(coverage.zones) ? coverage.zones.length : 0,
-      driftStatus: drift.status ?? null,
+      driftStatus: typeof drift.status === 'string' ? drift.status : null,
     }
   })
   return NextResponse.json({ data })
@@ -96,16 +97,14 @@ export async function POST (req: NextRequest) {
     if (!fr) return jsonError(404, 'Tekač ne obstaja.')
     if (fr.projectId !== projectId) return jsonError(400, 'Tekač pripada drugemu projektu.')
     fenceRunId = fr.id
-    try {
-      const parsed = parseNodes(JSON.parse(fr.nodes ?? '[]'))
-      runNodes = parsed ?? []
-    } catch { runNodes = [] }
+    // R542: nodes/terrain sta jsonb — validator neposredno (JSON.parse odveč)
+    runNodes = parseNodes(fr.nodes) ?? []
     if (runNodes.length === 0) return jsonError(400, 'Tekač nima veljavnih vozlišč.', 'Najprej dodajte vozlišča tekaču (Ogradnja).')
     runTotalCm = runNodes[runNodes.length - 1].atCm
-    try {
-      const terrain = parseTerrain(JSON.parse(fr.terrain ?? 'null'))
-      hasTerrain = terrain != null && terrain.length > 0
-    } catch { hasTerrain = false }
+    hasTerrain = (() => {
+      const terrain = parseTerrain(fr.terrain)
+      return terrain != null && terrain.length > 0
+    })()
   } else {
     const totalCm = typeof body.totalCm === 'number' && Number.isFinite(body.totalCm) && body.totalCm > 0
       ? body.totalCm
@@ -148,12 +147,13 @@ export async function POST (req: NextRequest) {
     const session = await tx.captureSession.create({
       data: {
         projectId, workOrderId, fenceRunId, authorId: user.id, name, mode,
-        device: JSON.stringify(device),
-        outdoor: JSON.stringify(outdoor),
-        plan: JSON.stringify(plan),
-        state: JSON.stringify({ currentStopId: plan[0]?.id ?? null, doneStops: [] }),
-        coverage: JSON.stringify({ zones: [], criticalMissing: [], gateOk: false }),
-        drift: JSON.stringify({ samples: [], status: 'DRIFT_OK', lastRefCode: null }),
+        // R542: jsonb — objekti direktno (ne JSON.stringify)
+        device: device as unknown as Prisma.InputJsonValue,
+        outdoor: outdoor as unknown as Prisma.InputJsonValue,
+        plan: plan as unknown as Prisma.InputJsonValue,
+        state: { currentStopId: plan[0]?.id ?? null, doneStops: [] },
+        coverage: { zones: [], criticalMissing: [], gateOk: false },
+        drift: { samples: [], status: 'DRIFT_OK', lastRefCode: null },
         note: typeof body.note === 'string' && body.note.trim() ? body.note.trim().slice(0, 500) : null,
       },
     })

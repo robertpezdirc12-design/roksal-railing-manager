@@ -6,6 +6,6 @@ for (const sku of ['ROK-OG-POLNA-128', 'ROK-OGP-POLNA-57', 'ROK-OGP-POLNA-100', 
   if (!p) { console.log(sku, 'NE OBSTOJA'); continue }
   console.log('═'.repeat(70))
   console.log(`${sku} · ${p.name} · family=${p.family.code}`)
-  console.log('tech:', JSON.stringify(JSON.parse(p.tech ?? '{}'), null, 1).slice(0, 700))
+  console.log('tech:', JSON.stringify(p.tech ?? {}, null, 1).slice(0, 700))  // R542: jsonb objekt
 }
 await db.$disconnect()

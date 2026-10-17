@@ -839,21 +839,20 @@ export function playbookZaKljuc (key: string): PlaybookDefinition | undefined {
   return VGRADNJENI_PLAYBOOKI.find((p) => p.key === key)
 }
 
-/** Serializacija definicije v JSON za PlaybookDef.definition (baza). */
-export function serializiraj (def: PlaybookDefinition): string {
-  return JSON.stringify({
+/** Serializacija definicije v OBJEKT za PlaybookDef.definition (jsonb, R542 —
+ *  prej JSON niz). */
+export function serializiraj (def: PlaybookDefinition): PlaybookDefinition {
+  return {
     key: def.key, naziv: def.naziv, opis: def.opis, scenarij: def.scenarij,
     version: def.version, steps: def.steps,
-  })
+  }
 }
 
-/** Deserializacija iz PlaybookDef.definition (neveljaven JSON → null). */
-export function deserializiraj (json: string): PlaybookDefinition | null {
-  try {
-    const raw = JSON.parse(json) as PlaybookDefinition
-    if (!raw || typeof raw !== 'object' || !Array.isArray(raw.steps) || !raw.key) return null
-    return raw
-  } catch {
-    return null
-  }
+/** Deserializacija iz PlaybookDef.definition (jsonb objekt; napačna oblika →
+ *  null — R542: brez JSON.parse, vrednost je že razčlenjena). */
+export function deserializiraj (json: unknown): PlaybookDefinition | null {
+  if (json === null || typeof json !== 'object' || Array.isArray(json)) return null
+  const raw = json as PlaybookDefinition
+  if (!Array.isArray(raw.steps) || !raw.key) return null
+  return raw
 }

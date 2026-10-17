@@ -24,6 +24,7 @@ import {
 import {
   celiceZaElement, projekcijaIzRavnine, vzorciTeksturo, type Pravokotnik, type VirTeksture,
 } from './photo-replace-texture'
+import { techObject } from './json'
 
 // ─── Verzija engine-a (§13 revizija: katera verzija je izrisala sliko) ──────
 // R523 (1.2.0): DETAJL pred FOTO_IZDELEK v izbiri gradiva + množica izrezov
@@ -125,12 +126,10 @@ const MATERIALI: Record<MaterialVrsta, MaterialInfo> = {
   KOVO: { vrsta: 'KOVO', sijaj: 0.35, struktura: 0.1 },
 }
 
-/** Prebere material iz tech JSON izdelka (npr. {"material":"Aluminij", …}). */
-export function materialIzTecha (tech: string | null | undefined): MaterialInfo {
-  let raw: Record<string, unknown> = {}
-  try {
-    if (tech) raw = JSON.parse(tech) as Record<string, unknown>
-  } catch { /* neveljaven JSON → privzeto ALU */ }
+/** Prebere material iz tech JSON izdelka (npr. {"material":"Aluminij", …}).
+ *  R542: tech je jsonb objekt (testni mostiči pošiljajo JSON niz — oboje gre). */
+export function materialIzTecha (tech: unknown): MaterialInfo {
+  const raw = techObject(tech)
   const m = typeof raw.material === 'string' ? raw.material.toLowerCase() : ''
   if (m.includes('inox') || m.includes('v2a') || m.includes('1.43')) return MATERIALI.INOX
   if (m.includes('wpc')) return MATERIALI.WPC
@@ -147,11 +146,8 @@ export function materialIzTecha (tech: string | null | undefined): MaterialInfo 
  * 150 mm × 25 mm). Doslej je izris za vse te izdelke vzel privzeti 70 mm —
  * POLNA 128 bi tako dobila skoraj dvakrat preveč desk (napačna razmerja).
  */
-export function lameleIzTecha (tech: string | null | undefined): number | null {
-  let raw: Record<string, unknown> = {}
-  try {
-    if (tech) raw = JSON.parse(tech) as Record<string, unknown>
-  } catch { return null }
+export function lameleIzTecha (tech: unknown): number | null {
+  const raw = techObject(tech)
   if (typeof raw.lameleMm === 'number' && Number.isFinite(raw.lameleMm)) return raw.lameleMm
   if (typeof raw.lamele === 'string') {
     const m = /(\d{2,3})/.exec(raw.lamele)
@@ -194,11 +190,8 @@ export function sirinaIzImena (ime: string | null | undefined): number | null {
  * celoten priporočen obseg. Vrača SAMO smiselne razmike 0..80 mm; drugače
  * null (UI ohrani svojo privzeto vrednost, ki jo uporabnik lahko spremeni).
  */
-export function rezaIzTecha (tech: string | null | undefined): number | null {
-  let raw: Record<string, unknown> = {}
-  try {
-    if (tech) raw = JSON.parse(tech) as Record<string, unknown>
-  } catch { return null }
+export function rezaIzTecha (tech: unknown): number | null {
+  const raw = techObject(tech)
   const v = raw.razmakDeskMm
   if (typeof v === 'number' && Number.isFinite(v)) {
     const r = Math.round(v)
@@ -224,11 +217,8 @@ export function rezaIzTecha (tech: string | null | undefined): number | null {
 }
 
 /** Višina ograje v mm iz tech JSON (npr. {"visina":"1000 mm"}). */
-export function visinaIzTecha (tech: string | null | undefined): number | null {
-  let raw: Record<string, unknown> = {}
-  try {
-    if (tech) raw = JSON.parse(tech) as Record<string, unknown>
-  } catch { return null }
+export function visinaIzTecha (tech: unknown): number | null {
+  const raw = techObject(tech)
   if (typeof raw.visinaMm === 'number' && Number.isFinite(raw.visinaMm)) return raw.visinaMm
   if (typeof raw.visina === 'string') {
     const m = /(\d{3,4})/.exec(raw.visina)

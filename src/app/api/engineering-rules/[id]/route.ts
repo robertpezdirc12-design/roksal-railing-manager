@@ -6,6 +6,7 @@
 //        R449 (issue #8): tudi deaktivacija zapiše RuleVersion (sprememba polja active).
 
 import { NextRequest, NextResponse } from 'next/server'
+import { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 import { jsonError, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
@@ -59,13 +60,13 @@ export async function PATCH (req: NextRequest, ctx: Ctx) {
   const updated = await db.$transaction(async (tx) => {
     const updated = await tx.engineeringRule.update({ where: { id }, data: patch })
 
-    // R449 (issue #8): zgodovina vrednosti — staro→novo
+    // R449 (issue #8): zgodovina vrednosti — staro→novo (R542: jsonb objekta)
     const version = await tx.ruleVersion.create({
       data: {
         ruleId: rule.id,
         userId: auth.user.id,
-        oldValue: JSON.stringify(ruleSnapshot(rule)),
-        newValue: JSON.stringify(ruleSnapshot(updated)),
+        oldValue: ruleSnapshot(rule) as Prisma.InputJsonValue,
+        newValue: ruleSnapshot(updated) as Prisma.InputJsonValue,
         note: `Popravek: ${Object.keys(patch).join(', ')}`,
       },
     })
@@ -108,8 +109,8 @@ export async function DELETE (req: NextRequest, ctx: Ctx) {
       data: {
         ruleId: rule.id,
         userId: auth.user.id,
-        oldValue: JSON.stringify(ruleSnapshot(rule)),
-        newValue: JSON.stringify(ruleSnapshot(updated)),
+        oldValue: ruleSnapshot(rule) as Prisma.InputJsonValue,
+        newValue: ruleSnapshot(updated) as Prisma.InputJsonValue,
         note: 'Deaktivacija pravila',
       },
     })

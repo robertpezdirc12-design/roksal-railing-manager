@@ -273,14 +273,16 @@ export default function KonfiguratorModule () {
     try {
       const res = await apiGet<{
         data: {
-          id: string; projectId: string; variantId: string | null; renderParams: string
+          id: string; projectId: string; variantId: string | null; renderParams: Record<string, unknown> // R542: jsonb
           product: { id: string; sku: string; name: string; family: { code: string; name: string } }
           variant: { id: string; name: string } | null
         }
       }>(`/api/photo-visualization/${id}`)
       const d = res.data
-      let cfg: { config?: { lengthCm?: number; heightCm?: number } } = {}
-      try { cfg = JSON.parse(d.renderParams) as typeof cfg } catch { /* brez segmentov */ }
+      // R542: renderParams je jsonb objekt — API vrača razčlenjenega (brez JSON.parse)
+      const cfg: { config?: { lengthCm?: number; heightCm?: number } } =
+        (d.renderParams && typeof d.renderParams === 'object' && !Array.isArray(d.renderParams))
+          ? d.renderParams as typeof cfg : {}
       setProjectId(d.projectId)
       setFamilyCode(d.product.family.code)
       setProductId(d.product.id)
@@ -904,27 +906,27 @@ function StepIzdelek ({ families, products, loading, error, familyCode, productI
  * (dolžine/višine po segmentu; ključe seg-N razreši strežnik ob izračunu BOM).
  * Vrne null, če meritev NI nastala iz ograjnega tekača (manjka
  * params.fenceRunId ali params.segments) — takrat velja stara flat pretvorba.
+ * R542: params je jsonb objekt — niz ostane le kot obramba za starejše oblike.
  */
-function runSegmentsFromParams (params: string | null): { lengthCm: number; heightCm: number | null }[] | null {
+function runSegmentsFromParams (params: Record<string, unknown> | string | null): { lengthCm: number; heightCm: number | null }[] | null {
   if (!params) return null
-  try {
-    const o = JSON.parse(params) as {
-      fenceRunId?: unknown
-      segments?: { lengthCm?: unknown; heightCm?: unknown }[] | null
-    }
-    if (typeof o.fenceRunId !== 'string' || !o.fenceRunId) return null
-    if (!Array.isArray(o.segments) || o.segments.length === 0) return null
-    const out: { lengthCm: number; heightCm: number | null }[] = []
-    for (const s of o.segments) {
-      const lenCm = Number(s?.lengthCm)
-      if (!Number.isFinite(lenCm) || lenCm <= 0) continue // preskoči neveljavne
-      const h = Number(s?.heightCm)
-      out.push({ lengthCm: lenCm, heightCm: Number.isFinite(h) && h > 0 ? h : null })
-    }
-    return out.length > 0 ? out : null
-  } catch {
-    return null
+  const o = (typeof params === 'string'
+    ? (() => { try { return JSON.parse(params) as unknown } catch { return null } })()
+    : params) as {
+    fenceRunId?: unknown
+    segments?: { lengthCm?: unknown; heightCm?: unknown }[] | null
+  } | null
+  if (!o || typeof o !== 'object') return null
+  if (typeof o.fenceRunId !== 'string' || !o.fenceRunId) return null
+  if (!Array.isArray(o.segments) || o.segments.length === 0) return null
+  const out: { lengthCm: number; heightCm: number | null }[] = []
+  for (const s of o.segments) {
+    const lenCm = Number(s?.lengthCm)
+    if (!Number.isFinite(lenCm) || lenCm <= 0) continue // preskoči neveljavne
+    const h = Number(s?.heightCm)
+    out.push({ lengthCm: lenCm, heightCm: Number.isFinite(h) && h > 0 ? h : null })
   }
+  return out.length > 0 ? out : null
 }
 
 // ─── 3. MERITVE (družinski vhodni obrazec, issue #7 §4) ───────────────────────
@@ -975,7 +977,7 @@ function StepMeritve (p: {
     }
     setPrefillBusy(true)
     try {
-      const res = await apiGet<{ data: { id: string; type: string; source: string; lengthCm: number | null; heightCm: number | null; location: string | null; params: string | null }[] }>(
+      const res = await apiGet<{ data: { id: string; type: string; source: string; lengthCm: number | null; heightCm: number | null; location: string | null; params: Record<string, unknown> | null }[] }>(
         `/api/measurements?projectId=${p.projectId}`
       )
       const rows = (res.data ?? []).filter((m) => m.type !== 'FOTO' && (m.lengthCm ?? 0) > 0)

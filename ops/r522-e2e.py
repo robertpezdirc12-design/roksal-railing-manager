@@ -399,12 +399,14 @@ const m = await db.measurement.findFirst({
 if (!m) { console.log(JSON.stringify({ napaka: 'meritev ni najdena' })) }
 else {
   // FOTO detajl vezan nanjo (docOf)
+  // R542: params je jsonb — docOf je prvorazredni ključ, zato Prisma path
+  // filter (prej podniz contains po JSON nizu — ista vezava, poštenejša oblika)
   const d = await db.measurement.findFirst({
-    where: { type: 'FOTO', params: { contains: '"docOf":"' + m.id + '"' } },
+    where: { type: 'FOTO', params: { path: ['docOf'], equals: m.id } },
     orderBy: { createdAt: 'desc' },
     select: { id: true, params: true, status: true },
   })
-  const p = d ? JSON.parse(d.params || '{}') : {}
+  const p = d ? (d.params ?? {}) : {}
   console.log(JSON.stringify({
     meritevId: m.id, tip: m.type, status: m.status, dolzina: m.lengthCm, avtor: m.author?.email,
     detajlObstaja: !!d,

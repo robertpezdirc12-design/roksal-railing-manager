@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { jsonError, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
-import { parseWebhookEvents, serializeWebhookEvents, WEBHOOK_EVENTS } from '@/lib/webhook-core'
+import { parseWebhookEvents, WEBHOOK_EVENTS } from '@/lib/webhook-core'
 
 // /api/webhooks/[id] — SPREMEMBA/PREKLIC naročnine (R481 — issue #9 §9;
 // integrations.manage = ADMIN/VODJA). Naročnina ostane v bazi za zgodovino
@@ -41,11 +41,12 @@ export async function PATCH (req: NextRequest, { params }: Params) {
     if (!Array.isArray(body.events) || body.events.length === 0) {
       return jsonError(400, 'Manjka seznam dogodkov.', `events: [tip, …] — veljavni: ${WEBHOOK_EVENTS.join(', ')}.`)
     }
-    const events = parseWebhookEvents(JSON.stringify(body.events))
+    // R542: parseWebhookEvents sprejema jsonb tabelo (ali stari niz) neposredno
+    const events = parseWebhookEvents(body.events)
     if (!events) {
       return jsonError(400, 'Neveljavni dogodki.', `Vsak tip mora biti iz kataloga: ${WEBHOOK_EVENTS.join(', ')}.`)
     }
-    data.events = serializeWebhookEvents(events)
+    data.events = events // R542: jsonb tabela (parseWebhookEvents že deduplicira)
   }
 
   if (body?.description !== undefined) {

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import type { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 import { jsonError, managesAssignments, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
@@ -31,7 +32,7 @@ function pinRow (p: {
   status: string; resolvedAt: Date | null
   author?: { id: string; name: string } | null; authorId?: string | null
   resolvedBy?: { id: string; name: string } | null; resolvedById?: string | null
-  snapshot: string | null; createdAt: Date; updatedAt: Date
+  snapshot: Prisma.JsonValue; createdAt: Date; updatedAt: Date
 }) {
   return {
     id: p.id, fenceRunId: p.fenceRunId, targetType: p.targetType, targetKey: p.targetKey,

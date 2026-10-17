@@ -312,7 +312,7 @@ else:
 import {{ PrismaClient }} from '@prisma/client'
 const db = new PrismaClient()
 const v = await db.photoVisualization.findUnique({{ where: {{ id: '{vid}' }}, }})
-console.log(JSON.stringify({{ engine: v?.engineVersion, tip: v ? JSON.parse(v.renderParams).config?.tip : null }}))
+console.log(JSON.stringify({{ engine: v?.engineVersion, tip: v?.renderParams?.config?.tip ?? null }}))  // R542: jsonb objekt
 await db.$disconnect()
 ''')
             chk(V.get('tip') == 'FASADA', f'tip FASADA preživi krog (dejansko {V.get("tip")})')

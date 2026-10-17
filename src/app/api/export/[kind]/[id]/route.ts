@@ -18,7 +18,9 @@ import {
   bomCsv, bomXlsx, quoteCsv, quoteXlsx, exportChecks,
   type BomExportLine, type QuoteExportLine, type ExportCheck,
 } from '@/lib/export-core'
-import { POSTS_RULE_KEY, WASTE_RULE_KEY, type RawSegmentRow } from '@/lib/segment-bom'
+import { POSTS_RULE_KEY, WASTE_RULE_KEY } from '@/lib/segment-bom'
+import type { Prisma } from '@prisma/client'
+import { asJsonObject } from '@/lib/json'
 
 type Params = { params: Promise<{ kind: string; id: string }> }
 
@@ -39,7 +41,7 @@ interface BomRow {
 }
 
 async function loadBomExport (id: string): Promise<{
-  pkg: { id: string; code: string; name: string; qty: number; unit: string; productId: string; projectId: string; calcJson: string | null; product: { sku: string; name: string } }
+  pkg: { id: string; code: string; name: string; qty: number; unit: string; productId: string; projectId: string; calcJson: Prisma.JsonValue; product: { sku: string; name: string } }
   bom: { code: string; status: string } | null
   lines: BomRow[]
   project: { code: string; title: string } | null
@@ -154,12 +156,12 @@ export async function GET (req: NextRequest, { params }: Params) {
     const posts = rules.find((r) => r.key === POSTS_RULE_KEY)
     const waste = rules.find((r) => r.key === WASTE_RULE_KEY)
     let hasSegments = false
-    try {
-      const parsed = JSON.parse(loaded.pkg.calcJson ?? '{}') as {
-        inputs?: { segments?: RawSegmentRow[] }
-      }
-      hasSegments = Array.isArray(parsed?.inputs?.segments) && (parsed.inputs.segments.length ?? 0) > 0
-    } catch { hasSegments = false }
+    {
+      // R542: calcJson je jsonb objekt — branje brez JSON.parse
+      const inputs = asJsonObject(asJsonObject(loaded.pkg.calcJson)?.inputs)
+      const segs = inputs?.segments
+      hasSegments = Array.isArray(segs) && segs.length > 0
+    }
     const checks = exportChecks({
       wastePct: waste ? Number(waste.value) : null,
       postSpacingCm: posts ? Number(posts.value) : null,

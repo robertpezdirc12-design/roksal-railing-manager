@@ -73,7 +73,7 @@ for expected in ['ROK-TER-KLASIK', 'ROK-TER-RUSTIC', 'ROK-OGP-POLNA-57', 'ROK-OG
 romb = next((p for p in prods if p['sku'] == 'ROK-OG-ROMB-67'), None)
 chk(romb is not None and romb.get('warrantyMonths') == 180, 'ROMB 67: garancija 180 mesecev (15 let, roksal.com)')
 chk(romb is not None and romb.get('variants'), 'ROMB 67: variante z barvami')
-tech = json.loads(romb['tech']) if romb and romb.get('tech') else {}
+tech = (romb.get('tech') if isinstance(romb.get('tech'), dict) else {}) if romb else {}  # R542: jsonb objekt
 chk(tech.get('maxRazmakPrecnaMm') == 1450, 'ROMB 67: max razmak prečna 145 cm (izvorni podatek)')
 chk(tech.get('maxRazmakPokoncnaMm') == 1100, 'ROMB 67: max razmak pokončna 110 cm (izvorni podatek)')
 

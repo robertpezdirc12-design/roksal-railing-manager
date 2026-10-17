@@ -14,7 +14,7 @@ export type ToastFn = ReturnType<typeof useToast>['toast']
 
 export interface Pt { x: number; y: number; label?: string; src?: 'ROCNO' | 'PREDLOG' }
 export interface PhotoRow {
-  id: string; type: string; location: string | null; params: string | null; createdAt: string
+  id: string; type: string; location: string | null; params: Record<string, unknown> | null; createdAt: string // R542: jsonb
   project: { code: string } | null
 }
 export interface ProjectOption { id: string; code: string; title: string }

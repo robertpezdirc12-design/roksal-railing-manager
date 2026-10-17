@@ -12,6 +12,7 @@ import { parseRegPairs, register3Points } from '@/lib/reality-r2p-engine'
 import { captureSessionZaUporabnika } from '@/lib/capture-qa-access'
 import { geoContext } from '@/lib/reality-r2p-service'
 import { retryOnUnique } from '@/lib/versioning'
+import { Prisma } from '@prisma/client'
 
 export async function POST (req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requirePermission(req, 'measurements.write')
@@ -54,8 +55,9 @@ export async function POST (req: NextRequest, { params }: { params: Promise<{ id
     const reg = await tx.registration.create({
       data: {
         sessionId: id, version,
-        points: JSON.stringify(pairs),
-        transform: JSON.stringify(result.transform),
+        // R542: jsonb — objekta direktno (ne JSON.stringify)
+        points: pairs as unknown as Prisma.InputJsonValue,
+        transform: result.transform as unknown as Prisma.InputJsonValue,
         rmsCm: Number.isFinite(result.rmsCm) ? result.rmsCm : 999999,
         quality: result.quality,
         userId: user.id,

@@ -67,7 +67,7 @@ chk(s == 200 and len(vers) == 1, f'nastanek profila zapiše TOČNO 1 verzijo ({l
 v1 = vers[0] if vers else None
 chk(v1 and v1['user'] and v1['user']['name'] == admin_name, 'verzija nosi kdo (user.name)')
 chk(v1 and v1['profile'] and v1['profile']['sku'] == sku, 'verzija nosi osnovne podatke profila (sku)')
-snap1 = json.loads(v1['data']) if v1 else {}
+snap1 = (v1.get('data') or {}) if v1 else {}  # R542: data je jsonb objekt
 chk(snap1.get('before') is None, 'ob nastanku je before = null')
 chk(snap1.get('after', {}).get('pricePerM') == 100 and snap1.get('profile', {}).get('sku') == sku,
     'snapshot vsebuje after + celoten profile posnetek')
@@ -83,7 +83,7 @@ chk(len(vers) == 2, f'sprememba doda 2. verzijo ({len(vers)})')
 chk(all(vers[i]['createdAt'] >= vers[i+1]['createdAt'] for i in range(len(vers)-1)),
     'seznam je padajoče po createdAt (najnovejša prva)')
 v2 = vers[0] if vers else None
-snap2 = json.loads(v2['data']) if v2 else {}
+snap2 = (v2.get('data') or {}) if v2 else {}  # R542: data je jsonb objekt
 chk(snap2.get('before', {}).get('pricePerM') == 100 and snap2.get('after', {}).get('pricePerM') == 125.5,
     'staro→novo preverljivo (pricePerM 100 → 125.5)')
 chk(snap2.get('before', {}).get('name') == f'{TAG} testni profil'
@@ -93,7 +93,7 @@ chk(snap2.get('profile', {}).get('pricePerM') == 125.5, 'snapshot vsebuje celote
 # podrobnost verzije
 s, b = call('GET', f'/api/catalog/versions/{v2["id"]}', admin)
 det = json.loads(b)['data'] if s == 200 else None
-chk(s == 200 and det and json.loads(det['data'])['after']['pricePerM'] == 125.5,
+chk(s == 200 and det and (det['data'] or {}).get('after', {}).get('pricePerM') == 125.5,  # R542: jsonb objekt
     'GET /api/catalog/versions/[id] — podrobnost s snapshotom')
 chk(det and det['user'] and det['profile'] and det['profile']['sku'] == sku, 'podrobnost nosi user + profile')
 s, _ = call('GET', '/api/catalog/versions/ne-obstaja', admin)
@@ -120,7 +120,7 @@ s, b = call('GET', f'/api/engineering-rules/{rule["id"]}/versions', admin)
 rvers = json.loads(b)['data'] if s == 200 else []
 chk(len(rvers) == 1, f'nastanek pravila zapiše 1 RuleVersion ({len(rvers)})')
 rv1 = rvers[0] if rvers else None
-chk(rv1 and rv1['oldValue'] is None and json.loads(rv1['newValue'])['value'] == 45,
+chk(rv1 and rv1['oldValue'] is None and rv1['newValue']['value'] == 45,  # R542: jsonb objekti
     'ob nastanku je oldValue = null, newValue = 45')
 chk(rv1 and rv1['user'] and rv1['user']['name'], 'RuleVersion nosi kdo (user.name)')
 
@@ -132,7 +132,7 @@ s, b = call('GET', f'/api/engineering-rules/{rule["id"]}/versions', admin)
 rvers = json.loads(b)['data'] if s == 200 else []
 chk(len(rvers) == 2, f'posodobitev doda 2. RuleVersion ({len(rvers)})')
 rv2 = rvers[-1] if rvers else None
-chk(rv2 and json.loads(rv2['oldValue'])['value'] == 45 and json.loads(rv2['newValue'])['value'] == 55,
+chk(rv2 and rv2['oldValue']['value'] == 45 and rv2['newValue']['value'] == 55,
     'staro→novo vrednosti (45 → 55)')
 chk(all(rvers[i]['createdAt'] <= rvers[i+1]['createdAt'] for i in range(len(rvers)-1)),
     'seznam je naraščajoče po createdAt')
@@ -142,13 +142,13 @@ s, b = call('PATCH', f'/api/engineering-rules/{rule["id"]}', prod, {'value': 60}
 chk(s == 200, f'PATCH pravila uspešen ({s})')
 s, b = call('GET', f'/api/engineering-rules/{rule["id"]}/versions', admin)
 rvers = json.loads(b)['data'] if s == 200 else []
-chk(len(rvers) == 3 and json.loads(rvers[-1]['oldValue'])['value'] == 55
-    and json.loads(rvers[-1]['newValue'])['value'] == 60, 'PATCH doda RuleVersion s staro→novo')
+chk(len(rvers) == 3 and rvers[-1]['oldValue']['value'] == 55
+    and rvers[-1]['newValue']['value'] == 60, 'PATCH doda RuleVersion s staro→novo')
 
 # podrobnost verzije pravila
 s, b = call('GET', f'/api/engineering-rules/versions/{rvers[-1]["id"]}', admin)
 rdet = json.loads(b)['data'] if s == 200 else None
-chk(s == 200 and rdet and json.loads(rdet['newValue'])['value'] == 60, 'GET /api/engineering-rules/versions/[id] — podrobnost')
+chk(s == 200 and rdet and rdet['newValue']['value'] == 60, 'GET /api/engineering-rules/versions/[id] — podrobnost')
 chk(rdet and rdet['rule'] and rdet['rule']['key'] == key and rdet['user'], 'podrobnost nosi rule + user')
 s, _ = call('GET', '/api/engineering-rules/versions/ne-obstaja', admin)
 chk(s == 404, f'neznana verzija pravila 404 ({s})')
@@ -158,8 +158,8 @@ s, b = call('DELETE', f'/api/engineering-rules/{rule["id"]}', prod)
 chk(s == 200, f'deaktivacija pravila uspešna ({s})')
 s, b = call('GET', f'/api/engineering-rules/{rule["id"]}/versions', admin)
 rvers = json.loads(b)['data'] if s == 200 else []
-chk(len(rvers) == 4 and json.loads(rvers[-1]['oldValue'])['active'] is True
-    and json.loads(rvers[-1]['newValue'])['active'] is False, 'deaktivacija zapiše RuleVersion (active true → false)')
+chk(len(rvers) == 4 and rvers[-1]['oldValue']['active'] is True
+    and rvers[-1]['newValue']['active'] is False, 'deaktivacija zapiše RuleVersion (active true → false)')
 
 # ══ 4. RBAC ═══════════════════════════════════════════════════════════════════
 print('── RBAC ──')
@@ -205,7 +205,7 @@ s, b = call('GET', '/api/audit?action=CATALOG_VERSION&limit=50', admin)
 entries = json.loads(b)['data'] if s == 200 else []
 chk(s == 200 and any(e['entity'] == 'catalogVersion' for e in entries),
     f'AuditLog vsebuje CATALOG_VERSION zapise ({len(entries)})')
-chk(any(json.loads(e['detail']).get('sku') == sku for e in entries if e['detail']),
+chk(any((e['detail'] or {}).get('sku') == sku for e in entries),  # R542: detail objekt
     'CATALOG_VERSION detail nosi sku profila')
 s, b = call('GET', '/api/audit?action=RULE_VERSION&limit=50', admin)
 entries = json.loads(b)['data'] if s == 200 else []
@@ -231,11 +231,12 @@ const {PrismaClient}=require('@prisma/client');const p=new PrismaClient();
   await p.profile.deleteMany({where:{sku:{startsWith:'__TAG__'}}});
   await p.ruleVersion.deleteMany({where:{rule:{key:{startsWith:'__TAG__'.toLowerCase()}}}});
   await p.engineeringRule.deleteMany({where:{key:{startsWith:'__TAG__'.toLowerCase()}}});
-  await p.auditLog.deleteMany({where:{OR:[{detail:{contains:'__TAG__'}},{detail:{contains:'__TAG__'.toLowerCase()}}]}});
+  // R542: detail je jsonb — podniz po serializiranem jsonb (ista semantika contains)
+  await p.$executeRawUnsafe('DELETE FROM "AuditLog" WHERE "detail"::text LIKE $1 OR "detail"::text LIKE $2', '%__TAG__%', '%__TAG_LOWO__%');
   console.log('CLEAN_DONE');
   return p.$disconnect();
 })()
-'''.replace('__TAG__', TAG)
+'''.replace('__TAG__', TAG).replace('__TAG_LOWO__', TAG.lower())
 import subprocess
 r = subprocess.run(['bun', '-e', CLEAN], capture_output=True, text=True,
                    env={**__import__('os').environ, 'DATABASE_URL': os.environ.get('TEST_DB_URL') or 'postgresql://roksal:roksal@localhost:54329/roksal'})

@@ -29,7 +29,7 @@ const PRODUCTS = [
     name: 'WoodCore WPC terasna deska KLASIK 150×25',
     desc: 'Terasna deska iz WPC lesnega kompozita (lesni delci + HDPE + aditivi). Enota stran ozka rebra, druga široka rebra. 15-letna garancija.',
     widthMm: 150, heightMm: 25, warrantyMonths: 180,
-    tech: JSON.stringify({ material: 'WPC (HDPE)', dolzine: [4000, 2200], povrsine: 3, barv: 7, garancijaLet: 15, vir: 'https://roksal.com/woodcore-wpc-deske/wpc-deske-za-teraso/' }),
+    tech: { material: 'WPC (HDPE)', dolzine: [4000, 2200], povrsine: 3, barv: 7, garancijaLet: 15, vir: 'https://roksal.com/woodcore-wpc-deske/wpc-deske-za-teraso/' },
     variants: [
       { sku: 'ROK-TER-KLASIK-ROAK', name: 'KLASIK — Rustic Oak', color: 'Rustic oak' },
       { sku: 'ROK-TER-KLASIK-RWA', name: 'KLASIK — Rustic Walnut', color: 'Rustic walnut' },
@@ -40,7 +40,7 @@ const PRODUCTS = [
     name: 'WoodCore WPC terasna deska RUSTIC (staran les) 150×25',
     desc: 'RUSTIC izvedba — ena stran popolnoma gladka, druga gosto rebričena. Izgled staranega lesa. 15-letna garancija.',
     widthMm: 150, heightMm: 25, warrantyMonths: 180,
-    tech: JSON.stringify({ material: 'WPC (HDPE)', dolzine: [4000, 2200], povrsine: 'gladka/rebričena', barv: 7, garancijaLet: 15, vir: 'https://roksal.com/woodcore-wpc-deske/wpc-deske-za-teraso/' }),
+    tech: { material: 'WPC (HDPE)', dolzine: [4000, 2200], povrsine: 'gladka/rebričena', barv: 7, garancijaLet: 15, vir: 'https://roksal.com/woodcore-wpc-deske/wpc-deske-za-teraso/' },
     variants: [
       { sku: 'ROK-TER-RUSTIC-ROAK', name: 'RUSTIC — Rustic Oak', color: 'Rustic oak' },
       { sku: 'ROK-TER-RUSTIC-RWA', name: 'RUSTIC — Rustic Walnut', color: 'Rustic walnut' },
@@ -51,7 +51,7 @@ const PRODUCTS = [
     name: 'Pokončna ograja — POLNA DESKA 57/32',
     desc: 'Polna WPC deska za pokončne ograde, montaža na širino 57 ali 32 mm. Skrito vijačenje (RF vijaki skozi cev od zadaj). Standardna dolžina 5,8 m, rezljiva. Max razmak vodoravnih cevi 100 cm.',
     widthMm: 57, heightMm: 32, warrantyMonths: 180,
-    tech: JSON.stringify({ material: 'WPC (HDPE)', profil: 'POLNA DESKA 57/32', dolzine: [5800], maxRazmakPodporeMm: 1000, vijacenje: 'skrito (RF od zadaj)', barv: 3, primerno: 'samo pokončna ograja', vir: 'https://roksal.com/woodcore-wpc-deske/balkonske-ograje-in-dvoriscne-ograje/wpc-ograja-pokoncna/' }),
+    tech: { material: 'WPC (HDPE)', profil: 'POLNA DESKA 57/32', dolzine: [5800], maxRazmakPodporeMm: 1000, vijacenje: 'skrito (RF od zadaj)', barv: 3, primerno: 'samo pokončna ograja', vir: 'https://roksal.com/woodcore-wpc-deske/balkonske-ograje-in-dvoriscne-ograje/wpc-ograja-pokoncna/' },
     variants: [],
   },
   {
@@ -59,7 +59,7 @@ const PRODUCTS = [
     name: 'Pokončna ograja — POLNA DESKA 100',
     desc: 'Polna WPC deska širine 10 cm za pokončne ograde. Dolžina 5,8 m. Max razmak vodoravnih cevi 80 cm.',
     widthMm: 100, warrantyMonths: 180,
-    tech: JSON.stringify({ material: 'WPC (HDPE)', profil: 'POLNA DESKA 100', dolzine: [5800], maxRazmakPodporeMm: 800, barv: 8, primerno: 'samo pokončna ograja', vir: 'https://roksal.com/woodcore-wpc-deske/balkonske-ograje-in-dvoriscne-ograje/wpc-ograja-pokoncna/' }),
+    tech: { material: 'WPC (HDPE)', profil: 'POLNA DESKA 100', dolzine: [5800], maxRazmakPodporeMm: 800, barv: 8, primerno: 'samo pokončna ograja', vir: 'https://roksal.com/woodcore-wpc-deske/balkonske-ograje-in-dvoriscne-ograje/wpc-ograja-pokoncna/' },
     variants: [
       { sku: 'ROK-OGP-POLNA-100-ROAK', name: 'POLNA 100 — Rustic Oak', color: 'Rustic oak' },
       { sku: 'ROK-OGP-POLNA-100-RWA', name: 'POLNA 100 — Rustic Walnut', color: 'Rustic walnut' },
@@ -70,7 +70,7 @@ const PRODUCTS = [
     name: 'Ograja — POLNA DESKA 128 (pokončna ali prečna)',
     desc: 'Polna WPC deska širine 12,8 cm, dolžine 2,2 m. Uporabna pri prečni ALI pokončni ograji. Prečna: max razmak stebričkov 110 cm; pokončna: max razmap cevi 100 cm.',
     widthMm: 128, warrantyMonths: 180,
-    tech: JSON.stringify({ material: 'WPC (HDPE)', profil: 'POLNA DESKA 128', dolzine: [2200], maxRazmakPrecnaMm: 1100, maxRazmakPokoncnaMm: 1000, barv: 5, primerno: 'prečna in pokončna ograja', vir: 'https://roksal.com/woodcore-wpc-deske/balkonske-ograje-in-dvoriscne-ograje/wpc-precna-ograja/' }),
+    tech: { material: 'WPC (HDPE)', profil: 'POLNA DESKA 128', dolzine: [2200], maxRazmakPrecnaMm: 1100, maxRazmakPokoncnaMm: 1000, barv: 5, primerno: 'prečna in pokončna ograja', vir: 'https://roksal.com/woodcore-wpc-deske/balkonske-ograje-in-dvoriscne-ograje/wpc-precna-ograja/' },
     variants: [
       { sku: 'ROK-OG-POLNA-128-ROAK', name: 'POLNA 128 — Rustic Oak', color: 'Rustic oak' },
       { sku: 'ROK-OG-POLNA-128-RWA', name: 'POLNA 128 — Rustic Walnut', color: 'Rustic walnut' },
@@ -81,7 +81,7 @@ const PRODUCTS = [
     name: 'Ograja — ROMB DESKA 67 (pokončna ali prečna)',
     desc: 'WPC romb deska širine 6,7 cm. Prečna: dolžina 5,8 m, max razmak stebričkov 145 cm (L-kotnika levo/desno); pokončna: dolžina 2,8 m, max razmap cevi 110 cm. Skrito vijačenje skozi alu cev v sredini profila.',
     widthMm: 67, warrantyMonths: 180,
-    tech: JSON.stringify({ material: 'WPC (HDPE)', profil: 'ROMB 67', dolzine: [2800, 5800], maxRazmakPrecnaMm: 1450, maxRazmakPokoncnaMm: 1100, vijacenje: 'skrito (alu cev v jedru, RF vijaki)', barv: 7, primerno: 'prečna in pokončna ograja, fasada', vir: 'https://roksal.com/woodcore-wpc-deske/balkonske-ograje-in-dvoriscne-ograje/wpc-precna-ograja/' }),
+    tech: { material: 'WPC (HDPE)', profil: 'ROMB 67', dolzine: [2800, 5800], maxRazmakPrecnaMm: 1450, maxRazmakPokoncnaMm: 1100, vijacenje: 'skrito (alu cev v jedru, RF vijaki)', barv: 7, primerno: 'prečna in pokončna ograja, fasada', vir: 'https://roksal.com/woodcore-wpc-deske/balkonske-ograje-in-dvoriscne-ograje/wpc-precna-ograja/' },
     variants: [
       { sku: 'ROK-OG-ROMB-67-ROAK', name: 'ROMB 67 — Rustic Oak', color: 'Rustic oak' },
       { sku: 'ROK-OG-ROMB-67-RWA', name: 'ROMB 67 — Rustic Walnut', color: 'Rustic walnut' },
@@ -92,7 +92,7 @@ const PRODUCTS = [
     name: 'Prečna ograja — DESKA 150 (terasni profil)',
     desc: 'Terasni profil WPC deske širine 15 cm za prečne ograde. Dolžina 4 m ali 2,2 m. Max razmak stebričkov 130 cm. Vijačenje vidno spredaj (vijaki skozi desko v konstrukcijo).',
     widthMm: 150, heightMm: 25, warrantyMonths: 180,
-    tech: JSON.stringify({ material: 'WPC (HDPE)', profil: 'DESKA 150 (terasni)', dolzine: [4000, 2200], maxRazmakPrecnaMm: 1300, vijacenje: 'vidno spredaj', barv: 7, primerno: 'prečna ograja', vir: 'https://roksal.com/woodcore-wpc-deske/balkonske-ograje-in-dvoriscne-ograje/wpc-precna-ograja/' }),
+    tech: { material: 'WPC (HDPE)', profil: 'DESKA 150 (terasni)', dolzine: [4000, 2200], maxRazmakPrecnaMm: 1300, vijacenje: 'vidno spredaj', barv: 7, primerno: 'prečna ograja', vir: 'https://roksal.com/woodcore-wpc-deske/balkonske-ograje-in-dvoriscne-ograje/wpc-precna-ograja/' },
     variants: [
       { sku: 'ROK-OG-DESKA-150-ROAK', name: 'DESKA 150 — Rustic Oak', color: 'Rustic oak' },
       { sku: 'ROK-OG-DESKA-150-RWA', name: 'DESKA 150 — Rustic Walnut', color: 'Rustic walnut' },
@@ -103,7 +103,7 @@ const PRODUCTS = [
     name: 'Fasada — KUBO profil',
     desc: 'WPC deska s profilom KUBO za fasade. Na voljo 4 barvni odtenki.',
     warrantyMonths: 180,
-    tech: JSON.stringify({ material: 'WPC (HDPE)', profil: 'KUBO', barv: 4, primerno: 'fasada', vir: 'https://roksal.com/woodcore-wpc-deske/barvni-odtenki/' }),
+    tech: { material: 'WPC (HDPE)', profil: 'KUBO', barv: 4, primerno: 'fasada', vir: 'https://roksal.com/woodcore-wpc-deske/barvni-odtenki/' },
     variants: [
       { sku: 'ROK-FAS-KUBO-ROAK', name: 'KUBO — Rustic Oak', color: 'Rustic oak' },
       { sku: 'ROK-FAS-KUBO-RWA', name: 'KUBO — Rustic Walnut', color: 'Rustic walnut' },
@@ -114,7 +114,7 @@ const PRODUCTS = [
     name: 'Podložna letev WPC 40×30×2200',
     desc: 'Podkonstrukcija za WoodCore WPC terase iz WPC materiala. Višina terase s podkonstrukcijo 5,5 ali 6,5 cm.',
     widthMm: 40, heightMm: 30, warrantyMonths: 180,
-    tech: JSON.stringify({ material: 'WPC (HDPE)', dimenzije: '40×30×2200 mm', vir: 'https://roksal.com/woodcore-wpc-deske/wpc-deske-za-teraso/' }),
+    tech: { material: 'WPC (HDPE)', dimenzije: '40×30×2200 mm', vir: 'https://roksal.com/woodcore-wpc-deske/wpc-deske-za-teraso/' },
     variants: [],
   },
   {
@@ -122,7 +122,7 @@ const PRODUCTS = [
     name: 'Zaključna letev za teraso 45×55',
     desc: 'Zaključna letev za WoodCore WPC teraso. Dolžine 4000 ali 2200 mm (različne dolžine so lahko iz različnih serij).',
     widthMm: 45, heightMm: 55, warrantyMonths: 180,
-    tech: JSON.stringify({ material: 'WPC (HDPE)', dimenzije: '45×55×4000/2200 mm', vir: 'https://roksal.com/woodcore-wpc-deske/wpc-deske-za-teraso/' }),
+    tech: { material: 'WPC (HDPE)', dimenzije: '45×55×4000/2200 mm', vir: 'https://roksal.com/woodcore-wpc-deske/wpc-deske-za-teraso/' },
     variants: [],
   },
 ]

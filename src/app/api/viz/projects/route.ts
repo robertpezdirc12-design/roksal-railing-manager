@@ -12,27 +12,19 @@ import { db } from '@/lib/db'
 import { jsonError, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
 import { parseBody } from '@/lib/validate'
+import { Prisma } from '@prisma/client'
 
 const TIPS = ['OGRAJA', 'BALUSTRADA', 'NAGIB']
 
-// R538: zod validacija (zrcali prejšnjo sprejemljivost — vzorec R536-d):
-// ime obvezno po trim + omejitev 120 znakov (kot prej), tip ima tihi privzetek
-// OGRAJA ob neznani vrednosti (kot prej), params: obvezen neprazen niz, ki se
-// razčleni kot JSON objekt (kot prej — niz, ki ni JSON, ⇒ 400), projectId
-// neobvezen (obstoj preverja handler, kot prej), opomba: trim/500, prazna ⇒ null
-// (kot prej).
+// R538: zod validacija (vzorec R536-d) + R542: params je jsonb OBJEKT (prej
+// JSON niz — zadnja od 3 zod shem iz inventure R542-a); ime obvezno po trim +
+// omejitev 120 znakov (kot prej), tip ima tihi privzetek OGRAJA ob neznani
+// vrednosti (kot prej), projectId neobvezen (obstoj preverja handler, kot
+// prej), opomba: trim/500, prazna ⇒ null (kot prej).
 const VizProjectCreateSchema = z.object({
   name: z.string({ error: 'Manjka ime projekta.' }).trim().min(1, 'Manjka ime projekta.').transform((v) => v.slice(0, 120)),
   tip: z.unknown().transform((v) => (typeof v === 'string' && TIPS.includes(v) ? v : 'OGRAJA')),
-  params: z.string({ error: 'Manjkajo params konfiguratorja (JSON).' }).trim().min(1, 'Manjkajo params konfiguratorja (JSON).')
-    .refine((v) => {
-      try {
-        const parsed = JSON.parse(v) as unknown
-        return !!parsed && typeof parsed === 'object'
-      } catch {
-        return false
-      }
-    }, 'Params niso veljaven JSON.'),
+  params: z.record(z.string(), z.unknown(), { error: 'Manjkajo params konfiguratorja (JSON objekt, ne niz).' }),
   projectId: z.string({ error: 'projectId mora biti besedilo.' }).optional().transform((v) => v || undefined),
   note: z.string({ error: 'Opomba mora biti besedilo.' }).nullish().transform((v) => {
     const t = v?.trim().slice(0, 500)
@@ -81,7 +73,8 @@ export async function POST (req: NextRequest) {
   // shranitev konfiguracije + revizija VIZ_PROJECT_CREATE v ENI transakciji.
   const created = await db.$transaction(async (tx) => {
     const created = await tx.vizProject.create({
-      data: { name: data.name, projectId, authorId: user.id, tip: data.tip, params: data.params, note: data.note },
+      // R542: params je jsonb objekt (zod sprejme samo objekt — ne niz)
+      data: { name: data.name, projectId, authorId: user.id, tip: data.tip, params: data.params as Prisma.InputJsonValue, note: data.note },
     })
 
     await writeAudit({

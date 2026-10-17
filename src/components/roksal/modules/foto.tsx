@@ -21,7 +21,7 @@ import { EmptyState, ErrorBox, LoadingRows, PageHeader } from '@/components/roks
 import { hasPerm } from '@/lib/permissions-core'
 
 interface PhotoRow {
-  id: string; type: string; location: string | null; params: string | null; note: string | null; createdAt: string
+  id: string; type: string; location: string | null; params: Record<string, unknown> | null; note: string | null; createdAt: string
   author: { name: string } | null
   project: { code: string; title: string } | null
   workOrder: { code: string; title: string } | null
@@ -65,13 +65,10 @@ async function shrinkImage (file: File): Promise<string> {
   return canvas.toDataURL('image/jpeg', 0.7)
 }
 
+// R542: params je jsonb objekt (API ga vrača razčlenjenega) — brez JSON.parse
 function parsePhoto (row: PhotoRow): string | null {
-  try {
-    const p = row.params ? (JSON.parse(row.params) as { photo?: unknown }) : null
-    return typeof p?.photo === 'string' ? p.photo : null
-  } catch {
-    return null
-  }
+  const p = row.params
+  return typeof p?.photo === 'string' ? p.photo : null
 }
 
 // ─── modul ───────────────────────────────────────────────────────────────────
@@ -123,7 +120,8 @@ export default function FotoModule () {
         type: 'FOTO',
         workOrderId: workOrderId !== 'none' ? workOrderId : null,
         note: desc.trim() || null,
-        params: JSON.stringify({ photo }),
+        // R542: params je jsonb objekt (zod sprejema samo objekt)
+        params: { photo },
       })
       toast({ title: 'Foto dokaz shranjen.', description: desc.trim() || 'Shranjeno med meritve tipa FOTO.' })
       setPhoto(null); setDesc(''); setWorkOrderId('none')

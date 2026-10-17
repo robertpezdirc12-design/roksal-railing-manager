@@ -17,6 +17,7 @@ import { analyzeContext, loadRunContext, snapshotVersionOn, syncSegments } from 
 import { fenceRunZaUporabnika } from '@/lib/fence-run-access'
 import { deliverEvent, recordEvent } from '@/lib/notify'
 import { retryOnUnique } from '@/lib/versioning'
+import { Prisma } from '@prisma/client'
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -97,29 +98,32 @@ export async function PATCH (req: NextRequest, { params }: Params) {
     if (!nodes) {
       return jsonError(400, 'Neveljavna vozlišča.', 'nodes: [{ kind, atCm, … }] — položaji strogo naraščajoči (min 5 cm med točkami).')
     }
-    data.nodes = JSON.stringify(nodes)
+    // R542: jsonb — objekt direktno
+    data.nodes = nodes
   }
 
   // teren (§12)
   if (body.terrain !== undefined) {
     if (body.terrain === null) {
-      data.terrain = null
+      // R542: null = DB NULL (stolpec je jsonb)
+      data.terrain = Prisma.DbNull
     } else {
       const terrain = parseTerrain(body.terrain)
       if (!terrain) return jsonError(400, 'Neveljaven teren.', 'terrain: [{ distCm, elevCm }] — urejene višinske točke (max 33).')
-      data.terrain = JSON.stringify(terrain)
+      data.terrain = terrain
     }
   }
 
   // kalibracija (§4)
   if (body.calibration !== undefined) {
     if (body.calibration === null) {
-      data.calibration = null
+      // R542: null = DB NULL (stolpec je jsonb)
+      data.calibration = Prisma.DbNull
     } else {
       const calibration = parseCalibration(body.calibration)
       if (!calibration) return jsonError(400, 'Neveljavna kalibracija.', 'calibration: { method, refValueCm, device?, … } (§4).')
       calibration.algorithmVersion = 'fence-run/1.0'
-      data.calibration = JSON.stringify(calibration)
+      data.calibration = calibration
     }
   }
 

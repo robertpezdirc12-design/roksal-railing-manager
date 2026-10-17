@@ -11,6 +11,7 @@ import { writeAudit } from '@/lib/audit'
 import { parseDrift, driftStatus, type DriftSample } from '@/lib/capture-qa-engine'
 import { captureSessionZaUporabnika } from '@/lib/capture-qa-access'
 import { analyzeSession, loadCaptureContext } from '@/lib/capture-qa-service'
+import { Prisma } from '@prisma/client'
 
 export async function POST (req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const auth = await requirePermission(req, 'measurements.write')
@@ -42,7 +43,8 @@ export async function POST (req: NextRequest, { params }: { params: Promise<{ id
   if (!ctx) return jsonError(404, 'Zajem ne obstaja.')
 
   // vzorci iz posnetkov + ročni vzorci ostanejo; nov vzorec se doda (max 200)
-  const existing = parseDrift(JSON.parse(access.session.drift ?? '{}')) ?? { samples: [], status: 'DRIFT_OK' as const, lastRefCode: null }
+  // R542: drift je jsonb objekt — parseDrift neposredno (slaba oblika → privzeto)
+  const existing = parseDrift(access.session.drift) ?? { samples: [], status: 'DRIFT_OK' as const, lastRefCode: null }
   const photoSamples: DriftSample[] = ctx.photos
     .filter((p) => p.offsetCm != null)
     .map((p) => ({ offsetCm: p.offsetCm as number, ts: p.capturedAt.toISOString() }))
@@ -57,7 +59,8 @@ export async function POST (req: NextRequest, { params }: { params: Promise<{ id
     await tx.captureSession.update({
       where: { id },
       data: {
-        drift: JSON.stringify({ samples: all, status: status.state, lastRefCode: existing.lastRefCode }),
+        // R542: jsonb — objekt direktno (ne JSON.stringify)
+        drift: { samples: all, status: status.state, lastRefCode: existing.lastRefCode } as unknown as Prisma.InputJsonValue,
       },
     })
 

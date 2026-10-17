@@ -65,7 +65,8 @@ const {PrismaClient}=require('@prisma/client');const p=new PrismaClient();
   await p.stockLot.deleteMany({where:{id:'test-lot-r452-alu'}});
   const old=await p.materialOrder.findMany({where:{note:{contains:'__TAG__'}},select:{id:true}});
   for(const o of old){await p.materialOrderLine.deleteMany({where:{orderId:o.id}});await p.materialOrder.deleteMany({where:{id:o.id}});}
-  await p.auditLog.deleteMany({where:{OR:[{detail:{contains:'__TAG__'}},{detail:{contains:'BOM-TEST-R452'}}]}});
+  // R542: detail je jsonb — podniz po serializiranem jsonb (ista semantika contains)
+  await p.$executeRawUnsafe('DELETE FROM "AuditLog" WHERE "detail"::text LIKE ANY($1::text[])', ['%__TAG__%', '%BOM-TEST-R452%']);
   // 2) svež fixture
   const alu=await p.inventoryItem.findUnique({where:{sku:'ALU-OKR-60-6M'}});
   const lep=await p.inventoryItem.findUnique({where:{sku:'LEP-MS'}});
@@ -90,7 +91,7 @@ const {PrismaClient}=require('@prisma/client');const p=new PrismaClient();
   await p.stockLot.deleteMany({where:{id:'test-lot-r452-alu'}});
   const os=await p.materialOrder.findMany({where:{note:{contains:'__TAG__'}},select:{id:true}});
   for(const o of os){await p.materialOrderLine.deleteMany({where:{orderId:o.id}});await p.materialOrder.deleteMany({where:{id:o.id}});}
-  await p.auditLog.deleteMany({where:{OR:[{detail:{contains:'__TAG__'}},{detail:{contains:'BOM-TEST-R452'}},__CODES__]}});
+  await p.$executeRawUnsafe('DELETE FROM "AuditLog" WHERE "detail"::text LIKE ANY($1::text[])', ['%__TAG__%', '%BOM-TEST-R452%'].concat(__MREZE__));
   console.log('CLEAN_DONE');return p.$disconnect();
 })()
 '''.replace('__TAG__', TAG)
@@ -264,7 +265,7 @@ audit = jget('/api/audit?action=MATERIAL_ORDER_CREATE&limit=50', admin)
 chk(audit is not None, 'GET /api/audit?action=MATERIAL_ORDER_CREATE 200')
 found_audit = False
 for e in (audit['data'] if audit else []):
-    det = json.loads(e['detail']) if e.get('detail') else {}
+    det = e.get('detail') if isinstance(e.get('detail'), dict) else {}  # R542: detail objekt
     if det.get('code') == created:
         found_audit = True
         chk(e.get('entity') == 'materialOrder', 'revizija: entity = materialOrder')
@@ -288,8 +289,9 @@ for path in ['/api/bom', '/api/stock', '/api/material-orders', '/api/reports?typ
 print('── čiščenje ──')
 codes = [created] if created else []
 # pobriši tudi morebitna naročila iz prejšnjih zagonov (note TAG) + revizije po kodah
-codes_clause = ','.join(f"{{detail:{{contains:{json.dumps(c)}}}}}" for c in codes)
-clean = CLEAN.replace('__CODES__', codes_clause)
+# R542: revizije brišemo po podnizu serializiranega jsonb detaila (ne Prisma contains)
+mreze = [json.dumps(f'%{c}%') for c in codes]
+clean = CLEAN.replace('__MREZE__', ','.join(mreze))
 done, err = bun(clean)
 chk(done, f'čiščenje (BOM + lot + naročila + revizije) {"" if done else " — " + err}')
 

@@ -1307,10 +1307,9 @@ function sanitizeStepLines (raw: unknown): SceneLine[] {
   return out
 }
 
-/** Serializacija v JSON niz (persistenca na ArSnapshot.sceneJson). */
-export function serializeSceneResult (r: SceneUnderstandingResult): string {
-  return JSON.stringify(r)
-}
+// R542: serializeSceneResult (JSON niz) je ODSTRANJEN — ArSnapshot.sceneJson je
+// jsonb, zato rute shranjujejo že razčiščen SceneUnderstandingResult objekt
+// neposredno (sanitizeSceneResult ostaja edini vhodni validator).
 
 /** R470 (§5): dimenzijske osi — veljavne točke 0..1, kind iz seznama,
  * label 1..measureLabelMaxLen. Najprej se izločijo neveljavne, ŠE NATO

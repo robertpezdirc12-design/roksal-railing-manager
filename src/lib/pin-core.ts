@@ -159,6 +159,7 @@ export interface PublicPin {
 /**
  * Projekcija pina za javni žeton: BREZ internalNote, brez ID-jev uporabnikov,
  * brez e-pošte (samo ime avtorja/reševalca). snapshot ostane (geometrijski dokaz).
+ * R542: snapshot je jsonb objekt — brez JSON.parse (PublicPin.snapshot je unknown).
  */
 export function publicPin (p: {
   id: string
@@ -172,13 +173,10 @@ export function publicPin (p: {
   resolvedAt: Date | null
   resolvedBy?: { name: string } | null
   author?: { name: string } | null
-  snapshot?: string | null
+  snapshot?: unknown
   createdAt: Date
 }): PublicPin {
-  let snapshot: unknown = null
-  if (p.snapshot) {
-    try { snapshot = JSON.parse(p.snapshot) } catch { snapshot = null }
-  }
+  const snapshot: unknown = p.snapshot ?? null
   return {
     id: p.id,
     fenceRunId: p.fenceRunId,

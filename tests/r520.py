@@ -405,7 +405,7 @@ else:
 import {{ PrismaClient }} from '@prisma/client'
 const db = new PrismaClient()
 const v = await db.photoVisualization.findUnique({{ where: {{ id: '{vid}' }}, }})
-const rp = v ? JSON.parse(v.renderParams) : {{}}
+const rp = v?.renderParams ?? {{}}  // R542: jsonb objekt
 console.log(JSON.stringify({{
   tip: rp.config?.tip, deska: rp.config?.deskaMm, reza: rp.config?.rezaMm,
   globina: rp.config?.heightCm, maskaPrednji: rp.maska?.prednji?.length,

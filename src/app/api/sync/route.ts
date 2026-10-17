@@ -17,6 +17,7 @@
 //  • ob zaključku: writeAudit SYNC_RUN (entity 'sync').
 
 import { NextRequest, NextResponse } from 'next/server'
+import { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 import { getSessionUser, jsonError, managesAssignments, readsAllData, type SessionUser } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
@@ -265,7 +266,8 @@ async function opMeritev (
       slopeDeg,
       // R486 (issue #7 §6): razširjeni merilni podatki iz offline vrste —
       // ENAKA struktura kot confirm (brez njih params ostane kot prej).
-      params: JSON.stringify({ ...(photoId ? { photoId } : {}), ...extras, synced: true }),
+      // R542: params je jsonb objekt (ne niz).
+      params: { ...(photoId ? { photoId } : {}), ...extras, synced: true },
       note: str(payload.note),
     },
     include: {
@@ -293,11 +295,12 @@ async function opMeritev (
         measurementId: measurement.id,
         version: (last?.version ?? 0) + 1,
         userId: user.id,
-        data: JSON.stringify({
+        // R542: data je jsonb objekt (ne niz)
+        data: {
           type, lengthCm, heightCm, posts, segments, handrail, slopeDeg,
           location: measurement.location, note: measurement.note, params: measurement.params,
           status: provenance.status, statusNote: provenance.reason,
-        }),
+        },
         note: photoId ? 'Potrjeno s kamero (offline sinhronizacija)' : 'Shranjeno prek sinhronizacije (offline)',
       },
     })
@@ -368,14 +371,15 @@ async function opFoto (
   const zapis = photoRecordProvenance()
   // R522: doc polja se zapišejo v params SAMO kadar gre za dokumentacijsko
   // sliko — navadne offline fotografije ostanejo nespremenjene.
+  // R542: params je jsonb objekt (ne niz) — zapišiDocVParams sprejema/vrača objekt.
   const paramsOut = jeDokSlika
-    ? zapišiDocVParams(JSON.stringify({ photo: dataUrl, stage: 'ZAJEM', synced: true }), {
+    ? zapišiDocVParams({ photo: dataUrl, stage: 'ZAJEM', synced: true }, {
       docTag: docTag as DocTag,
       docSegmentIdx: normalizirajDocSegment(payload.docSegmentIdx),
       docNote: normalizirajDocNote(payload.docNote),
       docOffline: true,
     })
-    : JSON.stringify({ photo: dataUrl, stage: 'ZAJEM', synced: true })
+    : { photo: dataUrl, stage: 'ZAJEM', synced: true }
   const photo = await db.measurement.create({
     data: {
       type: 'FOTO',
@@ -386,7 +390,7 @@ async function opFoto (
       workOrderId,
       authorId: user.id,
       location: str(payload.location),
-      params: paramsOut,
+      params: paramsOut as Prisma.InputJsonValue,
     },
     include: {
       author: { select: { name: true } },
@@ -542,8 +546,9 @@ export async function POST (req: NextRequest) {
     // ── idempotenca: obstoječi SyncOp zadetek → shranjen rezultat, BREZ ponovitve ──
     const existing = await db.syncOp.findUnique({ where: { id: opId } }).catch(() => null)
     if (existing) {
-      let saved: unknown = null
-      try { saved = JSON.parse(existing.result) } catch { saved = null }
+      // R542: result je razčlenjen jsonb (ne niz) — razčlenjevanje ni več potrebno;
+      // shranjena vrednost se POŠTENO predstavi naprej (tudi jsonb null → null).
+      const saved: unknown = existing.result
       results.push({ opId, status: 'OK', data: saved })
       synced++
       continue
@@ -680,13 +685,15 @@ export async function POST (req: NextRequest) {
     }
 
     // uspešno obdelan op → SyncOp zadetek (idempotenca za vsako ponovitev)
+    // R542: result je jsonb — null rezultat se shrani kot JSON null (Prisma.JsonNull,
+    // ker je stolpec obvezen), ne kot niz "null".
     await db.syncOp.create({
       data: {
         id: opId,
         deviceId,
         userId: user.id,
         kind: op.kind,
-        result: JSON.stringify(outcome.data ?? null),
+        result: outcome.data == null ? Prisma.JsonNull : outcome.data as Prisma.InputJsonValue,
       },
     }).catch(() => {}) // unique → že zapisan (paralelna dostava) → ne prekini
     results.push({ opId, status: 'OK', data: outcome.data ?? null })

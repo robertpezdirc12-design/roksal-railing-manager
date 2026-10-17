@@ -5,6 +5,7 @@
 //      R449 (issue #8): vsak upsert zapiše RuleVersion (staro→novo) + revizijo RULE_VERSION.
 
 import { NextRequest, NextResponse } from 'next/server'
+import { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 import { jsonError, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
@@ -62,12 +63,13 @@ export async function POST (req: NextRequest) {
     })
 
     // R449 (issue #8): zgodovina vrednosti — staro→novo ob vsakem upsertu
+    // (R542: oldValue/newValue sta jsonb objekta — ne niza)
     const version = await tx.ruleVersion.create({
       data: {
         ruleId: rule.id,
         userId: auth.user.id,
-        oldValue: existing ? JSON.stringify(ruleSnapshot(existing)) : null,
-        newValue: JSON.stringify(ruleSnapshot(rule)),
+        oldValue: existing ? ruleSnapshot(existing) as Prisma.InputJsonValue : Prisma.DbNull,
+        newValue: ruleSnapshot(rule) as Prisma.InputJsonValue,
         note: existing ? `Posodobitev pravila ${key}` : `Novo pravilo ${key}`,
       },
     })

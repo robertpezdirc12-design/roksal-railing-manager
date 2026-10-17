@@ -61,7 +61,7 @@ export interface HandoverRow {
   id: string; workOrderId: string; version: number; status: string
   summary: string | null
   designedSnapshotId: string | null; installedSnapshotId: string | null
-  diffJson: string | null; photosJson: string | null
+  diffJson: Record<string, unknown> | null; photosJson: unknown[] | null // R542: jsonb objekt/tabela
   monterConfirmedAt: string | null
   monterConfirmedBy: { name: string } | null
   customerSignedAt: string | null; customerSignedBy: string | null
@@ -536,8 +536,9 @@ export function HandoverSection ({ woId, canWrite, onTransitioned }: {
 
   const latest = ho.data?.data.latest ?? null
   const versions = ho.data?.data.versions ?? []
-  const diff: DiffData = (() => { try { return JSON.parse(latest?.diffJson ?? '{}') } catch { return {} } })()
-  const photos: PhotosData = (() => { try { return JSON.parse(latest?.photosJson ?? '[]') } catch { return [] } })()
+  // R542: diffJson/photosJson sta jsonb — API vrača razčlenjeno (objekt/tabela); obramba za neobjektno ostane
+  const diff: DiffData = (latest?.diffJson != null && typeof latest.diffJson === 'object' && !Array.isArray(latest.diffJson)) ? latest.diffJson as DiffData : {}
+  const photos: PhotosData = Array.isArray(latest?.photosJson) ? latest.photosJson as PhotosData : []
   const photosBy = (stage: string) => photos.filter((p) => p.stage === stage).length
 
   async function zgradi (): Promise<void> {

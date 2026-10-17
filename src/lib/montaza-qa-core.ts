@@ -28,8 +28,10 @@ import { db } from '@/lib/db'
 import { writeAudit } from '@/lib/audit'
 import { emitEvent } from '@/lib/notify'
 import { readsAllData } from '@/lib/auth'
-import { PLAYBOOK_MONTAZA, type PlaybookDefinition, type PlaybookStep } from '@/lib/playbook-core'
+import { PLAYBOOK_MONTAZA, deserializiraj, type PlaybookDefinition, type PlaybookStep } from '@/lib/playbook-core'
 import { segmentsZaProjekt } from '@/lib/capture-qa-service'
+import { asJsonObject } from '@/lib/json'
+import type { Prisma } from '@prisma/client'
 
 // ── statusni prostori ───────────────────────────────────────────────────────
 
@@ -97,11 +99,10 @@ async function montazaDefinicija (): Promise<{ def: PlaybookDefinition; vir: 'ba
     where: { key: 'MONTAZA', status: 'ACTIVE' },
     orderBy: { version: 'desc' },
   }).catch(() => null)
+  // R542: definicija je jsonb — deserializiraj (obramba pred slabo obliko) namesto JSON.parse
   if (row) {
-    try {
-      const def = JSON.parse(row.definition) as PlaybookDefinition
-      if (def && Array.isArray(def.steps)) return { def, vir: 'baza' }
-    } catch { /* pokvarjen JSON → fallback na vgrajeno */ }
+    const def = deserializiraj(row.definition)
+    if (def) return { def, vir: 'baza' }
   }
   return { def: PLAYBOOK_MONTAZA, vir: 'vgrajen' }
 }
@@ -601,15 +602,15 @@ export async function zgradiDiff (projectId: string | null): Promise<{
     })
     designedSnapshotId = snap?.id ?? null
     if (snap) {
-      try {
-        const data = JSON.parse(snap.data) as { segments?: { key?: string; lengthCm?: number | null; heightCm?: number | null }[] }
-        designed = (data.segments ?? []).map((s, i) => ({
-          key: typeof s.key === 'string' ? s.key : `seg-${i + 1}`,
-          lengthCm: typeof s.lengthCm === 'number' ? s.lengthCm : null,
-          heightCm: typeof s.heightCm === 'number' ? s.heightCm : null,
-          source: 'AS-DESIGNED',
-        }))
-      } catch { /* prazno — fallback spodaj */ }
+      // R542: data je jsonb — branje brez JSON.parse (obramba za neobjektno obliko)
+      const data = asJsonObject(snap.data)
+      const segs = Array.isArray(data?.segments) ? data.segments as unknown as { key?: unknown; lengthCm?: unknown; heightCm?: unknown }[] : []
+      designed = segs.map((s, i) => ({
+        key: typeof s.key === 'string' ? s.key : `seg-${i + 1}`,
+        lengthCm: typeof s.lengthCm === 'number' ? s.lengthCm : null,
+        heightCm: typeof s.heightCm === 'number' ? s.heightCm : null,
+        source: 'AS-DESIGNED',
+      }))
     }
     if (designed.length === 0) {
       // brez dvojčka: zadnji POTRJENI tekač (isti vir kot AS-DESIGNED, P5)
@@ -633,15 +634,15 @@ export async function zgradiDiff (projectId: string | null): Promise<{
     })
     installedSnapshotId = snap?.id ?? null
     if (snap) {
-      try {
-        const data = JSON.parse(snap.data) as { segments?: { key?: string; lengthCm?: number | null; heightCm?: number | null }[] }
-        izvedeno = (data.segments ?? []).map((s, i) => ({
-          key: typeof s.key === 'string' ? s.key : `seg-${i + 1}`,
-          lengthCm: typeof s.lengthCm === 'number' ? s.lengthCm : null,
-          heightCm: typeof s.heightCm === 'number' ? s.heightCm : null,
-          source: 'AS-INSTALLED',
-        }))
-      } catch { /* prazno */ }
+      // R542: data je jsonb — branje brez JSON.parse (obramba za neobjektno obliko)
+      const data = asJsonObject(snap.data)
+      const segs = Array.isArray(data?.segments) ? data.segments as unknown as { key?: unknown; lengthCm?: unknown; heightCm?: unknown }[] : []
+      izvedeno = segs.map((s, i) => ({
+        key: typeof s.key === 'string' ? s.key : `seg-${i + 1}`,
+        lengthCm: typeof s.lengthCm === 'number' ? s.lengthCm : null,
+        heightCm: typeof s.heightCm === 'number' ? s.heightCm : null,
+        source: 'AS-INSTALLED',
+      }))
     }
   }
 
@@ -734,8 +735,9 @@ export async function zgradiPorocilo (user: SessionUser, workOrderId: string, su
       designedSnapshotId: diff.designedSnapshotId,
       installedSnapshotId: diff.installedSnapshotId,
       producedBomId: bom?.id ?? null,
-      diffJson: JSON.stringify({ ...diff, zgrajeno: new Date().toISOString() }),
-      photosJson: JSON.stringify(photos),
+      // R542: jsonb — objekta direktno (ne JSON.stringify)
+      diffJson: { ...diff, zgrajeno: new Date().toISOString() } as unknown as Prisma.InputJsonValue,
+      photosJson: photos as unknown as Prisma.InputJsonValue,
       summary: typeof summary === 'string' && summary.trim() ? summary.trim().slice(0, 2000) : null,
       customerRemark: zadnja?.customerRemark ?? null,
       status,

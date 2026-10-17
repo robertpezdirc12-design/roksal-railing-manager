@@ -25,8 +25,8 @@ export type FenceRunClient = Pick<Prisma.TransactionClient, 'fenceRun' | 'fenceS
 export interface RunRow {
   id: string; projectId: string; workOrderId: string | null; authorId: string | null
   name: string; status: string; productId: string | null; variantId: string | null
-  measurementId: string | null; calibration: string | null; terrain: string | null
-  nodes: string | null; quality: string | null; note: string | null
+  measurementId: string | null; calibration: Prisma.JsonValue; terrain: Prisma.JsonValue
+  nodes: Prisma.JsonValue; quality: Prisma.JsonValue; note: string | null
   createdAt: Date; updatedAt: Date
 }
 
@@ -47,9 +47,11 @@ export interface RunContext {
   segments: SegmentRow[]
 }
 
-function safeParse<T> (json: string | null, fn: (v: unknown) => T | null): T | null {
-  if (!json) return null
-  try { return fn(JSON.parse(json)) } catch { return null }
+// R542: jsonb — vrednosti so že razčlenjene; validator (parseNodes/…)
+// neposredno, try/catch odveč (validatorji vračajo null, ne mečejo).
+function safeParse<T> (v: unknown, fn: (v: unknown) => T | null): T | null {
+  if (v === null || v === undefined) return null
+  return fn(v)
 }
 
 /** Naloži tekač z razčlenjenimi vozlišči/terenom/kalibracijo + produktnimi pravili.
@@ -65,7 +67,7 @@ export async function loadRunContext (runId: string, client: FenceRunClient = db
   const nodes = safeParse(run.nodes, parseNodes) ?? []
   const terrain = safeParse(run.terrain, parseTerrain)
   const calibration = safeParse(run.calibration, parseCalibration)
-  const rules: ProductRules = { ...DEFAULT_RULES, ...productRulesFromTech((run.product as { tech: string | null } | null)?.tech) }
+  const rules: ProductRules = { ...DEFAULT_RULES, ...productRulesFromTech(run.product?.tech) }
   const segments = await client.fenceSegment.findMany({
     where: { fenceRunId: runId },
     orderBy: { order: 'asc' },
@@ -161,7 +163,8 @@ export async function syncSegments (ctx: RunContext, client: FenceRunClient = db
   const analysis = analyzeContext({ ...ctx, segments: fresh.map(toSegmentRow) })
   await client.fenceRun.update({
     where: { id: ctx.run.id },
-    data: { quality: JSON.stringify(analysis.quality) },
+    // R542: jsonb — objekt direktno (ne JSON.stringify)
+    data: { quality: analysis.quality as unknown as Prisma.InputJsonValue },
   })
   return fresh
 }
@@ -265,12 +268,13 @@ export async function snapshotVersionOn (
   await client.fenceRunVersion.create({
     data: {
       fenceRunId: runId, version, userId, note,
-      data: JSON.stringify({
+      // R542: jsonb — posnetek kot objekt (ne JSON.stringify)
+      data: {
         status: run.status, productId: run.productId, variantId: run.variantId,
         nodes: run.nodes, terrain: run.terrain, calibration: run.calibration,
         quality: run.quality, engineVersion: ENGINE_VERSION,
         segments,
-      }),
+      } as unknown as Prisma.InputJsonValue,
     },
   })
   return version

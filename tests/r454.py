@@ -73,7 +73,9 @@ const {{PrismaClient}}=require('@prisma/client');const p=new PrismaClient();
 (async()=>{{
   await p.arSnapshot.deleteMany({{where:{{note:{{contains:'{TAG}'}}}}}});
   await p.vizProject.deleteMany({{where:{{OR:[{{name:{{contains:'{TAG}'}}}},{{note:{{contains:'{TAG}'}}}}]}}}});
-  await p.auditLog.deleteMany({{where:{{OR:[{{detail:{{contains:'{TAG}'}}}},{{action:'AR_ANALYZE'}}]}}}});
+  // R542: detail je jsonb — podniz po serializiranem jsonb; AR_ANALYZE ostaja Prisma filter
+  await p.$executeRawUnsafe('DELETE FROM "AuditLog" WHERE "detail"::text LIKE $1', '%{TAG}%');
+  await p.auditLog.deleteMany({{where:{{action:'AR_ANALYZE'}}}});
   console.log('CLEAN_DONE');return p.$disconnect();
 }})()
 '''
@@ -144,17 +146,18 @@ s, _ = call('GET', '/api/viz/projects', monter); chk(s == 200, f'monter GET viz/
 
 # ══ 2. /api/ar-snapshots — CRUD ══════════════════════════════════════════════
 print('── 2. AR posnetki (CRUD) ──')
-ANALYSIS = json.dumps({
+# R542: analysis/params sta jsonb — zod sprejema OBJEKT (niz → 400)
+ANALYSIS = {
     'scene': 'vhodna terasa s stopniščem',
     'placement': [{'label': 'Leva ograja', 'where': 'ob levem robu stopnišča', 'estLenCm': 420, 'note': 'testni predlog'}],
     'obstacles': ['vrata se odpirajo navznoter'],
     'references': ['ploščice 40 cm'],
-})
+}
 s, b = call('POST', '/api/ar-snapshots', admin, {
     'projectId': proj['id'] if proj else None,
     'scene': 'vhodna terasa s stopniščem',
     'analysis': ANALYSIS,
-    'params': json.dumps({'photo': PHOTO, 'posts': 5, 'heightCm': 110, 'scale': 1, 'opacity': 0.95, 'mode': 'demo'}),
+    'params': {'photo': PHOTO, 'posts': 5, 'heightCm': 110, 'scale': 1, 'opacity': 0.95, 'mode': 'demo'},
     'note': f'{TAG} — vhodna terasa',
 })
 chk(s == 201, f'POST ar-snapshots → 201 (dobil {s}: {b[:120]})')
@@ -173,7 +176,7 @@ if row:
     chk(isinstance(row.get('project'), dict) and row['project'].get('code'), 'seznam: povezava na projekt s kodo')
 
 det = jget(f'/api/ar-snapshots/{snap_id}', admin) if snap_id else None
-chk(det is not None and json.loads(det['data']['params'])['photo'].startswith('data:image/jpeg;base64,'),
+chk(det is not None and (det['data']['params'] or {}).get('photo', '').startswith('data:image/jpeg;base64,'),  # R542: jsonb objekt
     'podrobnost vsebuje params.photo (dataUrl)')
 
 s, b = call('PATCH', f'/api/ar-snapshots/{snap_id}', admin, {'note': f'{TAG} — posodobljena opomba'})
@@ -197,6 +200,12 @@ dt = time.time() - t0
 VLM_OK = (s == 200)
 if s == 502 and 'ni na voljo' in b:
     skip(f'VLM klic → 502 „ni na voljo“ ({dt:.0f} s) — VLM analiza v tem okolju ni preverjena')
+elif s == 422 and 'prepoznala' in b:
+    # 422 „Analiza ni prepoznala uporabnih predlogov“ je DOCUMENTIRANA pot rute
+    # (VLM je odgovoril, a za fiksturo ni našel uporabnih predlogov) — modelna
+    # nedeterminističnost, ne aplikacijska napaka. Kot pri 502 se to NE šteje
+    # kot dokaz, da prepoznava deluje (R542-d: opažena ~1/4 zagonov).
+    skip(f'VLM klic → 422 „ni prepoznala uporabnih predlogov“ ({dt:.0f} s) — kakovost prepoznave nad fiksturo ni deterministična')
 elif not VLM_OK:
     bad(f'POST s fixture fotografijo → 200 v {dt:.0f} s (dobil {s}: {b[:150]})')
 if VLM_OK:
@@ -217,9 +226,9 @@ if VLM_OK:
 
 # ══ 4. /api/viz/projects — CRUD + duplicate ═════════════════════════════════
 print('── 4. Shranjeni 3D projekti (CRUD + podvajanje) ──')
-PARAMS = json.dumps({'profileId': None, 'sku': None, 'colorId': 'antracit', 'tip': 'BALUSTRADA',
-                     'lengthCm': 420, 'heightCm': 110, 'posts': 5, 'segments': 4,
-                     'handrail': True, 'slopeDeg': 0, 'montaza': True, 'material': 'ALU'})
+PARAMS = {'profileId': None, 'sku': None, 'colorId': 'antracit', 'tip': 'BALUSTRADA',
+          'lengthCm': 420, 'heightCm': 110, 'posts': 5, 'segments': 4,
+          'handrail': True, 'slopeDeg': 0, 'montaza': True, 'material': 'ALU'}  # R542: jsonb objekt
 s, b = call('POST', '/api/viz/projects', admin, {
     'name': f'{TAG} — terasa Kos', 'projectId': proj['id'] if proj else None,
     'tip': 'BALUSTRADA', 'params': PARAMS, 'note': 'testna konfiguracija',
@@ -229,7 +238,7 @@ viz_id = json.loads(b)['data']['id'] if s == 201 else None
 
 s, _ = call('POST', '/api/viz/projects', admin, {'params': '{}'}); chk(s == 400, f'POST brez imena → 400 (dobil {s})')
 s, _ = call('POST', '/api/viz/projects', admin, {'name': 'x', 'params': 'to-ni-json'}); chk(s == 400, f'POST z ne-JSON params → 400 (dobil {s})')
-s, _ = call('POST', '/api/viz/projects', admin, {'name': 'x', 'params': '{}', 'projectId': 'neobstojeci-id'}); chk(s == 404, f'POST z neobstoječim projectId → 404 (dobil {s})')
+s, _ = call('POST', '/api/viz/projects', admin, {'name': 'x', 'params': {}, 'projectId': 'neobstojeci-id'}); chk(s == 404, f'POST z neobstoječim projectId → 404 (dobil {s})')  # R542: params objekt
 
 # monter lahko shrani (measurements.write)
 s, b = call('POST', '/api/viz/projects', monter, {'name': f'{TAG} — monterjeva', 'tip': 'OGRAJA', 'params': PARAMS})
@@ -242,7 +251,7 @@ chk(vrow is not None, 'seznam vsebuje nov 3D projekt')
 if vrow:
     chk(vrow['name'] == f'{TAG} — terasa Kos', 'seznam: ime preneseno')
     chk(vrow['tip'] == 'BALUSTRADA', 'seznam: tip prenesen')
-    chk(json.loads(vrow['params'])['lengthCm'] == 420, 'seznam: params JSON z dimenzijo')
+    chk((vrow['params'] or {}).get('lengthCm') == 420, 'seznam: params z dimenzijo (R542: jsonb objekt)')
     chk(isinstance(vrow.get('author'), dict) and vrow['author'].get('name'), 'seznam: avtor z imenom')
     chk(isinstance(vrow.get('project'), dict) and vrow['project'].get('code'), 'seznam: povezava na projekt')
 

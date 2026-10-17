@@ -20,6 +20,7 @@ import { fenceRunZaUporabnika } from '@/lib/fence-run-access'
 import { nextPackageCodeOn } from '@/lib/product-core'
 import { POSTS_RULE_KEY } from '@/lib/segment-bom'
 import { retryOnUnique } from '@/lib/versioning'
+import { Prisma } from '@prisma/client'
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -99,7 +100,7 @@ export async function POST (req: NextRequest, { params }: Params) {
         segments: analysis.summary.segmentCount,
         handrail: true,
         slopeDeg: analysis.summary.maxSlopeDeg,
-        params: JSON.stringify({
+        params: {
           fenceRunId: id,
           engine: ENGINE_VERSION,
           source: 'FENCE_RUN',
@@ -112,7 +113,7 @@ export async function POST (req: NextRequest, { params }: Params) {
             status: s.status, verifiedCm: s.verifiedCm,
           })),
           summary: analysis.summary,
-        }),
+        } as unknown as Prisma.InputJsonValue,
         note: ctx.run.note,
       },
     })
@@ -129,11 +130,12 @@ export async function POST (req: NextRequest, { params }: Params) {
         measurementId: measurement.id,
         version: (last?.version ?? 0) + 1,
         userId: user.id,
-        data: JSON.stringify({
+        // R542: data je jsonb objekt (ne niz)
+        data: {
           type: 'OGRAJA', lengthCm: analysis.summary.totalLengthCm, heightCm: maxHeight,
           posts: analysis.summary.postCount, segments: analysis.summary.segmentCount,
           slopeDeg: analysis.summary.maxSlopeDeg, location: ctx.run.name, note: ctx.run.note,
-        }),
+        },
         note: `Potrjeno iz ograjnega tekača (${ctx.segments.length} segmentov · ${analysis.summary.verifiedCount} preverjenih)`,
       },
     })
@@ -194,7 +196,8 @@ export async function POST (req: NextRequest, { params }: Params) {
             qty,
             unit: product.unit === 'm' ? 'm' : 'm',
             status: 'IZMERA',
-            calcJson: JSON.stringify({ inputs }),
+            // R542: jsonb — objekt direktno (ne JSON.stringify)
+            calcJson: { inputs } as unknown as Prisma.InputJsonValue,
             note: `Iz ograjnega tekača (${ctx.run.name})`,
           },
         })
@@ -209,7 +212,8 @@ export async function POST (req: NextRequest, { params }: Params) {
       data: {
         status: 'POTRJEN',
         measurementId: measurement.id,
-        quality: JSON.stringify(analysis.quality),
+        // R542: jsonb — objekt direktno (ne JSON.stringify)
+        quality: analysis.quality as unknown as Prisma.InputJsonValue,
       },
     })
     // R539: posnetek verzije NA tx klientu, brez notranjega retrija (zunanja

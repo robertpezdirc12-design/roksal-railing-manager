@@ -54,13 +54,14 @@ export async function GET (req: NextRequest) {
     include: { user: { select: { name: true } } },
   })
   const data = rows.map((s) => {
-    let parsed: ReturnType<typeof parseTwinData> = null
-    try { parsed = parseTwinData(JSON.parse(s.data)) } catch { parsed = null }
+    // R542: data je jsonb — parseTwinData neposredno (vrne null ob slabi obliki)
+    const parsed = parseTwinData(s.data)
     return {
       id: s.id, kind: s.kind, version: s.version, reason: s.reason,
       createdFrom: s.createdFrom, parentSnapshotId: s.parentSnapshotId,
       author: s.user?.name ?? null, createdAt: s.createdAt,
-      sources: JSON.parse(s.sources) as { vrsta: string; id: string }[],
+      // R542: sources je jsonb tabela — obramba za ne-tabelo ostaja
+      sources: Array.isArray(s.sources) ? s.sources as unknown as { vrsta: string; id: string }[] : [],
       summary: {
         totalLengthCm: parsed?.totalLengthCm ?? null,
         segments: parsed?.segments.length ?? 0,

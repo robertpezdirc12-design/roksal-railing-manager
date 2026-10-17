@@ -4,6 +4,7 @@
 // NE odvisna od 'use client' — uporabljena izključno v API rutah.
 
 import { NextResponse } from 'next/server'
+import type { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 import { jsonError, type SessionUser } from '@/lib/auth'
 import {
@@ -121,7 +122,7 @@ export async function vizZaUporabnika (
   id: string
 ): Promise<{ viz: {
   id: string; projectId: string; variantLabel: string; status: string
-  authorId: string | null; engineVersion: string; renderParams: string
+  authorId: string | null; engineVersion: string; renderParams: Prisma.JsonValue
   measurementId: string | null; measurementVersion: number | null
   sourcePhotoId: string | null
   productId: string; variantId: string | null
@@ -136,7 +137,7 @@ export async function vizZaUporabnika (
   }
   return { viz: viz as unknown as {
     id: string; projectId: string; variantLabel: string; status: string
-    authorId: string | null; engineVersion: string; renderParams: string
+    authorId: string | null; engineVersion: string; renderParams: Prisma.JsonValue
     measurementId: string | null; measurementVersion: number | null
     sourcePhotoId: string | null
     productId: string; variantId: string | null
@@ -149,7 +150,7 @@ export async function vizZaUporabnika (
 export async function preveriIzdelek (
   productId: unknown,
   variantId: unknown
-): Promise<{ produkt: { id: string; sku: string; name: string; unit: string; tech: string | null; familyCode: string } } | { napaka: string; status: number }> {
+): Promise<{ produkt: { id: string; sku: string; name: string; unit: string; tech: Prisma.JsonValue; familyCode: string } } | { napaka: string; status: number }> {
   if (typeof productId !== 'string' || !productId) return { napaka: 'Manjka izdelek (productId).', status: 400 }
   const p = await db.product.findUnique({
     where: { id: productId },

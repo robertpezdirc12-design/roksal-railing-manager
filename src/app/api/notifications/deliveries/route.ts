@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import type { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 import { getSessionUser, jsonError } from '@/lib/auth'
 
@@ -9,13 +10,14 @@ import { getSessionUser, jsonError } from '@/lib/auth'
 
 const STATUSES = ['PENDING', 'SENT', 'FAILED', 'SKIPPED']
 
-/** Razčleni payload eventa (title/body) — odporen proti praznemu/pokvarjenemu JSON. */
-function parsePayload (raw: string): { title: string; body: string } {
-  try {
-    const p = JSON.parse(raw) as { title?: string; body?: string }
-    return { title: p.title ?? '', body: p.body ?? '' }
-  } catch {
-    return { title: '', body: '' }
+/** Razčleni payload eventa (title/body) — R542: payload je razčlenjen jsonb
+ *  objekt (ne niz); obramba ostaja za neobjektne vrednosti. */
+function parsePayload (raw: Prisma.JsonValue): { title: string; body: string } {
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return { title: '', body: '' }
+  const p = raw as { title?: unknown; body?: unknown }
+  return {
+    title: typeof p.title === 'string' ? p.title : '',
+    body: typeof p.body === 'string' ? p.body : '',
   }
 }
 

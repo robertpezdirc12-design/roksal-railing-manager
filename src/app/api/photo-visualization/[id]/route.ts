@@ -23,6 +23,8 @@ import {
   type RezultatGradiva, type VizDokaz,
 } from '@/lib/viz-provenance'
 import { retryOnUnique } from '@/lib/versioning'
+import { asJsonObject } from '@/lib/json'
+import { Prisma } from '@prisma/client'
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -61,10 +63,9 @@ export async function GET (req: NextRequest, { params }: Params) {
     select: { data: true },
   })
   if (zadnjaVerzija) {
-    try {
-      const parsed = JSON.parse(zadnjaVerzija.data) as { meta?: { opozorila?: { koda: string; sporocilo: string }[] } }
-      if (Array.isArray(parsed.meta?.opozorila)) opozorila = parsed.meta.opozorila
-    } catch { /* posnetek neberljiv → brez opozoril */ }
+    // R542: data je jsonb objekt — branje brez JSON.parse (obramba za ne-tabelo)
+    const op = asJsonObject(asJsonObject(zadnjaVerzija.data)?.meta)?.opozorila
+    if (Array.isArray(op)) opozorila = op as { koda: string; sporocilo: string }[]
   }
   const dokazVerzije = preberiDokaz(zadnjaVerzija?.data)
 
@@ -125,8 +126,9 @@ export async function PATCH (req: NextRequest, { params }: Params) {
   if (body.renderParams !== undefined) {
     const params2 = preveriRenderParams(body.renderParams)
     if ('napaka' in params2) return jsonError(400, params2.napaka)
-    const json = JSON.stringify(params2.params)
-    if (json.length > MAX_PARAMS_JSON) return jsonError(400, 'Parametri izrisa presežejo dovoljeno velikost.')
+    // R542: velikostna varovalka ostaja (JSON.stringify samo za meritev dolžine);
+    // renderParams se shrani kot jsonb OBJEKT
+    if (JSON.stringify(params2.params).length > MAX_PARAMS_JSON) return jsonError(400, 'Parametri izrisa presežejo dovoljeno velikost.')
 
     // §6: ce je vezana meritev, opozori na odstopanje prikazne dolzine
     const opozorila = oceniKakovost(params2.params, 1000, 750, dolzinaMereCm)
@@ -134,7 +136,8 @@ export async function PATCH (req: NextRequest, { params }: Params) {
       ? ['MERA_RAZVELJAVLJENA', ...opozorila.map((o) => o.koda)]
       : opozorila.map((o) => o.koda)
 
-    update.renderParams = json
+    // R542: renderParams je jsonb — objekt direktno
+    update.renderParams = params2.params
     update.engineVersion = ENGINE_VERSION
 
     // dokaz PREJŠNJE verzije (R510: nova verzija ne sme tiho izgubiti potrjene
@@ -237,7 +240,7 @@ export async function PATCH (req: NextRequest, { params }: Params) {
 
   // verzija posnetek
   if (novaVerzija > 0) {
-    const renderParams = update.renderParams as string
+    const renderParams = update.renderParams as Prisma.InputJsonValue
     // R536: dirka verzij — branje zadnje verzije in izračun naslednje sta
     // ZNOTRAJ retried fn (versioning.ts): ob sočasnem P2002 na
     // @@unique([visualizationId, version]) se številka izračuna znova in
@@ -254,10 +257,11 @@ export async function PATCH (req: NextRequest, { params }: Params) {
         data: {
           visualizationId: id,
           version: (zadnja?.version ?? 0) + 1,
-          data: JSON.stringify({
-            renderParams: JSON.parse(renderParams) as unknown,
+          // R542: data je jsonb — posnetek kot objekt (ne JSON.stringify)
+          data: {
+            renderParams,
             meta: { opozorila: opozorilaKodi, engineVersion: ENGINE_VERSION, dokaz },
-          }),
+          } as unknown as Prisma.InputJsonValue,
           userId: user.id,
           note: typeof body.versionNote === 'string' && body.versionNote.trim() ? body.versionNote.trim().slice(0, 200) : 'Sprememba konfiguracije',
         },

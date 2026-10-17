@@ -4,6 +4,7 @@
 // R438 (issue #5): nov job obvestila-retry (retryPending iz src/lib/notify.ts).
 // R441 (issue #3): nov job varnostna-kopija (ops/backup.sh — šifrirana + off-site).
 
+import { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 import { writeAudit } from '@/lib/audit'
 import { retryPending } from '@/lib/notify'
@@ -105,7 +106,9 @@ export async function runJob (key: string, userId: string | null): Promise<RunJo
   } catch (err) {
     const run = await db.jobRun.create({
       data: {
-        job: key, ok: false, affected: 0, detail: JSON.stringify({ napaka: err instanceof Error ? err.message : String(err) }),
+        job: key, ok: false, affected: 0,
+        // R542: detail je jsonb objekt (ne niz)
+        detail: { napaka: err instanceof Error ? err.message : String(err) },
         startedAt, finishedAt: new Date(), userId,
       },
     })
@@ -114,7 +117,8 @@ export async function runJob (key: string, userId: string | null): Promise<RunJo
   }
 
   const run = await db.jobRun.create({
-    data: { job: key, ok: true, affected, detail: JSON.stringify(detail), startedAt, finishedAt: new Date(), userId },
+    // R542: detail je jsonb objekt (ne niz)
+    data: { job: key, ok: true, affected, detail: detail as Prisma.InputJsonValue, startedAt, finishedAt: new Date(), userId },
   })
   await writeAudit({
     userId, action: 'MAINTENANCE_RUN', entity: 'jobRun', entityId: run.id,

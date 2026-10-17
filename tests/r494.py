@@ -110,7 +110,7 @@ for sku, (dol, sir, vis) in POHISTVO.items():
     if p:
         chk(p.get('unit') == 'kos', f'{sku}: enota kos')
         chk(p.get('warrantyMonths') == 180, f'{sku}: garancija 180 m (15 let)')
-        t = json.loads(p.get('tech') or '{}')
+        t = ((p.get('tech') if isinstance(p.get('tech'), dict) else {}) if p else {})  # R542: jsonb objekt
         chk('RAL 9005' in t.get('konstrukcija', '') or 'jeklena' in t.get('konstrukcija', ''), f'{sku}: konstrukcija opisana ({t.get("konstrukcija", "?")})')
         chk(t.get('vir', '').endswith('/vrtno-pohistvo/'), f'{sku}: vir roksal.com/vrtno-pohistvo')
         dim_ok = p.get('depthMm') == dol and p.get('widthMm') == sir and p.get('heightMm') == vis
@@ -121,21 +121,21 @@ chk(len([p for p in d.get('data', []) if p['sku'].startswith('ROK-VRT-')]) == 8,
 
 # ── 5. tehnične dopolnitve ──
 romb = prods.get('ROK-OG-ROMB-67', {})
-t_romb = json.loads(romb.get('tech') or '{}') if romb else {}
+t_romb = ((romb.get('tech') if isinstance(romb.get('tech'), dict) else {}) if romb else {})  # R542: jsonb objekt
 chk(t_romb.get('sestavaMateriala') == '60 % bambusova vlakna, 30 % reciklirani polietilen (HDPE), 10 % aditivi', 'ROMB: sestava materiala 60/30/10 (izvirnik)')
 chk('vključena v ceno' in t_romb.get('aluCev', ''), 'ROMB: alu cev vključena v ceno (izvirnik)')
 chk(t_romb.get('standardniRazmakFasadaMm') == 8, 'ROMB: standardni razmak fasada 8 mm (referenca Intersport)')
 chk(t_romb.get('montaznaTemperatura') == 'najmanj +5 °C', 'ROMB: montažna temperatura ≥ +5 °C')
 p100 = prods.get('ROK-OGP-POLNA-100', {})
-t100 = json.loads(p100.get('tech') or '{}') if p100 else {}
+t100 = ((p100.get('tech') if isinstance(p100.get('tech'), dict) else {}) if p100 else {})  # R542: jsonb objekt
 chk(t100.get('razmakDeskMm') == '5–30 (priporočeno)', 'POLNA 100: razmak desk 5–30 mm (izvirnik)')
 chk('180 cm' in t100.get('maxStebrickev', ''), 'POLNA 100: max stebrički 180 cm (≤150 cm višine)')
 p57 = prods.get('ROK-OGP-POLNA-57', {})
-t57 = json.loads(p57.get('tech') or '{}') if p57 else {}
+t57 = ((p57.get('tech') if isinstance(p57.get('tech'), dict) else {}) if p57 else {})  # R542: jsonb objekt
 chk(t57.get('vijak') == 'dolg približno 2/3 globine profila', 'POLNA 57/32: vijak 2/3 globine (izvirnik)')
 chk(t57.get('maxStebrickevMm') == 1500 and t57.get('maxNosilciMm') == 1000, 'POLNA 57/32: max stebrički 150 / nosilci 100 cm')
 p128 = prods.get('ROK-OG-POLNA-128', {})
-t128 = json.loads(p128.get('tech') or '{}') if p128 else {}
+t128 = ((p128.get('tech') if isinstance(p128.get('tech'), dict) else {}) if p128 else {})  # R542: jsonb objekt
 chk('6 odtenkov' in t128.get('barvOpomba', ''), 'POLNA 128: barvOpomba dokumentira neskladje vira')
 
 # ── 6. API colors (imena odtenkov za UI lestvice) ──

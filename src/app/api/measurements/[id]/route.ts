@@ -13,16 +13,23 @@
 //     referenco, ki je bila med tem popravljena.
 
 import { NextRequest, NextResponse } from 'next/server'
+import { Prisma } from '@prisma/client'
+import { z } from 'zod'
 import { db } from '@/lib/db'
 import { jsonError, readsAllData, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
 import { MEASUREMENT_STATUS_LABELS, MEASUREMENT_STATUSES, deriveProvenance, type MeasurementStatus, type MeasureMode } from '@/lib/measure-engine'
 import { invalidateQuotesForPackage } from '@/lib/quote-invalidation'
 import { retryOnUnique } from '@/lib/versioning'
+import { canonicalJson } from '@/lib/json'
 
 type Params = { params: Promise<{ id: string }> }
 
 const TYPES = ['OGRAJA', 'BALUSTRADA', 'NAGIB', 'FOTO', 'OSTANEO']
+
+// R542: params je jsonb OBJEKT (ne niz) — surovi prehod niza zaprt z zod
+// (inventura R542-a: drugi od 2 surovih krajev Measurement.params).
+const ParamsSchema = z.record(z.string(), z.unknown(), { error: 'params mora biti JSON objekt (ne niz).' }).nullish()
 
 const INCLUDE = {
   author: { select: { name: true } },
@@ -89,7 +96,13 @@ export async function PATCH (req: NextRequest, { params }: Params) {
   }
   if (typeof body.location === 'string') patch.location = body.location.trim() || null
   if (typeof body.note === 'string') patch.note = body.note.trim() || null
-  if (typeof body.params === 'string') patch.params = body.params
+  // R542: params vrata — objekt/null/neodvisno; niz (stara oblika) → 400.
+  // Semantika kot prej: podan (tudi izrecno null) → zapiše; izpuščen → nedotaknjeno.
+  const paramsParsed = ParamsSchema.safeParse((body as { params?: unknown }).params)
+  if (!paramsParsed.success) {
+    return jsonError(400, 'Neveljavni parametri meritve.', 'params mora biti JSON objekt (točke, kalibracija …) — ne niz.')
+  }
+  if (paramsParsed.data !== undefined) patch.params = paramsParsed.data as Prisma.InputJsonValue ?? Prisma.DbNull
   if (typeof body.handrail === 'boolean') patch.handrail = body.handrail
 
   const numOr = (v: unknown, key: string) => {
@@ -130,15 +143,18 @@ export async function PATCH (req: NextRequest, { params }: Params) {
   }
 
   // ── R501: sprememba geometrije razveljavi prej dokazano merilo ────────────
-  const paramsChanged = typeof patch.params === 'string' && patch.params !== existing.params
+  // R542: primerjava po vsebini (canonicalJson — jsonb normalizira vrstni red
+  // ključev, zato primerjava surovih nizov ni več poštena).
+  const novoParams = paramsParsed.data ?? null
+  const paramsChanged = paramsParsed.data !== undefined &&
+    canonicalJson(novoParams) !== canonicalJson(existing.params ?? null)
   if (paramsChanged && statusWanted !== null) {
     return jsonError(400, 'Geometrije ni mogoče hkrati spreminjati in potrjevati.',
       'Najprej shranite spremembo točk/kalibracije (strežnik jo ponovno ovrednoti), nato jo posebej potrdite.')
   }
   let revalidated = false
   if (paramsChanged) {
-    let novo: { points?: unknown; calibration?: unknown; mode?: unknown; multiView?: unknown } | null = null
-    try { novo = JSON.parse(patch.params as string) } catch { novo = null }
+    const novo = novoParams as { points?: unknown; calibration?: unknown; mode?: unknown; multiView?: unknown } | null
     const mv = novo?.multiView as { count?: number; conflict?: boolean } | undefined
     const rec = novo && (novo.points !== undefined || novo.calibration !== undefined)
       ? deriveProvenance({
@@ -190,12 +206,13 @@ export async function PATCH (req: NextRequest, { params }: Params) {
         measurementId: id,
         version: (lastVersion?.version ?? 0) + 1,
         userId: auth.user.id,
-        data: JSON.stringify({
+        // R542: data je jsonb objekt (ne niz) — params je v njem že objekt
+        data: {
           type: existing.type, location: existing.location, note: existing.note, handrail: existing.handrail,
           lengthCm: existing.lengthCm, heightCm: existing.heightCm, posts: existing.posts,
           segments: existing.segments, slopeDeg: existing.slopeDeg, params: existing.params,
           status: existing.status, statusNote: existing.statusNote,
-        }),
+        },
         note: `Popravek: ${Object.keys(patch).join(', ')}`,
       },
     })

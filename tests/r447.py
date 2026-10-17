@@ -151,7 +151,7 @@ chk(pkg_t and pkg_t['unit'] == 'm2', 'enota paketa iz produkta (m2)')
 # calcJson.inputs se vrne (pisarna z quotes.create)
 pkgs = jget(f"/api/project-packages?projectId={p006['id']}", admin)['data']
 mine = next(p for p in pkgs if p['id'] == pkg_t['id'])
-calc = json.loads(mine['calcJson']) if mine['calcJson'] else {}
+calc = mine['calcJson'] if isinstance(mine['calcJson'], dict) else {}  # R542: jsonb objekt
 chk(calc.get('inputs', {}).get('segments') == inputs_t['segments'], 'strukturirani vhodi shranjeni v calcJson.inputs')
 chk(calc.get('plan', {}).get('product', {}).get('sku') == 'TER-WPC-001', 'dry-run izračun shranjen v calcJson.plan')
 chk(calc.get('inputs', {}).get('podlaga') == 'Beton', 'družinska polja (podlaga) shranjena')

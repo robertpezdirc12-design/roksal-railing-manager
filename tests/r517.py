@@ -218,7 +218,8 @@ const gradiva = glt ? await db.productAsset.findMany({
   where: { productId: p.id, variantSku: glt.sku, status: 'VERIFIED', kind: 'FOTO_IZDELEK', filePath: { not: null } },
 }) : []
 console.log(JSON.stringify({
-  sku: p?.sku, profil: JSON.parse(p?.tech ?? '{}').profil ?? null,
+  // R542: Product.tech je jsonb objekt — brez JSON.parse
+  sku: p?.sku, profil: p?.tech?.profil ?? null,
   sirina: lameleIzTecha(p?.tech ?? null),
   glt: glt ? { sku: glt.sku, color: glt.color, ral: glt.ral, barva: barvaVariante({ ral: glt.ral, color: glt.color }) } : null,
   gradiva: gradiva.map(g => g.filePath),
@@ -329,8 +330,8 @@ import {{ PrismaClient }} from '@prisma/client'
 const db = new PrismaClient()
 const v = await db.photoVisualization.findUnique({{ where: {{ id: '{vid}' }}, }})
 const ver = await db.photoVisualizationVersion.findFirst({{ where: {{ visualizationId: '{vid}' }}, orderBy: {{ version: 'desc' }}, }})
-const rp = v ? JSON.parse(v.renderParams) : {{}}
-const meta = ver ? (JSON.parse(ver.data).meta ?? {{}}) : {{}}
+const rp = v?.renderParams ?? {{}}  // R542: jsonb objekt
+const meta = ver?.data?.meta ?? {{}}
 console.log(JSON.stringify({{
   lamela: rp.config?.lamelaMm, deska: rp.config?.deskaMm, reza: rp.config?.rezaMm, posts: rp.config?.posts, vijaki: rp.config?.vijaki,
   maskaOgraja: rp.maska?.ograja?.length, maskaIzpusti: rp.maska?.izpusti?.length, maskaPrednji: rp.maska?.prednji?.length,

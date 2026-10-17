@@ -64,12 +64,16 @@ export function maskEmail (email: string): string {
   return `${email.slice(0, 1)}***${email.slice(at)}`
 }
 
-function parsePayload (raw: string): EventPayload {
-  try {
-    const p = JSON.parse(raw) as Partial<EventPayload>
-    return { title: p.title ?? '', body: p.body ?? '', customerEmail: p.customerEmail, customerName: p.customerName }
-  } catch {
-    return { title: '', body: '' }
+function parsePayload (raw: Prisma.JsonValue): EventPayload {
+  // R542: payload je razčlenjen jsonb objekt (ne niz) — obramba ostaja za
+  // neobjektne vrednosti (starejše vrstice so vedno objekti).
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return { title: '', body: '' }
+  const p = raw as Partial<EventPayload>
+  return {
+    title: typeof p.title === 'string' ? p.title : '',
+    body: typeof p.body === 'string' ? p.body : '',
+    customerEmail: typeof p.customerEmail === 'string' ? p.customerEmail : undefined,
+    customerName: typeof p.customerName === 'string' ? p.customerName : undefined,
   }
 }
 
@@ -242,12 +246,12 @@ export async function recordEvent (input: EmitEventInput, client: NotifyClient =
     userEmails = new Map(valid.map((u) => [u.id, u.email]))
   }
 
-  // 3) event = en vir resnice
+  // 3) event = en vir resnice (R542: payload je jsonb objekt — ne niz)
   const event = await client.notificationEvent.create({
     data: {
       key: input.key,
       type: input.type,
-      payload: JSON.stringify(payload),
+      payload: payload as unknown as Prisma.InputJsonValue,
       projectId: input.projectId ?? null,
     },
   })

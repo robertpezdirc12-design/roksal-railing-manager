@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 import { requirePermission } from '@/lib/auth'
+import { asJsonObject } from '@/lib/json'
 
 // DIREKTOR COCKPIT / PREGLEDNICA (R444, issue #7 §8 DIREKTOR + RBAC popravek).
 // Osnovna vrata ostajajo projects.read (KPI: projekti, nalogi, zaloga-meje).
@@ -53,7 +55,8 @@ export async function GET (req: NextRequest) {
     const [invoices, packages, items] = await Promise.all([
       db.invoice.findMany({ select: { status: true, total: true, paid: true, dueDate: true } }),
       db.projectPackage.findMany({
-        where: { calcJson: { not: null } },
+        // R542: calcJson je jsonb — not-null filter potrebuje DbNull
+        where: { calcJson: { not: Prisma.DbNull } },
         select: { calcJson: true, project: { select: { id: true, code: true, title: true } } },
       }),
       db.inventoryItem.findMany({
@@ -70,8 +73,8 @@ export async function GET (req: NextRequest) {
     // marže po projektih (Σ margin iz ProjectPackage.calcJson) — top 5
     const byProject = new Map<string, { code: string; title: string; margin: number; totalSale: number }>()
     for (const p of packages) {
-      let calc: MarginCalc | null = null
-      try { calc = JSON.parse(p.calcJson ?? '') as MarginCalc } catch { calc = null }
+      // R542: calcJson je jsonb objekt — branje brez JSON.parse
+      const calc: MarginCalc | null = asJsonObject(p.calcJson)
       const margin = typeof calc?.margin === 'number' && Number.isFinite(calc.margin) ? calc.margin : 0
       const totalSale = typeof calc?.totalSale === 'number' && Number.isFinite(calc.totalSale) ? calc.totalSale : 0
       const prev = byProject.get(p.project.id) ?? { code: p.project.code, title: p.project.title, margin: 0, totalSale: 0 }

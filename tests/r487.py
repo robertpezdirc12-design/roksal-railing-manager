@@ -135,7 +135,7 @@ PROJ_ID = (projects.get('data') or [{}])[0].get('id')
 PHOTO = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q=='
 s, d = callj('POST', '/api/measurements', monter, {
     'type': 'FOTO', 'projectId': PROJ_ID, 'location': f'{TAG} teren',
-    'params': json.dumps({'photo': PHOTO}), 'note': f'{TAG} foto osnova'})
+    'params': {'photo': PHOTO}, 'note': f'{TAG} foto osnova'})  # R542: jsonb objekt (niz → zod 400)
 chk(s == 201, f'FOTO osnova ustvarjena ({s})')
 photo_id = d.get('data', {}).get('id')
 
@@ -167,7 +167,7 @@ s, d = callj('POST', '/api/measurement/confirm', monter, {
 chk(s == 201, f'strinjajoči pogledi → 201 ({s}: {json.dumps(d)[:120] if s != 201 else ""})')
 M1 = d.get('data', {}).get('id')
 p1 = meas_params(M1) if M1 else {}
-pr1 = json.loads(p1.get('params') or '{}')
+pr1 = p1.get('params') or {}  # R542: jsonb objekt
 mv = pr1.get('multiView') or {}
 chk(mv.get('count') == 2, f'multiView.count = 2 ({mv.get("count")})')
 chk(mv.get('values') == [320, 312], f'multiView.values = [320, 312] ({mv.get("values")})')
@@ -204,7 +204,7 @@ s, d = callj('POST', '/api/measurement/confirm', monter, {
 chk(s == 201, f'konflikt + manualOverride z razlogom → 201 ({s})')
 M3 = d.get('data', {}).get('id')
 p3 = meas_params(M3) if M3 else {}
-pr3 = json.loads(p3.get('params') or '{}')
+pr3 = p3.get('params') or {}  # R542: jsonb objekt
 mv3 = pr3.get('multiView') or {}
 chk(mv3.get('conflict') is True, f'multiView.conflict = true — zapisan, NE tih ({mv3.get("conflict")})')
 chk(mv3.get('manualOverride') is True, f'multiView.manualOverride = true ({mv3.get("manualOverride")})')
@@ -219,7 +219,7 @@ s, d = callj('POST', '/api/measurement/confirm', monter, {
     'note': f'{TAG} zmerno'})
 chk(s == 201, f'razpršenost 7,7 % (≤ 15 %) → 201 ({s})')
 M4 = d.get('data', {}).get('id')
-pr4 = json.loads(meas_params(M4).get('params') or '{}') if M4 else {}
+pr4 = (meas_params(M4).get('params') or {}) if M4 else {}  # R542: jsonb objekt
 mv4 = pr4.get('multiView') or {}
 chk(mv4.get('spreadPct') == 7.7 and mv4.get('conflict') is False,
     f'7,7 % → conflict:false (strežniška vrata SAMO > 15 %) ({mv4.get("spreadPct")}/{mv4.get("conflict")})')
@@ -233,7 +233,7 @@ s, d = callj('POST', '/api/measurement/confirm', monter, {
     'note': f'{TAG} nekonsolidabilno'})
 chk(s == 201, f'pogled brez kalibracije → 201 brez konsolidacije ({s})')
 M5 = d.get('data', {}).get('id')
-pr5 = json.loads(meas_params(M5).get('params') or '{}') if M5 else {}
+pr5 = (meas_params(M5).get('params') or {}) if M5 else {}  # R542: jsonb objekt
 chk('multiView' not in pr5, f'brez izračunljivih ≥ 2 dolžin NI multiView ({sorted(pr5.keys())})')
 chk(isinstance(pr5.get('views'), list), 'views kljub temu persistirani (revizija)')
 
@@ -259,7 +259,7 @@ s, d = callj('POST', '/api/measurement/confirm', monter, {
     'note': f'{TAG} klasicna-usklajena'})
 chk(s == 201, f'klasična potrditev brez views 201 — usklajena dolžina ({s})')
 M6 = d.get('data', {}).get('id')
-pr6 = json.loads(meas_params(M6).get('params') or '{}') if M6 else {}
+pr6 = (meas_params(M6).get('params') or {}) if M6 else {}  # R542: jsonb objekt
 # R501 (issue #15 faza 2): h grelu dodan `provenance` (strežniški izračun, kako
 # je številka pridobljena) — ZAVESTNA rast pogodbe, ne regresa: stari ključi
 # ostanejo enaki, noben nov ključ se ne doda mimo jedra.
@@ -298,7 +298,7 @@ s, d = callj('POST', '/api/measurement/confirm', monter, {
     'note': f'{TAG} determinizem'})
 chk(s == 201, f'ponovljena potrditev 201 ({s})')
 M7 = d.get('data', {}).get('id')
-mv7 = json.loads(meas_params(M7).get('params') or '{}').get('multiView') if M7 else None
+mv7 = (meas_params(M7).get('params') or {}).get('multiView') if M7 else None  # R542: jsonb objekt
 chk(mv7 == mv, f'isti vhodi → enak multiView ({mv7 == mv})')
 
 print('── C) verzija + revizija + export')
@@ -416,7 +416,8 @@ const {PrismaClient}=require('@prisma/client');const p=new PrismaClient();
     await p.notificationEvent.deleteMany({where:{key:{contains:':'+m.id}}});
     await p.measurement.delete({where:{id:m.id}});
   }
-  await p.auditLog.deleteMany({where:{detail:{contains:'__TAG__'}}});
+  // R542: detail je jsonb — podniz po serializiranem jsonb (ista semantika contains)
+  await p.$executeRawUnsafe('DELETE FROM "AuditLog" WHERE "detail"::text LIKE $1', '%' + '__TAG__' + '%');
   await p.auditLog.deleteMany({where:{entityId:{in:ms.map(m=>m.id)}}});
   console.log('CLEAN_DONE');return p.$disconnect();
 })()

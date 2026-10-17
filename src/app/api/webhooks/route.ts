@@ -5,7 +5,6 @@ import { writeAudit } from '@/lib/audit'
 import { sha256Hex } from '@/lib/webhook-sign'
 import {
   parseWebhookEvents,
-  serializeWebhookEvents,
   validWebhookSecret,
   validWebhookUrl,
   WEBHOOK_EVENTS,
@@ -84,7 +83,8 @@ export async function POST (req: NextRequest) {
   if (!Array.isArray(rawEvents) || rawEvents.length === 0) {
     return jsonError(400, 'Manjka seznam dogodkov.', `events: [tip, …] — veljavni: ${WEBHOOK_EVENTS.join(', ')}.`)
   }
-  const events = parseWebhookEvents(JSON.stringify(rawEvents))
+  // R542: parseWebhookEvents sprejema jsonb tabelo (ali stari niz) neposredno
+  const events = parseWebhookEvents(rawEvents)
   if (!events) {
     return jsonError(400, 'Neveljavni dogodki.', `Vsak tip mora biti iz kataloga (max ${WEBHOOK_EVENTS.length}): ${WEBHOOK_EVENTS.join(', ')}.`)
   }
@@ -105,7 +105,7 @@ export async function POST (req: NextRequest) {
       data: {
         url,
         secretHash: sha256Hex(secret),
-        events: serializeWebhookEvents(events),
+        events, // R542: jsonb tabela (parseWebhookEvents že deduplicira)
         active: true,
         description,
         createdById: user.id,

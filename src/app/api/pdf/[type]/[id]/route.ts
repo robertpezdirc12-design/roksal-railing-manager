@@ -25,6 +25,7 @@ import {
   type SegmentRules, type SegmentRole, type SegmentInput,
 } from '@/lib/segment-bom'
 import { exportChecks } from '@/lib/export-core'
+import { asJsonObject, asJsonObjectLoose } from '@/lib/json'
 import { renderMeasurePackagePdf, type CutListRow, type PackagePhoto } from '@/lib/measure-package-pdf'
 import { handoverPdfZaUporabnika } from '@/lib/handover-pdf'
 
@@ -337,7 +338,7 @@ interface VizRowFull {
   status: string
   sourcePhoto: string
   rendered: string | null
-  renderParams: string
+  renderParams: unknown
   engineVersion: string
   note: string | null
   createdAt: Date
@@ -366,10 +367,11 @@ async function renderPhotoVizPdf (id: string): Promise<{ bytes: Uint8Array<Array
   if (!viz) return jsonError(404, 'Vizualizacija ne obstaja.')
 
   // konfiguracija iz posnetka (prikaz povzetka)
-  let cfgInfo = ''
-  try {
-    const p = JSON.parse(viz.renderParams) as { config?: Record<string, unknown>; reference?: { cm?: number; tip?: string } }
-    const c = p.config ?? {}
+  // R542: renderParams je jsonb objekt — branje brez JSON.parse
+  let cfgInfo = '—'
+  {
+    const p = asJsonObjectLoose(viz.renderParams)
+    const c = asJsonObject(p?.config) ?? {}
     const deli = [
       `Tip: ${String(c.tip ?? '—')}`,
       `Dolžina: ${String(c.lengthCm ?? '—')} cm`,
@@ -378,7 +380,7 @@ async function renderPhotoVizPdf (id: string): Promise<{ bytes: Uint8Array<Array
       c.handrail === false ? 'Brez ročnika' : 'Z ročnikom',
     ]
     cfgInfo = deli.join(' · ')
-  } catch { cfgInfo = '—' }
+  }
 
   const doc = pdfDoc()
   setFooter(doc)

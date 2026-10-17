@@ -15,13 +15,13 @@ export type VariantLabel = (typeof VARIANT_LABELS)[number]
 export interface ProjectRow { id: string; code: string; title: string; status: string; customer: { name: string; city: string | null } | null }
 export interface VariantRow { id: string; sku: string; name: string; color: string | null; ral: string | null }
 export interface ProductRow {
-  id: string; sku: string; name: string; unit: string; tech: string | null
+  id: string; sku: string; name: string; unit: string; tech: Record<string, unknown> | null // R542: jsonb
   family: { code: string; name: string }
   variants: VariantRow[]
 }
 export interface MeasurementRow {
   id: string; type: string; location: string | null; lengthCm: number | null; heightCm: number | null
-  posts: number | null; params: string | null; createdAt: string
+  posts: number | null; params: Record<string, unknown> | null; createdAt: string // R542: jsonb
 }
 export interface SavedVizRow {
   id: string; variantLabel: string; status: string; note: string | null
@@ -95,15 +95,15 @@ export interface FotoMeasurement { m: MeasurementRow; foto: string | null }
 /** GET /api/photo-visualization/[id] → data: polja, ki jih potrebujeta odpri() (vstop) in slotIzZapisa() (stanje.ts). */
 export interface OdpriZapis {
   id: string; variantLabel: string; status: string; sourcePhoto: string
-  renderParams: string; measurementId: string | null; note: string | null
+  renderParams: Record<string, unknown>; measurementId: string | null; note: string | null // R542: jsonb
   sourcePhotoId: string | null
   productId: string; variantId: string | null
-  product: { id: string; sku: string; name: string; tech: string | null; family: { code: string } }
+  product: { id: string; sku: string; name: string; tech: Record<string, unknown> | null; family: { code: string } } // R542: tech jsonb
   opozorila: Opozorilo[]
   dokaz: DokazVeriga | null
 }
 
-/** JSON.parse(renderParams) shranjene vizualizacije — delno zaupanja vreden vhod (stari zapisi imajo manjkajoča polja). */
+/** renderParams shranjene vizualizacije (R542: jsonb objekt) — delno zaupanja vreden vhod (stari zapisi imajo manjkajoča polja). */
 export interface ParsedRenderParams {
   quad?: Tocka[]; reference?: { tip?: string; cm?: number; opis?: string }; config?: Record<string, unknown>
   maska?: { ograja?: Tocka[][]; izpusti?: Tocka[][]; prednji?: Tocka[][] }

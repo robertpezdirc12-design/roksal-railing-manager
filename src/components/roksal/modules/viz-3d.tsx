@@ -73,29 +73,26 @@ function clampNum (v: unknown, min: number, max: number, fb: number): number {
   return Math.min(max, Math.max(min, n))
 }
 
-/** Prebere params JSON meritve in vrne konfigurator (ali null, če ga ni). */
-export function parseKonfigurator (params: string | null | undefined): KonfigParams | null {
+/** Prebere params meritve (R542: jsonb objekt) in vrne konfigurator (ali null, če ga ni). */
+export function parseKonfigurator (params: Record<string, unknown> | string | null | undefined): KonfigParams | null {
   if (!params) return null
-  try {
-    const raw: unknown = JSON.parse(params)
-    if (typeof raw !== 'object' || raw === null) return null
-    const k = (raw as { konfigurator?: unknown }).konfigurator
-    if (typeof k !== 'object' || k === null) return null
-    const o = k as Record<string, unknown>
-    return {
-      profileId: typeof o.profileId === 'string' ? o.profileId : null,
-      sku: typeof o.sku === 'string' ? o.sku : null,
-      colorId: isColorId(o.colorId) ? o.colorId : 'antracit',
-      tip: o.tip === 'BALUSTRADA' || o.tip === 'NAGIB' ? o.tip : 'OGRAJA',
-      lengthCm: clampNum(o.lengthCm, 20, 6000, 400),
-      heightCm: clampNum(o.heightCm, 20, 400, 110),
-      posts: Math.round(clampNum(o.posts, 1, 40, 5)),
-      handrail: typeof o.handrail === 'boolean' ? o.handrail : true,
-      slopeDeg: clampNum(o.slopeDeg, 0, 60, 0),
-      material: typeof o.material === 'string' ? o.material : null,
-    }
-  } catch {
-    return null
+  // R542: API vrača razčlenjen objekt; niz ostaja le kot obramba za starejše oblike
+  const raw: unknown = typeof params === 'string' ? (() => { try { return JSON.parse(params) as unknown } catch { return null } })() : params
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return null
+  const k = (raw as { konfigurator?: unknown }).konfigurator
+  if (typeof k !== 'object' || k === null) return null
+  const o = k as Record<string, unknown>
+  return {
+    profileId: typeof o.profileId === 'string' ? o.profileId : null,
+    sku: typeof o.sku === 'string' ? o.sku : null,
+    colorId: isColorId(o.colorId) ? o.colorId : 'antracit',
+    tip: o.tip === 'BALUSTRADA' || o.tip === 'NAGIB' ? o.tip : 'OGRAJA',
+    lengthCm: clampNum(o.lengthCm, 20, 6000, 400),
+    heightCm: clampNum(o.heightCm, 20, 400, 110),
+    posts: Math.round(clampNum(o.posts, 1, 40, 5)),
+    handrail: typeof o.handrail === 'boolean' ? o.handrail : true,
+    slopeDeg: clampNum(o.slopeDeg, 0, 60, 0),
+    material: typeof o.material === 'string' ? o.material : null,
   }
 }
 

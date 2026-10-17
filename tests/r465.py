@@ -180,15 +180,14 @@ chk(any(x.get('toKind') == 'VRATA' for x in segs), 'segment z VRATA obstaja (ozn
 TINY_PNG = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD//gA='
 s, d = callj('POST', '/api/ar-snapshots', monter, {
     'projectId': P4, 'scene': 'testni prizor',
-    'params': json.dumps({'photo': TINY_PNG, 'scale': 1.2, 'opacity': 0.9, 'mode': 'demo',
-                          'source': {'vir': 'tekac', 'runId': RUN, 'segments': len(segs), 'totalCm': 600}}),
+    'params': {'photo': TINY_PNG, 'scale': 1.2, 'opacity': 0.9, 'mode': 'demo',
+               'source': {'vir': 'tekac', 'runId': RUN, 'segments': len(segs), 'totalCm': 600}},  # R542: jsonb objekt (niz → zod 400)
     'note': TAG})
 chk(s == 201, f'AR posnetek z virom tekača 201 (dejansko {s})')
 ARSNAP = d.get('data', {}).get('id') if s == 201 else None
 s, d = callj('GET', f'/api/ar-snapshots/{ARSNAP}', monter)
 src = None
-try: src = json.loads(d['data']['params']).get('source')
-except Exception: pass
+src = (d.get('data', {}).get('params') or {}).get('source')  # R542: jsonb objekt
 chk(s == 200 and (src or {}).get('vir') == 'tekac' and src.get('runId') == RUN, f'vir tekača preberljiv v podrobnosti AR posnetka ({src})')
 
 # ══ A. RBAC (fail-closed) ═══════════════════════════════════════════════════

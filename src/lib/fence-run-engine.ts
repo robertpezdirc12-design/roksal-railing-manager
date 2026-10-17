@@ -19,6 +19,7 @@
 // ─── Vrste vozlišč (§1: stebri, vogali, vrata, stopniški prehodi) ───────────
 
 import { CALIB_METHODS, MEASUREMENT_STATUS_ORDER, MEASUREMENT_STATUS_SHORT, type CalibrationMethod, type MeasurementStatus } from './measure-engine'
+import { techObject } from './json'
 
 // Skupna lestvica metod kalibracije — izpeljana iz merilnega jedra, ne tukaj
 // napisana ponova (issue #15 faza 2).
@@ -124,22 +125,19 @@ export const DEFAULT_RULES: ProductRules = { maxSpanCm: 120, maxSlopeDeg: 30, ga
 
 /** Prebere pravila iz tech JSON izdela (številska polja maxSpanCm/maxSlopeDeg/
  *  gateMaxWcm) — pisna polja („razmik ≤ 120 cm") se NE tolmačijo (§17: brez
- *  fuzzy matchinga — samo eksplicitne številske vrednosti). */
-export function productRulesFromTech (techJson: string | null | undefined): Partial<ProductRules> {
-  if (!techJson) return {}
-  try {
-    const t = JSON.parse(techJson) as Record<string, unknown>
-    const out: Partial<ProductRules> = {}
-    const span = Number(t.maxSpanCm)
-    if (Number.isFinite(span) && span >= 40 && span <= 300) out.maxSpanCm = Math.round(span)
-    const slope = Number(t.maxSlopeDeg)
-    if (Number.isFinite(slope) && slope >= 5 && slope <= 60) out.maxSlopeDeg = Math.round(slope)
-    const gate = Number(t.gateMaxWcm)
-    if (Number.isFinite(gate) && gate >= 60 && gate <= 1000) out.gateMaxWcm = Math.round(gate)
-    return out
-  } catch {
-    return {}
-  }
+ *  fuzzy matchinga — samo eksplicitne številske vrednosti).
+ *  R542: tech je jsonb objekt (stari testni mostiči pošiljajo JSON niz —
+ *  techObject sprejme oboje). */
+export function productRulesFromTech (techJson: unknown): Partial<ProductRules> {
+  const t = techObject(techJson)
+  const out: Partial<ProductRules> = {}
+  const span = Number(t.maxSpanCm)
+  if (Number.isFinite(span) && span >= 40 && span <= 300) out.maxSpanCm = Math.round(span)
+  const slope = Number(t.maxSlopeDeg)
+  if (Number.isFinite(slope) && slope >= 5 && slope <= 60) out.maxSlopeDeg = Math.round(slope)
+  const gate = Number(t.gateMaxWcm)
+  if (Number.isFinite(gate) && gate >= 60 && gate <= 1000) out.gateMaxWcm = Math.round(gate)
+  return out
 }
 
 // ─── Segmenti (izpeljani iz vozlišč + terena) ───────────────────────────────

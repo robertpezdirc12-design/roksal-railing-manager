@@ -25,6 +25,8 @@
 //  - VIZUALIZACIJA OSTANE PREDSTAVITEV: ta modul NE dokazuje mer, NE proizvaja
 //    količin in NE posega v kosovnico/cenik — to niso njegovi viri.
 
+import { asJsonObject } from '@/lib/json'
+
 /** Trditev odjemalca: «pri izrisu je bilo uporabljeno TO gradivo». */
 export interface TrdnjaGradiva {
   assetId: string
@@ -158,19 +160,15 @@ export function dokazMere (status: string | null | undefined, verzija: number | 
 
 /**
  * Prebere dokaz iz posnetka verzije (`PhotoVisualizationVersion.data`).
- * Fail-closed: pokvarjen JSON, verzija brez dokaza ali dokaz s poškodovanimi
- * polji vrne null — star zapis ne more dobiti verige, ki ob nastanku ni bila
- * zapisana, pokvarjen posnetek pa ne more podtiskati lažnega dokaza.
+ * Fail-closed: verzija brez dokaza ali dokaz s poškodovanimi polji vrne null —
+ * star zapis ne more dobiti verige, ki ob nastanku ni bila zapisana, pokvarjen
+ * posnetek pa ne more podtiskati lažnega dokaza.
+ * R542: data je jsonb objekt — brez JSON.parse.
  */
-export function preberiDokaz (data: string | null | undefined): VizDokaz | null {
-  if (typeof data !== 'string' || data.length === 0) return null
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(data)
-  } catch {
-    return null
-  }
-  const surov = (parsed as { meta?: { dokaz?: unknown } })?.meta?.dokaz
+export function preberiDokaz (data: unknown): VizDokaz | null {
+  const parsed = asJsonObject(data)
+  if (!parsed) return null
+  const surov = asJsonObject(parsed.meta)?.dokaz
   if (!surov || typeof surov !== 'object' || Array.isArray(surov)) return null
   const d = surov as Record<string, unknown>
   return {

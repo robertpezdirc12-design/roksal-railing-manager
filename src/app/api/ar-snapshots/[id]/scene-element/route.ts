@@ -31,9 +31,10 @@ import { writeAudit } from '@/lib/audit'
 import { parseBody } from '@/lib/validate'
 import {
   SCENE_CLASSES, SCENE_LIMITS, SCENE_STATUSES, STAIR_ASCENTS, SURFACE_KINDS,
-  applyEdits, isDepthManifest, newSceneId, sanitizeSceneResult, serializeSceneResult,
+  applyEdits, isDepthManifest, newSceneId, sanitizeSceneResult,
   type SceneClass, SceneElement, SceneStatus, SceneUnderstandingResult, StairAscent, SurfaceKind,
 } from '@/lib/scene-understanding-core'
+import { Prisma } from '@prisma/client'
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -89,13 +90,10 @@ const SceneElementAddSchema = z.object({
   label: z.string({ error: 'Oznaka mora biti besedilo.' }).trim().optional().transform((v) => (v ? v.slice(0, SCENE_LIMITS.elementLabelMaxLen) : undefined)),
 })
 
-function parseStored (raw: string | null): SceneUnderstandingResult | null {
-  if (!raw) return null
-  try {
-    return sanitizeSceneResult(JSON.parse(raw))
-  } catch {
-    return null
-  }
+// R542: sceneJson je jsonb objekt — sanitizeSceneResult (validator) neposredno,
+// brez JSON.parse (slaba oblika → null → 404, kot prej).
+function parseStored (raw: unknown): SceneUnderstandingResult | null {
+  return sanitizeSceneResult(raw)
 }
 
 export async function GET (req: NextRequest, { params }: Params) {
@@ -185,7 +183,8 @@ export async function PATCH (req: NextRequest, { params }: Params) {
   await db.$transaction(async (tx) => {
     await tx.arSnapshot.update({
       where: { id },
-      data: { sceneJson: serializeSceneResult(updated) },
+      // R542: sceneJson je jsonb — objekt direktno (ne JSON niz)
+      data: { sceneJson: updated as unknown as Prisma.InputJsonValue },
       select: { id: true },
     })
 
@@ -270,7 +269,8 @@ export async function POST (req: NextRequest, { params }: Params) {
   await db.$transaction(async (tx) => {
     await tx.arSnapshot.update({
       where: { id },
-      data: { sceneJson: serializeSceneResult(updated) },
+      // R542: sceneJson je jsonb — objekt direktno (ne JSON niz)
+      data: { sceneJson: updated as unknown as Prisma.InputJsonValue },
       select: { id: true },
     })
 

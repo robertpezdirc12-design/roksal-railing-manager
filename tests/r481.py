@@ -318,8 +318,8 @@ const {{PrismaClient}} = require('@prisma/client'); const p = new PrismaClient()
 ''')
 chk(row.get('len') == 64 and bool(row.get('hash')) and row.get('eq_secret') is False,
     'DB: shranjen SAMO SHA-256 hex has (64 znakov, ≠ skrivnost)')
-chk(row.get('events') == '["QUOTE_SIGNED","ORDER_CONFIRMED"]' and row.get('active') is True and row.get('revoked') is None,
-    'DB: events kot JSON niz + active + ni preklica')
+chk(row.get('events') == ['QUOTE_SIGNED', 'ORDER_CONFIRMED'] and row.get('active') is True and row.get('revoked') is None,
+    'DB: events kot jsonb tabela + active + ni preklica (R542)')
 
 s, d = callj('POST', '/api/webhooks', admin, {'url': 'http://partner.example.com/h', 'events': ['QUOTE_SIGNED'], 'secret': 'x' * 20})
 chk(s == 400, 'POST http (zunanji) URL → 400')
@@ -527,8 +527,9 @@ a_create = global_audit(admin, 'WEBHOOK_CREATE')
 chk(len(a_create) > 0, 'revizija WEBHOOK_CREATE v globalnem dnevniku')
 detail_blob = json.dumps([e.get('detail') for e in a_create], ensure_ascii=False)
 chk(SECRET not in detail_blob, 'WEBHOOK_CREATE detail BREZ skrivnosti')
-chk(not any('secretHash' in (e.get('detail') or '') for e in a_create), 'WEBHOOK_CREATE detail BREZ secretHash')
-chk(any((e.get('detail') or '').find('events') >= 0 for e in a_create), 'WEBHOOK_CREATE detail vsebuje events')
+# R542: detail je jsonb objekt — podniz po serializaciji (ista namena)
+chk(not any('secretHash' in json.dumps(e.get('detail'), ensure_ascii=False) for e in a_create), 'WEBHOOK_CREATE detail BREZ secretHash')
+chk(any('events' in json.dumps(e.get('detail'), ensure_ascii=False) for e in a_create), 'WEBHOOK_CREATE detail vsebuje events')
 for action in ('WEBHOOK_UPDATE', 'WEBHOOK_REVOKE', 'WEBHOOK_TEST', 'WEBHOOK_RETRY'):
     rows = global_audit(admin, action)
     chk(len(rows) > 0, f'revizija {action} zabeležena')

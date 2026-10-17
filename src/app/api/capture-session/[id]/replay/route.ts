@@ -18,9 +18,9 @@ import { loadCaptureContext } from '@/lib/capture-qa-service'
 import { computeCoverage, driftStatus, parseQuality } from '@/lib/capture-qa-engine'
 import type { DriftSample, PhotoQuality } from '@/lib/capture-qa-engine'
 
-function safeParseQuality (raw: string | null): PhotoQuality {
-  if (!raw) return {}
-  try { return parseQuality(JSON.parse(raw)) ?? {} } catch { return {} }
+// R542: quality je jsonb objekt — parseQuality (validator) neposredno.
+function safeParseQuality (raw: unknown): PhotoQuality {
+  return parseQuality(raw) ?? {}
 }
 
 export async function GET (req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -82,11 +82,9 @@ export async function GET (req: NextRequest, { params }: { params: Promise<{ id:
     })
   }
 
-  // ── končno (avtoritativno) stanje iz shranjenega zajema ──
-  let finalCoverage: unknown = null
-  try { finalCoverage = ctx.session.coverage ? JSON.parse(ctx.session.coverage) : null } catch { finalCoverage = null }
-  let finalDrift: unknown = null
-  try { finalDrift = ctx.session.drift ? JSON.parse(ctx.session.drift) : null } catch { finalDrift = null }
+  // ── končno (avtoritativno) stanje iz shranjenega zajema (R542: jsonb) ──
+  const finalCoverage: unknown = ctx.session.coverage ?? null
+  const finalDrift: unknown = ctx.session.drift ?? null
 
   const totalCm = ctx.run && ctx.run.segments.length > 0
     ? ctx.run.segments[ctx.run.segments.length - 1].toAtCm

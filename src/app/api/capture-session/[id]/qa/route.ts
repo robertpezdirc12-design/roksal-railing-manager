@@ -11,10 +11,11 @@ import {
   coverageHeatmap, elementQa, frameQuality, structuralZones,
 } from '@/lib/reality-r2p-engine'
 import { geoContext, heightLimitRules, toleranceRules } from '@/lib/reality-r2p-service'
+import { asJsonObject } from '@/lib/json'
 
-function safeParseQ (v: string | null): { dark?: boolean; bright?: boolean; blurry?: boolean; blurScore?: number } {
-  if (!v) return {}
-  try { return JSON.parse(v) as { dark?: boolean; bright?: boolean; blurry?: boolean; blurScore?: number } } catch { return {} }
+// R542: quality je jsonb objekt — brez JSON.parse (obramba za neobjektno obliko)
+function safeParseQ (v: unknown): { dark?: boolean; bright?: boolean; blurry?: boolean; blurScore?: number } {
+  return (asJsonObject(v) ?? {}) as { dark?: boolean; bright?: boolean; blurry?: boolean; blurScore?: number }
 }
 
 export async function GET (req: NextRequest, { params }: { params: Promise<{ id: string }> }) {

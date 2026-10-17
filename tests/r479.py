@@ -259,7 +259,7 @@ PIN1 = pin1.get('data', {}).get('id')
 chk(pin1.get('data', {}).get('status') == 'ODPRTO', 'nov pin = ODPRTO')
 chk(pin1.get('data', {}).get('internalNote', '').startswith('INTERNI'), 'internalNote se vrne INTERNEMU pogledu')
 chk(pin1.get('data', {}).get('author', {}).get('name') == 'Robert Pezdirc', 'avtor z imenom')
-snap = json.loads(pin1.get('data', {}).get('snapshot') or '{}')
+snap = pin1.get('data', {}).get('snapshot') or {}  # R542: jsonb objekt
 chk(snap.get('segmentLabel') == 'seg-1' and snap.get('lengthCm', 0) > 0, f'snapshot cilja ob nastanku (past #6): {snap}')
 chk(audit_has(admin, 'PIN_CREATE', PIN1, P4), 'revizija PIN_CREATE')
 
@@ -285,7 +285,7 @@ PIN2 = pin2.get('data', {}).get('id')
 s, pin3 = callj('POST', '/api/pins', admin, {'fenceRunId': RUN, 'targetType': 'FOTOGRAFIJA', 'targetKey': PHOTOS[0], 'note': f'Foto {TAG}'})
 chk(s == 201, f'pin na fotografijo 201 (dejansko {s})')
 PIN3 = pin3.get('data', {}).get('id')
-snap3 = json.loads(pin3.get('data', {}).get('snapshot') or '{}')
+snap3 = pin3.get('data', {}).get('snapshot') or {}  # R542: jsonb objekt
 chk(snap3.get('sessionId') == SESS, f'snapshot fotopina vezan na zajem ({snap3})')
 
 # IDOR: monter na tuj tekač (P3)

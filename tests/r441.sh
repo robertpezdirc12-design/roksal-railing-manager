@@ -149,7 +149,7 @@ contains "job poroča trajanje" "$BODY" 'durationMs'
 # dnevnik + revizija (baza — prek Prisma, ne sqlite3: R464)
 RUN_OK=$(dbq "const {PrismaClient}=require('@prisma/client');const p=new PrismaClient();p.jobRun.findFirst({where:{job:'varnostna-kopija'},orderBy:{startedAt:'desc'},select:{ok:true}}).then(r=>{console.log(r&&r.ok?1:0);return p.\$disconnect()})")
 t "JobRun dnevnik ok" 1 "$RUN_OK"
-DETAIL=$(dbq "const {PrismaClient}=require('@prisma/client');const p=new PrismaClient();p.jobRun.findFirst({where:{job:'varnostna-kopija'},orderBy:{startedAt:'desc'},select:{detail:true}}).then(r=>{console.log(r?r.detail:'{}');return p.\$disconnect()})")
+DETAIL=$(dbq "const {PrismaClient}=require('@prisma/client');const p=new PrismaClient();p.jobRun.findFirst({where:{job:'varnostna-kopija'},orderBy:{startedAt:'desc'},select:{detail:true}}).then(r=>{console.log(JSON.stringify(r?r.detail:{}));return p.\$disconnect()})")
 contains "detail: šifrirano" "$DETAIL" '"sifrirano":true'
 # OFF-SITE je odvisnost okolja (žeton + dosegljiv GitLab) — POŠTENO preverjamo
 # poročanje: če je bilo naloženo, so zapisani tudi kosi; sicer mora biti
@@ -160,7 +160,7 @@ else
   contains "detail: off-site poroča razlog (odvisno od okolja)" "$DETAIL" '"opomba":'
 fi
 notcontains "detail BREZ celotnega sha256" "$DETAIL" '"sha256":"[a-f0-9]{64}"'
-AUD_BACKUP=$(dbq "const {PrismaClient}=require('@prisma/client');const p=new PrismaClient();p.auditLog.count({where:{action:'MAINTENANCE_RUN',detail:{contains:'varnostna-kopija'}}}).then(n=>{console.log(n>0?1:0);return p.\$disconnect()})")
+AUD_BACKUP=$(dbq "const {PrismaClient}=require('@prisma/client');const p=new PrismaClient();p.\$queryRawUnsafe('SELECT count(*)::int AS n FROM \"AuditLog\" WHERE \"action\" = \$1 AND \"detail\"::text LIKE \$2', 'MAINTENANCE_RUN', '%varnostna-kopija%').then(r=>{console.log(r[0].n>0?1:0);return p.\$disconnect()})")
 t "revizija MAINTENANCE_RUN zapisana" 1 "$AUD_BACKUP"
 # local .rkb obstaja in je šifriran (glava Salted__)
 LAST_RKB=$(find $ROOT/db/backups -maxdepth 1 -name 'roksal-backup-*.rkb' -printf '%T@ %p\n' | sort -rn | head -n1 | cut -d' ' -f2-)

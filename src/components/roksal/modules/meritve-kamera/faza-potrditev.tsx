@@ -98,7 +98,8 @@ export function FazaPotrditev (props: FazaPotrditevProps) {
           projectId: projectId !== 'none' ? projectId : null,
           workOrderId: workOrderId !== 'none' ? workOrderId : null,
           location: location.trim() || null,
-          params: JSON.stringify({ photo: d.dataUrl, stage: 'DOKUMENTACIJA' }),
+          // R542: params je jsonb objekt (zod sprejema samo objekt)
+          params: { photo: d.dataUrl, stage: 'DOKUMENTACIJA' },
           docOfMeasurementId: meritevId,
           docTag: d.tag,
           docSegmentIdx: d.segmentIdx,

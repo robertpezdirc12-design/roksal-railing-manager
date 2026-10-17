@@ -417,7 +417,8 @@ sid_m = d.get('data', {}).get('id')
 if sid_m: snap_ids.append(sid_m)
 s, d = callj('GET', f'/api/ar-snapshots/{sid_m}', monter)
 try:
-    ids = [e['id'] for e in json.loads(d['data']['sceneJson'])['elements']]
+    shranjen = d['data']['sceneJson']
+    ids = [e['id'] for e in (shranjen if isinstance(shranjen, dict) else json.loads(shranjen))['elements']]  # R542: jsonb
     chk('el-ok' in ids and 'el-bad' not in ids, 'bbox >1 izločen, veljaven ostane')
 except Exception as ex:
     bad(f'sceneJson berljiv: {ex}')

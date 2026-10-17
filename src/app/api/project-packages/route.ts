@@ -155,16 +155,16 @@ export async function POST (req: NextRequest) {
     joinCompareCode = compareCodeRaw
   }
 
-  // R447: strukturirana kalkulacija konfiguratorja (objekt → JSON niz); varovalka velikosti
-  let calcJson: string | null = null
+  // R447: strukturirana kalkulacija konfiguratorja (jsonb objekt); varovalka velikosti
+  // ostaja prek JSON.stringify (samo meritev dolžine — R542)
+  let calcJson: Prisma.InputJsonValue | undefined
   if (data.calcJson !== undefined && data.calcJson !== null) {
     if (typeof data.calcJson !== 'object' || Array.isArray(data.calcJson)) {
       return jsonError(400, 'calcJson mora biti objekt (npr. { inputs, plan }).')
     }
     try {
-      const serialized = JSON.stringify(data.calcJson)
-      if (serialized.length > 128 * 1024) return jsonError(400, 'calcJson je prevelik (največ 128 kB).')
-      calcJson = serialized
+      if (JSON.stringify(data.calcJson).length > 128 * 1024) return jsonError(400, 'calcJson je prevelik (največ 128 kB).')
+      calcJson = data.calcJson as Prisma.InputJsonValue
     } catch {
       return jsonError(400, 'calcJson ni veljaven JSON.')
     }

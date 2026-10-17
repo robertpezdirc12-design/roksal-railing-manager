@@ -333,7 +333,7 @@ export default function ArModule () {
         type: 'FOTO',
         projectId: projectId !== 'none' ? projectId : null,
         location: 'AR predogled',
-        params: JSON.stringify({ photo, ar: true }),
+        params: { photo, ar: true },
         note: note.trim() || `AR predogled — ${vir === 'tekac' && runSegs ? `${runSegs.length} seg. tekača` : `${posts} stebrov, ${heightCm} cm`}`,
       })
 
@@ -350,8 +350,8 @@ export default function ArModule () {
         await apiPost('/api/ar-snapshots', {
           projectId: projectId !== 'none' ? projectId : null,
           scene: analysis?.scene ?? null,
-          analysis: analysis ? JSON.stringify(analysis) : null,
-          params: JSON.stringify({ photo, posts, heightCm, scale, opacity, mode, ...sourceInfo }),
+          analysis: analysis ?? null,
+          params: { photo, posts, heightCm, scale, opacity, mode, ...sourceInfo },
           note: (note.trim() || null) as string | null,
           ...(elementsToSave.length > 0
             ? { sceneUnderstanding: { version: 1, at: Date.now(), elements: elementsToSave, edits: sceneEdits } }

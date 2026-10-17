@@ -19,10 +19,12 @@ import { apiDelete, apiPost, fmtDateTime, useApi } from '@/lib/api-client'
 import { EmptyState, ErrorBox, LoadingRows, PageHeader } from '@/components/roksal/ui-bits'
 import { READS_ALL_PROJECTS, hasPerm } from '@/lib/permissions-core'
 import { notificationEventLabel } from '@/lib/notify-events'
+import { asJsonObject } from '@/lib/json'
 
 interface AuditRow {
   id: string; action: string; entity: string; entityId: string | null; projectId: string | null
-  detail: string | null; createdAt: string
+  // R542: detail je jsonb objekt (ne niz) — API ga vrača razčlenjenega
+  detail: Record<string, unknown> | null; createdAt: string
   user: { name: string; role: string } | null
 }
 
@@ -176,7 +178,8 @@ export default function VarnostModule () {
                       <span className="text-xs text-muted-foreground">{a.user?.name ?? 'sistem'}</span>
                       <span className="text-[10px] text-muted-foreground/60">{a.user?.role}</span>
                     </div>
-                    {a.detail ? <div className="mt-1 truncate font-mono text-[11px] text-muted-foreground">{a.detail}</div> : null}
+                    {/* R542: detail je objekt — izris kot jedrnata serializacija (objekt ni veljaven React child) */}
+                    {a.detail ? <div className="mt-1 truncate font-mono text-[11px] text-muted-foreground">{JSON.stringify(a.detail)}</div> : null}
                   </div>
                   <div className="text-right text-xs text-muted-foreground">
                     <div>{fmtDateTime(a.createdAt)}</div>
@@ -196,7 +199,8 @@ export default function VarnostModule () {
 
 interface JobDef {
   job: string; label: string; desc: string; cron: string
-  last: { ok: boolean; affected: number; detail: string | null; startedAt: string; finishedAt: string; user: { name: string } | null } | null
+  // R542: detail je jsonb objekt (ne niz)
+  last: { ok: boolean; affected: number; detail: Record<string, unknown> | null; startedAt: string; finishedAt: string; user: { name: string } | null } | null
 }
 
 function MaintenanceCard () {
@@ -278,7 +282,9 @@ interface BackupDetail {
 function BackupCard () {
   const jobs = useApi<{ data: { definitions: JobDef[] } }>('/api/jobs', [])
   const last = jobs.data?.data.definitions.find(d => d.job === 'varnostna-kopija')?.last ?? null
-  const detail: BackupDetail = last?.detail ? JSON.parse(last.detail) : {}
+  // R542: detail je že razčlenjen jsonb objekt — brez JSON.parse (bil je znani
+  // zlom: JSON.parse nad objektom vrže); obramba za neobjektne vrednosti ostaja.
+  const detail = { ...asJsonObject(last?.detail) } as BackupDetail
   const offsiteOk = detail.off_site === true
 
   return (

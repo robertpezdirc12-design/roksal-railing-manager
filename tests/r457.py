@@ -100,7 +100,8 @@ const {{PrismaClient}}=require('@prisma/client');const p=new PrismaClient();
     await p.measurementVersion.deleteMany({{where:{{measurementId:m.id}}}});
     await p.measurement.delete({{where:{{id:m.id}}}});
   }}
-  await p.auditLog.deleteMany({{where:{{detail:{{contains:'{TAG}'}}}}}});
+  // R542: detail je jsonb — podniz po serializiranem jsonb (ista semantika contains)
+  await p.$executeRawUnsafe('DELETE FROM "AuditLog" WHERE "detail"::text LIKE $1', '%{TAG}%');
   await p.measurement.deleteMany({{where:{{note:'DBG-TEST'}}}});
   console.log('CLEAN_DONE');return p.$disconnect();
 }})()
@@ -280,7 +281,7 @@ s, d = callj('POST', '/api/measurement/confirm', monter, {
 })
 chk(s == 201, f'potrditev s KERAMIKA mode + engine 201 (dejansko {s})')
 mid = d['data']['id'] if s == 201 else None
-params = json.loads(d['data']['params']) if s == 201 else {}
+params = (d['data'].get('params') or {}) if s == 201 else {}  # R542: jsonb objekt
 chk(params.get('mode') == 'KERAMIKA', 'params.mode = KERAMIKA')
 chk(params.get('engine', {}).get('domain', {}).get('mode') == 'KERAMIKA', 'params.engine.domain = KERAMIKA')
 chk(params.get('calibration', {}).get('method') == 'ZNANA_MERA', 'kalibracijska metoda zapisana (§4)')

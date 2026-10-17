@@ -7,7 +7,7 @@ const ps = await db.product.findMany({
   orderBy: { sku: 'asc' },
 })
 for (const p of ps) {
-  const tech = JSON.parse(p.tech || '{}')
+  const tech = p.tech ?? {}  // R542: jsonb objekt
   const verified = p.assets.filter(a => a.status === 'VERIFIED')
   console.log('─'.repeat(90))
   console.log(`${p.sku} | ${p.name} | ${p.family.code} | profil=${tech.profil} | visina=${tech.visinaMm}`)

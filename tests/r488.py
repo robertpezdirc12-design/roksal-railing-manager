@@ -168,7 +168,8 @@ const {PrismaClient}=require('@prisma/client');const p=new PrismaClient();
   }
   await p.quote.deleteMany({where:{note:{contains:'__TAG__'}}});
   await p.user.deleteMany({where:{email:{contains:'r488'}}});
-  await p.auditLog.deleteMany({where:{detail:{contains:'__TAG__'}}});
+  // R542: detail je jsonb — podniz po serializiranem jsonb (ista semantika contains)
+  await p.$executeRawUnsafe('DELETE FROM "AuditLog" WHERE "detail"::text LIKE $1', '%' + '__TAG__' + '%');
   console.log('CLEAN_DONE');return p.$disconnect();
 })()
 '''
@@ -267,9 +268,7 @@ chk(det.get('run', {}).get('status') == 'POTRJEN'
 
 s, d = callj('GET', f'/api/measurements/{MEAS}', admin)
 md = d.get('data', {})
-params = {}
-try: params = json.loads(md.get('params', '{}'))
-except Exception: pass
+params = md.get('params') or {}  # R542: params je jsonb objekt (brez parse)
 chk(params.get('fenceRunId') == RUN and len(params.get('segments', [])) == 4
     and abs(md.get('lengthCm', 0) - 1000) < 0.01,
     'meritev: params.fenceRunId + 4 segmentov + lengthCm 1000 (§17 en vir)')
@@ -285,7 +284,7 @@ pkg_db = bun_out(r'''
 const {PrismaClient}=require('@prisma/client');const p=new PrismaClient();
 (async()=>{
   const pkg=await p.projectPackage.findUnique({where:{id:'__PKG__'}});
-  const calc=pkg?JSON.parse(pkg.calcJson||'{}'):null;
+  const calc=pkg?(pkg.calcJson??null):null;  // R542: calcJson je jsonb objekt
   console.log('JSON='+JSON.stringify({status:pkg?.status,qty:pkg?.qty,unit:pkg?.unit,
     measurementId:pkg?.measurementId,calc}));
   return p.$disconnect();
@@ -486,7 +485,7 @@ snap = bun_out(r'''
 const {PrismaClient}=require('@prisma/client');const p=new PrismaClient();
 (async()=>{
   const s=await p.digitalTwinSnapshot.findUnique({where:{id:'__SNAP__'}});
-  console.log('JSON='+JSON.stringify(s?JSON.parse(s.data):null));
+  console.log('JSON='+JSON.stringify(s?(s.data??null):null));  // R542: data je jsonb objekt
   return p.$disconnect();
 })()
 '''.replace('__SNAP__', DESIGNED))
@@ -567,7 +566,7 @@ chk(src_has('src/components/roksal/modules/konfigurator.tsx', 'runSegmentsFromPa
     and src_has('src/components/roksal/modules/konfigurator.tsx', 'params.fenceRunId + params.segments'),
     'KONFIGURATOR: helper za PRAVE segmente tekača (params.fenceRunId + params.segments)')
 chk(src_has('src/components/roksal/modules/konfigurator.tsx', 'iz potrjenih tekačev (seg-1 … seg-N)')
-    and src_has('src/app/api/fence-run/[id]/confirm/route.ts', 'calcJson: JSON.stringify({ inputs })'),
+    and src_has('src/app/api/fence-run/[id]/confirm/route.ts', 'calcJson: { inputs }'),
     'CONFIRM: handoff zapiše calcJson.inputs (brez plan); prefill sporoča prenos segmentov')
 
 # ══ K. ČIŠČENJE ×2 ══════════════════════════════════════════════════════════

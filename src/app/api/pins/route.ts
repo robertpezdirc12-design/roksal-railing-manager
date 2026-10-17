@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 import { jsonError, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
@@ -25,7 +26,7 @@ function pinRow (p: {
   status: string; resolvedAt: Date | null
   author?: { id: string; name: string } | null; authorId?: string | null
   resolvedBy?: { id: string; name: string } | null; resolvedById?: string | null
-  snapshot: string | null; createdAt: Date; updatedAt: Date
+  snapshot: Prisma.JsonValue; createdAt: Date; updatedAt: Date
 }) {
   return {
     id: p.id, fenceRunId: p.fenceRunId, targetType: p.targetType, targetKey: p.targetKey,
@@ -113,7 +114,6 @@ export async function POST (req: NextRequest) {
   if (typeof snapshot === 'string' && snapshot.startsWith('ERR:')) {
     return jsonError(400, snapshot.slice(4))
   }
-
   // R539 (transakcijska celovitost): pin + revizija PIN_CREATE v ENI
   // transakciji — prej bi padec med njima pustil pin brez revizije
   // (zgodovina pregleda bi izgubila sled).
@@ -128,7 +128,8 @@ export async function POST (req: NextRequest) {
         y: body?.y ?? null,
         note: (body?.note as string).trim(),
         internalNote: body?.internalNote?.trim() ? (body?.internalNote as string).trim() : null,
-        snapshot: snapshot as string | null,
+        // R542: snapshot je jsonb — OBJEKT dokaza (prej JSON niz); null = DB NULL
+        snapshot: snapshot === null ? Prisma.DbNull : snapshot as unknown as Prisma.InputJsonValue,
       },
       include: PIN_INCLUDE,
     })
@@ -152,21 +153,22 @@ function isPinTargetTypeSafe (v: unknown): v is 'SEGMENT' | 'VOZLISCE' | 'FOTOGR
  * Snapshot cilja ob nastanku pina (past #6): seg-N ključi so izpeljava
  * (order+1) — če se tekač spremeni, se lahko premaknejo na drugo geometrijo.
  * Pin zato hrani dokaz o takratnem stanju. Vrne 'ERR:<sporočilo>' ob napaki.
+ * R542: vrača jsonb OBJEKT (ne JSON niz).
  */
 async function buildSnapshot (
   fenceRunId: string,
   targetType: 'SEGMENT' | 'VOZLISCE' | 'FOTOGRAFIJA',
   targetKey: string,
   index: number | null
-): Promise<string | null | `ERR:${string}`> {
+): Promise<Record<string, unknown> | null | `ERR:${string}`> {
   if (targetType === 'SEGMENT') {
     // seg-N → tekačev order je 0-based (N−1)
     const seg = await db.fenceSegment.findFirst({ where: { fenceRunId, order: (index as number) - 1 } })
     if (!seg) return `ERR:Segment ${targetKey} na tem tekaču ne obstaja.`
-    return JSON.stringify({
+    return {
       segmentLabel: targetKey, lengthCm: seg.lengthCm, angleDeg: seg.angleDeg,
       heightCm: seg.heightCm, status: seg.status, version: seg.version,
-    })
+    }
   }
   if (targetType === 'VOZLISCE') {
     // node-N → indeks v vrsti vozlišč (sortirano po atCm, 0-based)
@@ -174,7 +176,7 @@ async function buildSnapshot (
     const nodes = [...(ctx?.nodes ?? [])].sort((a, b) => a.atCm - b.atCm)
     const n = nodes[index as number]
     if (!n) return `ERR:Vozlišče ${targetKey} na tem tekaču ne obstaja.`
-    return JSON.stringify({ label: targetKey, kind: n.kind, atCm: n.atCm, heightCm: n.heightCm ?? null })
+    return { label: targetKey, kind: n.kind, atCm: n.atCm, heightCm: n.heightCm ?? null }
   }
   // FOTOGRAFIJA — posnetek zajema, ki pripada TEMU tekaču
   const photo = await db.capturePhoto.findUnique({
@@ -184,8 +186,8 @@ async function buildSnapshot (
   if (!photo || photo.session.fenceRunId !== fenceRunId) {
     return 'ERR:Fotografija ne pripada temu tekaču.'
   }
-  return JSON.stringify({
+  return {
     sessionId: photo.sessionId, sessionName: photo.session.name,
     zone: photo.zone, capturedAt: photo.capturedAt.toISOString(),
-  })
+  }
 }

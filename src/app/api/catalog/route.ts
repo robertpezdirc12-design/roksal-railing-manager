@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { Prisma } from '@prisma/client'
 import { z } from 'zod'
 import { db } from '@/lib/db'
 import { jsonError, requirePermission } from '@/lib/auth'
@@ -76,7 +77,8 @@ export async function POST (req: NextRequest) {
       data: {
         profileId: profile.id,
         userId: auth.user.id,
-        data: JSON.stringify({ before: null, after: snapshot, profile: snapshot }),
+        // R542: data je jsonb objekt (ne niz)
+        data: { before: null, after: snapshot, profile: snapshot } as unknown as Prisma.InputJsonValue,
         note: 'Nov profil v katalogu',
       },
     })

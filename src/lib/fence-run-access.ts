@@ -4,6 +4,7 @@
 // (avtor). Fail-closed: brez ustreznega obsega → 403.
 
 import type { NextResponse } from 'next/server'
+import type { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 import { jsonError } from '@/lib/auth'
 import type { SessionUser } from '@/lib/auth'
@@ -22,7 +23,7 @@ export async function fenceRunZaUporabnika (
       id: string; projectId: string; authorId: string | null; status: string
       name: string; note: string | null; productId: string | null; variantId: string | null
       measurementId: string | null; workOrderId: string | null
-      calibration: string | null; terrain: string | null; nodes: string | null; quality: string | null
+      calibration: Prisma.JsonValue; terrain: Prisma.JsonValue; nodes: Prisma.JsonValue; quality: Prisma.JsonValue
       createdAt: Date; updatedAt: Date
     }
     projectCode: string

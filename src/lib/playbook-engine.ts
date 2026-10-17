@@ -7,6 +7,8 @@
 import { db } from '@/lib/db'
 import { writeAudit } from '@/lib/audit'
 import { readsAllData, type SessionUser } from '@/lib/auth'
+import { Prisma } from '@prisma/client'
+import { asJsonObject } from '@/lib/json'
 import {
   deserializiraj, napredek, naslednjiKorak, preveriEvidence, serializiraj,
   jeZakljucen, VGRADNJENI_PLAYBOOKI, korakById,
@@ -49,7 +51,8 @@ export async function ensurePlaybookSeed (): Promise<void> {
         name: def.naziv,
         version: def.version,
         status: 'ACTIVE',
-        definition: serializiraj(def),
+        // R542: definicija je jsonb objekt (serializiraj vrača objekt)
+        definition: serializiraj(def) as unknown as Prisma.InputJsonValue,
       },
     })
   }
@@ -106,12 +109,12 @@ export interface RunOverviewRow {
   status: string
   workOrderId: string | null
   projectId: string | null
-  context: string | null
-  handoff: string | null
+  context: Prisma.JsonValue
+  handoff: Prisma.JsonValue
   startedAt: Date
   completedAt: Date | null
   steps: { stepId: string; status: string; attempts: number }[]
-  playbookDef: { definition: string }
+  playbookDef: { definition: Prisma.JsonValue }
 }
 
 export async function zacniZagon (
@@ -146,7 +149,8 @@ export async function zacniZagon (
       projectId: wo.projectId,
       workOrderId: wo.id,
       userId: user.id,
-      context: JSON.stringify({ odgovori: {} }),
+      // R542: jsonb — objekt direktno
+      context: { odgovori: {} },
       steps: {
         create: aktivna.def.steps.map((s) => ({ stepId: s.id, status: 'PENDING' })),
       },
@@ -184,22 +188,31 @@ async function naloziZagon (runId: string) {
   return { run, def: { ...def, version: run.playbookVersion } }
 }
 
+// R542: kontekst/handoff sta jsonb objekta — branje brez JSON.parse;
+// obramba pred napačno obliko ostaja (asJsonObject + shape guard).
+function razberiContext (v: Prisma.JsonValue): RunContext {
+  const c = asJsonObject(v) as RunContext | null
+  return c ?? { odgovori: {} }
+}
+
+function razberiHandoff (v: Prisma.JsonValue): { do: string; opis: string; ob: string }[] {
+  return Array.isArray(v) ? v as { do: string; opis: string; ob: string }[] : []
+}
+
 export function sestaviStanje (
   run: {
     id: string; status: string; playbookKey: string; playbookVersion: number
     workOrderId: string | null; projectId: string | null
     startedAt: Date; completedAt: Date | null
-    context: string | null; handoff: string | null
+    context: Prisma.JsonValue; handoff: Prisma.JsonValue
     steps: {
-      stepId: string; status: string; attempts: number; evidence: string | null
+      stepId: string; status: string; attempts: number; evidence: Prisma.JsonValue
       exceptionReason: string | null; startedAt: Date | null; completedAt: Date | null
     }[]
   },
   def: PlaybookDefinition
 ): RunState {
-  const context: RunContext = run.context
-    ? (() => { try { return JSON.parse(run.context) as RunContext } catch { return { odgovori: {} } } })()
-    : { odgovori: {} }
+  const context = razberiContext(run.context)
   if (!context.odgovori) context.odgovori = {}
   // koraki v VRSTNEM REDU DEFINICIJE (deterministični API odgovor — include brez
   // orderBy vrstni red baze ni zajamčen)
@@ -210,7 +223,9 @@ export function sestaviStanje (
     stepId: s.stepId,
     status: s.status as KorakStanje['status'],
     attempts: s.attempts,
-    evidence: s.evidence ? (() => { try { return JSON.parse(s.evidence) as Evidence } catch { return null } })() : null,
+    evidence: s.evidence !== null && typeof s.evidence === 'object' && !Array.isArray(s.evidence)
+      ? s.evidence as Evidence
+      : null,
     exceptionReason: s.exceptionReason,
     startedAt: s.startedAt?.toISOString() ?? null,
     completedAt: s.completedAt?.toISOString() ?? null,
@@ -236,9 +251,7 @@ export function sestaviStanje (
     })),
     naslednji: naslednji?.id ?? null,
     napredek: napredek(def, stanja, context.odgovori),
-    handoff: run.handoff
-      ? (() => { try { return JSON.parse(run.handoff) as { do: string; opis: string; ob: string }[] } catch { return [] } })()
-      : [],
+    handoff: razberiHandoff(run.handoff),
   }
 }
 
@@ -291,9 +304,7 @@ export async function izvediAkcijo (user: SessionUser, vhod: AkcijaVhod): Promis
   const st = run.steps.find((s) => s.stepId === vhod.stepId)
   if (!st) return { status: 404, napaka: 'Stanje koraka ne obstaja.' }
 
-  const context: RunContext = run.context
-    ? (() => { try { return JSON.parse(run.context) as RunContext } catch { return { odgovori: {} } } })()
-    : { odgovori: {} }
+  const context = razberiContext(run.context)
   if (!context.odgovori) context.odgovori = {}
 
   // ── ZACNI: PENDING/NEUSPESNO → IN_PROGRESS (poskus +1)
@@ -324,7 +335,9 @@ export async function izvediAkcijo (user: SessionUser, vhod: AkcijaVhod): Promis
       where: { id: st.id },
       data: {
         status: 'COMPLETED',
-        evidence: vhod.evidence ? JSON.stringify(vhod.evidence) : null,
+        // R542: jsonb — objekt direktno; null pomeni DB NULL (polje je izrecno
+        // v patchu, zato DbNull in ne izpuščena vrednost)
+        evidence: vhod.evidence ? vhod.evidence as unknown as Prisma.InputJsonValue : Prisma.DbNull,
         exceptionReason: null,
         completedAt: new Date(),
       },
@@ -334,7 +347,8 @@ export async function izvediAkcijo (user: SessionUser, vhod: AkcijaVhod): Promis
       context.odgovori[korak.id] = vhod.evidence.odgovor
       await db.playbookRun.update({
         where: { id: run.id },
-        data: { context: JSON.stringify(context) },
+        // R542: jsonb — objekt direktno
+        data: { context: context as unknown as Prisma.InputJsonValue },
       })
     }
     await writeAudit({
@@ -381,7 +395,8 @@ export async function izvediAkcijo (user: SessionUser, vhod: AkcijaVhod): Promis
     }
     await db.playbookStepRun.update({
       where: { id: st.id },
-      data: { status: 'IN_PROGRESS', evidence: null, exceptionReason: null, completedAt: null },
+      // R542: evidence null = DB NULL (stolpec je jsonb)
+      data: { status: 'IN_PROGRESS', evidence: Prisma.DbNull, exceptionReason: null, completedAt: null },
     })
     // če je bil run že zaključen → znova V_TEKU (stanje v bazi se je lahko spremenilo)
     if ((run.status as string) === 'ZAKLJUCEN') {
@@ -407,23 +422,20 @@ async function moznoZakljucek (user: SessionUser, runId: string): Promise<Akcija
   const nalozeno = await naloziZagon(runId)
   if (!nalozeno) return { status: 404, napaka: 'Zagon ne obstaja.' }
   const { run, def } = nalozeno
-  const context: RunContext = run.context
-    ? (() => { try { return JSON.parse(run.context) as RunContext } catch { return { odgovori: {} } } })()
-    : { odgovori: {} }
+  const context = razberiContext(run.context)
   const stanja: KorakStanje[] = run.steps.map((s) => ({
     stepId: s.stepId, status: s.status as KorakStanje['status'], attempts: s.attempts,
   }))
   if (run.status === 'V_TEKU' && jeZakljucen(def, stanja, context.odgovori ?? {})) {
     const handoffCilj = [...def.steps].reverse().find((s) => s.handoff)?.handoff
-    const dosedanji = run.handoff
-      ? (() => { try { return JSON.parse(run.handoff) as { do: string; opis: string; ob: string }[] } catch { return [] } })()
-      : []
+    const dosedanji = razberiHandoff(run.handoff)
     const novi = handoffCilj
       ? [...dosedanji, { do: handoffCilj.do, opis: handoffCilj.opis, ob: new Date().toISOString() }]
       : dosedanji
     await db.playbookRun.update({
       where: { id: run.id },
-      data: { status: 'ZAKLJUCEN', completedAt: new Date(), handoff: JSON.stringify(novi) },
+      // R542: jsonb — objekt direktno
+      data: { status: 'ZAKLJUCEN', completedAt: new Date(), handoff: novi as unknown as Prisma.InputJsonValue },
     })
     await writeAudit({
       userId: user.id,
@@ -478,7 +490,8 @@ export async function novejsaVerzija (
       version,
       status: 'ACTIVE', // nova verzija takoj aktivna za nove zagone (stare ostanejo vezane — §14)
       authorId: user.id,
-      definition: serializiraj({ ...input.def, version }),
+      // R542: definicija je jsonb objekt
+      definition: serializiraj({ ...input.def, version }) as unknown as Prisma.InputJsonValue,
     },
   })
   // prejšnje ACTIVE umakni v RETIRED

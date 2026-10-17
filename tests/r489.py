@@ -155,7 +155,8 @@ const {PrismaClient}=require('@prisma/client');const p=new PrismaClient();
     await p.project.delete({where:{id:pr.id}});
   }
   await p.user.deleteMany({where:{email:{contains:'r489'}}});
-  await p.auditLog.deleteMany({where:{detail:{contains:'__TAG__'}}});
+  // R542: detail je jsonb — podniz po serializiranem jsonb (ista semantika contains)
+  await p.$executeRawUnsafe('DELETE FROM "AuditLog" WHERE "detail"::text LIKE $1', '%' + '__TAG__' + '%');
   console.log('CLEAN_DONE');return p.$disconnect();
 })()
 '''
@@ -429,15 +430,13 @@ HO = d.get('data', {})
 chk(HO.get('version') == 1 and HO.get('status') == 'NEPOPOLNA', f'v1 status NEPOPOLNA (kritično odprto) ({HO.get("status")})')
 
 # diffJson: seg-1..seg-4 iz tekača (načrtovano); izvedeno brez AS-INSTALLED
-try: diff = json.loads(HO.get('diffJson') or '{}')
-except Exception: diff = {}
+diff = HO.get('diffJson') or {}  # R542: jsonb objekt (brez parse)
 primerjava = diff.get('primerjava', [])
 chk([p.get('key') for p in primerjava] == ['seg-1', 'seg-2', 'seg-3', 'seg-4'],
     f'diffJson primerjava seg-1..seg-4 ({[p.get("key") for p in primerjava]})')
 chk(all(p.get('nacrtCm') == 250 and p.get('izvedenoCm') is None and p.get('ujema') is None for p in primerjava),
     'načrtovano 250 cm/segment iz tekača; izvedeno — (brez AS-INSTALLED, vir zapisan)')
-try: photos = json.loads(HO.get('photosJson') or '[]')
-except Exception: photos = []
+photos = HO.get('photosJson') or []  # R542: jsonb objekt (brez parse)
 chk(len(photos) >= 1 and all(p.get('stage') in ('PRED', 'MED', 'PO') for p in photos),
     f'fotografija naloga je v poročilu z fazo ({len(photos)}, {[p.get("stage") for p in photos]})')
 

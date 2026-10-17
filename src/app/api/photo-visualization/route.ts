@@ -17,6 +17,7 @@ import {
 } from '@/lib/photo-replace-engine'
 import { dokazMere } from '@/lib/viz-provenance'
 import { retryOnUnique } from '@/lib/versioning'
+import { Prisma } from '@prisma/client'
 
 const LIST_SELECT = {
   id: true, projectId: true, variantLabel: true, status: true,
@@ -128,7 +129,9 @@ export async function POST (req: NextRequest) {
     oznaka = prost
   }
 
+  // velikostna varovalka ostaja (JSON.stringify samo za meritve dolžine — R542)
   const renderParamsJson = JSON.stringify(params.params)
+  const renderParamsObj = params.params as unknown as Prisma.InputJsonValue
   if (renderParamsJson.length > MAX_PARAMS_JSON) {
     return jsonError(400, 'Parametri izrisa presežejo dovoljeno velikost.')
   }
@@ -168,7 +171,9 @@ export async function POST (req: NextRequest) {
         productId: izdelek.produkt.id,
         variantId: typeof body.variantId === 'string' && body.variantId ? body.variantId : null,
         engineVersion: ENGINE_VERSION,
-        renderParams: renderParamsJson,
+        // R542: renderParams je jsonb — OBJEKT direktno (JSON niz samo še za
+        // velikostno varovalko zgoraj)
+        renderParams: renderParamsObj,
         rendered,
         note: typeof body.note === 'string' && body.note.trim() ? body.note.trim().slice(0, 500) : null,
       },
@@ -189,7 +194,8 @@ export async function POST (req: NextRequest) {
         data: {
           visualizationId: viz.id,
           version: (zadnja?.version ?? 0) + 1,
-          data: JSON.stringify({
+          // R542: data je jsonb — posnetek kot objekt (ne JSON.stringify)
+          data: {
             renderParams: params.params,
             meta: {
               opozorila,
@@ -197,7 +203,7 @@ export async function POST (req: NextRequest) {
               // R510: dokaz, NA KATERI MERI in KATEREM IZVIRNIKU gradiva slika stoji.
               dokaz,
             },
-          }),
+          } as unknown as Prisma.InputJsonValue,
           userId: user.id,
           note: 'Ustvarjena varianta',
         },

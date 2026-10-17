@@ -6,6 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { asJsonObject } from '@/lib/json'
 import { requirePermission } from '@/lib/auth'
 import { consentStatus } from '@/lib/pin-core'
 
@@ -46,15 +47,9 @@ export async function GET (req: NextRequest) {
   })
 
   const data: GalleryItem[] = photos.map((m) => {
-    let photo: string | null = null
-    if (m.params) {
-      try {
-        const parsed = JSON.parse(m.params) as { photo?: unknown }
-        if (typeof parsed.photo === 'string' && parsed.photo) photo = parsed.photo
-      } catch {
-        photo = null
-      }
-    }
+    // R542: params je jsonb objekt — branje brez JSON.parse
+    const parsed = asJsonObject(m.params)
+    const photo = typeof parsed?.photo === 'string' && parsed.photo ? parsed.photo : null
     return {
       id: m.id,
       location: m.location,

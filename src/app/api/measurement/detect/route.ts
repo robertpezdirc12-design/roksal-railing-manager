@@ -9,6 +9,7 @@ import ZAI from 'z-ai-web-dev-sdk'
 import { db } from '@/lib/db'
 import { jsonError, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
+import { asJsonObject } from '@/lib/json'
 
 const VLM_TIMEOUT_MS = 60_000
 
@@ -88,13 +89,9 @@ export async function POST (req: NextRequest) {
   if (!photo) return jsonError(404, 'Fotografija (meritev) ne obstaja.')
   if (photo.type !== 'FOTO') return jsonError(400, 'Meritev ni fotografija.', 'Zaznava deluje na meritvah tipa FOTO.')
 
-  let dataUrl: string | null = null
-  if (photo.params) {
-    try {
-      const parsed = JSON.parse(photo.params) as { photo?: unknown }
-      if (typeof parsed.photo === 'string' && parsed.photo.startsWith('data:image/')) dataUrl = parsed.photo
-    } catch { /* prazno */ }
-  }
+  // R542: params je jsonb objekt — branje brez JSON.parse
+  const parsed = asJsonObject(photo.params)
+  const dataUrl = typeof parsed?.photo === 'string' && parsed.photo.startsWith('data:image/') ? parsed.photo : null
   if (!dataUrl) return jsonError(422, 'Fotografija nima veljavne slike.', 'Params ne vsebuje dataUrl slike.')
 
   let raw = ''

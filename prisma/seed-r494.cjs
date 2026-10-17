@@ -19,6 +19,14 @@ const path = require('path')
 const { PrismaClient } = require('@prisma/client')
 const db = new PrismaClient()
 
+// R542: tech je jsonb — vrednost v bazi je OBJEKT (ne niz). Branje jemlje objekt,
+// primerjava idempotence potrebujeta kanonizacijo (jsonb ne ohranja vrstnega reda ključev).
+const techObjekt = (v) => (v && typeof v === 'object' && !Array.isArray(v)) ? v : {}
+const canon = (v) => JSON.stringify(v, (_k, x) => {
+  if (x && typeof x === 'object' && !Array.isArray(x)) { const o = {}; for (const k of Object.keys(x).sort()) o[k] = x[k]; return o }
+  return x
+})
+
 const SRC_DIR = path.join(__dirname, '..', 'public', 'assets', 'roksal', 'src')
 const MARKER = '[R494]'
 const TODAY = '2026-10-12'
@@ -250,11 +258,11 @@ async function main () {
         familyId: famVrt.id, sku: item.sku, name: item.name, desc: item.desc, unit: item.unit,
         widthMm: item.dims.sirina, heightMm: item.dims.visina, depthMm: item.dims.dolzina,
         warrantyMonths: 180,
-        tech: JSON.stringify({
+        tech: {
           ...item.tech, material: 'WPC (HDPE) + kovinska konstrukcija', garancijaLet: 15,
           opomba: 'Klopi in mize izdelajo tudi po meri naročnika.',
           vir: 'https://roksal.com/woodcore-wpc-deske/vrtno-pohistvo/',
-        }),
+        },
       },
     })
     console.log(`${MARKER} pohištvo: ${item.sku} (${item.tech.dimenzije})`)
@@ -264,12 +272,11 @@ async function main () {
   let techOk = 0
   const wpc = await db.product.findMany({ where: { sku: { startsWith: 'ROK-' } } })
   for (const p of wpc) {
-    let t = {}
-    try { t = JSON.parse(p.tech || '{}') } catch { t = {} }
+    const t = techObjekt(p.tech)
     const dod = TECH_UPDATE[p.sku] || {}
     const nova = { ...t, ...TECH_SKUPNO, ...dod }
-    if (JSON.stringify(nova) !== p.tech) {
-      await db.product.update({ where: { id: p.id }, data: { tech: JSON.stringify(nova) } })
+    if (canon(nova) !== canon(p.tech)) {
+      await db.product.update({ where: { id: p.id }, data: { tech: nova } })
       techOk++
     }
   }

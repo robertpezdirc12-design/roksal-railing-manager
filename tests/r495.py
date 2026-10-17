@@ -78,7 +78,7 @@ rows = db_rows("""
 import { PrismaClient } from '@prisma/client';
 const db = new PrismaClient();
 const p = await db.product.findUnique({ where: { sku: 'ROK-OGP-POLNA-57' }, include: { variants: true } });
-console.log(JSON.stringify({ sku: p.sku, tech: JSON.parse(p.tech), varianti: p.variants.map(v => ({ sku: v.sku, name: v.name, color: v.color })) }));
+console.log(JSON.stringify({ sku: p.sku, tech: p.tech, varianti: p.variants.map(v => ({ sku: v.sku, name: v.name, color: v.color })) }));  // R542: tech je jsonb objekt
 await db.$disconnect();
 """)
 r57 = rows[0]

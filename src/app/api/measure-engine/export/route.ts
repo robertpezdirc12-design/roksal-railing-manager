@@ -13,6 +13,7 @@ import { db } from '@/lib/db'
 import { jsonError, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
 import { fotografiIzParametrov, originalDokaz } from '@/lib/original-proof'
+import { asJsonObject } from '@/lib/json'
 import { buildExportRows, exportCsv, MEASURE_MODES, type ExportSource } from '@/lib/measure-engine'
 
 export async function GET (req: NextRequest) {
@@ -41,10 +42,9 @@ export async function GET (req: NextRequest) {
   })
   if (!m) return jsonError(404, 'Meritev ne obstaja.')
 
-  let params: ExportSource['params'] = null
-  try {
-    params = m.params ? (JSON.parse(m.params) as ExportSource['params']) : null
-  } catch { params = null }
+  // R542: params je jsonb objekt — branje brez JSON.parse (obramba za neobjektno)
+  const paramsRaw = asJsonObject(m.params)
+  const params = paramsRaw !== null ? paramsRaw as unknown as ExportSource['params'] : null
   // način izmere: params.mode (R457) — sicer pade na legacy tip
   const mode = params?.mode != null && (MEASURE_MODES as string[]).includes(String(params.mode))
     ? String(params.mode)

@@ -53,7 +53,10 @@ export async function GET (req: NextRequest, { params }: { params: Promise<{ id:
         note: r.note, createdAt: r.createdAt,
       })),
       photos: ctx.photos.map((p) => ({
-        id: p.id, clientKey: p.clientKey, zone: p.zone, quality: p.quality ? JSON.parse(p.quality) : null,
+        id: p.id, clientKey: p.clientKey, zone: p.zone,
+        // R542: quality je jsonb objekt — brez JSON.parse (bil je znani zlom:
+        // JSON.parse nad objektom vrže → 500)
+        quality: p.quality ?? null,
         offsetCm: p.offsetCm, capturedAt: p.capturedAt,
       })),
       analysis,
@@ -87,7 +90,8 @@ export async function PATCH (req: NextRequest, { params }: { params: Promise<{ i
     if (!outdoor) {
       return jsonError(400, 'Neveljavni zunanji pogoji.', `outdoor: { conditions: [${OUTDOOR_CONDITIONS.map((c) => c.id).join(' | ')}], note? }`)
     }
-    data.outdoor = JSON.stringify(outdoor)
+    // R542: jsonb — objekt direktno
+    data.outdoor = outdoor
   }
 
   // opravljeni postanki + trenutni korak (§2/§17 — vodena ruta, resume)
@@ -108,7 +112,8 @@ export async function PATCH (req: NextRequest, { params }: { params: Promise<{ i
     if (merged.currentStopId && !planIds.has(merged.currentStopId)) {
       return jsonError(400, `Neznan trenutni postanek »${merged.currentStopId}«.`)
     }
-    data.state = JSON.stringify(merged)
+    // R542: jsonb — objekt direktno
+    data.state = merged
   }
 
   // status: PREKINJEN (prekinitev zajema) / V_TEKU (nadaljevanje)

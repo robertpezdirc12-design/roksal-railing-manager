@@ -233,8 +233,9 @@ else:
 
 print('── E) strežniški preračun je avtoriteta (confirm)')
 PHOTO = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q=='
+# R542: Measurement.params je jsonb — API sprejema OBJEKT (niz → zod 400)
 s, d = callj('POST', '/api/measurements', monter, {
-    'type': 'FOTO', 'params': json.dumps({'photo': PHOTO}), 'location': f'{TAG} teren',
+    'type': 'FOTO', 'params': {'photo': PHOTO}, 'location': f'{TAG} teren',
     'note': f'{TAG} foto osnova'})
 chk(s == 201, f'FOTO osnova ustvarjena ({s})')
 photo_id = (d.get('data') or {}).get('id')
@@ -255,7 +256,8 @@ M1 = d.get('data', {}).get('id') if s == 201 else None
 if M1:
     row = meas_params(M1)
     chk(row.get('status') == 'CALIBRATED', f'DB status = CALIBRATED ({row.get("status")})')
-    pr = json.loads(row.get('params') or '{}')
+    # R542: params je jsonb objekt (plane znotraj ostaja JSON niz — §9 provenance)
+    pr = row.get('params') or {}
     prov = pr.get('provenance') or {}
     chk(prov.get('status') == 'CALIBRATED', f'params.provenance.status = CALIBRATED ({prov.get("status")})')
     # plane je v params.calibration kot JSON string (params nosi number|string)
@@ -376,7 +378,9 @@ const {PrismaClient}=require('@prisma/client');const p=new PrismaClient();
     await p.notificationEvent.deleteMany({where:{key:{contains:':'+m.id}}});
     await p.measurement.delete({where:{id:m.id}});
   }
-  await p.auditLog.deleteMany({where:{detail:{contains:'__TAG__'}}});
+  // R542: AuditLog.detail je jsonb — Prisma `contains` ne velja več;
+  // podniz po serializiranem jsonb (detail::text LIKE) je ista semantika.
+  await p.$executeRawUnsafe('DELETE FROM "AuditLog" WHERE "detail"::text LIKE $1', '%' + '__TAG__' + '%');
   await p.auditLog.deleteMany({where:{entityId:{in:ms.map(m=>m.id)}}});
   console.log('CLEAN_DONE');return p.$disconnect();
 })()

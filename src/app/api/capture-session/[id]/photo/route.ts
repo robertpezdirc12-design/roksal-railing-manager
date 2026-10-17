@@ -11,6 +11,7 @@ import { writeAudit } from '@/lib/audit'
 import { parseQuality, parsePlan } from '@/lib/capture-qa-engine'
 import { captureSessionZaUporabnika } from '@/lib/capture-qa-access'
 import { analyzeSession, loadCaptureContext } from '@/lib/capture-qa-service'
+import { Prisma } from '@prisma/client'
 
 const THUMB_MAX = 120 * 1024 // 120 KB (§24)
 
@@ -48,7 +49,8 @@ export async function POST (req: NextRequest, { params }: { params: Promise<{ id
   const ctx = await loadCaptureContext(id)
   if (!ctx) return jsonError(404, 'Zajem ne obstaja.')
 
-  const plan = ctx.plan.length > 0 ? ctx.plan : parsePlan(JSON.parse(access.session.plan ?? '[]') ?? [])
+  // R542: plan je jsonb objekt — parsePlan neposredno
+  const plan = ctx.plan.length > 0 ? ctx.plan : parsePlan(access.session.plan)
   if (!plan) return jsonError(500, 'Plan zajema ni berljiv.')
   const stop = plan.find((p) => p.id === zone)
   if (!stop) return jsonError(400, `Neznana zona »${zone}«.`, 'Zona mora biti postanek iz plan-a (§1).')
@@ -82,7 +84,8 @@ export async function POST (req: NextRequest, { params }: { params: Promise<{ id
     const photo = await tx.capturePhoto.create({
       data: {
         sessionId: id, clientKey, zone,
-        quality: JSON.stringify(quality),
+        // R542: jsonb — objekt direktno (ne JSON.stringify)
+        quality: quality as unknown as Prisma.InputJsonValue,
         offsetCm,
         thumb,
       },

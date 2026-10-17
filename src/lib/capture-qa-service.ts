@@ -15,6 +15,7 @@ import {
   type OutdoorResult, type PlanStop, type RefNetworkResult, type TwinSnapshotData,
 } from '@/lib/capture-qa-engine'
 import { parseNodes, parseTerrain, round1, type RunNode, type TerrainPoint } from '@/lib/fence-run-engine'
+import { asJsonObject } from '@/lib/json'
 
 // ─── Kontekst zajema ────────────────────────────────────────────────────────
 
@@ -25,7 +26,7 @@ export interface CaptureRefRow {
 }
 
 export interface CapturePhotoRow {
-  id: string; clientKey: string; zone: string; quality: string | null
+  id: string; clientKey: string; zone: string; quality: Prisma.JsonValue
   offsetCm: number | null; thumb: string | null; capturedAt: Date
 }
 
@@ -33,8 +34,8 @@ export interface CaptureContext {
   session: {
     id: string; projectId: string; workOrderId: string | null; fenceRunId: string | null
     authorId: string | null; name: string; status: string; mode: string
-    device: string | null; outdoor: string | null; plan: string | null; state: string | null
-    coverage: string | null; drift: string | null; snapshotId: string | null; note: string | null
+    device: Prisma.JsonValue; outdoor: Prisma.JsonValue; plan: Prisma.JsonValue; state: Prisma.JsonValue
+    coverage: Prisma.JsonValue; drift: Prisma.JsonValue; snapshotId: string | null; note: string | null
   }
   plan: PlanStop[]
   device: { tier: DeviceTier; caps: DeviceCapsInput } | null
@@ -49,9 +50,12 @@ export interface CaptureContext {
   } | null
 }
 
-function safeParse<T> (json: string | null, fn: (v: unknown) => T | null, fallback: T): T {
-  if (!json) return fallback
-  try { return fn(JSON.parse(json)) ?? fallback } catch { return fallback }
+// R542: stolpci so jsonb — odjemalec vrača ŽE razčlenjene vrednosti, zato
+// safeParse pokliče validator (obratna obramba pred napačno obliko) neposredno
+// nad vrednostjo; try/catch ni več potreben (validatorji ne mečejo).
+function safeParse<T> (v: unknown, fn: (v: unknown) => T | null, fallback: T): T {
+  if (v === null || v === undefined) return fallback
+  return fn(v) ?? fallback
 }
 
 /** Naloži zajem z razčlenjenim stanjem + vezanim tekačem (če je FENCE_RUN). */
@@ -173,8 +177,9 @@ export async function recomputeSession (ctx: CaptureContext): Promise<{ coverage
   await db.captureSession.update({
     where: { id: ctx.session.id },
     data: {
-      coverage: JSON.stringify(coverage),
-      drift: JSON.stringify({ samples: all.slice(-200), status: combined.state, lastRefCode: driftState.lastRefCode }),
+      // R542: jsonb — objekt direktno (ne JSON.stringify)
+      coverage: coverage as unknown as Prisma.InputJsonValue,
+      drift: { samples: all.slice(-200), status: combined.state, lastRefCode: driftState.lastRefCode } as unknown as Prisma.InputJsonValue,
     },
   })
   return { coverage, drift: combined }
@@ -336,8 +341,9 @@ export async function createTwinSnapshotRow (args: {
       kind: args.kind,
       version,
       parentSnapshotId: last?.id ?? null,
-      data: JSON.stringify(args.data),
-      sources: JSON.stringify(args.sources),
+      // R542: jsonb — objekta direktno (ne JSON.stringify)
+      data: args.data as unknown as Prisma.InputJsonValue,
+      sources: args.sources as unknown as Prisma.InputJsonValue,
       reason: args.reason.slice(0, 500),
       createdFrom: args.createdFrom ?? null,
       userId: args.userId,
@@ -463,7 +469,8 @@ export async function buildDesignedSnapshot (args: {
   const base = await segmentsZaProjekt(args.projectId, { confirmedFirst: true }, client)
   let config: Record<string, unknown> | null = null
   if (pkg.calcJson) {
-    try { config = JSON.parse(pkg.calcJson) as Record<string, unknown> } catch { config = null }
+    // R542: calcJson je jsonb objekt
+    config = asJsonObject(pkg.calcJson)
   }
   const data = buildAsDesigned({
     segments: base.segments.map((s) => ({
@@ -687,14 +694,15 @@ export async function twinOverview (projectId: string): Promise<TwinOverview> {
     orderBy: { createdAt: 'desc' },
   })
   const viz3d = await db.vizProject.findFirst({ where: { projectId }, orderBy: { createdAt: 'desc' } })
-  const viz3dLength = viz3d?.params ? safeParseRecord(viz3d.params)?.lengthCm : null
+  const viz3dParams = asJsonObject(viz3d?.params)
+  const viz3dLength = typeof viz3dParams?.lengthCm === 'number' ? viz3dParams.lengthCm : null
   const zones = await db.capturePhoto.groupBy({
     by: ['zone'],
     where: { session: { projectId } },
     _count: { _all: true },
   })
   const photoZones = new Set(zones.map((z) => z.zone))
-  const camParams = camMeasurement?.params ? safeParseRecord(camMeasurement.params) : null
+  const camParams = asJsonObject(camMeasurement?.params)
 
   for (const seg of base.segments) {
     const key = `seg-${seg.order + 1}`
@@ -729,10 +737,6 @@ export async function twinOverview (projectId: string): Promise<TwinOverview> {
       captureSessions: sessions, photos,
     },
   }
-}
-
-function safeParseRecord (json: string): Record<string, unknown> | null {
-  try { return JSON.parse(json) as Record<string, unknown> } catch { return null }
 }
 
 // ─── Geometrijski diff (§13) ────────────────────────────────────────────────

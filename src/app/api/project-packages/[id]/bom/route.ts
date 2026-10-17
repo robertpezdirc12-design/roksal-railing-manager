@@ -9,6 +9,7 @@ import { normalizeSegments, SEGMENT_BOM_VERSION, type RawSegmentRow } from '@/li
 import { GEOMETRY_SOURCE_VERSION, izberiGeometrijo, type OdlokGeometrije } from '@/lib/measure-geometry-source'
 import { MEASUREMENT_STATUS_LABELS, measurementStatusAllowsBusiness, type MeasurementStatus } from '@/lib/measure-engine'
 import { retryOnUnique } from '@/lib/versioning'
+import { asJsonObject } from '@/lib/json'
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -67,18 +68,17 @@ export async function POST (req: NextRequest, { params }: Params) {
 
   // R475: segmenti + razmik iz strukturiranih vhodov konfiguratorja (R447:
   // calcJson.inputs so izvor količine in se ohranijo čez regeneracijo).
+  // R542: calcJson je jsonb objekt — branje brez JSON.parse.
   let segments: ReturnType<typeof normalizeSegments> = []
   let spacingCm: number | null = null
-  if (pkg.calcJson) {
-    try {
-      const parsed = JSON.parse(pkg.calcJson) as {
-        inputs?: { segments?: RawSegmentRow[]; razmikStebrovM?: number }
+  {
+    const inputs = asJsonObject(asJsonObject(pkg.calcJson)?.inputs)
+    if (inputs) {
+      segments = normalizeSegments(Array.isArray(inputs.segments) ? inputs.segments as RawSegmentRow[] : [])
+      if (typeof inputs.razmikStebrovM === 'number' && inputs.razmikStebrovM > 0) {
+        spacingCm = Math.round(inputs.razmikStebrovM * 100)
       }
-      segments = normalizeSegments(Array.isArray(parsed?.inputs?.segments) ? parsed.inputs.segments : [])
-      if (typeof parsed?.inputs?.razmikStebrovM === 'number' && parsed.inputs.razmikStebrovM > 0) {
-        spacingCm = Math.round(parsed.inputs.razmikStebrovM * 100)
-      }
-    } catch { /* starejše/prazne kalkulacije brez inputs — predloga × qty */ }
+    }
   }
 
   // ── R511 (issue #7 §8/§10, issue #3 §4E): obseg iz POTRJENEGA tekača ───────
@@ -146,12 +146,11 @@ export async function POST (req: NextRequest, { params }: Params) {
   // kalkulacija se shrani na paket (marža ostaja v pisarni — issue #7 §12)
   // R447: strukturirane VHODE konfiguratorja (calcJson.inputs) ohranimo čez
   // regeneracijo — izmera/segmenti so izvor količine in ne smejo biti izgubljeni.
+  // R542: calcJson je jsonb — branje brez JSON.parse.
   let preservedInputs: unknown = null
-  if (pkg.calcJson) {
-    try {
-      const parsed = JSON.parse(pkg.calcJson) as { inputs?: unknown }
-      if (parsed && typeof parsed === 'object' && parsed.inputs) preservedInputs = parsed.inputs
-    } catch { /* starejše/prazne kalkulacije brez inputs — nič hudega */ }
+  {
+    const parsed = asJsonObject(pkg.calcJson)
+    if (parsed?.inputs) preservedInputs = parsed.inputs
   }
   const calc = {
     generatedAt: new Date().toISOString(),
@@ -220,7 +219,8 @@ export async function POST (req: NextRequest, { params }: Params) {
     await tx.projectPackage.update({
       where: { id: pkg.id },
       data: {
-        calcJson: JSON.stringify(calc),
+        // R542: jsonb — objekt direktno (ne JSON.stringify)
+        calcJson: calc as unknown as Prisma.InputJsonValue,
         status: pkg.status === 'KONFIGURACIJA' || pkg.status === 'IZMERA' ? 'KONFIGURACIJA' : pkg.status,
       },
     })

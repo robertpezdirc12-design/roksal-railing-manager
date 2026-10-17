@@ -65,7 +65,7 @@ vers = json.loads(b)['data'] if s == 200 else []
 chk(s == 200 and len(vers) == 1, f'TOČNO 1 MeasurementVersion ob nastanku ({len(vers)})')
 v1 = vers[0] if vers else None
 chk(v1 and v1['version'] == 1, f'verzija ima version = 1 ({v1["version"] if v1 else "?"})')
-snap = json.loads(v1['data']) if v1 else {}
+snap = (v1.get('data') if isinstance(v1.get('data'), dict) else {}) if v1 else {}  # R542: jsonb objekt
 chk(snap.get('type') == 'OGRAJA' and snap.get('lengthCm') == 320 and snap.get('heightCm') == 105,
     'posnetek v1 vsebuje meritvene podatke (type/lengthCm/heightCm)')
 chk(v1 and v1['user'] and v1['user']['name'], 'verzija v1 nosi kdo (user.name)')
@@ -77,7 +77,7 @@ chk(s == 200, f'PATCH meritve uspešen ({s})')
 s, b = call('GET', f"/api/measurements/{meas['id']}/verzije", admin)
 vers = json.loads(b)['data'] if s == 200 else []
 chk(len(vers) == 2 and vers[-1]['version'] == 2, f'PATCH doda v2 — zaporedje verzij (v1, v2)')
-chk(json.loads(vers[-1]['data']).get('lengthCm') == 320, 'v2 = posnetek PRED spremembo (320, ne 340)')
+chk((vers[-1]['data'] or {}).get('lengthCm') == 320, 'v2 = posnetek PRED spremembo (320, ne 340)')
 
 # ══ 2. SYNC/OFFLINE MERITEV — regresija (smoke) ═══════════════════════════════
 print('── regresija: sync/offline meritev še dela ──')
@@ -202,11 +202,12 @@ const {PrismaClient}=require('@prisma/client');const p=new PrismaClient();
   // testni losi (qty 5/2 po ceni 10.5/11, ustvarjeni danes z markerjem v auditu ne obstaja → po itemu+času)
   await p.stockLot.deleteMany({where:{AND:[{qty:5},{unitCost:10.5}]}});
   await p.stockLot.deleteMany({where:{AND:[{qty:2},{unitCost:11}]}});
-  await p.auditLog.deleteMany({where:{OR:[{detail:{contains:'__TAG__'}},{detail:{contains:'__TAG__'.toLowerCase()}}]}});
+  // R542: detail je jsonb — podniz po serializiranem jsonb (ista semantika contains)
+  await p.$executeRawUnsafe('DELETE FROM "AuditLog" WHERE "detail"::text LIKE $1 OR "detail"::text LIKE $2', '%__TAG__%', '%__TAG_LOWO__%');
   console.log('CLEAN_DONE');
   return p.$disconnect();
 })()
-'''.replace('__TAG__', TAG)
+'''.replace('__TAG__', TAG).replace('__TAG_LOWO__', TAG.lower())
 import subprocess
 r = subprocess.run(['bun', '-e', CLEAN], capture_output=True, text=True,
                    env={**__import__('os').environ, 'DATABASE_URL': os.environ.get('TEST_DB_URL') or 'postgresql://roksal:roksal@localhost:54329/roksal'})

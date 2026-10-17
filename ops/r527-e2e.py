@@ -366,9 +366,9 @@ const { PrismaClient } = require("@prisma/client")
 const db = new PrismaClient()
 const v = await db.photoVisualization.findFirst({ orderBy: { createdAt: "desc" }, include: { product: true } })
 if (!v) { console.log(JSON.stringify({ napaka: "NI ZAPISA" })); process.exit(0) }
-const rp = JSON.parse(v.renderParams)
+const rp = v.renderParams ?? {}  // R542: jsonb objekt
 const ver = await db.photoVisualizationVersion.findFirst({ where: { visualizationId: v.id }, orderBy: { version: "desc" } })
-const meta = JSON.parse(ver?.data ?? "{}").meta ?? {}
+const meta = ver?.data?.meta ?? {}  // R542: jsonb objekt
 console.log(JSON.stringify({
   sku: v.product?.sku ?? null, ime: v.product?.name ?? null,
   tip: rp.config?.tip, engine: v.engineVersion,

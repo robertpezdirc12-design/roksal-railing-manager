@@ -105,8 +105,11 @@ def audit_has (token, action, entity_id, project_id):
 def audit_detail (token, action, entity_id, project_id):
     for e in audit_rows(token, project_id):
         if e.get('action') == action and e.get('entityId') == entity_id:
-            try: return json.loads(e.get('detail') or '{}')
-            except Exception: return {}
+            det = e.get('detail')
+            if isinstance(det, str):  # R542: detail je jsonb objekt — obramba za staro obliko niza
+                try: return json.loads(det)
+                except Exception: return {}
+            return det if isinstance(det, dict) else {}
     return None
 
 # ── priprava ────────────────────────────────────────────────────────────────
@@ -145,7 +148,7 @@ const p = new PrismaClient();
   const mk = (pid, label, status) => p.photoVisualization.create({data:{
     projectId: pid, variantLabel: label, status,
     sourcePhoto: prej(label), productId: prod.id, variantId: prod.variants[0]?.id ?? null,
-    engineVersion: '1.0.0', renderParams: JSON.stringify(__RENDER_PARAMS__),
+    engineVersion: '1.0.0', renderParams: __RENDER_PARAMS__,  // R542: jsonb objekt (ne niz)
     rendered: potem(label), note: 'INTERNI-NOTE-__TAG__-' + label,
   }});
   const a = await mk(proj.id, 'A', 'OSNUTEK');

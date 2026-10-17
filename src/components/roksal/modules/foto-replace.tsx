@@ -245,7 +245,8 @@ export default function FotoReplaceModule () {
       const res = await apiGet<{ data: OdpriZapis }>(`/api/photo-visualization/${id}`)
       const d = res.data
       let rp: ParsedRenderParams = {}
-      try { rp = JSON.parse(d.renderParams) as typeof rp } catch { /* prazno */ }
+      // R542: renderParams je jsonb objekt — API vrača razčlenjenega (brez JSON.parse)
+      if (d.renderParams && typeof d.renderParams === 'object' && !Array.isArray(d.renderParams)) rp = d.renderParams as ParsedRenderParams
       const label = (VARIANT_LABELS as readonly string[]).includes(d.variantLabel) ? (d.variantLabel as VariantLabel) : 'A'
       setPhoto(d.sourcePhoto)
       setPhotoName('shranjena fotografija')

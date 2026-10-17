@@ -71,7 +71,7 @@ interface ReviewPin {
   resolvedAt: string | null
   author: { id: string; name: string | null } | null
   resolvedBy: { id: string; name: string | null } | null
-  snapshot: string | null
+  snapshot: Record<string, unknown> | null // R542: jsonb objekt
   createdAt: string
   updatedAt: string
 }
@@ -150,25 +150,23 @@ const fmtCm = (n: number | null | undefined, unit = 'cm'): string =>
 const fmtM = (cm: number | null | undefined): string =>
   cm == null ? '—' : `${(cm / 100).toLocaleString('sl-SI', { maximumFractionDigits: 2 })} m`
 
-/** Kratek povzetek snapshot-a cilja (dokaz o geometriji ob nastanku pina). */
+/** Kratek povzetek snapshot-a cilja (dokaz o geometriji ob nastanku pina). R542: jsonb objekt — brez JSON.parse. */
 function pinSnapshotSummary (p: ReviewPin): string | null {
-  if (!p.snapshot) return null
-  try {
-    const s = JSON.parse(p.snapshot) as Record<string, unknown>
-    if (p.targetType === 'SEGMENT') {
-      const parts: string[] = []
-      if (typeof s.lengthCm === 'number') parts.push(`dolžina ${fmtCm(s.lengthCm)}`)
-      if (typeof s.status === 'string') parts.push(`status ${s.status}`)
-      return parts.length ? `ob nastanku: ${parts.join(' · ')}` : null
-    }
-    if (p.targetType === 'VOZLISCE') {
-      const parts: string[] = []
-      if (typeof s.kind === 'string') parts.push(String(s.kind))
-      if (typeof s.atCm === 'number') parts.push(fmtM(s.atCm))
-      return parts.length ? `ob nastanku: ${parts.join(' · ')}` : null
-    }
-    if (typeof s.zone === 'string') return `ob nastanku: cona ${s.zone}`
-  } catch { /* pokvarjen snapshot — preskoči */ }
+  const s = p.snapshot
+  if (!s || typeof s !== 'object') return null
+  if (p.targetType === 'SEGMENT') {
+    const parts: string[] = []
+    if (typeof s.lengthCm === 'number') parts.push(`dolžina ${fmtCm(s.lengthCm)}`)
+    if (typeof s.status === 'string') parts.push(`status ${s.status}`)
+    return parts.length ? `ob nastanku: ${parts.join(' · ')}` : null
+  }
+  if (p.targetType === 'VOZLISCE') {
+    const parts: string[] = []
+    if (typeof s.kind === 'string') parts.push(String(s.kind))
+    if (typeof s.atCm === 'number') parts.push(fmtM(s.atCm))
+    return parts.length ? `ob nastanku: ${parts.join(' · ')}` : null
+  }
+  if (typeof s.zone === 'string') return `ob nastanku: cona ${s.zone}`
   return null
 }
 

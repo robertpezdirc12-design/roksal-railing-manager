@@ -12,6 +12,8 @@ import { writeAudit } from '@/lib/audit'
 import { parseCalibration, parseNodes, parseTerrain, round1 } from '@/lib/fence-run-engine'
 import { loadRunContext, snapshotVersionOn, syncSegments } from '@/lib/fence-run-service'
 import { projectIdsZaUporabnika } from '@/lib/fence-run-access'
+import { asJsonObject } from '@/lib/json'
+import { Prisma } from '@prisma/client'
 
 export async function GET (req: NextRequest) {
   const auth = await requirePermission(req, 'measurements.read')
@@ -41,8 +43,8 @@ export async function GET (req: NextRequest) {
   const data = runs.map((r) => {
     const totalCm = r.segments.reduce((a, s) => a + s.lengthCm, 0)
     const verified = r.segments.filter((s) => s.status === 'VERIFIED' || s.status === 'CONFIRMED').length
-    let quality: { state?: string; score?: number } = {}
-    try { quality = r.quality ? JSON.parse(r.quality) : {} } catch { /* prazno */ }
+    // R542: quality je jsonb objekt — branje brez JSON.parse
+    const quality = asJsonObject(r.quality) ?? {}
     return {
       id: r.id, name: r.name, status: r.status, updatedAt: r.updatedAt,
       project: r.project, product: r.product, variant: r.variant, author: r.author,
@@ -50,8 +52,8 @@ export async function GET (req: NextRequest) {
       totalLengthCm: round1(totalCm),
       segmentCount: r.segments.length,
       verifiedCount: verified,
-      qualityState: quality.state ?? null,
-      qualityScore: quality.score ?? null,
+      qualityState: typeof quality.state === 'string' ? quality.state : null,
+      qualityScore: typeof quality.score === 'number' ? quality.score : null,
     }
   })
   return NextResponse.json({ data })
@@ -135,9 +137,10 @@ export async function POST (req: NextRequest) {
       data: {
         projectId, workOrderId, authorId: user.id, name,
         productId, variantId,
-        calibration: calibration ? JSON.stringify(calibration) : null,
-        terrain: terrain ? JSON.stringify(terrain) : null,
-        nodes: JSON.stringify(nodes),
+        // R542: jsonb — objekti direktno; null = DB NULL (prej JSON niz/null)
+        calibration: (calibration as unknown as Prisma.InputJsonValue) ?? Prisma.DbNull,
+        terrain: (terrain as unknown as Prisma.InputJsonValue) ?? Prisma.DbNull,
+        nodes: nodes as unknown as Prisma.InputJsonValue,
         note: typeof body.note === 'string' && body.note.trim() ? body.note.trim().slice(0, 500) : null,
       },
     })

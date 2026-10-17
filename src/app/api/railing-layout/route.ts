@@ -21,6 +21,8 @@ import {
   parseEnginePoints, provenanceForParams, type GeometryResult,
 } from '@/lib/measure-engine'
 import { retryOnUnique } from '@/lib/versioning'
+import { asJsonObject } from '@/lib/json'
+import type { Prisma } from '@prisma/client'
 
 const DEFAULT_MAX_SPAN_CM = 120
 
@@ -58,17 +60,16 @@ export async function GET (req: NextRequest) {
   if (!m) return jsonError(404, 'Meritev ne obstaja.')
 
   let layout: ReturnType<typeof layoutFrom> | null = null
-  if (m.params) {
-    try {
-      const p = JSON.parse(m.params) as { points?: unknown; calibration?: unknown }
-      const calib = parseCalibration(p.calibration)
-      // točke so shranjene normalizirano (0..1) — v piksle jih pretvori jedro
-      // (toPx prek imgW/imgH), zato route nima več svoje pretvorbe.
-      const pts = parseEnginePoints(p.points)
-      // Brez dokazanega merila (px/cm) jedro ne izračuna NiČ — brez tihega
-      // predpostavljenega 1 cm/px (issue #15 faza 1/2).
-      if (pts.length >= 2 && calib) layout = layoutFrom(computeGeometry(pts, calib), DEFAULT_MAX_SPAN_CM)
-    } catch { /* ni geometrije */ }
+  {
+    // R542: params je jsonb objekt — branje brez JSON.parse
+    const p = asJsonObject(m.params)
+    const calib = parseCalibration(p?.calibration)
+    // točke so shranjene normalizirano (0..1) — v piksle jih pretvori jedro
+    // (toPx prek imgW/imgH), zato route nima več svoje pretvorbe.
+    const pts = parseEnginePoints(p?.points)
+    // Brez dokazanega merila (px/cm) jedro ne izračuna NiČ — brez tihega
+    // predpostavljenega 1 cm/px (issue #15 faza 1/2).
+    if (pts.length >= 2 && calib) layout = layoutFrom(computeGeometry(pts, calib), DEFAULT_MAX_SPAN_CM)
   }
   if (!layout) {
     return jsonError(422, 'Meritev nima izračunljive geometrije točk.', 'Točke in kalibracija (px/cm) sta shranjeni samo pri meritvah s kamero — brez merila postavitve ne moremo izračunati.')
@@ -140,11 +141,11 @@ export async function POST (req: NextRequest) {
           posts: layout.posts,
           segments: layout.segments.length,
           slopeDeg: layout.slopeDeg,
-          params: JSON.stringify({
+          params: {
             points: pts, calibration: calibrationToParams(calib), maxSpanCm, layout,
             // R501: ista provenienca/pogodba kot confirm in sinhronizacija.
             provenance: provenanceForParams({ status: provenance.status, reason: provenance.reason, scale: provenance.scale, calibration: calib }),
-          }),
+          } as unknown as Prisma.InputJsonValue,
           note: typeof body.note === 'string' && body.note.trim() ? body.note.trim() : 'Postavitev iz točk na fotografiji',
         },
       })
@@ -158,7 +159,8 @@ export async function POST (req: NextRequest) {
           measurementId: created.id,
           version: (last?.version ?? 0) + 1,
           userId: user.id,
-          data: JSON.stringify({ lengthCm: layout.totalLengthCm, posts: layout.posts, segments: layout.segments.length, slopeDeg: layout.slopeDeg }),
+          // R542: data je jsonb objekt (ne niz)
+          data: { lengthCm: layout.totalLengthCm, posts: layout.posts, segments: layout.segments.length, slopeDeg: layout.slopeDeg },
           note: 'Postavitev (layout) iz točk',
         },
       })

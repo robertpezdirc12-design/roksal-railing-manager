@@ -430,7 +430,7 @@ const {PrismaClient}=require('@prisma/client');const p=new PrismaClient();
   const prods=await p.product.findMany({where:{sku:{not:'OGR-K-002'}},take:1});
   const pv=await p.photoVisualization.create({data:{projectId:proj.id,
     sourcePhoto:'data:image/jpeg;base64,R0lGODlhAQABAAAAACw=',productId:prods[0].id,
-    engineVersion:'photo-replace/1.0',renderParams:'{}',note:'__TAG__'}});
+    engineVersion:'photo-replace/1.0',renderParams:{},note:'__TAG__'}});
   console.log('PV='+pv.id);return p.$disconnect();
 })()
 '''

@@ -9,6 +9,7 @@ import { NextResponse } from 'next/server'
 import type { SessionUser } from '@/lib/auth'
 import { readsAllData } from '@/lib/auth'
 import { db } from '@/lib/db'
+import { asJsonObject } from '@/lib/json'
 import { pdfDoc, NAVY, AMBER, GRAY, LIGHT, type Rgb } from '@/lib/pdf-mini'
 
 export const HANDOVER_PDF_VERSION = 'handover-pdf/1.0'
@@ -305,23 +306,26 @@ export async function handoverPdfZaUporabnika (
     }),
   ])
 
+  // R542: diffJson je jsonb objekt — branje brez JSON.parse (obramba za
+  // neobjektno obliko ostane prek asJsonObject)
   let diff: HandoverPdfInput['diff'] = { primerjava: [], nacrtVir: null, izvedenoVir: null }
-  try {
-    const parsed = JSON.parse(report.diffJson ?? '{}') as {
+  {
+    const parsed = asJsonObject(report.diffJson) as {
       primerjava?: HandoverPdfInput['diff']['primerjava']
       nacrtovano?: { source: string }[]
       izvedeno?: { source: string }[]
-    }
+    } | null
     diff = {
-      primerjava: parsed.primerjava ?? [],
-      nacrtVir: parsed.nacrtovano?.[0]?.source ?? null,
-      izvedenoVir: parsed.izvedeno?.[0]?.source ?? null,
+      primerjava: parsed?.primerjava ?? [],
+      nacrtVir: parsed?.nacrtovano?.[0]?.source ?? null,
+      izvedenoVir: parsed?.izvedeno?.[0]?.source ?? null,
     }
-  } catch { /* brez primerjave */ }
+  }
 
   let photos: HandoverPhotoRow[] = []
-  try {
-    const refs = JSON.parse(report.photosJson ?? '[]') as { id: string; stage: string }[]
+  {
+    // R542: photosJson je jsonb tabela — brez JSON.parse
+    const refs = Array.isArray(report.photosJson) ? report.photosJson as unknown as { id: string; stage: string }[] : []
     // naloži palačinko (thumbnail) vsake FOTO meritve — zmerno število
     const ids = refs.slice(0, 12).map((r) => r.id)
     const rows = ids.length > 0
@@ -329,14 +333,12 @@ export async function handoverPdfZaUporabnika (
       : []
     const byId = new Map(rows.map((r) => [r.id, r.params]))
     photos = refs.slice(0, 12).map((r) => {
-      let thumb: string | null = null
-      try {
-        const p = JSON.parse(byId.get(r.id) ?? '{}') as { photo?: string }
-        thumb = typeof p.photo === 'string' ? p.photo : null
-      } catch { thumb = null }
+      // R542: params je jsonb objekt — brez JSON.parse
+      const p = asJsonObject(byId.get(r.id))
+      const thumb = typeof p?.photo === 'string' ? p.photo : null
       return { id: r.id, stage: r.stage, thumb }
     })
-  } catch { /* brez fotografij */ }
+  }
 
   const bytes = renderHandoverPdf({
     reportId: report.id,

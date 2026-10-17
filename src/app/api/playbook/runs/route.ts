@@ -9,6 +9,7 @@ import { jsonError, requirePermission, readsAllData } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { ensurePlaybookSeed, zagoniZaNalog, zacniZagon, type RunOverviewRow } from '@/lib/playbook-engine'
 import { deserializiraj, napredek, type KorakStanje } from '@/lib/playbook-core'
+import { asJsonObject } from '@/lib/json'
 
 interface RunPovzetek {
   id: string
@@ -24,8 +25,8 @@ interface RunPovzetek {
 
 function povzetek (run: RunOverviewRow): RunPovzetek {
   const def = deserializiraj(run.playbookDef.definition)
-  let odgovori: Record<string, boolean | string> = {}
-  try { odgovori = run.context ? (JSON.parse(run.context) as { odgovori?: Record<string, boolean | string> }).odgovori ?? {} : {} } catch { /* prazno */ }
+  // R542: context je jsonb objekt — brez JSON.parse (obramba za neobjektno obliko)
+  const odgovori: Record<string, boolean | string> = asJsonObject(run.context)?.odgovori as Record<string, boolean | string> ?? {}
   const stanja: KorakStanje[] = run.steps.map((s) => ({
     stepId: s.stepId, status: s.status as KorakStanje['status'], attempts: s.attempts,
   }))

@@ -50,6 +50,7 @@
 //   • odgovor: `{ data, paket? }` — obstoječi klicatelji berejo samo `data`.
 
 import { NextRequest, NextResponse } from 'next/server'
+import type { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 import { jsonError, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
@@ -281,7 +282,10 @@ export async function POST (req: NextRequest) {
   // points + calibration shranimo v params (zapis postopka za revizijo/ponovno izdelavo)
   // points: normalizirane koordinate 0..1; calibration dodatno nosi imgW/imgH za
   // pretvorbo v piksle pri ponovnem izračunu (GET /api/railing-layout?measurementId)
-  let params: string | null = null
+  // R542: params je jsonb — shranimo OBJEKT (ne JSON niza). try/catch ostaja kot
+  // varovalka residualnih primerov (npr. ne-JSON vrednost v extra) — fallback
+  // je minimalni objekt (stolpec je obvezen).
+  let params: Prisma.InputJsonValue
   try {
     const extra: Record<string, unknown> = { photoId, source: 'KAMERA' }
     // R501 (issue #15 faza 2): točke grejo skozi ENOTNO normalizacijo (`pointsForStorage`)
@@ -316,8 +320,8 @@ export async function POST (req: NextRequest) {
       scale: provenance.scale,
       calibration: parseCalibration(body.calibration),
     })
-    params = JSON.stringify(extra)
-  } catch { params = JSON.stringify({ photoId, source: 'KAMERA' }) }
+    params = extra as unknown as Prisma.InputJsonValue
+  } catch { params = { photoId, source: 'KAMERA' } }
 
   // R438 (issue #5): kontakt stranke za statusno obvestilo (EMAIL, maskiran
   // naslov) — branje PRED transakcijo (samo vsebina obvestila, ne odloča o zapisu).
@@ -385,11 +389,12 @@ export async function POST (req: NextRequest) {
           measurementId: measurement.id,
           version: (last?.version ?? 0) + 1,
           userId: user.id,
-          data: JSON.stringify({
+          // R542: data je jsonb objekt (ne niz)
+          data: {
             type, lengthCm, heightCm, posts, segments, handrail, slopeDeg,
             location: measurement.location, note: measurement.note, params,
             status: provenance.status, statusNote: provenance.reason,
-          }),
+          },
           note: versionBits.length > 0 ? `${versionBits.join(' · ')} — potrjeno s kamero` : 'Potrjeno s kamero (iz fotografije)',
         },
       })
@@ -490,7 +495,8 @@ export async function POST (req: NextRequest) {
           status: 'IZMERA',
           // NOBENA cena/marža/načrt tu ne nastane (R488 isti pogoj): calcJson je
           // samo dokaz izvora in prenosa, ki ga pisarna nadaljuje s kosovnico.
-          calcJson: JSON.stringify({
+          // R542: jsonb — objekt direktno (ne JSON.stringify)
+          calcJson: {
             prenos: {
               verzia: HANDOFF_VERSION,
               izvor: 'KAMERA',
@@ -500,7 +506,7 @@ export async function POST (req: NextRequest) {
               enota: odlok.unit,
               razlog: odlok.razlog,
             },
-          }),
+          },
           note: `§8 prenos iz meritve s kamero (${produkt.family.code})`,
         },
         select: { id: true, code: true },

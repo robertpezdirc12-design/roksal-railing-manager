@@ -113,28 +113,25 @@ export function preveriDocPolja (vhod: {
 }
 
 /**
- * Zapiše doc* polja v obstoječi params JSON meritev (aditivno — obstoječe
- * ključe pusti pri miru). Vrne JSON string; če params ni bil veljaven JSON,
- * ga POŠTENO zamenja z objektom, ki vsebuje vsaj doc polja (izguba pokvarjenih
- * podatkov ni možna — pokvarjen JSON že prej ni bil uporaben).
+ * Zapiše doc* polja v obstoječi params objekt meritev (aditivno — obstoječe
+ * ključe pusti pri miru). R542: params je jsonb OBJEKT (ne niz več) — sprejme
+ * in vrne objekt; pokvarjeni nizi iz preteklosti tu niso več možni (zod vrata
+ * na rutah zavračajo nize).
  */
-export function zapišiDocVParams (params: string | null, doc: {
+export function zapišiDocVParams (params: Record<string, unknown> | null, doc: {
   docOf?: string | null
   docTag?: DocTag | null
   docSegmentIdx?: number | null
   docNote?: string
   docOffline?: boolean
-}): string {
-  let obj: Record<string, unknown> = {}
-  if (params) {
-    try { obj = JSON.parse(params) as Record<string, unknown> } catch { obj = {} }
-  }
+}): Record<string, unknown> {
+  const obj: Record<string, unknown> = params ? { ...params } : {}
   if (doc.docOf !== null && doc.docOf !== undefined) obj.docOf = doc.docOf
   if (doc.docTag !== null && doc.docTag !== undefined) obj.docTag = doc.docTag
   if (doc.docSegmentIdx !== null && doc.docSegmentIdx !== undefined) obj.docSegmentIdx = doc.docSegmentIdx
   if (doc.docNote !== undefined && doc.docNote !== '') obj.docNote = doc.docNote
   if (doc.docOffline === true) obj.docOffline = true
-  return JSON.stringify(obj)
+  return obj
 }
 
 /**

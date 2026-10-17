@@ -2,7 +2,7 @@
 // Družine → izdelki → variante → komponente (BOM predloge z EKSPlicitnimi ID) → ceniki → paketi.
 // Uporaba: node prisma/seed-r442.cjs
 /* eslint-disable @typescript-eslint/no-require-imports */
-const { PrismaClient } = require('@prisma/client')
+const { Prisma, PrismaClient } = require('@prisma/client')
 const db = new PrismaClient()
 
 // ── 1. produktni družine (issue #7 §1) ────────────────────────────────────────
@@ -307,7 +307,7 @@ async function main () {
       data: {
         familyId: famMap.get(p.family), sku: p.sku, name: p.name, unit: p.unit,
         desc: p.desc ?? null, widthMm: p.widthMm ?? null, heightMm: p.heightMm ?? null,
-        tech: p.tech ? JSON.stringify(p.tech) : null,
+        tech: p.tech ?? Prisma.DbNull,
         costPrice: p.cost, salePrice: p.sale, warrantyMonths: p.warranty,
       },
     })

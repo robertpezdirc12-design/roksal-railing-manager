@@ -96,7 +96,8 @@ const {{PrismaClient}}=require('@prisma/client');const p=new PrismaClient();
   for(const x of ps){{await p.project.delete({{where:{{id:x.id}}}});}}
   await p.measurement.deleteMany({{where:{{note:'{TAG}'}}}});
   await p.user.deleteMany({{where:{{email:'monter2-r459@roksal.si'}}}});
-  await p.auditLog.deleteMany({{where:{{detail:{{contains:'{TAG}'}}}}}});
+  // R542: detail je jsonb — podniz po serializiranem jsonb (ista semantika contains)
+  await p.$executeRawUnsafe('DELETE FROM "AuditLog" WHERE "detail"::text LIKE $1', '%{TAG}%');
   console.log('CLEAN_DONE');return p.$disconnect();
 }})()
 '''
@@ -293,7 +294,8 @@ const {{PrismaClient}}=require('@prisma/client');const p=new PrismaClient();
   const acts=[...new Set(logs.map(l=>l.action))].sort();
   console.log('ACTS='+acts.join(','));
   const v1=await p.photoVisualizationVersion.findFirst({{where:{{visualizationId:'{VIZ_A}',version:1}}}});
-  console.log('V1HAS420='+(v1&&v1.data.includes('"lengthCm":420')));
+  // R542: data je jsonb objekt — dolžina je vrednost, ne podniz
+  console.log('V1HAS420='+(v1&&v1.data&&v1.data.renderParams?.config?.lengthCm===420));
   return p.$disconnect();
 }})()
 '''

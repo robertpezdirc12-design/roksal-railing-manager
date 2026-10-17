@@ -5,6 +5,7 @@
 // → revizija VIZ_PROJECT_DUPLICATE.
 
 import { NextRequest, NextResponse } from 'next/server'
+import { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 import { jsonError, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
@@ -30,7 +31,8 @@ export async function POST (req: NextRequest, { params }: Params) {
         projectId: existing.projectId,
         authorId: user.id,
         tip: existing.tip,
-        params: existing.params,
+        // R542: params je jsonb — kopija podeduje objekt; null = DB NULL
+        params: (existing.params as Prisma.InputJsonValue) ?? Prisma.DbNull,
         note: existing.note,
       },
     })

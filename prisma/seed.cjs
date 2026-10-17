@@ -310,9 +310,9 @@ async function main () {
 
   console.log('[seed] naseljujem galerijo zaključenih del …')
   await db.measurement.createMany({ data: [
-    { projectId: projects[3].id, authorId: monter.id, type: 'FOTO', location: 'Ograja — vhod, Kovač', note: 'Zaključeno delo: kovana ograja + nadstrešek', params: JSON.stringify({ photo: fotoSvg('Kovana ograja — vhod', '#2b3a4e', '#c9a227', 9, true) }) },
-    { projectId: projects[3].id, authorId: monter.id, type: 'FOTO', location: 'Nadstrešek — dvorišče, Kovač', note: 'Polikarbonatna plošča, odvod na desno', params: JSON.stringify({ photo: fotoSvg('Nadstrešek — dvorišče', '#37475e', '#9fb4cc', 0, false) }) },
-    { projectId: projects[7].id, authorId: vodja.id, type: 'FOTO', location: 'Vrtna ograja — Pri Lipi', note: 'Zaključeno + predano stranki', params: JSON.stringify({ photo: fotoSvg('Vrtna ograja — Pri Lipi', '#4a5a48', '#d9c9a3', 11, false) }) }
+    { projectId: projects[3].id, authorId: monter.id, type: 'FOTO', location: 'Ograja — vhod, Kovač', note: 'Zaključeno delo: kovana ograja + nadstrešek', params: { photo: fotoSvg('Kovana ograja — vhod', '#2b3a4e', '#c9a227', 9, true) } },
+    { projectId: projects[3].id, authorId: monter.id, type: 'FOTO', location: 'Nadstrešek — dvorišče, Kovač', note: 'Polikarbonatna plošča, odvod na desno', params: { photo: fotoSvg('Nadstrešek — dvorišče', '#37475e', '#9fb4cc', 0, false) } },
+    { projectId: projects[7].id, authorId: vodja.id, type: 'FOTO', location: 'Vrtna ograja — Pri Lipi', note: 'Zaključeno + predano stranki', params: { photo: fotoSvg('Vrtna ograja — Pri Lipi', '#4a5a48', '#d9c9a3', 11, false) } }
   ] })
 
   console.log('[seed] naseljujem portal stranke (R435) …')
@@ -323,21 +323,21 @@ async function main () {
 
   console.log('[seed] naseljujem vzdrževalna opravila (R435) …')
   await db.jobRun.createMany({ data: [
-    { job: 'seje-gc', ok: true, affected: 2, detail: JSON.stringify({ note: 'cron (izvirnik) — potekle seje' }), startedAt: new Date(Date.now() - 86400000 * 1.2), finishedAt: new Date(Date.now() - 86400000 * 1.2 + 400) },
-    { job: 'obvestila-gc', ok: true, affected: 0, detail: JSON.stringify({ note: 'cron (izvirnik) — prebrana obvestila > 30 dni' }), startedAt: new Date(Date.now() - 86400000 * 1.2), finishedAt: new Date(Date.now() - 86400000 * 1.2 + 120) }
+    { job: 'seje-gc', ok: true, affected: 2, detail: { note: 'cron (izvirnik) — potekle seje' }, startedAt: new Date(Date.now() - 86400000 * 1.2), finishedAt: new Date(Date.now() - 86400000 * 1.2 + 400) },
+    { job: 'obvestila-gc', ok: true, affected: 0, detail: { note: 'cron (izvirnik) — prebrana obvestila > 30 dni' }, startedAt: new Date(Date.now() - 86400000 * 1.2), finishedAt: new Date(Date.now() - 86400000 * 1.2 + 120) }
   ] })
 
   console.log('[seed] naseljujem revizijo in obvestila …')
   await db.auditLog.createMany({ data: [
-    { userId: admin.id, action: 'SETUP_COMPLETE', entity: 'sistem', detail: JSON.stringify({ note: 'Inicialna nastavitev' }) },
-    { userId: admin.id, action: 'USER_ROLE_CHANGE', entity: 'user', entityId: monter.id, detail: JSON.stringify({ from: 'MONTER', to: 'MONTER', note: 'potrditev po setupu' }) },
-    { userId: vodja.id, action: 'QUOTE_ISSUE', entity: 'quote', entityId: quotes[1].id, projectId: projects[1].id, detail: JSON.stringify({ code: 'PON-2026-002' }) },
-    { userId: monter.id, action: 'WO_TRANSITION', entity: 'workOrder', entityId: wos[0].id, projectId: projects[0].id, detail: JSON.stringify({ from: 'NAPROGRAMIRAN', to: 'V_TEKU' }) },
-    { userId: skladisce.id, action: 'STOCK_LOT_ADD', entity: 'inventoryItem', entityId: items[0].id, detail: JSON.stringify({ qty: 12, unitCost: 54 }) },
-    { userId: proizvodnja.id, action: 'PRODUCTION_STATUS', entity: 'productionOrder', detail: JSON.stringify({ code: 'PR-2026-002', to: 'DOKONCAN' }) },
-    { userId: proizvodnja.id, action: 'QC_CHECK', entity: 'productionOrder', entityId: prods[1].id, projectId: projects[1].id, detail: JSON.stringify({ item: 'Robni obdelava — poliranje', result: 'NOK' }) },
-    { userId: vodja.id, action: 'WARRANTY_VISIT', entity: 'warranty', entityId: gar1.id, projectId: projects[3].id, detail: JSON.stringify({ note: 'Redni letni pregled' }) },
-    { userId: admin.id, action: 'PAYMENT_RECORD', entity: 'invoice', entityId: invoices[0].id, projectId: projects[0].id, detail: JSON.stringify({ amount: quotes[0].total }) }
+    { userId: admin.id, action: 'SETUP_COMPLETE', entity: 'sistem', detail: { note: 'Inicialna nastavitev' } },
+    { userId: admin.id, action: 'USER_ROLE_CHANGE', entity: 'user', entityId: monter.id, detail: { from: 'MONTER', to: 'MONTER', note: 'potrditev po setupu' } },
+    { userId: vodja.id, action: 'QUOTE_ISSUE', entity: 'quote', entityId: quotes[1].id, projectId: projects[1].id, detail: { code: 'PON-2026-002' } },
+    { userId: monter.id, action: 'WO_TRANSITION', entity: 'workOrder', entityId: wos[0].id, projectId: projects[0].id, detail: { from: 'NAPROGRAMIRAN', to: 'V_TEKU' } },
+    { userId: skladisce.id, action: 'STOCK_LOT_ADD', entity: 'inventoryItem', entityId: items[0].id, detail: { qty: 12, unitCost: 54 } },
+    { userId: proizvodnja.id, action: 'PRODUCTION_STATUS', entity: 'productionOrder', detail: { code: 'PR-2026-002', to: 'DOKONCAN' } },
+    { userId: proizvodnja.id, action: 'QC_CHECK', entity: 'productionOrder', entityId: prods[1].id, projectId: projects[1].id, detail: { item: 'Robni obdelava — poliranje', result: 'NOK' } },
+    { userId: vodja.id, action: 'WARRANTY_VISIT', entity: 'warranty', entityId: gar1.id, projectId: projects[3].id, detail: { note: 'Redni letni pregled' } },
+    { userId: admin.id, action: 'PAYMENT_RECORD', entity: 'invoice', entityId: invoices[0].id, projectId: projects[0].id, detail: { amount: quotes[0].total } }
   ] })
   await db.notification.createMany({ data: [
     { userId: monter.id, title: 'Nov nalog dodeljen', body: 'N-2026-003 — Dostava stekla, Horvat (jutri)' },

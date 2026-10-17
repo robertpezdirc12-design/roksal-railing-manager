@@ -148,7 +148,7 @@ if snap_mixed: snap_ids.append(snap_mixed)
 s, d = callj('GET', f'/api/ar-snapshots/{snap_mixed}', monter)
 stored = d.get('data', {}).get('sceneJson')
 try:
-    parsed = json.loads(stored)
+    parsed = stored if isinstance(stored, dict) else json.loads(stored)  # R542: jsonb objekt
     ids = [e['id'] for e in parsed['elements']]
     chk('el-ok' in ids and 'el-bad' not in ids, 'bbox >1 izločen, veljaven ostane')
     chk(parsed['elements'][0]['cls'] == 'PODLAGA' and parsed['elements'][0]['kind'] == 'BETON', 'razred+kind shranjena')
@@ -164,7 +164,8 @@ snap_many = d.get('data', {}).get('id')
 if snap_many: snap_ids.append(snap_many)
 s, d = callj('GET', f'/api/ar-snapshots/{snap_many}', monter)
 try:
-    n = len(json.loads(d['data']['sceneJson'])['elements'])
+    shranjen = d['data']['sceneJson']
+    n = len((shranjen if isinstance(shranjen, dict) else json.loads(shranjen))['elements'])  # R542: jsonb
     chk(n == 24, f'>24 elementov reže na 24 (shranjeno {n})')
 except Exception as ex:
     bad(f'preveč elementov: {ex}')

@@ -1,7 +1,7 @@
 // audit — REKONSTRUKCIJA R431 (vir: R428 — sistemski/globalni pregled)
 // readAudit (per-projekt) + readAuditGlobal (projectId=null dogodki).
 
-import type { Prisma } from '@prisma/client'
+import { Prisma } from '@prisma/client'
 import { db } from '@/lib/db'
 
 /** Odjemalec, prek katerega gre zapis revizije: globalni db ALI transakcijski
@@ -24,7 +24,8 @@ export async function writeAudit (input: {
       entity: input.entity,
       entityId: input.entityId ?? null,
       projectId: input.projectId ?? null, // null = sistemski dogodek (R428)
-      detail: input.detail ? JSON.stringify(input.detail) : null,
+      // R542: detail je jsonb OBJEKT (ne niz) — null gre eksplicitno kot DB NULL
+      detail: input.detail ? input.detail as Prisma.InputJsonValue : Prisma.DbNull,
     },
   })
 }

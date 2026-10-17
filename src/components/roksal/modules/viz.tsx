@@ -52,7 +52,7 @@ interface VizRow {
   id: string
   name: string
   tip: string
-  params: string
+  params: Record<string, unknown> | null
   note: string | null
   projectId: string | null
   createdAt: string
@@ -193,7 +193,8 @@ export default function VizModule () {
         slopeDeg: slope > 0 ? Math.round(slope * 100) / 100 : null,
         projectId: projectId !== 'none' ? projectId : null,
         location: location.trim() || null,
-        params: JSON.stringify({
+        // R542: params je jsonb objekt (zod sprejema samo objekt)
+        params: {
           viz: { profileId: profile?.id ?? null, sku: profile?.sku ?? null, color: colorId },
           konfigurator: {
             profileId: profile?.id ?? null,
@@ -207,7 +208,7 @@ export default function VizModule () {
             slopeDeg: Math.round(slope * 100) / 100,
             material: profile?.material ?? null,
           },
-        }),
+        },
         note: `Konfigurator: ${profile ? `${profile.sku} · ` : ''}${color.label}${tip !== 'OGRAJA' ? ` · ${TIP_SHORT[tip]}` : ''}`,
       })
       toast({
@@ -307,9 +308,10 @@ export default function VizModule () {
   // ── R454: shranjeni 3D projekti (POST /api/viz/projects) ──────────────────
 
   /** Zapis celotne trenutne konfiguracije v params (raven format — isti ključi
-   *  kot params.konfigurator pri meritvi, plus segments/montaza/location). */
-  function currentParams (): string {
-    return JSON.stringify({
+   *  kot params.konfigurator pri meritvi, plus segments/montaza/location).
+   *  R542: params je jsonb OBJEKT (zod sprejema samo objekt). */
+  function currentParams (): Record<string, unknown> {
+    return {
       profileId: profile?.id ?? null,
       sku: profile?.sku ?? null,
       colorId,
@@ -322,7 +324,7 @@ export default function VizModule () {
       slopeDeg: Math.round(slope * 100) / 100,
       montaza,
       material: profile?.material ?? null,
-    })
+    }
   }
 
   async function saveVizProject (): Promise<void> {
@@ -355,12 +357,9 @@ export default function VizModule () {
 
   /** Naloži shranjen projekt nazaj v konfigurator (celotno stanje). */
   function loadVizProject (row: VizRow): void {
-    let k: Record<string, unknown> | null = null
-    try {
-      const parsed = JSON.parse(row.params) as unknown
-      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) k = parsed as Record<string, unknown>
-    } catch { /* neveljaven JSON — ne naložimo */ }
-    if (!k) {
+    // R542: params je jsonb objekt (API ga vrača razčlenjenega) — brez JSON.parse
+    const k = row.params
+    if (!k || typeof k !== 'object') {
       toast({ title: 'Konfiguracije ni bilo mogoče prebrati.', variant: 'destructive' })
       return
     }

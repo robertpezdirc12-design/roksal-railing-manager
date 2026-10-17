@@ -100,7 +100,9 @@ const BOMS=__BOMS__;const IDS=[__ITEM_A__,__ITEM_B__];
 (async()=>{
   // 1) more ostankov prejšnjih zagonov (idempotenca)
   const picks=await p.pickingList.findMany({where:{bomId:{in:BOMS}},select:{id:true}});
-  await p.auditLog.deleteMany({where:{OR:[{detail:{contains:'__TAG__'}},{detail:{contains:'r464c-'}},{entityId:{in:[...BOMS,...IDS,...picks.map(x=>x.id)]}}]}});
+  // R542: detail je jsonb — podniz po serializiranem jsonb; entityId ostaja Prisma filter
+  await p.$executeRawUnsafe('DELETE FROM "AuditLog" WHERE "detail"::text LIKE ANY($1::text[])', ['%__TAG__', '%r464c-']);
+  await p.auditLog.deleteMany({where:{entityId:{in:[...BOMS,...IDS,...picks.map(x=>x.id)]}}});
   await p.pickingList.deleteMany({where:{bomId:{in:BOMS}}});
   await p.stockReservation.deleteMany({where:{OR:[{bomId:{in:BOMS}},{itemId:{in:IDS}}]}});
   await p.bom.deleteMany({where:{id:{in:BOMS}}});
@@ -403,7 +405,9 @@ const {PrismaClient}=require('@prisma/client');const p=new PrismaClient();
 const BOMS=__BOMS__;const IDS=[__ITEM_A__,__ITEM_B__];
 (async()=>{
   const picks=await p.pickingList.findMany({where:{bomId:{in:BOMS}},select:{id:true}});
-  await p.auditLog.deleteMany({where:{OR:[{detail:{contains:'__TAG__'}},{detail:{contains:'r464c-'}},{entityId:{in:[...BOMS,...IDS,...picks.map(x=>x.id)]}}]}});
+  // R542: detail je jsonb — podniz po serializiranem jsonb; entityId ostaja Prisma filter
+  await p.$executeRawUnsafe('DELETE FROM "AuditLog" WHERE "detail"::text LIKE ANY($1::text[])', ['%__TAG__', '%r464c-']);
+  await p.auditLog.deleteMany({where:{entityId:{in:[...BOMS,...IDS,...picks.map(x=>x.id)]}}});
   await p.pickingList.deleteMany({where:{bomId:{in:BOMS}}});
   await p.stockReservation.deleteMany({where:{OR:[{bomId:{in:BOMS}},{itemId:{in:IDS}}]}});
   await p.bom.deleteMany({where:{id:{in:BOMS}}});

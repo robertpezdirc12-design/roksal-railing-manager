@@ -108,10 +108,12 @@ export async function analyzeQuality (dataUrl: string): Promise<Quality | null> 
   })
 }
 
-export function parsePhoto (params: string | null): string | null {
+/** R542: params je jsonb objekt — vrne data URL fotografije meritve FOTO (ali null);
+ *  niz ostaja le kot obramba za starejše oblike. */
+export function parsePhoto (params: Record<string, unknown> | string | null): string | null {
   if (!params) return null
-  try {
-    const p = JSON.parse(params) as { photo?: unknown }
-    return typeof p.photo === 'string' && p.photo.startsWith('data:image/') ? p.photo : null
-  } catch { return null }
+  const p: unknown = typeof params === 'string' ? (() => { try { return JSON.parse(params) as unknown } catch { return null } })() : params
+  if (!p || typeof p !== 'object') return null
+  const photo = (p as { photo?: unknown }).photo
+  return typeof photo === 'string' && photo.startsWith('data:image/') ? photo : null
 }

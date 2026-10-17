@@ -354,7 +354,7 @@ model Measurement {
   // (CONFIRMED) ali razveljavlja (INVALIDATED).
   status      String      @default("ESTIMATED") // ESTIMATED | AUTO_SUGGESTED | MANUAL | CALIBRATED | VERIFIED | CONFIRMED | INVALIDATED
   statusNote  String? // zakaj to stanje (razlog izračuna ali razlog ročnega posega)
-  params      String? // JSON (profileId, barva, photoId, points, calibration, viz, konfigurator …)
+  params      Json? // JSON (profileId, barva, photoId, points, calibration, viz, konfigurator …)
   note        String?
   // R437 (issue #2): javna deljena povezava meritve (žeton /m/[token] izvirnika → /api/public/measure?token=)
   shareToken  String?     @unique
@@ -378,7 +378,7 @@ model MeasurementVersion {
   measurement  Measurement @relation(fields: [measurementId], references: [id], onDelete: Cascade)
   measurementId String
   version      Int
-  data         String   // JSON posnetek (type, lengthCm, heightCm, posts, slopeDeg, note, params …)
+  data         Json   // JSON posnetek (type, lengthCm, heightCm, posts, slopeDeg, note, params …)
   userId       String?
   user         User?    @relation("measurementVersions", fields: [userId], references: [id])
   note         String?
@@ -413,7 +413,7 @@ model CatalogVersion {
   profile   Profile? @relation(fields: [profileId], references: [id], onDelete: Cascade)
   userId    String?
   user      User?    @relation("catalogVersions", fields: [userId], references: [id])
-  data      String   // JSON posnetek: { before: staro (le spremenjena polja | null pri novem), after: novo, profile: celoten posnetek }
+  data      Json   // JSON posnetek: { before: staro (le spremenjena polja | null pri novem), after: novo, profile: celoten posnetek }
   note      String?
   createdAt DateTime @default(now())
 
@@ -697,7 +697,7 @@ model AuditLog {
   entity    String // ime entitete (invoice, workOrder …)
   entityId  String?
   projectId String? // null = sistemski dogodek (R428: globalni pregled)
-  detail    String? // JSON
+  detail    Json? // JSON
   createdAt DateTime @default(now())
 
   // R535: prilagajoča se tabela — brez teh indeksov je vsak pregled revizije
@@ -724,7 +724,7 @@ model NotificationEvent {
   id        String   @id @default(cuid())
   key       String   @unique // dedup: npr. "wo-assign:<nalogId>:<assigneeId>"
   type      String // WO_ASSIGNED | WO_TERMIN | … (NOTIFICATION_EVENT_TYPES v notify-events.ts)
-  payload   String // JSON { title, body, customerEmail?, customerName? }
+  payload   Json // JSON { title, body, customerEmail?, customerName? }
   projectId String?
   createdAt DateTime @default(now())
 
@@ -789,7 +789,7 @@ model JobRun {
   job        String // seje-gc | portal-gc | obvestila-gc
   ok         Boolean
   affected   Int      @default(0)
-  detail     String? // JSON
+  detail     Json? // JSON
   startedAt  DateTime
   finishedAt DateTime
   userId     String? // null = sistemski/cron zagon
@@ -862,8 +862,8 @@ model RuleVersion {
   rule      EngineeringRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
   userId    String?
   user      User?          @relation("ruleVersions", fields: [userId], references: [id])
-  oldValue  String? // JSON stanje PRED spremembo (null ob nastanku pravila)
-  newValue  String // JSON stanje PO spremembi
+  oldValue  Json? // JSON stanje PRED spremembo (null ob nastanku pravila)
+  newValue  Json // JSON stanje PO spremembi
   note      String?
   createdAt DateTime       @default(now())
 
@@ -880,7 +880,7 @@ model SyncOp {
   deviceId  String
   userId    String
   kind      String // meritev | foto | nalog-opomba | nalog-status | nalog-zakljucek
-  result    String // JSON odgovor operacije
+  result    Json // JSON odgovor operacije
   createdAt DateTime @default(now())
 
   @@index([userId, createdAt])
@@ -940,7 +940,7 @@ model Product {
   heightMm       Int?
   depthMm        Int?
   // tehnične lastnosti (JSON): material, ral, obremenitev, toplotna prevodnost …
-  tech           String?
+  tech           Json?
   // osnovni ceni (nabavna/prodajna na enoto); veljavne cene razrešuje PriceList
   costPrice      Decimal @db.Decimal(12,2)       @default(0)
   salePrice      Decimal @db.Decimal(12,2)       @default(0)
@@ -1017,7 +1017,7 @@ model ProductVariant {
   // override ceni (null = podeduje produkt)
   costPrice Decimal? @db.Decimal(12,2)
   salePrice Decimal? @db.Decimal(12,2)
-  tech      String? // JSON dopolnilne tehnične lastnosti
+  tech      Json? // JSON dopolnilne tehnične lastnosti
   active    Boolean  @default(true)
   sortOrder Int      @default(0)
 
@@ -1173,7 +1173,7 @@ model ProjectPackage {
   qty           Float           @default(0) // količina v enoti produkta
   unit          String          @default("m2")
   status        String          @default("POVPRAŠEVANJE") // POVPRAŠEVANJE | IZMERA | KONFIGURACIJA | PONUDBA | POTRJENO | REZERVIRANO | V_IZDELAVI | DOSTAVLJENO | MONTIRANO | PREDANO
-  calcJson      String? // JSON kalkulacija (cena, marža, material)
+  calcJson      Json? // JSON kalkulacija (cena, marža, material)
   note          String?
   // R476 (issue #9 §5 — PRIMERJALNI PAKETI): isti obseg (izmera) v več nivojih
   // — STANDARD / BOLJSI / PREMIUM. Paketi z enako compareCode pripadajo isti
@@ -1408,8 +1408,8 @@ model HandoverReport {
   designedSnapshotId  String? // AS-DESIGNED dvojček (načrtovano/potrjeno)
   installedSnapshotId String? // AS-INSTALLED dvojček (izvedeno)
   producedBomId       String? // POTRJENA kosovnica (material po segmentih)
-  diffJson            String? // primerjava seg-N: načrtovano/potrjeno/izvedeno + viri
-  photosJson          String? // [{ id, stage: PRED|MED|PO, createdAt }] — izvirniki ostanejo
+  diffJson            Json? // primerjava seg-N: načrtovano/potrjeno/izvedeno + viri
+  photosJson          Json? // [{ id, stage: PRED|MED|PO, createdAt }] — izvirniki ostanejo
   summary             String? // povzetek izvedbe
   monterConfirmedAt   DateTime?
   monterConfirmedById String?
@@ -1533,9 +1533,9 @@ model ArSnapshot {
   authorId  String?
   author    User?    @relation("arSnapshots", fields: [authorId], references: [id], onDelete: SetNull)
   scene     String? // kratek opis prizora (VLM), npr. „terasa z vhodnimi vrati"
-  analysis  String? // JSON { placement: [{label, where, estLenCm?, note?}], obstacles: [], references: [] }
-  params    String? // JSON { photo, posts, heightCm, scale, opacity, mode } — posnetek + nastavitve
-  sceneJson String? // R467 (issue #8 F1): JSON SceneUnderstandingResult {version, elements[], edits[]} — živi razredi prizora ob zajemu; edits = označeni popravki monterja (izvirnik se ne prepisuje)
+  analysis  Json? // JSON { placement: [{label, where, estLenCm?, note?}], obstacles: [], references: [] }
+  params    Json? // JSON { photo, posts, heightCm, scale, opacity, mode } — posnetek + nastavitve
+  sceneJson Json? // R467 (issue #8 F1): JSON SceneUnderstandingResult {version, elements[], edits[]} — živi razredi prizora ob zajemu; edits = označeni popravki monterja (izvirnik se ne prepisuje)
   note      String?
   createdAt DateTime @default(now())
 
@@ -1553,7 +1553,7 @@ model VizProject {
   authorId  String?
   author    User?    @relation("vizProjects", fields: [authorId], references: [id], onDelete: SetNull)
   tip       String   @default("OGRAJA") // OGRAJA | BALUSTRADA | NAGIB
-  params    String // JSON konfiguratorja (lengthCm, heightCm, posts, segments, handrail, colorId, profileId, slopeDeg, montaza …)
+  params    Json // JSON konfiguratorja (lengthCm, heightCm, posts, segments, handrail, colorId, profileId, slopeDeg, montaza …)
   note      String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1593,7 +1593,7 @@ model PhotoVisualization {
   variantId     String? // varianta produkta (barva/RAL, §3)
   variant       ProductVariant? @relation("photoVizVariant", fields: [variantId], references: [id], onDelete: SetNull)
   engineVersion String // verzija render engine-a (photo-replace-core)
-  renderParams  String // JSON: { quad, reference, config } — BREZ fotografije (≤ 8 KB)
+  renderParams  Json // JSON: { quad, reference, config } — BREZ fotografije (≤ 8 KB)
   rendered      String? // data URL izrisane POTEM sličice z žigom (≤ 2,5 MB)
   note          String?
   createdAt     DateTime @default(now())
@@ -1613,7 +1613,7 @@ model PhotoVisualizationVersion {
   visualizationId String
   visualization   PhotoVisualization @relation(fields: [visualizationId], references: [id], onDelete: Cascade)
   version         Int
-  data            String // JSON posnetek (brez blob fotografij)
+  data            Json // JSON posnetek (brez blob fotografij)
   userId          String?
   user            User?    @relation("photoVizVersions", fields: [userId], references: [id], onDelete: SetNull)
   note            String?
@@ -1642,7 +1642,7 @@ model PlaybookDef {
   effectiveFrom DateTime @default(now())
   authorId      String?
   author        User?    @relation("playbookAuthor", fields: [authorId], references: [id], onDelete: SetNull)
-  definition    String // JSON: { steps: [...], pravila } — podatkovno definirani workflow
+  definition    Json // JSON: { steps: [...], pravila } — podatkovno definirani workflow
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -1668,8 +1668,8 @@ model PlaybookRun {
   userId         String
   user           User        @relation("playbookUser", fields: [userId], references: [id])
   status         String      @default("V_TEKU") // V_TEKU | ZAKLJUCEN | PREKINJEN
-  context        String? // JSON: { odgovori: { jeStopnisce: true, … }, naprava: { tier, … } }
-  handoff        String? // JSON: [{ do: 'KONFIGURATOR', ob: ISO, runId }] (§11)
+  context        Json? // JSON: { odgovori: { jeStopnisce: true, … }, naprava: { tier, … } }
+  handoff        Json? // JSON: [{ do: 'KONFIGURATOR', ob: ISO, runId }] (§11)
   startedAt      DateTime    @default(now())
   completedAt    DateTime?
 
@@ -1690,7 +1690,7 @@ model PlaybookStepRun {
   run             PlaybookRun @relation(fields: [runId], references: [id], onDelete: Cascade)
   stepId          String // id koraka iz definicije (stable identifier)
   status          String      @default("PENDING") // PENDING | IN_PROGRESS | COMPLETED | NI_PRIMERNO | BLOKIRANO | NEUSPESNO
-  evidence        String? // JSON dokazil (§10)
+  evidence        Json? // JSON dokazil (§10)
   exceptionReason String? // §6: obvezni razlog za NI_PRIMERNO / BLOKIRANO
   attempts        Int         @default(0) // število poskusov (retry podpora)
   startedAt       DateTime?
@@ -1734,10 +1734,10 @@ model FenceRun {
   variant       ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
   measurementId String? // kanonična meritev po potrditvi (§17/§21)
   measurement   Measurement?   @relation("fenceRunMeasurements", fields: [measurementId], references: [id], onDelete: SetNull)
-  calibration   String? // JSON §4 — metoda + referenca + zaupanje
-  terrain       String? // JSON §12 — višinski profil
-  nodes         String? // JSON §1 — vozlišča tekača
-  quality       String? // JSON §3 — quality gate posnetek
+  calibration   Json? // JSON §4 — metoda + referenca + zaupanje
+  terrain       Json? // JSON §12 — višinski profil
+  nodes         Json? // JSON §1 — vozlišča tekača
+  quality       Json? // JSON §3 — quality gate posnetek
   note          String?
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
@@ -1792,7 +1792,7 @@ model FenceRunVersion {
   version    Int
   userId     String?
   user       User?    @relation("fenceRunVersions", fields: [userId], references: [id])
-  data       String   // JSON posnetek: { nodes, terrain, calibration, segments, status, quality }
+  data       Json   // JSON posnetek: { nodes, terrain, calibration, segments, status, quality }
   note       String?
   createdAt  DateTime @default(now())
 
@@ -1834,7 +1834,7 @@ model ReviewPin {
   resolvedAt   DateTime?
   resolvedById String?
   resolvedBy   User?     @relation("reviewPinResolver", fields: [resolvedById], references: [id], onDelete: SetNull)
-  snapshot     String? // JSON posnetek cilja ob nastanku (past premika seg-N)
+  snapshot     Json? // JSON posnetek cilja ob nastanku (past premika seg-N)
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
@@ -1936,7 +1936,7 @@ model WebhookSubscription {
   id            String    @id @default(cuid())
   url           String // https (SSRF vrata: validWebhookUrl v webhook-core)
   secretHash    String // SHA-256 hex skrivnosti (podpisni ključ — skrivnost NI shranjena)
-  events        String // JSON niz tipov dogodkov, npr. ["QUOTE_SIGNED",…]
+  events        Json // JSON niz tipov dogodkov, npr. ["QUOTE_SIGNED",…]
   active        Boolean   @default(true)
   description   String?
   createdById   String?
@@ -2005,12 +2005,12 @@ model CaptureSession {
   name        String
   status      String   @default("V_TEKU") // V_TEKU | ZAKLJUCEN | PREKINJEN
   mode        String   @default("FENCE_RUN") // FENCE_RUN | KAMERA
-  device      String? // JSON §15 — zaznane zmožnosti naprave + izbrani režim
-  outdoor     String? // JSON §16 — zunanji pogoji zajema
-  plan        String? // JSON §2 — vodena ruta (postanki iz tekača/objekta)
-  state       String? // JSON §17 — trenutni korak + opravljeni postanki
-  coverage    String? // JSON §1 — živo stanje pokritosti (iz posnetkov)
-  drift       String? // JSON §3 — vzorci registra + status drifta
+  device      Json? // JSON §15 — zaznane zmožnosti naprave + izbrani režim
+  outdoor     Json? // JSON §16 — zunanji pogoji zajema
+  plan        Json? // JSON §2 — vodena ruta (postanki iz tekača/objekta)
+  state       Json? // JSON §17 — trenutni korak + opravljeni postanki
+  coverage    Json? // JSON §1 — živo stanje pokritosti (iz posnetkov)
+  drift       Json? // JSON §3 — vzorci registra + status drifta
   snapshotId  String? // AS-MEASURED snapshot, ustvarjen ob zaključku
   note        String?
   createdAt   DateTime @default(now())
@@ -2060,7 +2060,7 @@ model CapturePhoto {
   session    CaptureSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   clientKey  String // idempotenten ključ odjemalca (offline vrsta)
   zone       String // id postanka iz plan-a (cona pokritosti)
-  quality    String? // JSON { dark, bright, blurry, blurScore? }
+  quality    Json? // JSON { dark, bright, blurry, blurScore? }
   offsetCm   Float? // odmik registra ob zajemu (drift vzorec, §3)
   thumb      String? // data URL sličice (≤ 120 KB, §24)
   capturedAt DateTime       @default(now())
@@ -2083,8 +2083,8 @@ model DigitalTwinSnapshot {
   parentSnapshotId String?
   parentSnapshot DigitalTwinSnapshot? @relation("twinChain", fields: [parentSnapshotId], references: [id], onDelete: SetNull)
   children   DigitalTwinSnapshot[] @relation("twinChain")
-  data       String // JSON struktiranega stanja
-  sources    String // JSON [{ vrsta, id, version? }]
+  data       Json // JSON struktiranega stanja
+  sources    Json // JSON [{ vrsta, id, version? }]
   reason     String // razlog nastanka/spremembe (§22 — obvezno)
   createdFrom String? // captureSessionId | packageId | bomId | workOrderId
   userId     String?
@@ -2148,8 +2148,8 @@ model Registration {
   sessionId  String
   session    CaptureSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   version    Int // zaporedna verzija registracije na zajemu
-  points     String // JSON 3 para točk (source → target)
-  transform  String // JSON { tx, ty, rotationDeg, scale, orientation }
+  points     Json // JSON 3 para točk (source → target)
+  transform  Json // JSON { tx, ty, rotationDeg, scale, orientation }
   rmsCm      Float // residual RMS (cm) — utemeljena kakovost ujemanja
   quality    String // GOOD | WARNING | INVALID
   userId     String?

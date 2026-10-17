@@ -505,7 +505,8 @@ const {PrismaClient}=require('@prisma/client');const p=new PrismaClient();
   const today=new Date(); today.setHours(0,0,0,0);
   await p.measurement.deleteMany({where:{AND:[{type:'OGRAJA'},{source:'KAMERA'},{lengthCm:100},{location:null},{note:null},{createdAt:{gte:today}}]}});
   await p.punchEntry.deleteMany({where:{note:{contains:'R440S'}}});
-  await p.auditLog.deleteMany({where:{detail:{contains:P}}});
+  // R542: detail je jsonb — podniz po serializiranem jsonb (ista semantika)
+  await p.$executeRawUnsafe('DELETE FROM "AuditLog" WHERE "detail"::text LIKE $1', '%' + P + '%');
   console.log('CLEAN_DONE');
   return p.$disconnect();
 })()

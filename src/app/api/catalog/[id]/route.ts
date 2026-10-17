@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { Prisma } from '@prisma/client'
 import { z } from 'zod'
 import { db } from '@/lib/db'
 import { jsonError, requirePermission } from '@/lib/auth'
@@ -73,7 +74,8 @@ export async function PATCH (req: NextRequest, { params }: Params) {
       data: {
         profileId: id,
         userId: auth.user.id,
-        data: JSON.stringify({ before, after: patch, profile: profileSnapshot({ ...updated, pricePerM: updated.pricePerM.toNumber() }) }),
+        // R542: data je jsonb objekt (ne niz)
+        data: { before, after: patch, profile: profileSnapshot({ ...updated, pricePerM: updated.pricePerM.toNumber() }) } as unknown as Prisma.InputJsonValue,
         note: `Sprememba: ${Object.keys(patch).join(', ')}`,
       },
     })

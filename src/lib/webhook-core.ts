@@ -42,15 +42,19 @@ export const WEBHOOK_METHOD = 'POST'
 /** Časovna omejitev enega dostavnega poskusa. */
 export const WEBHOOK_TIMEOUT_MS = 10_000
 
-// ─── events[] v nizu (JSON — vzorec FenceRun.nodes) ─────────────────────────
+// ─── events[] (jsonb POLJE — R542; prej JSON niz, vzorec FenceRun.nodes) ────
 
 export const WEBHOOK_EVENTS_MAX = 16
 
-/** Razčleni JSON niz seznama dogodkov: `["A","B"]` → ['A','B']; smeti → null. */
-export function parseWebhookEvents (raw: string | null | undefined): string[] | null {
-  if (typeof raw !== 'string' || !raw.trim()) return null
-  let parsed: unknown
-  try { parsed = JSON.parse(raw) } catch { return null }
+/** Razčleni seznam dogodkov: sprejme jsonb vrednost (tabela) ALI stari JSON niz
+ *  `"[\"A\",\"B\"]"` → ['A','B'] (zgodovinska oblika/testi); smeti → null.
+ *  R542: stolpec events je jsonb — odjemalec vrača tabelo, ne niz. */
+export function parseWebhookEvents (raw: unknown): string[] | null {
+  let parsed: unknown = raw
+  if (typeof raw === 'string') {
+    if (!raw.trim()) return null
+    try { parsed = JSON.parse(raw) } catch { return null }
+  }
   if (!Array.isArray(parsed) || parsed.length === 0 || parsed.length > WEBHOOK_EVENTS_MAX) return null
   const out: string[] = []
   for (const t of parsed) {
@@ -58,11 +62,6 @@ export function parseWebhookEvents (raw: string | null | undefined): string[] | 
     if (!out.includes(t)) out.push(t) // dedup
   }
   return out.length > 0 ? out : null
-}
-
-/** Serializiraj seznam dogodov nazaj v obliko shranjevanja (JSON niz). */
-export function serializeWebhookEvents (events: readonly string[]): string {
-  return JSON.stringify([...new Set(events)])
 }
 
 // ─── Validacija URL (SSRF vrata) ────────────────────────────────────────────

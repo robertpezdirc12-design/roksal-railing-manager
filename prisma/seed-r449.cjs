@@ -24,14 +24,14 @@ async function main () {
         data: {
           profileId: aluL80.id,
           userId: vodja?.id ?? admin?.id ?? null,
-          data: JSON.stringify({
+          data: {
             before: { pricePerM: 82 },
             after: { pricePerM: aluL80.pricePerM },
             profile: {
               sku: aluL80.sku, name: aluL80.name, material: aluL80.material, type: aluL80.type,
               pricePerM: aluL80.pricePerM, description: aluL80.description, active: aluL80.active,
             },
-          }),
+          },
           note: 'Demo: sezonski popravek cene (82 → 89 €/m)',
         },
       })
@@ -42,14 +42,14 @@ async function main () {
         data: {
           profileId: inoxBal.id,
           userId: admin?.id ?? null,
-          data: JSON.stringify({
+          data: {
             before: { description: 'Inox balustrada, steklo 8 mm' },
             after: { description: inoxBal.description ?? '' },
             profile: {
               sku: inoxBal.sku, name: inoxBal.name, material: inoxBal.material, type: inoxBal.type,
               pricePerM: inoxBal.pricePerM, description: inoxBal.description, active: inoxBal.active,
             },
-          }),
+          },
           note: 'Demo: dopolnitev tehničnega opisa (steklo 8 → 10 mm)',
         },
       })
@@ -76,8 +76,8 @@ async function main () {
         data: {
           ruleId: rule.id,
           userId: proizvodnja?.id ?? admin?.id ?? null,
-          oldValue: JSON.stringify({ key: rule.key, label: rule.label, value: s.old.value, unit: rule.unit, note: rule.note, active: rule.active }),
-          newValue: JSON.stringify({ key: rule.key, label: rule.label, value: rule.value, unit: rule.unit, note: rule.note, active: rule.active }),
+          oldValue: { key: rule.key, label: rule.label, value: s.old.value, unit: rule.unit, note: rule.note, active: rule.active },
+          newValue: { key: rule.key, label: rule.label, value: rule.value, unit: rule.unit, note: rule.note, active: rule.active },
           note: s.note,
         },
       })

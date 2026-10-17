@@ -69,7 +69,8 @@ const {{PrismaClient}}=require('@prisma/client');const p=new PrismaClient();
     await p.measurementVersion.deleteMany({{where:{{measurementId:m.id}}}});
     await p.measurement.delete({{where:{{id:m.id}}}});
   }}
-  await p.auditLog.deleteMany({{where:{{detail:{{contains:'{TAG}'}}}}}});
+  // R542: detail je jsonb — podniz po serializiranem jsonb (ista semantika contains)
+  await p.$executeRawUnsafe('DELETE FROM "AuditLog" WHERE "detail"::text LIKE $1', '%{TAG}%');
   await p.measurement.deleteMany({{where:{{note:'DBG-TEST'}}}});
   console.log('CLEAN_DONE');return p.$disconnect();
 }})()
@@ -112,7 +113,7 @@ chk(s == 401, f'brez žetona 401 (dejansko {s})')
 # pripravi FOTO meritev (monter)
 s, b = call('POST', '/api/measurements', monter, {
     'type': 'FOTO', 'projectId': PROJ_ID, 'location': f'{TAG} teren',
-    'params': json.dumps({'photo': PHOTO}),
+    'params': {'photo': PHOTO},  # R542: jsonb objekt (niz → zod 400)
     'note': f'{TAG} foto osnova',
 })
 chk(s == 201, f'FOTO meritev ustvarjena (dejansko {s})')
@@ -152,7 +153,7 @@ chk(s == 201, f'potrditev z razširitvami 201 (dejansko {s}: {b[:120] if s != 20
 mid = json.loads(b)['data']['id'] if s == 201 else None
 
 if mid:
-    params = json.loads(jget(f'/api/measurements/{mid}', admin)['data']['params'])
+    params = jget(f'/api/measurements/{mid}', admin)['data']['params'] or {}  # R542: jsonb objekt
     chk(isinstance(params.get('views'), list) and len(params['views']) == 2, 'params.views: 2 dodatna pogleda')
     v0 = params['views'][0]
     chk(v0.get('photoId') == photo_id and isinstance(v0.get('points'), list), 'views[0] nosi photoId + točke')
@@ -224,7 +225,7 @@ s, b = call('POST', '/api/measurement/confirm', monter, {
 })
 chk(s == 201, f'klasična potrditev (brez novih polj) 201 (dejansko {s})')
 if s == 201:
-    params2 = json.loads(jget(f"/api/measurements/{json.loads(b)['data']['id']}", admin)['data']['params'])
+    params2 = jget(f"/api/measurements/{json.loads(b)['data']['id']}", admin)['data']['params'] or {}  # R542: jsonb objekt
     chk('views' not in params2 and 'confidence' not in params2, 'brez novih polj params ostane čist')
 
 # ══ C. GET [id] vrne params z novimi polji ═══════════════════════════════════
