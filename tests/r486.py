@@ -346,8 +346,10 @@ ui = [
     ('src/lib/offline.ts', 'views?: Record<string, unknown>[] | null', 'OFFLINE: views v QueuePhotoInput'),
     ('src/lib/offline.ts', 'quality?: Record<string, unknown> | null', 'OFFLINE: quality v QueuePhotoInput'),
     ('src/app/api/sync/route.ts', 'parseExtras', 'SYNC: parseExtras veja'),
-    ('src/components/roksal/modules/zajem.tsx', 'shrinkThumb', 'ZAJEM: skrčitev sličice ≤ 120 KB'),
-    ('src/components/roksal/modules/zajem.tsx', 'Dodaj posnetek', 'ZAJEM: gumb Dodaj posnetek ostaja'),
+    # R547: shrinkThumb/'Dodaj posnetek' sta se fizično preselila iz zajem.tsx v
+    # zajem-detail.tsx (razbitje srednjih modulov) — sidro posodobljeno pošteno.
+    ('src/components/roksal/modules/zajem-detail.tsx', 'shrinkThumb', 'ZAJEM: skrčitev sličice ≤ 120 KB'),
+    ('src/components/roksal/modules/zajem-detail.tsx', 'Dodaj posnetek', 'ZAJEM: gumb Dodaj posnetek ostaja'),
     ('src/components/roksal/modules/meritve-kamera.tsx', 'calibration: view.calib', 'KAMERA: saveOffline pošlje kalibracijo'),
 ]
 for rel, needle, msg in ui:

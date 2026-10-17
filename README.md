@@ -4,8 +4,8 @@ Poslovno-operativni sistem za Roksal — od prvega voda do zaključene montaže 
 fasad in teras: CRM, ponudbe s podpisom, proizvodnja, teren (tudi brez signala),
 računi in **fotomontaža PREJ/POTEM** iz uradnih Roksalovih gradiv.
 
-> **Stanje:** rekonstrukcija zaključena in presežena · izdaja **v1.65.0** ·
-> **53 testnih skupin + E2E skozi pravo aplikacijo** · GitHub je kanonični vir
+> **Stanje:** rekonstrukcija zaključena in presežena · izdaja **v1.66.0** ·
+> **54 testnih skupin + E2E skozi pravo aplikacijo** · GitHub je kanonični vir
 > (zadeve + release vrata), GitLab zrcalo, sinhronizacija po SHA (`ops/sync-check.sh`) ·
 > [docs/](docs/) vsebuje poročila za vsako fazo.
 
@@ -85,6 +85,15 @@ računi in **fotomontaža PREJ/POTEM** iz uradnih Roksalovih gradiv.
    skupin (r488 segmenti tekača, r511 vir obsega, r464 cenovne konstante)
    so sledila novi strukturi pošteno. Testna skupina r546
    (53. skupina). Belt 8 statičnih + 53 skupin.
+12. **Razbitje srednjih modulov (R547, izdaja v1.66.0):** naslednja trojka —
+   zajem (1372), servis (1283) in ogradnja (1211) — po istem receptu razbita v
+   14 poddatotek (zajem 161, servis 53, ogradnja 157): `zajem-{shared,new,qa,geo,
+   replay,detail}` (detail je podkoren, ki sestavlja geo/qa/replay),
+   `servis-{shared,garancije,reklamacije,primeri}`, `ogradnja-{shared,carovnik,
+   verify,detail}` (3-nivojski aciklični graf: carovnik nad verify, verify nad
+   shared). Sidro r486 (shrinkThumb/„Dodaj posnetek") je sledilo premiku v
+   zajem-detail pošteno. Testna skupina r547 (54. skupina).
+   Belt 8 statičnih + 54 skupin.
 
 ## Kaj aplikacija počne
 
@@ -321,11 +330,11 @@ ImageMagick, poppler) — podrobno v `tests/ci-local.sh` glavi.
 | Pot | Vsebina |
 |---|---|
 | `src/app/api/` | 195 API rut (App Router) |
-| `src/components/roksal/` | 50 modulov + ogrodje (app-shell, module-view) + 12 gradnikov velikanov (`konfigurator/pregled/projekti-*`, R546) |
+| `src/components/roksal/` | 50 modulov + ogrodje (app-shell, module-view) + 26 gradnikov razbitij (12 velikanov `konfigurator/pregled/projekti-*` R546 + 14 srednjih `zajem/servis/ogradnja-*` R547) |
 | `src/lib/` | 78 knjižnic: photo-replace-{mask,texture,core,engine}, permissions-core, nav-registry, audit, notify (outbox), json (jsonb pomožniki), csp (en vir CSP politike), deep-link (URL odraz zavihka), … |
 | `prisma/` | shema (94 modelov) + 17 migracij + semenske skripte (`db:seed` veriga) |
 | `public/assets/roksal/src/` | uradni Roksalovi viri, `MANIFEST.json` s SHA-256 |
-| `tests/` | 53 skupin + `ci-local.sh` / `ci-matrix.sh` + fixtures |
+| `tests/` | 54 skupin + `ci-local.sh` / `ci-matrix.sh` + fixtures |
 | `ops/` | E2E skripte, izrisi-dokazi, backup/restore/drill, secret-audit |
 | `docs/` | poročila po fazah (RECOVERY, FOTOZAMENJAVA, E2E, …) |
 | `.zscripts/` | vzdrževanje peskovnika: dev-detach, git-retry, ci-mirror |
@@ -343,11 +352,11 @@ ImageMagick, poppler) — podrobno v `tests/ci-local.sh` glavi.
   odločitev; benchmark fizičnih meritev (faza 7) zahteva pravo napravo.
   Seznam v
   [`docs/FOTOZAMENJAVA-POROCILO-14.md`](docs/FOTOZAMENJAVA-POROCILO-14.md) §5.
-- **Tehnični dolg — velikani razbiti (R546), ostanejo srednji moduli.** Trije
-  največji (konfigurator/pregled/projekti) so razbiti v 12 poddatotek; če
-  bo treba, isti vzorec čaka srednje module (zajem 1372, servis 1283,
-  ogradnja 1211) — po potrebi v prihodnjih krogih, po istem receptu
-  (shared list → gradniki → tanka lupina, sidra testov posodobljena pošteno).
+- **Tehnični dolg — srednji moduli razbiti (R547), ostaja naslednja vrsta.**
+  Velikani (R546) in srednji (R547: zajem/servis/ogradnja) so razbiti; isti
+  vzorec čaka naslednjo vrsto po potrebi (katalog 1099, danes 1095, viz 1060,
+  nalogi 1056) — po istem receptu (shared list → gradniki → tanka lupina,
+  sidra testov posodobljena pošteno).
 - **Revizija v1.58.0 (7,9/10) — Top-10 popravki izvedeni (R535–R543).** Še
   odprto za naslednje kroge (po prioriteti): CSP Enforce — zmožnost je
   pripravljena (`CSP_MODE=enforce`, `config/ENV-VARS.md`) in odločitev je

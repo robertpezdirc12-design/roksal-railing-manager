@@ -283,6 +283,12 @@ jobs:
           # uvozni graf, sidra r488/r511/r464 sledijo novi strukturi).
           # Nova skupina MORA biti tudi v tests/ci-matrix.sh.
           - grupa: r546
+          # R547: razbitje srednjih modulov — zajem (1372), servis (1283),
+          # ogradnja (1211) kirurško razbiti v 14 poddatotek BREZ spremembe
+          # obnašanja (refactoring: 0 odvisnosti, 0 DB sprememb; ogradnja 3-nivojski
+          # aciklični graf shared→verify→carovnik; sidro r486 sledi zajem-detail).
+          # Nova skupina MORA biti tudi v tests/ci-matrix.sh.
+          - grupa: r547
     services:
       postgres:
         image: postgres:16
