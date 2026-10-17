@@ -70,3 +70,6 @@ env.sh
 
 # python test cache
 tests/__pycache__/
+
+# PID datoteka lokalnega dev strežnika (okoljski artefakt — peskovnik jo je samodejno commitnil v dde9734)
+.zscripts/dev.pid
