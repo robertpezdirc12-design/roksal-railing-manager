@@ -59,6 +59,7 @@ import {
 import { useAppStore } from '@/lib/store'
 
 import { AnalizaPanel } from './ar/analiza-panel'
+import { PreckaPanel } from './ar/precka-panel'
 import { useArGlobina } from './ar/globina'
 import { Nastavitve } from './ar/nastavitve'
 import { PredogledGlava, PredogledNavodila, PredogledPogledi, PredogledViewport } from './ar/predogled'
@@ -129,7 +130,8 @@ export default function ArModule () {
 
   // R471 (F4): mera z AR globino (WebXR immersive-ar) — stanje in seja
   // živita v ./ar/globina.ts (R537-b); rezultat se zapiše kot sceneEdit.
-  const { depthSupport, depthTaps, depthBusy, runDepthMeasure } = useArGlobina({
+  // R558: + runDepthPolygonMeasure (celotna linija v eni seji).
+  const { depthSupport, depthTaps, depthBusy, runDepthMeasure, runDepthPolygonMeasure } = useArGlobina({
     mode, stopCamera, startCamera, sceneSelectedId, setSceneEdits, user,
   })
 
@@ -455,7 +457,7 @@ export default function ArModule () {
                   selectedAxes={selectedAxes} selectedMeasures={selectedMeasures} refAxis={refAxis}
                   computedForAxis={computedForAxis} setSceneEdits={setSceneEdits}
                   setSceneSelectedId={setSceneSelectedId} user={user}
-                  depthSupport={depthSupport} depthTaps={depthTaps} depthBusy={depthBusy} runDepthMeasure={runDepthMeasure}
+                  depthSupport={depthSupport} depthTaps={depthTaps} depthBusy={depthBusy} runDepthMeasure={runDepthMeasure} runDepthPolygonMeasure={runDepthPolygonMeasure}
                 />
               ) : null}
             </CardContent>
@@ -465,6 +467,9 @@ export default function ArModule () {
           {analysis ? (
             <AnalizaPanel analysis={analysis} setAnalysis={setAnalysis} />
           ) : null}
+
+          {/* R558 (raziskava V1.4): VLM prečka z več fotografijami (HOVER-style) */}
+          <PreckaPanel />
         </div>
       </div>
 

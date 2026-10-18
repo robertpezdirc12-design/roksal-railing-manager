@@ -7,8 +7,8 @@
 import { useAppStore } from '@/lib/store'
 import type { ToastFn } from './tipi'
 
-/** R457 (§19): prenos izvoza CSV/JSON potrjene meritve. */
-export async function prenesiIzvoz (savedId: string | null, fmt: 'csv' | 'json', toast: ToastFn): Promise<void> {
+/** R457 (§19): prenos izvoza CSV/JSON/DXF potrjene meritve (R558: + dxf). */
+export async function prenesiIzvoz (savedId: string | null, fmt: 'csv' | 'json' | 'dxf', toast: ToastFn): Promise<void> {
   if (!savedId) return
   try {
     const token = useAppStore.getState().token
@@ -26,7 +26,7 @@ export async function prenesiIzvoz (savedId: string | null, fmt: 'csv' | 'json',
     a.download = `roksal-meritev-${savedId.slice(-8)}.${fmt}`
     a.click()
     URL.revokeObjectURL(url)
-    toast({ title: `Izvoz ${fmt.toUpperCase()} prenešen.`, description: 'Dokument vsebuje projekt, reference, mere, zaupanje in verzijo.' })
+    toast({ title: `Izvoz ${fmt.toUpperCase()} prenešen.`, description: fmt === 'dxf' ? 'DXF (CAD, razviti prikaz ograje) — odpre se v AutoCAD-u, LibreCAD-u in BricsCAD-u.' : 'Dokument vsebuje projekt, reference, mere, zaupanje in verzijo.' })
   } catch (e) {
     toast({ title: 'Izvoz ni uspel', description: e instanceof Error ? e.message : undefined, variant: 'destructive' })
   }

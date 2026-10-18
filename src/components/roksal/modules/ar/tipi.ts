@@ -59,6 +59,15 @@ export interface ArAnalysis {
   references: string[]
 }
 
+/** R558 (raziskava V1.4): rezultat VLM prečke (POST /api/ar/analyze-multi). */
+export interface PreckaAnalysis {
+  scene: string
+  dims: { foto: number; kaj: string; ocenaCm: number | null }[]
+  warnings: string[]
+  postsHint: number | null
+  note: string
+}
+
 /** R454: vrstica zgodovine AR posnetkov (GET /api/ar-snapshots — brez params). */
 export interface SnapshotRow {
   id: string

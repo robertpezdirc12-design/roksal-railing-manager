@@ -316,6 +316,12 @@ jobs:
           # enote ročnega popravka (m → cm ×100, živo najdeno v sprehodu);
           # lažna alarma R555 dokumentirana (priporočena metoda, toast izbirnik).
           - grupa: r556
+          # R558 (raziskava R557 → izvedba V1): naklonomer (relativna
+          # gravitacijska metoda, platformno-neodvisna), globinski poligon
+          # (N tapov v eni seji, izstop = zaključek), DXF izvoz (R12 ASCII,
+          # poslovna mera kot razviti prikaz), VLM prečka (2–8 fotografij,
+          # HOVER-style).
+          - grupa: r558
     services:
       postgres:
         image: postgres:16

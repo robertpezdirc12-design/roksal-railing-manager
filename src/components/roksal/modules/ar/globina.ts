@@ -10,7 +10,7 @@
 import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react'
 
 import { useToast } from '@/hooks/use-toast'
-import { detectDepthSupport, startDepthMeasurement, type DepthSupportInfo } from '@/lib/depth-adapter'
+import { detectDepthSupport, startDepthMeasurement, startDepthPolygonMeasurement, type DepthSupportInfo } from '@/lib/depth-adapter'
 import type { SceneEdit } from '@/lib/scene-understanding-core'
 import type { SessionUser } from '@/lib/store'
 
@@ -28,6 +28,7 @@ export function useArGlobina ({ mode, stopCamera, startCamera, sceneSelectedId, 
   depthTaps: number
   depthBusy: boolean
   runDepthMeasure: (label: string) => Promise<void>
+  runDepthPolygonMeasure: (label: string) => Promise<void>
 } {
   const { toast } = useToast()
 
@@ -110,5 +111,64 @@ export function useArGlobina ({ mode, stopCamera, startCamera, sceneSelectedId, 
     }
   }
 
-  return { depthSupport, depthTaps, depthBusy, runDepthMeasure }
+  /**
+   * R558 (raziskava V1.2): MERA S POLIGONOM — celotna linija v eni AR seji.
+   * Monter tapne VOGALE (do 8); izstop iz seje (Nazaj) pri ≥2 točkah je
+   * ZAKLJUČEK mere. Rezultat: ena mera = SKUPNA dolžina lomljenke (to je
+   * »dolžina ograje«), v toastu segmenti + min/max + površina XZ (tla).
+   * Nazajzdružljivo z obstoječo dvotapno mero (label nosi vrsto).
+   */
+  async function runDepthPolygonMeasure (label: string): Promise<void> {
+    if (depthBusy) return
+    setDepthBusy(true)
+    setDepthTaps(0)
+    const cameraWasOn = mode === 'on'
+    if (cameraWasOn) stopCamera()
+    try {
+      await new Promise<void>((resolve) => {
+        void startDepthPolygonMeasurement((result) => {
+          if (result.ok) {
+            setSceneEdits((prev) => [...prev, {
+              elementId: sceneSelectedId ?? '',
+              measure: {
+                label: `${label} — ${result.kind === 'poligon' ? `poligon (${result.stats.points} točk)` : `segment (${result.stats.points} točki)`}`,
+                valueCm: result.stats.totalCm,
+                depth: result.manifest,
+              },
+              by: user?.name ?? 'monter',
+              at: Date.now(),
+            }])
+            const segOpis = result.stats.segmentsCm
+              .map((s) => s.toFixed(0))
+              .join(' + ')
+            toast({
+              title: result.kind === 'poligon' ? 'Poligon iz AR globine zabeležen.' : 'Segment iz AR globine zabeležen.',
+              description: `${label}: skupaj ${result.stats.totalCm.toFixed(1).replace('.', ',')} cm (${result.stats.segments} segmentov${result.stats.minCm != null && result.stats.maxCm != null ? `, ${result.stats.minCm.toFixed(0)}–${result.stats.maxCm.toFixed(0)} cm` : ''}${result.stats.areaXzM2 != null ? ` · površina tal ${String(result.stats.areaXzM2).replace('.', ',')} m²` : ''}) — segmenti: ${segOpis} cm. Shrani se z zajemom AR posnetka.`,
+            })
+          } else {
+            toast({
+              title: 'Mera s poligonom ni uspela.',
+              description: `${result.reason} Podatki ostajajo — merite z referenco ali ročno.`,
+            })
+          }
+          resolve()
+        }, {
+          maxTaps: 8,
+          onTap: (count) => { setDepthTaps(count) },
+        }).then((stop) => {
+          depthStopRef.current = stop
+        }).catch(() => {
+          toast({ title: 'Mera s poligonom ni uspela.', description: 'AR seje ni bilo mogoče odpreti na tej napravi — merite z referenco ali ročno.' })
+          resolve()
+        })
+      })
+    } finally {
+      setDepthBusy(false)
+      setDepthTaps(0)
+      depthStopRef.current = null
+      if (cameraWasOn) await startCamera()
+    }
+  }
+
+  return { depthSupport, depthTaps, depthBusy, runDepthMeasure, runDepthPolygonMeasure }
 }

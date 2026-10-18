@@ -15,6 +15,8 @@ import { writeAudit } from '@/lib/audit'
 import { fotografiIzParametrov, originalDokaz } from '@/lib/original-proof'
 import { asJsonObject } from '@/lib/json'
 import { buildExportRows, exportCsv, MEASURE_MODES, type ExportSource } from '@/lib/measure-engine'
+// R558 (raziskava V1.3): DXF izvoz — čist tekst (R12 ASCII), brez odvisnosti.
+import { dxfIzMeritve } from '@/lib/dxf'
 
 export async function GET (req: NextRequest) {
   const auth = await requirePermission(req, 'measurements.read')
@@ -25,8 +27,10 @@ export async function GET (req: NextRequest) {
   const id = url.searchParams.get('id')
   const format = url.searchParams.get('format') ?? 'json'
   if (!id) return jsonError(400, 'Manjka id meritve.')
-  if (format !== 'csv' && format !== 'json') {
-    return jsonError(400, 'Neveljaven format.', 'Podprite formata: csv, json.')
+  // R558: format dxf — čist tekstovni CAD (R12 ASCII), odpre se v
+  // AutoCAD/LibreCAD/BricsCAD. Ograja kot razviti prikaz iz poslovne mere.
+  if (format !== 'csv' && format !== 'json' && format !== 'dxf') {
+    return jsonError(400, 'Neveljaven format.', 'Podprite formata: csv, json, dxf.')
   }
 
   const m = await db.measurement.findUnique({
@@ -128,6 +132,30 @@ export async function GET (req: NextRequest) {
       headers: {
         'Content-Type': 'text/csv; charset=utf-8',
         'Content-Disposition': `attachment; filename="roksal-meritev-${m.id.slice(-8)}.csv"`,
+      },
+    })
+  }
+  // R558 (raziskava V1.3): DXF — poslovna mera kot CAD risba (razviti prikaz:
+  // linija + ročnik + stebri + metapodatki). Brez poslovne mere je risba
+  // prazna, meta pa pove zakaj (poštenost — nikoli izmišljenih segmentov).
+  if (format === 'dxf') {
+    const dxf = dxfIzMeritve({
+      naslov: `ROKSAL meritev ${m.id.slice(-8)}${src.projectCode ? ` — ${src.projectCode}` : ''}`,
+      dolzinaCm: m.lengthCm,
+      visinaCm: m.heightCm,
+      stebri: m.posts,
+      naklonDeg: m.slopeDeg,
+      projekt: src.projectCode ? `${src.projectCode} ${src.projectTitle ?? ''}`.trim() : null,
+      lokacija: m.location ?? null,
+      operater: src.authorName ?? null,
+      datum: m.createdAt.toISOString().slice(0, 16).replace('T', ' '),
+      verzija: src.version ?? 1,
+    })
+    return new NextResponse(dxf, {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/dxf; charset=utf-8',
+        'Content-Disposition': `attachment; filename="roksal-meritev-${m.id.slice(-8)}.dxf"`,
       },
     })
   }

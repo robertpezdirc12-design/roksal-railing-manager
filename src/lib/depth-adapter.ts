@@ -360,3 +360,241 @@ function sessionRenderContext (session: XRSessionLike): WebGLRenderingContext | 
     return null
   }
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// R558 (raziskava R557, V1.2): VEČTOČKOVNI GLOBINSKI POLIGON
+//
+// Najdena vrzel: obstoječa mera je končala po TOČNO dveh tapih — en segment
+// na sejo (»taps.length >= 2«). Celotna linija ograje (lomljenka z vogali)
+// je zahtevala več sej. Raziskava (Magicplan/Manifold) je pokazala, da je
+// » zajem enkrat, izmeri vse« glavna prodajna vrednost konkurente.
+//
+// polyIzTock je ČISTA funkcija (testirljiva brez WebXR); seja je namenoma
+// ločena od startDepthMeasurement (deljena struktura, a drugačen KONEC:
+// izstop uporabnika iz seje pri ≥2 tapih je ZAKLJUČEK, ne napaka —
+// »tapni vogale, ko je dovolj, pritisni Nazaj«).
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Statistika poligona iz zaporednih točk mere (čista, brez WebXR). */
+export interface PolyStats {
+  points: number
+  segments: number
+  /** skupna dolžina lomljenke v cm (round1) — to je »dolžina ograje« */
+  totalCm: number
+  minCm: number | null
+  maxCm: number | null
+  segmentsCm: number[]
+  /**
+   * Površina horizontalne projekcije (XZ — tla) v m² (round 0,01).
+   * Domensko: površina, ki jo LINIJA ograje obdaja (shoelace zapre obod).
+   * Dolžina totalCm je VERIGA (A→B), ne obvod — ograja ne teče okoli.
+   * Pri 2 točkah (enojen segment) je površina null; kolinearne točke
+   * veljavno dájo 0,00 m².
+   */
+  areaXzM2: number | null
+}
+
+/**
+ * Statistika verige točk: dolžine sosednjih segmentov, skupaj, min/max,
+ * površina horizontalne (XZ) projekcije po shoelace — |Σ(xᵢ·zᵢ₊₁ − xᵢ₊₁·zᵢ)|/2.
+ * Vrne null pri <2 točkah (ni mere) — nikoli ne izmišljujemo števil.
+ */
+export function polyIzTock (points: DepthTapPoint[]): PolyStats | null {
+  if (!Array.isArray(points) || points.length < 2) return null
+  const segmentsCm: number[] = []
+  let totalCm = 0
+  for (let i = 0; i + 1 < points.length; i++) {
+    const cm = pointsDistanceCm(points[i].world, points[i + 1].world)
+    if (cm == null) return null // neveljavna geometrija med točkama → celota ni zaupanja vredna
+    const r = Math.round(cm * 10) / 10
+    segmentsCm.push(r)
+    totalCm += r
+  }
+  const minCm = segmentsCm.length > 0 ? Math.min(...segmentsCm) : null
+  const maxCm = segmentsCm.length > 0 ? Math.max(...segmentsCm) : null
+  // shoelace po (x, z) — world točke so v METRIH (WebXR prostor), zato
+  // |Σ|/2 da površino NAVDNO v m² (brez pretvorb). Zaporedje točk je VERIGA
+  // (linija ograje); shoelace z modulom jo zapre v obod → površina je
+  // »površina, ki jo linija obdaja« (tloris poda/balkona).
+  let areaXzM2: number | null = null
+  if (points.length >= 3) {
+    let sum = 0
+    for (let i = 0; i < points.length; i++) {
+      const a = points[i].world
+      const b = points[(i + 1) % points.length].world
+      sum += a.x * b.z - b.x * a.z
+    }
+    const m2 = Math.abs(sum) / 2
+    areaXzM2 = Math.round(m2 * 100) / 100
+  }
+  return {
+    points: points.length,
+    segments: segmentsCm.length,
+    totalCm: Math.round(totalCm * 10) / 10,
+    minCm,
+    maxCm,
+    segmentsCm,
+    areaXzM2,
+  }
+}
+
+export type PolygonKind = 'segment' | 'poligon'
+
+export type DepthPolygonResult =
+  | { ok: true; kind: PolygonKind; taps: DepthTapPoint[]; stats: PolyStats; manifest: DepthManifest }
+  | { ok: false; reason: string }
+
+export interface DepthPolygonOptions {
+  /** največ točk (privzeto 8, meja 3–12) */
+  maxTaps?: number
+  timeoutMs?: number
+  onTap?: (count: number) => void
+}
+
+/**
+ * AR seja z globino za CELO linijo: monter tapne VOGALE lomljenke;
+ * seja se samodejno zaključi pri maxTaps, ALI jo monter zaključi z
+ * izstopom (Nazaj) — pri ≥2 točkah je izstop ZAKLJUČEK mere, ne napaka.
+ * 2 točki → kind 'segment' (nazajzdružljivo z obstoječo dvotapno mero);
+ * 3+ točke → 'poligon' (površina XZ se izračuna).
+ */
+export function startDepthPolygonMeasurement (
+  onResult: (result: DepthPolygonResult) => void,
+  opts?: DepthPolygonOptions,
+): Promise<() => void> {
+  const maxTaps = Math.max(3, Math.min(12, Math.round(opts?.maxTaps ?? 8)))
+  const timeoutMs = Math.max(10000, Math.min(180000, opts?.timeoutMs ?? 90000))
+  const onTap = typeof opts?.onTap === 'function' ? opts.onTap : null
+
+  return (async () => {
+    const nav = navigator as unknown as XRNavigatorLike
+    if (!nav.xr) {
+      onResult({ ok: false, reason: 'WebXR ni na voljo v tem brskalniku.' })
+      return () => {}
+    }
+    let session: XRSessionLike
+    try {
+      session = await nav.xr.requestSession('immersive-ar', {
+        optionalFeatures: ['depth-sensing', 'local-floor'],
+        depthSensing: { usagePreference: 'cpu-optimized', dataFormatPreference: 'luminance-alpha' },
+      })
+    } catch {
+      onResult({ ok: false, reason: 'AR seja ni bila odobrena ali globina ni podprta — merite z referenco ali ročno.' })
+      return () => {}
+    }
+
+    let finished = false
+    const taps: DepthTapPoint[] = []
+    let latestView: XRViewLike | null = null
+
+    const finish = (): void => {
+      if (finished) return
+      finished = true
+      try { void session.end().catch(() => {}) } catch { /* že končana */ }
+      const stats = polyIzTock(taps)
+      if (stats == null) {
+        onResult({ ok: false, reason: 'Premalo veljavnih točk (vsaj 2 z globino) — poskusite znova.' })
+        return
+      }
+      const kind: PolygonKind = taps.length >= 3 ? 'poligon' : 'segment'
+      onResult({ ok: true, kind, taps, stats, manifest: taps[taps.length - 1].manifest })
+    }
+
+    try {
+      const canvas = document.createElement('canvas')
+      const gl = (canvas.getContext('webgl2', { alpha: true, xrCompatible: true }) ??
+        canvas.getContext('webgl', { alpha: true, xrCompatible: true })) as WebGLRenderingContext | null
+      if (gl) {
+        const LayerCtor = (window as unknown as { XRWebGLLayer?: new (s: XRSessionLike, c: WebGLRenderingContext) => unknown }).XRWebGLLayer
+        if (LayerCtor) session.updateRenderState({ baseLayer: new LayerCtor(session, gl) })
+      }
+    } catch { /* brez plasti se poskus nadaljuje */ }
+
+    let refSpace: unknown
+    try {
+      refSpace = await session.requestReferenceSpace('local')
+    } catch {
+      finish() // taps je prazen → polyIzTock null → iskrena napaka
+      return () => { try { void session.end() } catch { /* n/a */ } }
+    }
+
+    const timeout = setTimeout(() => {
+      finish()
+    }, timeoutMs)
+
+    session.addEventListener('end', () => {
+      clearTimeout(timeout)
+      // R558: izstop uporabnika pri ≥2 točkah je ZAKLJUČEK mere (ne napaka)
+      finish()
+    })
+
+    session.addEventListener('select', (ev) => {
+      if (finished || latestView == null || refSpace == null) return
+      const frame = ev.frame
+      const pose = frame.getPose(ev.inputSource.targetRaySpace, refSpace)
+      if (!pose) return
+      const viewInv = latestView.transform.inverse.matrix
+      const ray = transformRay(viewInv, pose.transform.position, pose.transform.orientation)
+      if (ray == null) return
+      if (!(ray.dir.z < -1e-6)) return
+      const depthInfo = frame.getDepthInformation(latestView)
+      if (!depthInfo) return
+      const fx = focalPxFromProjection(latestView.projectionMatrix, depthInfo.width)
+      if (!(fx > 0)) return
+      const cx = depthInfo.width / 2
+      const cy = depthInfo.height / 2
+      const px = cx + (fx * ray.dir.x) / -ray.dir.z
+      const py = cy + (fx * ray.dir.y) / -ray.dir.z
+      const u = px / depthInfo.width
+      const v = py / depthInfo.height
+      if (u < 0 || u > 1 || v < 0 || v > 1) return
+      const depthM = depthInfo.getDepthInMeters(u, v)
+      if (typeof depthM !== 'number' || !Number.isFinite(depthM) || depthM <= 0) return
+      const manifest = isDepthManifest({
+        provider: 'WEBXR_DEPTH',
+        depthFormat: String(depthInfo.dataFormat || 'luminance-alpha').slice(0, 32),
+        rawValueToMeters: depthInfo.rawValueToMeters > 0 ? depthInfo.rawValueToMeters : 1,
+        width: depthInfo.width,
+        height: depthInfo.height,
+        focalPx: fx,
+        timestamp: Date.now(),
+      })
+      if (!manifest) return
+      const viewPoint = unprojectDepthSample({ u, v, depthM }, manifest)
+      if (!viewPoint) return
+      const world = multiplyPoint(latestView.transform.matrix, viewPoint)
+      if (!world) return
+      taps.push({ world, sample: { u, v, depthM }, manifest })
+      if (onTap) onTap(taps.length)
+      if (taps.length >= maxTaps) {
+        clearTimeout(timeout)
+        finish()
+      }
+    })
+
+    const loop = (time: number, frame: XRFrameLike): void => {
+      if (finished) return
+      const pose = frame.getViewerPose(refSpace)
+      if (pose && pose.views.length > 0) latestView = pose.views[0]
+      try {
+        const gl = sessionRenderContext(session)
+        if (gl) { gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT) }
+      } catch { /* prikaz ni merilen — ignoriramo */ }
+      session.requestAnimationFrame(loop)
+    }
+    session.requestAnimationFrame(loop)
+
+    return () => {
+      clearTimeout(timeout)
+      if (!finished) {
+        finished = true
+        try { void session.end().catch(() => {}) } catch { /* n/a */ }
+        const stats = polyIzTock(taps)
+        if (stats != null) {
+          onResult({ ok: true, kind: taps.length >= 3 ? 'poligon' : 'segment', taps, stats, manifest: taps[taps.length - 1].manifest })
+        }
+        // pri 0–1 točkah je prekinitev zunanja — brez mere, brez napake (tiho)
+      }
+    }
+  })()
+}

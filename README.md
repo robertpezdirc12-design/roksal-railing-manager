@@ -4,7 +4,7 @@ Poslovno-operativni sistem za Roksal — od prvega voda do zaključene montaže 
 fasad in teras: CRM, ponudbe s podpisom, proizvodnja, teren (tudi brez signala),
 računi in **fotomontaža PREJ/POTEM** iz uradnih Roksalovih gradiv.
 
-> **Stanje:** rekonstrukcija zaključena in presežena · izdaja **v1.72.2** ·
+> **Stanje:** rekonstrukcija zaključena in presežena · izdaja **v1.73.0** ·
 > **61 testnih skupin + E2E skozi pravo aplikacijo** · GitHub je kanonični vir
 > (zadeve + release vrata), GitLab zrcalo, sinhronizacija po SHA (`ops/sync-check.sh`) ·
 > [docs/](docs/) vsebuje poročila za vsako fazo.
@@ -265,6 +265,27 @@ računi in **fotomontaža PREJ/POTEM** iz uradnih Roksalovih gradiv.
    fantomski plavajoči šum (DOM »5.20«, a11y 5.199999809265137) — resnica
    je vedno `#id .value`. Testna skupina r556 (61. skupina). Belt 8 statičnih +
    61 skupin.
+
+21. **Izvedba V1 iz primerjalne raziskave (R558, minor v1.73.0):** spletna
+   raziskava (10 iskanj + 3 globoke strani: SiteScape, Polycam, Canvas,
+   Matterport, Manifold, Magicplan, HOVER, GAMMA AR, ARCore Depth,
+   RoomPlan, Google Measure ukinjen 2021) je pokazala, da je naša hibridna
+   arhitektura (referenca na katerem koli telefonu + WebXR globina na
+   Androidu + VLM) ŽE usklajena z najboljšo prakso (Manifoldova dvojna pot);
+   LiDAR za ograje je past (steklo + sonce + >4,5 m). Izvedene 4 vrzeli V1:
+   **(1) NAKLONOMER** — relativna gravitacijska metoda (ničla na vodoravni
+   + deska čez zobce): kot med dvema pospeškoma je platformno-neodvisen
+   (ne odvisen od neoverjene absolutne formule, ki jo je r553 zavedno
+   odlašal); kot >90° poroča 180−kot z opozorilom (telefon obrnjen);
+   **(2) GLOBINSKI POLIGON** — N tapov (3–8) v ENI AR seji: skupaj, min/max,
+   segmenti in površina horizontalne projekcije (tla) po shoelace; izstop
+   (Nazaj) pri ≥2 točkah je ZAKLJUČEK mere (pri stari poti napaka);
+   **(3) DXF IZVOZ** — čist tekstovni CAD (R12 ASCII, brez odvisnosti):
+   poslovna mera kot razviti prikaz (linija + ročnik + stebri + meta);
+   brez mere risba pove »NI PODANA« (nikoli izmišljenih segmentov);
+   **(4) VLM PREČKA** — HOVER-style 2–8 fotografij istega objekta → primerjava
+   dimenzij med posnetki, opozorila neskladij + predlog št. stebrov.
+   Testna skupina r558 (62. skupina). Belt 8 statičnih + 62 skupin.
 
 ## Kaj aplikacija počne
 

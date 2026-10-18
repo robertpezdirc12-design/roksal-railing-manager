@@ -5,9 +5,9 @@
 // referenčna skala; R471 (F4): mera z AR globino. Komentar R467/R468 z
 // originalnega mesta je v ar.tsx (vstop) pred pogojem tega dela.
 
-import type { Dispatch, SetStateAction } from 'react'
+import { useState, type Dispatch, type SetStateAction } from 'react'
 
-import { Loader2, MapPin, Ruler, Save, ScanLine } from 'lucide-react'
+import { Loader2, MapPin, Ruler, Save, ScanLine, Shapes, Smartphone } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -16,6 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { geomStatusText, slopeSourceText } from '@/components/roksal/scene-overlay'
 import { useToast } from '@/hooks/use-toast'
 import type { DepthSupportInfo } from '@/lib/depth-adapter'
+import { Naklonomer } from './naklonomer'
 import { AXIS_KIND_TEXT, MEASURE_METHOD_TEXT, SCENE_CLASSES, SURFACE_KINDS, ascentText, personHeightNote, type ConsolidatedMeasure, type DimAxis, type SceneClass, type SceneEdit, type SceneElement, type SurfaceKind } from '@/lib/scene-understanding-core'
 import type { SessionUser } from '@/lib/store'
 
@@ -24,7 +25,7 @@ export function ScenaDetail ({
   slopeInput, setSlopeInput, stepsInput, setStepsInput, angleInput, setAngleInput,
   measureInputs, setMeasureInputs, refAxisIdx, setRefAxisIdx, refCmInput, setRefCmInput,
   selectedAxes, selectedMeasures, refAxis, computedForAxis, setSceneEdits, setSceneSelectedId, user,
-  depthSupport, depthTaps, depthBusy, runDepthMeasure,
+  depthSupport, depthTaps, depthBusy, runDepthMeasure, runDepthPolygonMeasure,
 }: {
   sceneSelected: SceneElement
   scenePinned: Set<string>
@@ -49,11 +50,17 @@ export function ScenaDetail ({
   setSceneSelectedId: Dispatch<SetStateAction<string | null>>
   user: SessionUser | null
   depthSupport: DepthSupportInfo | null
+  /** R558 (raziskava V1.2): poligonska mera (celotna linija v eni seji). */
+  runDepthPolygonMeasure: (label: string) => Promise<void>
   depthTaps: number
   depthBusy: boolean
   runDepthMeasure: (label: string) => Promise<void>
 }): React.ReactElement {
   const { toast } = useToast()
+  // R558 (raziskava V1.1): naklonomer — odpre se ob vnosu naklona (slopeInput);
+  // prevzem izmerjenega kota zapiše vrednost v isti vnos (vir ostaja ročni vnos
+  // — monterjeva izjava, a iz SENSORSKE izmere; poštenost discipline). 
+  const [naklonomerOpen, setNaklonomerOpen] = useState(false)
   return (
     <div className="rounded-lg border bg-secondary/40 p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -266,6 +273,7 @@ export function ScenaDetail ({
               </span>
             </div>
           ) : (
+            <>
             <div className="mt-2 flex flex-wrap items-end gap-1.5">
               <div className="space-y-0.5">
                 <Label htmlFor="scene-slope" className="text-[11px]">Izmerjeni naklon (°, npr. 3,5 ali −2)</Label>
@@ -302,7 +310,29 @@ export function ScenaDetail ({
               <span id="scene-slope-help" className="sr-only">
                 Vnesite z nivelirjem ali referenčno metodo izmerjen naklon tal v stopinjah; veljavno od −45 do 45.
               </span>
+              {/* R558 (raziskava V1.1): NAKLONOMER — relativna gravitacijska metoda
+                  (ničla na vodoravni + deska čez zobce); vir ostaja monterjev
+                  vnos — senzor izmeri, monter potrdi (ista disciplina kot kamera). */}
+              <Button
+                size="sm"
+                variant={naklonomerOpen ? 'secondary' : 'outline'}
+                className="h-8"
+                aria-expanded={naklonomerOpen}
+                onClick={() => { setNaklonomerOpen(!naklonomerOpen) }}
+              >
+                <Smartphone className="size-3.5" aria-hidden />
+                Izmeri s telefonom
+              </Button>
             </div>
+            {naklonomerOpen ? (
+              <div className="mt-2">
+                <Naklonomer
+                  onPrevzemi={(v) => { setSlopeInput(v) }}
+                  onClose={() => { setNaklonomerOpen(false) }}
+                />
+              </div>
+            ) : null}
+            </>
           )}
         </div>
       ) : null}
@@ -396,6 +426,7 @@ export function ScenaDetail ({
                       {/* R471 (F4): MERA Z AR GLOBINO — samo, ko naprava DEJANSKO podpira
                           immersive-ar (issue §0); drugače gumba preprosto ni. */}
                       {depthSupport?.supported === true ? (
+                        <>
                         <Button
                           size="sm"
                           variant="outline"
@@ -407,6 +438,20 @@ export function ScenaDetail ({
                           {depthBusy ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <ScanLine className="size-3.5" aria-hidden />}
                           {depthBusy ? (depthTaps > 0 ? `Točka ${depthTaps}/2 …` : 'AR seja …') : 'AR globina'}
                         </Button>
+                        {/* R558 (raziskava V1.2): POLIGON — celotna linija v eni seji;
+                            izstop (Nazaj) pri ≥2 točkah je ZAKLJUČEK mere. */}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-8"
+                          disabled={depthBusy}
+                          aria-label={`Izmeri ${a.label} s poligonom AR globine (tapni vogale, do 8; izstop zaključi mero)`}
+                          onClick={() => { void runDepthPolygonMeasure(a.label) }}
+                        >
+                          {depthBusy ? <Loader2 className="size-3.5 animate-spin" aria-hidden /> : <Shapes className="size-3.5" aria-hidden />}
+                          {depthBusy ? (depthTaps > 0 ? `Točka ${depthTaps} …` : 'AR seja …') : 'Poligon (3–8)'}
+                        </Button>
+                        </>
                       ) : null}
                       <span id={`scene-measure-${i}-help`} className="sr-only">
                         Vnesite z merilnim trakom ali laserjem izmerjeno dolžino te osi v centimetrih.
@@ -426,7 +471,7 @@ export function ScenaDetail ({
               <p className="mt-0.5 text-[10px] text-muted-foreground">Preverjam podporo senzorja globine …</p>
             ) : depthSupport.supported ? (
               <p className="mt-0.5 text-[10px] text-muted-foreground">
-                Podprta prek WebXR/ARCore — gumb „AR globina“ pri osi odpre AR mero z dvema tapoma; rezultat se zapiše z metodo „AR globina“ in manifestom senzorja.
+                Podprta prek WebXR/ARCore — gumb „AR globina“ pri osi odpre AR mero z dvema tapoma; gumb „Poligon (3–8)“ pa zajame CELO linijo v eni seji (tapni vogale; izstop z Nazaj pri ≥2 točkah zaključi mero). Rezultat se zapiše z metodo „AR globina“ in manifestom senzorja.
               </p>
             ) : (
               <p className="mt-0.5 text-[10px] text-muted-foreground">{depthSupport.reason}</p>

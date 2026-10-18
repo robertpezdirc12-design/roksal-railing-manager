@@ -47,7 +47,7 @@
 // propsov (nobenih sprememb obnašanja — koda je seljena dobesedno).
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Camera, FileJson, FileSpreadsheet } from 'lucide-react'
+import { Camera, FileCode, FileJson, FileSpreadsheet } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useToast } from '@/hooks/use-toast'
@@ -778,8 +778,8 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
     }
   }
 
-  /** R457 (§19): prenos izvoza CSV/JSON potrjene meritve (logika v ./meritve-kamera/izvoz). */
-  async function downloadExport (fmt: 'csv' | 'json'): Promise<void> {
+  /** R457 (§19): prenos izvoza CSV/JSON/DXF potrjene meritve (logika v ./meritve-kamera/izvoz). */
+  async function downloadExport (fmt: 'csv' | 'json' | 'dxf'): Promise<void> {
     await prenesiIzvoz(savedId, fmt, toast)
   }
 
@@ -823,6 +823,8 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
           <span className="text-[11px] font-medium text-emerald-900 dark:text-emerald-200">Meritev shranjena ✓ — izvoz dokumenta:</span>
           <Button size="sm" variant="outline" className="h-8" onClick={() => void downloadExport('csv')}><FileSpreadsheet className="size-3.5" aria-hidden /> CSV</Button>
           <Button size="sm" variant="outline" className="h-8" onClick={() => void downloadExport('json')}><FileJson className="size-3.5" aria-hidden /> JSON</Button>
+          {/* R558 (raziskava V1.3): DXF — CAD risba (razviti prikaz ograje). */}
+          <Button size="sm" variant="outline" className="h-8" onClick={() => void downloadExport('dxf')}><FileCode className="size-3.5" aria-hidden /> DXF</Button>
         </div>
       ) : null}
 
