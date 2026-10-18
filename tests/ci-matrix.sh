@@ -15,7 +15,7 @@ cd "$(dirname "$0")/.."
 source tests/toolshim.sh
 
 # --- edina definicija: vrstni red skupin + njihove datoteke -------------------
-GRUPE=(r437-r445 r446-r452 r454-r458 r459-r462 r464 r464-notifications r465-r474 r475-r478 r479 r480 r481 r483 r484 r485 r486 r487 r488 r489 r490 r493 r494 r495 r500 r501 r502 r503 r504 r508 r509 r510 r511 r513 r516 r517 r518 r520 r522 r523 r524 r527 r532 r533 r534 r536 r538 r539 r540 r541 r542 r543 r544 r545 r546 r547 r548 r549 r550 r551 r552 r553 r556 r558 r559)
+GRUPE=(r437-r445 r446-r452 r454-r458 r459-r462 r464 r464-notifications r465-r474 r475-r478 r479 r480 r481 r483 r484 r485 r486 r487 r488 r489 r490 r493 r494 r495 r500 r501 r502 r503 r504 r508 r509 r510 r511 r513 r516 r517 r518 r520 r522 r523 r524 r527 r532 r533 r534 r536 r538 r539 r540 r541 r542 r543 r544 r545 r546 r547 r548 r549 r550 r551 r552 r553 r556 r558 r559 r560)
 
 declare -A CLANI
 CLANI[r437-r445]="r437.sh r438.sh r439.sh r440.sh r441.sh r440-smoke.py r443.py r445.py"
@@ -81,6 +81,7 @@ CLANI[r553]="r553.py"
 CLANI[r556]="r556.py"
 CLANI[r558]="r558.py"
 CLANI[r559]="r559.py"
+CLANI[r560]="r560.py"
 
 PASS=0; FAILED=0; SKIPPED=0; FAILED_LIST=""; SKIPPED_LIST=""
 STRICT_TOOLS="${STRICT_TOOLS:-0}"

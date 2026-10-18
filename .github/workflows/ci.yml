@@ -328,6 +328,15 @@ jobs:
           # okovje (kljuka/tečaji/ključavnica), stanje; vsako s zaupanjem,
           # NEZNANO kadar ne vidi (disciplina NI_DOKAZA).
           - grupa: r559
+          # R560 (zahteva lastnika: »mora prepoznat vijak les wpc zelezo
+          # rostfrai keramiko tla vogale vse … dolžina višina širina — čisto
+          # vse«): splošno gradbeno prepoznavanje kot NEODVISNI razdelki
+          # (neodvisno od jeOgraja) — materiali (les/WPC/železo/inox/
+          # keramika …), vijaki (tip/material/število), tla (vrsta +
+          # dimenzije ploščice 5..300), vogali (notranji/zunanji + kot)
+          # in mere (dolžina/višina/širina z referenco); NEZNANO 0, nikoli
+          # ugibanje (disciplina NI_DOKAZA).
+          - grupa: r560
     services:
       postgres:
         image: postgres:16

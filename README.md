@@ -4,8 +4,8 @@ Poslovno-operativni sistem za Roksal — od prvega voda do zaključene montaže 
 fasad in teras: CRM, ponudbe s podpisom, proizvodnja, teren (tudi brez signala),
 računi in **fotomontaža PREJ/POTEM** iz uradnih Roksalovih gradiv.
 
-> **Stanje:** rekonstrukcija zaključena in presežena · izdaja **v1.74.0** ·
-> **63 testnih skupin + E2E skozi pravo aplikacijo** · GitHub je kanonični vir
+> **Stanje:** rekonstrukcija zaključena in presežena · izdaja **v1.75.0** ·
+> **64 testnih skupin + E2E skozi pravo aplikacijo** · GitHub je kanonični vir
 > (zadeve + release vrata), GitLab zrcalo, sinhronizacija po SHA (`ops/sync-check.sh`) ·
 > [docs/](docs/) vsebuje poročila za vsako fazo.
 
@@ -302,6 +302,31 @@ računi in **fotomontaža PREJ/POTEM** iz uradnih Roksalovih gradiv.
    videti, vrne NEZNANO z 0 % (NIKOLI ne ugiba; izrecno pravilo: keramika
    ročnika ≠ ploščice na tleh). Material vedno potrdi monter na terenu.
    Testna skupina r559 (63. skupina). Belt 8 statičnih + 63 skupin.
+
+23. **Splošno gradbeno prepoznavanje — vijaki, WPC, železo/inox, tla, vogali,
+   mere (R560, minor v1.75.0):** na nadaljevanje vprašanja lastnika (»mora
+   prepoznat vijak les wpc zelezo rostfrai keramiko tla vogale vse … dolžina
+   višina širina — čisto vse«) je R559 pokril samo obstoječo ograjo — WPC je
+   bil zvit v LES+opis, železo/inox nista bila ločena, vijakov, tal, vogalov
+   in os ŠIRINA pa ni prepoznal nihče. ISTI klic `POST /api/ar/inspect`
+   (glm-4.6v) zdaj vrne ŠE SPLOŠNE gradbene razdelke, NEODVISNE od
+   jeOgraja (prizor brez ograje ima lahko tla in vogale): MATERIALI
+   (les/WPC — lastna kategorija ne LES/železo = pocinkano mat/inox =
+   rostfraj sijaj/keramika/aluminij/steklo/kamen/beton/plastika, vsak s
+   kje+opis+zaupanjem), VIJAKI (tip po glavi TORX/INBUS/KRIŽNI/ŠESTROBI +
+   material INOX/POCINKANO/ČRNI + ocena števila — vidni tri-state,
+   vidni≠true → brez trditev), TLA (13 vrst + dimenzije ploščice 5..300 cm
+   SAMO iz referenc), VOGALI (notranji/zunanji + kot 15..180 + število) in
+   MERE (dolžina/višina/širina predmetov z navedeno referenco — vrata
+   200 cm, stopnica 17 cm, ploščica 40/60 cm, oseba 170 cm; brez reference
+   → ocenaCm null in »ocene ni«, nikoli izmišljena številka). Parser
+   sanitizira vsak razdelek neodvisno (cap 6 materialov / 8 mer, NEZNANO
+   ven, meje ploščice/število/kot), stari r559 VLM odgovor (brez novih
+   ključev) se preslika v privzete vrednosti. Audit dopolnjen
+   (tlaVrsta/materialiStevilo/merStevilo). Poštenost ostaja: nikoli ne
+   ugibaj zlitine (A2/A4 vizualno ni ločljivo) — material in mere vedno
+   potrdi monter na terenu.
+   Testna skupina r560 (64. skupina). Belt 8 statičnih + 64 skupin.
 
 ## Kaj aplikacija počne
 

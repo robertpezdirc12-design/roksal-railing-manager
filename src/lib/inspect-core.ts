@@ -5,11 +5,37 @@
 // POŠTENOSTNA PRAVILA (disciplina NI_DOKAZA): kadar komponente ni mogoče
 // videti, vrne NEZNANO z zaupanjem 0 — nikoli ne ugiba; jeOgraja=false
 // počisti VSE materiale/ocene (brez ostankov).
+//
+// R560 (zahteva lastnika: »mora prepoznat vijak les wpc zelezo rostfrai
+// keramiko tla vogale vse kaj je možno v gradbeništvu, dolžina višina
+// širina — čisto vse«): SPLOŠNO GRADBENO PREPOZNAVANJE kot NEODVISNI
+// razdelki (materiali/vijaki/tla/vogali/mere) — prizor BREZ ograje ima
+// lahko tla, vogale, materiale in mere; vsak del s svojim zaupanjem;
+// NEZNANO 0, kadar ni vidno — nikoli ne ugibamo.
 
 export type InspectMaterial = 'LES' | 'KERAMIKA' | 'INOX' | 'ALUMINIJ' | 'JEKLO' | 'PLASTIKA' | 'DRUGO' | 'NEZNANO'
 export type InspectPolnilo = 'STEKLO' | 'NAVPICNE_CEVI' | 'VODORAVNE_CEVI' | 'NAVPICNI_PROFILI' | 'BREZ' | 'DRUGO' | 'NEZNANO'
 export type TipOgraje = 'BALKONSKA' | 'STOPNISKA' | 'TERASNA' | 'VRTNA' | 'DRUGO' | 'NEZNANO'
 export type StanjeOgraje = 'NOVO' | 'DOBRO' | 'RABLJENO' | 'POSKODOVANO' | 'NEZNANO'
+
+// ── R560: splošni gradbeni tipi (NEODVISNI od jeOgraja) ──
+export type GradbeniMaterial = 'LES' | 'WPC' | 'ZELEZO' | 'INOX' | 'KERAMIKA' | 'ALUMINIJ' | 'STEKLO' | 'KAMEN' | 'BETON' | 'PLASTIKA' | 'DRUGO' | 'NEZNANO'
+export type TipVijaka = 'TORX' | 'INBUS' | 'KRIZNI' | 'SESTROBI' | 'DRUGO' | 'NEZNANO'
+export type MaterialVijaka = 'INOX' | 'POCINKANO' | 'CRNO' | 'JEKLO' | 'DRUGO' | 'NEZNANO'
+export type VrstaTal = 'KERAMICNE_PLOSCICE' | 'PORCELANAT' | 'LAMINAT' | 'PARKET' | 'KAMEN' | 'BETON' | 'TLAK' | 'TRAVA' | 'ZEMLJA' | 'ASFALT' | 'GRAMOZ' | 'DRUGO' | 'NEZNANO'
+export type TipVogala = 'NOTRANJI' | 'ZUNANJI' | 'DRUGO' | 'NEZNANO'
+export type OsaMere = 'DOLZINA' | 'VISINA' | 'SIRINA'
+
+/** R560: posamezen viden gradbeni material (kje + zaupanje). */
+export interface InspectMaterialViden { vrsta: GradbeniMaterial; kje: string; opis: string; zaupanje: number }
+/** R560: vijaki na sliki (vidni tri-state; tip/material/ocena števila). */
+export interface InspectVijaki { vidni: boolean | null; tip: TipVijaka; material: MaterialVijaka; steviloOcena: number | null; kje: string; zaupanje: number }
+/** R560: tla (vrsta + dimenzije ploščice SAMO iz referenc na sliki). */
+export interface InspectTla { vrsta: VrstaTal; opis: string; ploscicaDolzinaCm: number | null; ploscicaSirinaCm: number | null; zaupanje: number }
+/** R560: vogali (stičišča sten/ogradb, zavoji ograje; notranji/zunanji). */
+export interface InspectVogali { steviloOcena: number | null; tipGlavni: TipVogala; kot: number | null; opis: string; zaupanje: number }
+/** R560: ocena mere predmeta z referenco (brez reference → ocenaCm null). */
+export interface InspectMera { predmet: string; osa: OsaMere; ocenaCm: number | null; referenca: string; zaupanje: number }
 
 export interface InspectOgraja {
   jeOgraja: boolean
@@ -24,6 +50,12 @@ export interface InspectOgraja {
   ocenaVisineCm: number | null
   ocenaDolzineCm: number | null
   opombe: string[]
+  // ── R560: splošni gradbeni razdelki — NEODVISNI od jeOgraja ──
+  materiali: InspectMaterialViden[]
+  vijaki: InspectVijaki
+  tla: InspectTla
+  vogali: InspectVogali
+  mere: InspectMera[]
 }
 
 /** R559: prompt za VLM (glm-4.6v) — slovenščina, izrecna poštenostna pravila:
@@ -43,7 +75,12 @@ Vrni SAMO veljaven JSON (brez kode, brez markdown) točno te oblike:
   "stanjeOpis": "kratek opis stanja (npr. manjka vijak na srednjem steboru, rja na spodnjem robu)",
   "ocenaVisineCm": 105,
   "ocenaDolzineCm": 320,
-  "opombe": ["opombe za monterja — samo dejansko videno"]
+  "opombe": ["opombe za monterja — samo dejansko videno"],
+  "materiali": [{ "vrsta": "LES | WPC | ZELEZO | INOX | KERAMIKA | ALUMINIJ | STEKLO | KAMEN | BETON | PLASTIKA | DRUGO | NEZNANO", "kje": "kje je viden (ročnik, stebri, tla, stena, okvir, podboj …)", "opis": "kratek opis (npr. hrast z vzdolžnimi vlakni; pocinkana ploščevina)", "zaupanje": 0.7 }],
+  "vijaki": { "vidni": true, "tip": "TORX | INBUS | KRIZNI | SESTROBI | DRUGO | NEZNANO", "material": "INOX | POCINKANO | CRNO | JEKLO | DRUGO | NEZNANO", "steviloOcena": 12, "kje": "npr. stebri, ročnik, talna obloga", "zaupanje": 0.5 },
+  "tla": { "vrsta": "KERAMICNE_PLOSCICE | PORCELANAT | LAMINAT | PARKET | KAMEN | BETON | TLAK | TRAVA | ZEMLJA | ASFALT | GRAMOZ | DRUGO | NEZNANO", "opis": "kratek opis tal", "ploscicaDolzinaCm": 60, "ploscicaSirinaCm": 60, "zaupanje": 0.7 },
+  "vogali": { "steviloOcena": 2, "tipGlavni": "NOTRANJI | ZUNANJI | DRUGO | NEZNANO", "kot": 90, "opis": "kratek opis vogalov (stičišča sten, zavoji ograje)", "zaupanje": 0.6 },
+  "mere": [{ "predmet": "npr. hodnik/tla, odprtina, ograja", "osa": "DOLZINA | VISINA | SIRINA", "ocenaCm": 110, "referenca": "npr. ploščica 60 cm; vrata ≈ 200 cm", "zaupanje": 0.6 }]
 }
 Pravila:
 - jeOgraja: true SAMO, če je na sliki dejansko ograja z ročnikom; sicer false in VSE ostalo NEZNANO/null;
@@ -52,12 +89,26 @@ Pravila:
 - LES: topel ton z vzdolžnimi vlakni; WPC/tehnološki les zapiši kot LES z opisom »tehnološki les«;
 - okovje: true = jasno vidno, false = jasno ni, null = iz tega kota ni vidno;
 - ocenaVisineCm/ocenaDolzineCm: OCENA iz referenc na sliki (vhodna vrata ≈ 200 cm, stopnica ≈ 17 cm, ploščica ≈ 40 cm) ali null, če reference ni;
-- opombe: največ 5, samo dejansko videno; če ni ograje, prazen seznam.`
+- opombe: največ 5, samo dejansko videno; če ni ograje, prazen seznam.
+- SPLOŠNI RAZDELKI (materiali, vijaki, tla, vogali, mere) izpolni TUDI, kadar jeOgraja=false — prizor brez ograje ima lahko tla, vogale, materiale in mere;
+- materiali (največ 6): vsi gradbeni materiali, ki so dejansko VIDNI; WPC je lastna kategorija v materiali[] (ne LES) — homogen profil brez lesne strukture v prerezu (za rocnik.material pa ostaja pravilo LES z opisom); železo = pocinkano/jeklo (mat, sivkasto), inox/rostfraj = nerjaveče (sijaj); kadar ni jasno, NEZNANO in zaupanje 0 — nikoli ne ugibaj zlitine (A2/A4 vizualno ni ločljivo);
+- vijaki: vidni=true SAMO, če so glave res vidne (makro/kôta); tip po glavi (zvezdasta = TORX, šesterojni utor = INBUS, križna = KRIZNI, šestrobna glava = SESTROBI); material: svetleč se = INOX, mat rumenkasto = POCINKANO, črno = CRNO; sicer NEZNANO in zaupanje 0;
+- tla: vrsta + dimenzije ploščice SAMO, če so ploščice vidne (ploscicaDolzinaCm/ploscicaSirinaCm 5..300, sicer null); laminat/parket/gramoz → dimenzije null;
+- vogali: stičišča sten/ogradb ali zavoji ograje; notranji (kot < 180°), zunanji (> 180°); kot 15..180 (tipično 90/135); število 0..20;
+- mere (največ 8): dolžina/višina/širina predmetov na sliki — mero oceni SAMO iz referenc (vrata ≈ 200 cm, stopnica ≈ 17 cm, ploščica 40/60 cm, oseba ≈ 170 cm); brez reference → ocenaCm null in referenca »ni reference«.`
 
 const ROCNIK_MATERIJALI: readonly InspectMaterial[] = ['LES', 'KERAMIKA', 'INOX', 'ALUMINIJ', 'JEKLO', 'PLASTIKA', 'DRUGO', 'NEZNANO']
 const POLNILA: readonly InspectPolnilo[] = ['STEKLO', 'NAVPICNE_CEVI', 'VODORAVNE_CEVI', 'NAVPICNI_PROFILI', 'BREZ', 'DRUGO', 'NEZNANO']
 const TIPI: readonly TipOgraje[] = ['BALKONSKA', 'STOPNISKA', 'TERASNA', 'VRTNA', 'DRUGO', 'NEZNANO']
 const STANJA: readonly StanjeOgraje[] = ['NOVO', 'DOBRO', 'RABLJENO', 'POSKODOVANO', 'NEZNANO']
+
+// ── R560: splošni gradbeni seznami (NEODVISNI od jeOgraja) ──
+const GRADBENI_MATERIALI: readonly GradbeniMaterial[] = ['LES', 'WPC', 'ZELEZO', 'INOX', 'KERAMIKA', 'ALUMINIJ', 'STEKLO', 'KAMEN', 'BETON', 'PLASTIKA', 'DRUGO', 'NEZNANO']
+const TIPI_VIJAKOV: readonly TipVijaka[] = ['TORX', 'INBUS', 'KRIZNI', 'SESTROBI', 'DRUGO', 'NEZNANO']
+const MATERIALI_VIJAKOV: readonly MaterialVijaka[] = ['INOX', 'POCINKANO', 'CRNO', 'JEKLO', 'DRUGO', 'NEZNANO']
+const VRSTE_TAL: readonly VrstaTal[] = ['KERAMICNE_PLOSCICE', 'PORCELANAT', 'LAMINAT', 'PARKET', 'KAMEN', 'BETON', 'TLAK', 'TRAVA', 'ZEMLJA', 'ASFALT', 'GRAMOZ', 'DRUGO', 'NEZNANO']
+const TIPI_VOGALOV: readonly TipVogala[] = ['NOTRANJI', 'ZUNANJI', 'DRUGO', 'NEZNANO']
+const OSE_MER: readonly OsaMere[] = ['DOLZINA', 'VISINA', 'SIRINA']
 
 /** varna enum vrednost — neznano, če VLM ni odgovoril s predvideno vrednostjo. */
 function enumVal<T extends string> (v: unknown, dovoljene: readonly T[], pad: T): T {
@@ -86,6 +137,53 @@ export function varnaOcenaCm (v: unknown): number | null {
   return Number.isFinite(n) && n >= 10 && n <= 20_000 ? Math.round(n) : null
 }
 
+/** R560: varna dimenzija ploščice v cm (5..300) ali null. */
+export function varnaPloscicaCm (v: unknown): number | null {
+  const n = Number(v)
+  return Number.isFinite(n) && n >= 5 && n <= 300 ? Math.round(n) : null
+}
+
+/** R560: varno število (min..max) ali null (vogali, vijaki) —
+ * Number(null)=0 in Number('')=0 v JS sta PASTI pri min=0: izrecno
+ * zavrnemo null/undefined/prazen niz, sicer bi 0 lažno veljal. */
+export function varnoStevilo (v: unknown, min: number, max: number): number | null {
+  if (v == null || (typeof v === 'string' && !v.trim())) return null
+  const n = Number(v)
+  return Number.isFinite(n) && n >= min && n <= max ? Math.round(n) : null
+}
+
+/** R560: seznam vidnih materialov (cap 6; NEZNANO vrsta = šum → ven). */
+function parseMateriali (v: unknown): InspectMaterialViden[] {
+  if (!Array.isArray(v)) return []
+  const out: InspectMaterialViden[] = []
+  for (const m of v) {
+    if (out.length >= 6) break
+    if (m == null || typeof m !== 'object') continue
+    const o = m as Record<string, unknown>
+    const vrsta = enumVal(o.vrsta, GRADBENI_MATERIALI, 'NEZNANO')
+    if (vrsta === 'NEZNANO') continue
+    out.push({ vrsta, kje: varnoBesedilo(o.kje, 60), opis: varnoBesedilo(o.opis, 200), zaupanje: varnoZaupanje(o.zaupanje) })
+  }
+  return out
+}
+
+/** R560: mere (cap 8; veljavna osa + neprazen predmet; ocenaCm null = brez reference). */
+function parseMere (v: unknown): InspectMera[] {
+  if (!Array.isArray(v)) return []
+  const out: InspectMera[] = []
+  for (const m of v) {
+    if (out.length >= 8) break
+    if (m == null || typeof m !== 'object') continue
+    const o = m as Record<string, unknown>
+    const predmet = varnoBesedilo(o.predmet, 100)
+    if (!predmet) continue
+    const osa = typeof o.osa === 'string' && (OSE_MER as readonly string[]).includes(o.osa) ? o.osa as OsaMere : null
+    if (!osa) continue
+    out.push({ predmet, osa, ocenaCm: varnaOcenaCm(o.ocenaCm), referenca: varnoBesedilo(o.referenca, 100) || 'ni reference', zaupanje: varnoZaupanje(o.zaupanje) })
+  }
+  return out
+}
+
 /** Parser VLM odgovora: izlušči prvi veljavni JSON objekt in ga SANITIZIRAJ
  * (vsako polje neodvisno — polomljen VLM odgovor ne sesuje celotnega rezultata). */
 export function parseInspectJson (raw: string): InspectOgraja | null {
@@ -98,8 +196,40 @@ export function parseInspectJson (raw: string): InspectOgraja | null {
     const po = (p.polnilo ?? {}) as Record<string, unknown>
     const st = (p.stebri ?? {}) as Record<string, unknown>
     const ok = (p.okovje ?? {}) as Record<string, unknown>
+    const vj = (p.vijaki ?? {}) as Record<string, unknown>
+    const tl = (p.tla ?? {}) as Record<string, unknown>
+    const vg = (p.vogali ?? {}) as Record<string, unknown>
     const jeOgraja = p.jeOgraja === true
     const stevilo = Number(st.steviloOcena)
+    // R560: vijaki — dokaz o vidnosti (vidni !== true → brez trditev o tipu/materialu)
+    const vijaki: InspectVijaki = vj.vidni === true
+      ? {
+          vidni: true,
+          tip: enumVal(vj.tip, TIPI_VIJAKOV, 'NEZNANO'),
+          material: enumVal(vj.material, MATERIALI_VIJAKOV, 'NEZNANO'),
+          steviloOcena: varnoStevilo(vj.steviloOcena, 1, 60),
+          kje: varnoBesedilo(vj.kje, 60),
+          zaupanje: varnoZaupanje(vj.zaupanje),
+        }
+      : { vidni: varnoTri(vj.vidni), tip: 'NEZNANO', material: 'NEZNANO', steviloOcena: null, kje: '', zaupanje: 0 }
+    // R560: tla — vrsta in dimenzije ploščice neodvisno (NEZNANO + 60×60 je pošteno)
+    const tla: InspectTla = {
+      vrsta: enumVal(tl.vrsta, VRSTE_TAL, 'NEZNANO'),
+      opis: varnoBesedilo(tl.opis, 200),
+      ploscicaDolzinaCm: varnaPloscicaCm(tl.ploscicaDolzinaCm),
+      ploscicaSirinaCm: varnaPloscicaCm(tl.ploscicaSirinaCm),
+      zaupanje: varnoZaupanje(tl.zaupanje),
+    }
+    // R560: vogali — brez števila ni trditev o tipu/kotu
+    const vogali: InspectVogali = vg.steviloOcena == null || varnoStevilo(vg.steviloOcena, 0, 20) == null
+      ? { steviloOcena: null, tipGlavni: 'NEZNANO', kot: null, opis: '', zaupanje: 0 }
+      : {
+          steviloOcena: varnoStevilo(vg.steviloOcena, 0, 20),
+          tipGlavni: enumVal(vg.tipGlavni, TIPI_VOGALOV, 'NEZNANO'),
+          kot: varnoStevilo(vg.kot, 15, 180),
+          opis: varnoBesedilo(vg.opis, 200),
+          zaupanje: varnoZaupanje(vg.zaupanje),
+        }
     return {
       jeOgraja,
       scene: varnoBesedilo(p.scene, 300),
@@ -133,6 +263,12 @@ export function parseInspectJson (raw: string): InspectOgraja | null {
       opombe: jeOgraja && Array.isArray(p.opombe)
         ? p.opombe.filter((x): x is string => typeof x === 'string' && x.trim().length > 0).slice(0, 5).map((x) => x.trim().slice(0, 200))
         : [],
+      // ── R560: splošni razdelki — NEODVISNI od jeOgraja (tla obstajajo tudi brez ograje) ──
+      materiali: parseMateriali(p.materiali),
+      vijaki,
+      tla,
+      vogali,
+      mere: parseMere(p.mere),
     }
   } catch {
     return null

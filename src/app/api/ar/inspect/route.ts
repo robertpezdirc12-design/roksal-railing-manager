@@ -3,6 +3,13 @@
 // OGRAJE. POST (measurements.write) { photo: dataUrl, hint? } → glm-4.6v
 // prepozna: ali je na sliki ograja, tip, MATERIAL ROČNIKA (les/keramika/
 // inox/…), polnilo, stebri, OKOVJE (kljuka/tečaji/ključavnica) in stanje.
+//
+// R560 (zahteva lastnika: »mora prepoznat vijak les wpc zelezo rostfrai
+// keramiko tla vogale vse … dolžina višina širina — čisto vse«): ISTI klic
+// zdaj prepozna tudi SPLOŠNE gradbene razdelke — materiale (les, WPC,
+// železo, inox/rostfraj, keramika …), vijake (tip/material/število), tla
+// (vrsta + dimenzije ploščice), vogale (notranji/zunanji + kot) in mere
+// (dolžina/višina/širina z referenco) — NEODVISNO od jeOgraja.
 // Rezultat je PREDLOG s zaupanjem — NE vir resnice (issue §1: identiteto
 // materiala na terenu vedno potrdi monter). Ne piše v bazo.
 // Vzorec: /api/ar/analyze (R454) + /api/ar/analyze-multi (R558).
@@ -75,6 +82,10 @@ export async function POST (req: NextRequest) {
       tipOgraje: inspect.tipOgraje,
       rocnikMaterial: inspect.rocnik.material,
       rocnikZaupanje: inspect.rocnik.zaupanje,
+      // R560: splošni gradbeni razdelki v audit zapisu
+      tlaVrsta: inspect.tla.vrsta,
+      materialiStevilo: inspect.materiali.length,
+      merStevilo: inspect.mere.length,
       hint: hint || null,
     },
   })

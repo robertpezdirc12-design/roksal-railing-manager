@@ -6,6 +6,12 @@
 // nalaganje → POST /api/ar/inspect (backend VLM glm-4.6v) → material
 // ročnika/stebrov, polnilo, okovje, stanje — VSAKO s zaupanjem.
 // Pomoč pri odločitvi — NE vir resnice (material na terenu potrdi monter).
+//
+// R560 (zahteva lastnika: vijak, les, WPC, železo, rostfraj, keramika, tla,
+// vogali + mere — čisto vse): pod razdelkom ograje NOVE kartice SPLOŠNEGA
+// gradbenega prepoznavanja, NEODVISNE od jeOgraja — materiali, vijaki,
+// tla (+ dimenzije ploščice), vogali (+ kot) in mere (dolžina/višina/širina
+// z referenco); prazno stanje je poštena vrstica, ne ugibanje.
 
 import { useRef, useState } from 'react'
 
@@ -16,7 +22,7 @@ import { Input } from '@/components/ui/input'
 import { Camera, CheckCircle2, Loader2, MinusCircle, ScanSearch, Upload, X, XCircle } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { apiPost } from '@/lib/api-client'
-import type { InspectMaterial, InspectOgraja } from './tipi'
+import type { GradbeniMaterial, InspectMaterial, InspectOgraja, MaterialVijaka, OsaMere, TipVijaka, TipVogala, VrstaTal } from './tipi'
 
 /** slovenske oznake materialov (NEZNANO prikažemo ločeno — sivo). */
 const MATERIALI: Record<InspectMaterial, string> = {
@@ -36,6 +42,35 @@ const TIPI: Record<string, string> = {
 
 const STANJA: Record<string, string> = {
   NOVO: 'Novo', DOBRO: 'Dobro', RABLJENO: 'Rabljeno', POSKODOVANO: 'Poškodovano', NEZNANO: 'Neznano',
+}
+
+// ── R560: splošno gradbeno prepoznavanje (neodvisno od jeOgraja) ──
+const GRADBENI: Record<GradbeniMaterial, string> = {
+  LES: 'Les', WPC: 'WPC', ZELEZO: 'Železo', INOX: 'Inox (rostfraj)', KERAMIKA: 'Keramika',
+  ALUMINIJ: 'Aluminij', STEKLO: 'Steklo', KAMEN: 'Kamen', BETON: 'Beton', PLASTIKA: 'Plastika',
+  DRUGO: 'Drugo', NEZNANO: 'Neznano',
+}
+
+const TLA: Record<VrstaTal, string> = {
+  KERAMICNE_PLOSCICE: 'Keramične ploščice', PORCELANAT: 'Porcelanat', LAMINAT: 'Laminat',
+  PARKET: 'Parket', KAMEN: 'Kamen', BETON: 'Beton', TLAK: 'Tlak', TRAVA: 'Trava',
+  ZEMLJA: 'Zemlja', ASFALT: 'Asfalt', GRAMOZ: 'Gramoz', DRUGO: 'Drugo', NEZNANO: 'Neznano',
+}
+
+const VIJAK_TIP: Record<TipVijaka, string> = {
+  TORX: 'Torx', INBUS: 'Inbus', KRIZNI: 'Križni', SESTROBI: 'Šestrobi', DRUGO: 'Drugo', NEZNANO: 'Neznano',
+}
+
+const VIJAK_MATERIAL: Record<MaterialVijaka, string> = {
+  INOX: 'Inox', POCINKANO: 'Pocinkano', CRNO: 'Črni', JEKLO: 'Jeklo', DRUGO: 'Drugo', NEZNANO: 'Neznano',
+}
+
+const VOGALI: Record<TipVogala, string> = {
+  NOTRANJI: 'Notranji', ZUNANJI: 'Zunanji', DRUGO: 'Drugo', NEZNANO: 'Neznano',
+}
+
+const OSA: Record<OsaMere, string> = {
+  DOLZINA: 'dolžina', VISINA: 'višina', SIRINA: 'širina',
 }
 
 /** Badge zaupanja: ≥0,7 prepoznano (zeleno) · 0,4–0,69 verjetno (amber) · sicer nejasno (sivo). */
@@ -165,9 +200,12 @@ export function PrepoznavaPanel ({ zajemiKader }: {
         {!rezultat ? (
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">
-              Ali je kamera »pametna«? Fotografija obstoječe ograje → AI prepozna
+              Ali je kamera »pametna«? Fotografija gradbišča → AI prepozna
               <span className="font-medium text-foreground"> material ročnika (les / keramika / inox)</span>,
               polnilo, stebre, <span className="font-medium text-foreground">okovje (kljuka, tečaji, ključavnica)</span> in stanje —
+              ter splošne gradbene elemente: <span className="font-medium text-foreground">materiale (les, WPC, železo, inox/rostfraj, keramika)</span>,
+              <span className="font-medium text-foreground"> vijake</span>, <span className="font-medium text-foreground">tla (ploščice + dimenzije)</span>,
+              <span className="font-medium text-foreground"> vogale</span> in <span className="font-medium text-foreground">mere (dolžina / višina / širina)</span> —
               vsako s stopnjo zaupanja; kadar komponente ne vidi, to iskreno pove.
             </p>
             <input
@@ -283,8 +321,91 @@ export function PrepoznavaPanel ({ zajemiKader }: {
                 ) : null}
               </>
             )}
+            {/* ── R560: splošno gradbeno prepoznavanje (NEODVISNO od jeOgraja) ── */}
+            <div className="space-y-1.5">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Gradbišče — splošno prepoznavanje</h3>
+              <ul className="space-y-1.5">
+                {rezultat.materiali.length > 0 ? (
+                  <li className="rounded-lg border bg-secondary/40 p-2.5">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Materiali</p>
+                    <ul className="mt-1 space-y-1">
+                      {rezultat.materiali.map((m, i) => (
+                        <li key={i} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm">
+                          <span className="font-semibold">{GRADBENI[m.vrsta]}</span>
+                          <ZaupanjeBadge v={m.zaupanje} />
+                          {m.kje ? <span className="text-xs text-muted-foreground">· {m.kje}</span> : null}
+                          {m.opis ? <span className="w-full text-xs text-muted-foreground">{m.opis}</span> : null}
+                        </li>
+                      ))}
+                    </ul>
+                  </li>
+                ) : null}
+                {rezultat.vijaki.vidni === true ? (
+                  <li className="rounded-lg border bg-secondary/40 p-2.5">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Vijaki</p>
+                    <div className="mt-1 flex flex-wrap items-center gap-2 text-sm">
+                      <span className="font-semibold">{VIJAK_TIP[rezultat.vijaki.tip]}</span>
+                      <span className="text-muted-foreground">· {VIJAK_MATERIAL[rezultat.vijaki.material]}</span>
+                      {rezultat.vijaki.steviloOcena != null ? (
+                        <Badge variant="outline" className="border-roksal-amber/40 text-roksal-amber">≈ {rezultat.vijaki.steviloOcena}</Badge>
+                      ) : null}
+                      <ZaupanjeBadge v={rezultat.vijaki.zaupanje} />
+                    </div>
+                    {rezultat.vijaki.kje ? <p className="mt-1 text-xs text-muted-foreground">kje: {rezultat.vijaki.kje}</p> : null}
+                  </li>
+                ) : null}
+                {rezultat.tla.vrsta !== 'NEZNANO' || rezultat.tla.ploscicaDolzinaCm != null ? (
+                  <li className="rounded-lg border bg-secondary/40 p-2.5">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Tla</p>
+                    <div className="mt-1 flex flex-wrap items-center gap-2 text-sm">
+                      <span className="font-semibold">{TLA[rezultat.tla.vrsta]}</span>
+                      <ZaupanjeBadge v={rezultat.tla.zaupanje} />
+                      {rezultat.tla.ploscicaDolzinaCm != null && rezultat.tla.ploscicaSirinaCm != null ? (
+                        <span className="text-muted-foreground">ploščica ≈ {Math.round(rezultat.tla.ploscicaDolzinaCm)} × {Math.round(rezultat.tla.ploscicaSirinaCm)} cm (ocena)</span>
+                      ) : null}
+                    </div>
+                    {rezultat.tla.opis ? <p className="mt-1 text-sm text-muted-foreground">{rezultat.tla.opis}</p> : null}
+                  </li>
+                ) : null}
+                {rezultat.vogali.steviloOcena != null ? (
+                  <li className="rounded-lg border bg-secondary/40 p-2.5">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Vogali</p>
+                    <div className="mt-1 flex flex-wrap items-center gap-2 text-sm">
+                      <span className="font-semibold">{VOGALI[rezultat.vogali.tipGlavni]}</span>
+                      {rezultat.vogali.kot != null ? <Badge variant="outline">{rezultat.vogali.kot}°</Badge> : null}
+                      <Badge variant="outline" className="border-roksal-amber/40 text-roksal-amber">≈ {rezultat.vogali.steviloOcena}</Badge>
+                      <ZaupanjeBadge v={rezultat.vogali.zaupanje} />
+                    </div>
+                    {rezultat.vogali.opis ? <p className="mt-1 text-sm text-muted-foreground">{rezultat.vogali.opis}</p> : null}
+                  </li>
+                ) : null}
+                {rezultat.mere.length > 0 ? (
+                  <li className="rounded-lg border bg-secondary/40 p-2.5">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Mere (ocena iz referenc)</p>
+                    <ul className="mt-1 space-y-1 text-sm">
+                      {rezultat.mere.map((m, i) => (
+                        <li key={i} className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                          <span className="font-medium">{m.predmet}</span>
+                          <span className="text-muted-foreground">· {OSA[m.osa]}:</span>
+                          {m.ocenaCm != null ? (
+                            <span className="font-semibold text-foreground">≈ {Math.round(m.ocenaCm)} cm</span>
+                          ) : (
+                            <span className="text-muted-foreground">ocene ni</span>
+                          )}
+                          <span className="text-xs text-muted-foreground">(ref: {m.referenca})</span>
+                          <ZaupanjeBadge v={m.zaupanje} />
+                        </li>
+                      ))}
+                    </ul>
+                  </li>
+                ) : null}
+                {rezultat.materiali.length === 0 && rezultat.vijaki.vidni !== true && rezultat.tla.vrsta === 'NEZNANO' && rezultat.tla.ploscicaDolzinaCm == null && rezultat.vogali.steviloOcena == null && rezultat.mere.length === 0 ? (
+                  <li className="text-sm text-muted-foreground">Splošnih gradbenih elementov (materiali, vijaki, tla, vogali, mere) na tej sliki ni bilo mogoče prepoznati.</li>
+                ) : null}
+              </ul>
+            </div>
             <p className="text-xs text-muted-foreground">
-              Prepoznavanje je pomoč pri odločitvi — material in okovje vedno potrdite na terenu (dotik, vizualni pregled).
+              Prepoznavanje je pomoč pri odločitvi — material, okovje in mere vedno potrdite na terenu (dotik, vizualni pregled, merilni trak).
             </p>
           </div>
         )}
