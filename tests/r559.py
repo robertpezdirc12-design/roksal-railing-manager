@@ -243,7 +243,9 @@ for rel, needle, msg in c1:
 
 # ═══ D) HTTP inspect validacije ════════════════════════════════════════════
 print('── D) HTTP: /api/ar/inspect validacije')
-PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFAAH/q942jgAAAABJRU5ErkJggg=='
+# R562: 32×32 siva PNG (lekcija R559/r560: VLM zavrača 1×1 px z napako formata
+# → trajen SKIP; ≥24×24 gre skozi in VLM pošteno odgovori NEZNANO/brez ograje).
+PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAIAAAD8GO2jAAAAKElEQVR4nO3NsQkAAAgDsJ7dweO9wkEIZE/aORWBQCAQCAQCgUDwJVgBc7BMVUSGVgAAAABJRU5ErkJggg=='
 monter = login('monter@roksal.si', 'Monter123!')
 s, d, _ = call('POST', '/api/ar/inspect', None, {'photo': PNG})
 chk(s == 401, f'D1 brez žetona → 401 (dejansko {s})')
@@ -253,7 +255,7 @@ s, d, _ = call('POST', '/api/ar/inspect', monter, {'photo': 'data:text/plain;bas
 chk(s == 400, f'D3 napačen prefix → 400 (dejansko {s})')
 s, d, _ = call('POST', '/api/ar/inspect', monter, {'photo': 'data:image/png;base64,' + 'A' * (6 * 1024 * 1024 + 10)})
 chk(s == 400, f'D4 prevelika (>6 MB) → 400 (dejansko {s})')
-# živ VLM klic (kot E6 v r558 — 1×1 px slika; 422 je veljaven pošten izid)
+# živ VLM klic (kot E6 v r558 — 32×32 siva slika; 422 je veljaven pošten izid)
 s, d, _ = call('POST', '/api/ar/inspect', monter, {'photo': PNG, 'hint': TAG})
 if s == 200:
     data = d.get('data', {})
@@ -261,7 +263,7 @@ if s == 200:
         'D5 živ VLM → 200 s strukturo (jeOgraja/rocnik/okovje/stanje)')
     chk(data.get('jeOgraja') is False or data.get('rocnik', {}).get('material') is not None, 'D6 struktura materiala')
 elif s == 422:
-    skip('D5 živ VLM: 422 (1×1 px slika brez ograje — pošten izid)')
+    skip('D5 živ VLM: 422 (siva slika brez ograje — pošten izid)')
 elif s == 502:
     skip('D5 živ VLM: 502 (zunanja storitev trenutno nedosegljiva — ne aplikacijska napaka)')
 else:

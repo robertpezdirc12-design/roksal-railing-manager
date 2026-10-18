@@ -66,6 +66,11 @@ def src_has (relpath, needle):
 def bun_js (script):
     env = {**os.environ}
     env.setdefault('NODE_OPTIONS', '--import ./tests/ts-resolve-register.mjs')
+    # R562: ci-matrix (ena skupina) ne izvozi DATABASE_URL (ci-local ga v vrstici
+    # 117), lupina sandboxa pa lahko izvozi SQLITE file: URL iz predloge projekta
+    # — za ROKSAL (PG-only, P1012/validacija) je ta napačen. Vzorec iz r454.py:64:
+    # TEST_DB_URL zaklad ali privzeti lokalni PG, VEDNO prepisano (ne setdefault).
+    env['DATABASE_URL'] = os.environ.get('TEST_DB_URL') or 'postgresql://roksal:roksal@localhost:54329/roksal'
     r = subprocess.run(['bun', '-e', script], capture_output=True, text=True, cwd=REPO, env=env)
     out = (r.stdout or '').strip().splitlines()
     for line in reversed(out):
@@ -321,7 +326,9 @@ else:
 
 # ═══ E) analyze-multi validacije ══════════════════════════════════════════
 print('── E) HTTP: VLM prečka (analyze-multi)')
-PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFAAH/q942jgAAAABJRU5ErkJggg=='
+# R562: 32×32 siva PNG ×2 (lekcija R559/r560: VLM zavrača 1×1 px z napako
+# formata → trajen SKIP; ≥24×24 gre skozi — VLM pošteno odgovori na prazni sliki).
+PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAIAAAD8GO2jAAAAKElEQVR4nO3NsQkAAAgDsJ7dweO9wkEIZE/aORWBQCAQCAQCgUDwJVgBc7BMVUSGVgAAAABJRU5ErkJggg=='
 s, d, _ = call('POST', '/api/ar/analyze-multi', None, {'photos': [PNG, PNG]})
 chk(s == 401, f'E1 brez žetona → 401 (dejansko {s})')
 s, d, _ = call('POST', '/api/ar/analyze-multi', monter, {'photos': [PNG]})
@@ -338,7 +345,7 @@ if s == 200:
     chk('scene' in data and 'dims' in data and 'warnings' in data, 'E6 živ VLM klic → 200 s strukturo')
     chk(isinstance(data.get('dims', []), list), 'E7 dims seznam')
 elif s == 422:
-    skip('E6 živ VLM: 422 (1×1 px sliki ne prepozna — veljaven izid, struktura enaka)')
+    skip('E6 živ VLM: 422 (sivi sliki ne prepozna — veljaven izid, struktura enaka)')
 elif s == 502:
     skip('E6 živ VLM: 502 (zunanja storitev trenutno nedosegljiva — ne aplikacijska napaka)')
 else:
