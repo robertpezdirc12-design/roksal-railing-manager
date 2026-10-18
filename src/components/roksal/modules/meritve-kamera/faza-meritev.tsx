@@ -78,7 +78,7 @@ export interface FazaMeritevProps {
 
 export function FazaMeritev (props: FazaMeritevProps) {
   const {
-    view, undo, redo, past, future, snapshot, setViews, rocnoCnt, detect, detecting, views, addingView,
+    view, undo, redo, past, future, snapshot, setViews, rocnoCnt, detect, detecting, vlmEnabled, views, addingView,
     setAddingView, detajli, setDetajli, addingDok, setAddingDok, fileViewRef, onFileView, fileDokRef,
     onFileDok, existingPhotos, pickExistingView, pickExistingDok, mode, activeView, setActiveView, calibA,
     setCalibA, predlogi, imgBoxRef, onImageClick, calc, calibCm, setCalibCm, px, applyYRef, stairMode,

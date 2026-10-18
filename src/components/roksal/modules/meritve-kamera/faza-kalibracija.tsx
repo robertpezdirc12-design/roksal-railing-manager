@@ -63,7 +63,7 @@ export interface FazaKalibracijaProps {
 
 export function FazaKalibracija (props: FazaKalibracijaProps) {
   const {
-    view, busy, orientacija, uploadPhoto, detect, detecting, resetAll, online, maxTilt, views, mode,
+    view, busy, orientacija, uploadPhoto, detect, detecting, vlmEnabled, resetAll, online, maxTilt, views, mode,
     buildOptions, onImageClick, calibA, setCalibA, calibCm, setCalibCm, calibMethod, setCalibMethod,
     refObject, setRefObject, planeW, setPlaneW, planeH, setPlaneH, snapshot, setViews, calc, px,
     applyYRef, setPhase, onClose,
