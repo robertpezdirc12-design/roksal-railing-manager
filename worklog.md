@@ -5570,3 +5570,16 @@ Stage Summary:
 - LEKCIJA: podna past 'return op' v 'return openDb()' — substring preverjanja vedno po BLOKU (regex ekstrakcija), ne po prvem indexu; 'skipWaiting' v komentarju vs KLEC s oklepaji — preverjaj klic, ne omembo.
 - PRODUKCIJA v1.71.0: Vercel samodejni deploy sprožen s GitHub pushom (preveriti naslednji korak).
 - OPOMNIKI: (1) rotacija žetonov ob zaključku seje (GitHub ghp_VZHq…, GitLab glpat-ae7r… S CELOTNO priponko, Vercel vcp_3Xwo…); (2) SW obnašanja v produkciji prvič živa — če bo poročilo o težavah, preveri najprej /sw.js na produkciji (različica + sync dogodek v DevTools Application); (3) naslednji kandidati po želji lastnika: pregled odprtih zadev ali večja funkcionalna nadgradnja.
+
+**R552 dopolnitev (isti zapis, po potisku):** PRODUKCIJA v1.71.0 ŽIVA (health
+1.71.0, db ok, uptime 37 s po buildu); /sw.js na produkciji postreže NOVO
+vsebino (11 zadetkov roksal-sync/SKIP_WAITING/API_CACHE — obljubljeni živi
+dokaz iz glave testa); demo vrata na produkciji ostajajo ZAPRTA
+(enabled:false — sidro R551 brez spremembe); globoke povezave 200 ×4.
+GitHub: main + tag v1.71.0 = a03c355 (ls-remote verify; oddaljeni je bil že
+na 4e4c3fa — R551-dodatek je šel s prejšnjim potiskom, kot načrtovano).
+GITLAB ZRCALO: POTISK BLOKIRAN — celoten žeton (glpat-… s priponko
+.01.1704ktceh) je v tej seji NIČELA NA VOLJO (r441 disciplina ga v worklogu
+hrani okrnjenega; sredina izven konteksta; rekonstrukcija brez sredine → 401
+preverjeno). Sinhronizacija zrcala z eno ukazom, takoj ko lastnik znova
+podá žeton. GitHub (kanonični vir) + Vercel nista odvisna od zrcala.
