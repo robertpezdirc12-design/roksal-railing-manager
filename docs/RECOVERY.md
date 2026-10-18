@@ -221,3 +221,41 @@ DATABASE_URL=postgresql://… bunx prisma migrate deploy
 
 V produkciji (Vercel + Neon) je primarni DB backup `pg_dump`/PITR ponudnika;
 ta kopija je neodvisen, šifriran drugi vir (glej §8).
+
+## 10. R565 (issue #22): PostgreSQL — AVTOMATIZIRANA obnova + provider-zaveden drill
+
+R464 je PG obnavljanje dokumentiral kot ročno (migrate deploy + uvoz). Od R565
+je **celoten PG recovery avtomatiziran in dokazan z vajo**:
+
+- `ops/import-db.mjs` — uvoz `export/*.json` v SVEŽO bazo:
+  - vrstni red modelov se izračuna iz `prisma/schema.prisma` (topološka
+    ureditev po tujih ključih, Kahn); cikel, ki ni samopovezava, je trda napaka;
+  - samopovezave (npr. `DigitalTwinSnapshot.parentSnapshotId`) uvoz v dveh
+    fazah (create brez self-FK → update nazaj);
+  - preverba števcev VSAKE tabele proti `export/_meta.json` — neskladje = napaka;
+  - fail-closed: neprazne ciljne tabele zavrne (razen `--force`, ki briše v
+    obratnem odvisnostnem redu).
+- `ops/fk-check.mjs` — preverba tujih ključev 10 ključnih relacij
+  (QuoteLine→Quote, PriceRule→PriceList, Quote→Customer/Project,
+  Measurement→Project, AuditLog→User, WorkOrder→Project,
+  ProductVariant→Product, ProductAsset→Product, StockReservation→InventoryItem):
+  **0 sirot je pogoj veljavne obnove** — enako število vrstic samo po sebi ni
+  dokaz (issue #22 točka 3).
+- `ops/drill.sh` se zdaj razveji po **providerju iz manifesta kopije**:
+  - `postgresql`: sveža izolirana baza `roksal_drill_<ts>` na lokalnem
+    embedded PostgreSQL (varovala: nikoli enaka živi bazi) → `prisma migrate
+    deploy` → `import-db.mjs` → `fk-check.mjs` (0 sirot) → zagon aplikacije →
+    prijava + BRANJE (projekti) + PISANJE (nova stranka 201);
+  - `sqlite` (zgodovinske kopije): nespremenjena pot s `custom.db`;
+  - off-site kopija nedosegljiva (žeton/kvota) → poročilo **BLOKIRAN** (izhod
+    3) — nikoli "uspešno";
+  - `--file KOPIJA.rkb` preizkuša obnovo iz lokalne kopije (RPO se ne izračuna
+    — izrecno zapisano v poročilu); `ROKSAL_DRILL_KEEP=1` ohrani delovne
+    dnevnike faz.
+- RTO/RPO se izračunata SAMO po dejansko končani obnovi + poslovnem testu.
+
+**Dokaz (18. 35. 2026, peskovnik):** `RECOVERY-DRILL-20261018-183540.md` —
+PG kopija (94 tabel, 1706 vrstic) → obnova v svežo bazo (migracije 1,6 s +
+uvoz 0,5 s + FK 0 sirot) → aplikacija ZDRAVA → prijava + 8 projektov + pisanje
+OK. **RTO 56,3 s** (cilj ≤ 1800 s). Off-site prenos v peskovniku blokira
+manjkajoči GitLab žeton (iskreno izpisano; --file pot dokazuje celoten tok).

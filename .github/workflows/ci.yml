@@ -358,6 +358,11 @@ jobs:
           # brez odobrenih cen (priceOverride z razlogom = vidno okvirna);
           # snapshot cen ob izdelavi ponudbe (stare ponudbe se ne spreminjajo).
           - grupa: r564
+          # R565 (issue #22): PostgreSQL recovery — avtomatiziran uvoz
+          # (import-db.mjs FK-urejen + fk-check 0 sirot) + provider-zaveden
+          # drill (PG: sveža baza + migrate + uvoz + app + bralno-PISALNI test;
+          # SQLite nespremenjeno; off-site blokada = BLOCKED poročilo, ne uspeh).
+          - grupa: r565
     services:
       postgres:
         image: postgres:16
