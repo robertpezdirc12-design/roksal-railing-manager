@@ -4,7 +4,7 @@ Poslovno-operativni sistem za Roksal — od prvega voda do zaključene montaže 
 fasad in teras: CRM, ponudbe s podpisom, proizvodnja, teren (tudi brez signala),
 računi in **fotomontaža PREJ/POTEM** iz uradnih Roksalovih gradiv.
 
-> **Stanje:** rekonstrukcija zaključena in presežena · izdaja **v1.72.0** ·
+> **Stanje:** rekonstrukcija zaključena in presežena · izdaja **v1.72.1** ·
 > **59 testnih skupin + E2E skozi pravo aplikacijo** · GitHub je kanonični vir
 > (zadeve + release vrata), GitLab zrcalo, sinhronizacija po SHA (`ops/sync-check.sh`) ·
 > [docs/](docs/) vsebuje poročila za vsako fazo.
@@ -217,6 +217,24 @@ računi in **fotomontaža PREJ/POTEM** iz uradnih Roksalovih gradiv.
    0 novih odvisnosti, 0 DB sprememb; sidra r486–r550 veljajo naprej
    (regresijske preverbe v r553). Testna skupina r553 (60. skupina).
    Belt 8 statičnih + 60 skupin.
+19. **Sprehod uporabnika — teren + pisarna (R554, patch v1.72.1):**
+   popoln uporabniški sprehod po vlogi monterja (Luka Novak) in
+   administratorja (Robert Pezdirc): prijava → Danes → razširitev naloga
+   (kontrolni seznam + kontrola kakovosti) → projekti (iskanje, podrobnost,
+   generiranje BOM) → stranke (ustvari/uredi) → ponudbe → nalogi →
+   računi → zaloga → katalog → preglednica → meritve s kamero
+   **ZLATI TOK OD KONCA DO KONCA** (zajem → kalibracija 1 px = 0,4 cm →
+   označevanje → preverjanje na strežniku 3,4 m / 5 stebrov → potrditev,
+   sinhronizirano) → playbook (prihod, dokazila, napredek) → teren →
+   globalno iskanje (Ctrl+K) → temni način → mobilni 390 px (0 preliva,
+   lepljiva noga). DVE popravljeni napaki: **(1)** tipkarska »Orođje
+   pregledano« → »Orodje pregledano« (hrvaški zapis v slovenskem
+   checklistu playbooka MONTAŽA), **(2)** DialogContent podrobnosti
+   ponudbe brez opisa — Radix a11y opozorilo (dodan sr-only
+   DialogDescription za vsa stanja nalaganje/podatki/napaka). RBAC
+   preverjen (monter vidi 31 zavihkov, ne 42 — fail-closed). Demo baza
+   površena v seed stanje (izbrisani vsi testni zapisi sprehoda +
+   star ostanek R457-TEST). 0 novih odvisnosti, 0 DB sprememb.
 
 ## Kaj aplikacija počne
 

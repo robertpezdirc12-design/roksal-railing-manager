@@ -772,7 +772,7 @@ export const PLAYBOOK_MONTAZA: PlaybookDefinition = {
       navodilo: 'Odkljukaj varnostne točke pred delom.',
       kje: '—',
       rezultat: 'Varnostne kontrole odkljukane.',
-      checklist: ['Zaščitna oprema', 'Delovno mesto zavarovano', 'Orođje pregledano'],
+      checklist: ['Zaščitna oprema', 'Delovno mesto zavarovano', 'Orodje pregledano'],
       evidence: [{ vrsta: 'CHECKLIST', obvezno: true, opis: 'varnost' }],
     },
     {

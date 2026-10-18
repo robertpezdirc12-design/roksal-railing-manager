@@ -180,6 +180,9 @@ export default function PonudbeModule () {
       {/* podrobnost */}
       <Dialog open={!!selected} onOpenChange={(o) => { if (!o) setSelected(null) }}>
         <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
+          {/* dostopnost: opis vsebuje vsa stanja (nalaganje/podatki/napaka) — Radix
+              opozori, če DialogContent nima DialogDescription (videno v sprehodu R554) */}
+          <DialogDescription className="sr-only">Podrobnosti ponudbe s pozicijami.</DialogDescription>
           {detail.loading ? (
             <>
               <DialogHeader><DialogTitle className="sr-only">Nalaganje podrobnosti ponudbe</DialogTitle></DialogHeader>
