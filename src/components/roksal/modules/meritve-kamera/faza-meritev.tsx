@@ -36,6 +36,8 @@ export interface FazaMeritevProps {
   rocnoCnt: number
   detect: () => Promise<void>
   detecting: boolean
+  /** R563 (issue #23): gumb VLM se pokaže SAMO ob izrecno vklopljenem eksperimentu. */
+  vlmEnabled: boolean
   views: View[]
   addingView: boolean
   setAddingView: Dispatch<SetStateAction<boolean>>
@@ -177,10 +179,15 @@ export function FazaMeritev (props: FazaMeritevProps) {
             <Button size="sm" variant="outline" onClick={() => { snapshot(); setViews((vs) => vs.map((v) => (v.key === view.key ? { ...v, points: v.points.filter((p) => p.src !== 'PREDLOG') } : v))) }} disabled={rocnoCnt === 0}>
               <Eraser className="size-4" aria-hidden /> Počisti točke
             </Button>
-            <Button size="sm" variant="outline" onClick={() => void detect()} disabled={detecting || !view.photoId}>
-              {detecting ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Sparkles className="size-4" aria-hidden />}
-              {detecting ? 'VLM …' : 'Zaznaj samodejno'}
-            </Button>
+            {/* R563 (issue #23): VLM = ločen eksperiment (privzeto IZKLOPLJEN) —
+                gumb obstaja SAMO ob ROKSAL_VLM_EXPERIMENT=1 in je odkritosno
+                označen: fotografija gre ZUNANJEMU modelu; predlogi niso mera. */}
+            {vlmEnabled ? (
+              <Button size="sm" variant="outline" onClick={() => void detect()} disabled={detecting || !view.photoId} title="Eksperiment: fotografija se pošlje zunanjemu modelu (glm-4.6v) prek strežnika. Predlogi ostanejo PREDLOG — nikoli potrjena mera brez kalibracije.">
+                {detecting ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Sparkles className="size-4" aria-hidden />}
+                {detecting ? 'VLM …' : 'Zaznaj samodejno (VLM eksperiment)'}
+              </Button>
+            ) : null}
             {/* R455: dodatni pogled (§3) — R487 (issue #3): gumb odpre panel z
                 DVEMA potema — terenska (kamera/datoteka) in izbira obstoječe
                 FOTO projekta (isti vzorec kot 1. pogled) */}

@@ -346,6 +346,18 @@ jobs:
           # OSEBA brez imen/obrazov (zasebnost); NEZNANO/prazno, nikoli
           # ugibanje (disciplina NI_DOKAZA).
           - grupa: r561
+          # R563 (issue #23): kamera BREZ runtime VLM — VLM zaznava iz merilnega
+          # toka izločena v ločen, privzeto IZKLOPLJEN eksperiment
+          # (ROKSAL_VLM_EXPERIMENT=1 = edini vklop; brez env → fail-closed 503,
+          # fotografija se ne prebere niti iz baze); UI gumb samo ob vklopu;
+          # običajni tok (zajem→kalibracija→potrditev→izvoz) deluje brez ZAI;
+          # AR modul ostaja ločen (izrecne uporabniške akcije).
+          - grupa: r563
+          # R564 (issue #24): uradni cenik — statusi DEMO/DRAFT/PENDING_APPROVAL/
+          # APPROVED + izrecna odobritev z virom; zavora POSLAN/SPREJET/podpis
+          # brez odobrenih cen (priceOverride z razlogom = vidno okvirna);
+          # snapshot cen ob izdelavi ponudbe (stare ponudbe se ne spreminjajo).
+          - grupa: r564
     services:
       postgres:
         image: postgres:16

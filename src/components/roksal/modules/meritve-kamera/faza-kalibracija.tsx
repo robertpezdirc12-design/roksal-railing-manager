@@ -31,6 +31,8 @@ export interface FazaKalibracijaProps {
   uploadPhoto: (namen?: 'KALIBRACIJA' | 'POTRDITEV') => Promise<void>
   detect: () => Promise<void>
   detecting: boolean
+  /** R563 (issue #23): gumb VLM se pokaže SAMO ob izrecno vklopljenem eksperimentu. */
+  vlmEnabled: boolean
   resetAll: () => void
   online: boolean
   maxTilt: number | null
@@ -99,10 +101,15 @@ export function FazaKalibracija (props: FazaKalibracijaProps) {
                 {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null} Naloži fotografijo
               </Button>
             ) : null}
-            <Button size="sm" variant="outline" onClick={() => void detect()} disabled={detecting || !view.photoId}>
-              {detecting ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Sparkles className="size-4" aria-hidden />}
-              {detecting ? 'VLM analizira (do 60 s) …' : 'Zaznaj samodejno (VLM)'}
-            </Button>
+            {/* R563 (issue #23): VLM = ločen eksperiment (privzeto IZKLOPLJEN) —
+                gumb obstaja SAMO ob ROKSAL_VLM_EXPERIMENT=1 in je odkritosno
+                označen: fotografija gre ZUNANJEMU modelu; predlogi niso mera. */}
+            {vlmEnabled ? (
+              <Button size="sm" variant="outline" onClick={() => void detect()} disabled={detecting || !view.photoId} title="Eksperiment: fotografija se pošlje zunanjemu modelu (glm-4.6v) prek strežnika. Predlogi ostanejo PREDLOG — nikoli potrjena mera brez kalibracije.">
+                {detecting ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Sparkles className="size-4" aria-hidden />}
+                {detecting ? 'VLM analizira (do 60 s) …' : 'Zaznaj samodejno (VLM eksperiment)'}
+              </Button>
+            ) : null}
             <Button size="sm" variant="ghost" onClick={() => { resetAll(); setPhase(1) }}>
               <Undo2 className="size-4" aria-hidden /> Druga fotografija
             </Button>

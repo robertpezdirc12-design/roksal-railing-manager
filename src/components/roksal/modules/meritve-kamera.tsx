@@ -184,6 +184,10 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
   const projects = useApi<{ data: ProjectOption[] }>(open ? '/api/projects' : null, [open])
   const orders = useApi<{ data: WorkOrderOption[] }>(open ? '/api/nalog?scope=open' : null, [open])
   const photos = useApi<{ data: PhotoRow[] }>(open ? '/api/measurements?type=FOTO' : null, [open])
+  // R563 (issue #23): VLM zaznava je EKSPERIMENT, privzeto izklopljen — gumb se
+  // prikaže SAMO, če strežnik potrdi ROKSAL_VLM_EXPERIMENT=1 (GET /api/measurement/detect).
+  const vlmFlag = useApi<{ data: { enabled: boolean; model: string | null } }>(open ? '/api/measurement/detect' : null, [open])
+  const vlmEnabled = vlmFlag.data?.data?.enabled === true
 
   // R439 (issue #6): stanje signala (useSyncExternalStore) + offline nabor nalogov
   const online = useOnline()
@@ -851,6 +855,7 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
         <FazaKalibracija
           view={view} busy={busy} orientacija={orientacija} uploadPhoto={uploadPhoto} detect={detect}
           detecting={detecting} resetAll={resetAll} online={online} maxTilt={maxTilt} views={views} mode={mode}
+          vlmEnabled={vlmEnabled}
           buildOptions={buildOptions} onImageClick={onImageClick} calibA={calibA} setCalibA={setCalibA}
           calibCm={calibCm} setCalibCm={setCalibCm} calibMethod={calibMethod} setCalibMethod={setCalibMethod}
           refObject={refObject} setRefObject={setRefObject} planeW={planeW} setPlaneW={setPlaneW}
@@ -864,6 +869,7 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
         <FazaMeritev
           view={view} undo={undo} redo={redo} past={past} future={future} snapshot={snapshot}
           setViews={setViews} rocnoCnt={rocnoCnt} detect={detect} detecting={detecting} views={views}
+          vlmEnabled={vlmEnabled}
           addingView={addingView} setAddingView={setAddingView} detajli={detajli} setDetajli={setDetajli}
           addingDok={addingDok} setAddingDok={setAddingDok} fileViewRef={fileViewRef} onFileView={onFileView}
           fileDokRef={fileDokRef} onFileDok={onFileDok} existingPhotos={existingPhotos}

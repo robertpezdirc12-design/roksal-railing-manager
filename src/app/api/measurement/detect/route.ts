@@ -1,8 +1,16 @@
 // /api/measurement/detect — samodejna zaznava robov/točk na fotografiji (issue #1)
+// R563 (issue #23): VLM zaznava je LOČEN EKSPERIMENT, privzeto IZKLOPLJEN —
+// vklopi ga SAMO env ROKSAL_VLM_EXPERIMENT=1 (izrecno privoljenje, da se
+// fotografija pošlje zunanjemu modelu). Običajni merilni tok (ročno
+// označevanje, kalibracija, preverjanje, potrditev, kosovnica, ponudba)
+// deluje BREZ te rute in brez ZAI/ključa (fail-closed 503 brez env).
+//
 // POST { measurementId } (measurements.write) → VLM analiza fotografije (z-ai-web-dev-sdk,
 // SAMO backend): predlagane merilne točke, referenčni objekti za kalibracijo in opis prizora.
 // Točke so v normaliziranih koordinatah 0..1 (x desno, y dol) — UI jih riše na sliko,
 // monter jih sprejme ali ročno popravi (ročni vnos ostane fallback).
+// GET (measurements.write) → { enabled } — ali je eksperiment vklopljen (UI
+// gumb se prikaže SAMO ob enabled=true; drugače gumba ni).
 
 import { NextRequest, NextResponse } from 'next/server'
 import ZAI from 'z-ai-web-dev-sdk'
@@ -10,6 +18,7 @@ import { db } from '@/lib/db'
 import { jsonError, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
 import { asJsonObject } from '@/lib/json'
+import { VLM_EXPERIMENT_MODEL, VLM_IZKLOPLJEN_NASLOV, VLM_IZKLOPLJEN_NAVODILO, vlmExperimentVklopljen } from '@/lib/vlm-experiment'
 
 const VLM_TIMEOUT_MS = 60_000
 
@@ -76,10 +85,22 @@ Pravila:
 - "refObjects": znani objekti z ocenjeno realno dolžino v cm (višina stopnice 16–18, višina ograje 100–110, širina vrat 80–100, višina podboja 200, dolžina ploščice …) — uporabni se za kalibracijo merila;
 - če kakšen podatka ne vidiš, vrni prazen seznam.`
 
+export async function GET (req: NextRequest) {
+  const auth = await requirePermission(req, 'measurements.write')
+  if (auth instanceof NextResponse) return auth
+  return NextResponse.json({ data: { enabled: vlmExperimentVklopljen(), model: vlmExperimentVklopljen() ? VLM_EXPERIMENT_MODEL : null } })
+}
+
 export async function POST (req: NextRequest) {
   const auth = await requirePermission(req, 'measurements.write')
   if (auth instanceof NextResponse) return auth
   const { user } = auth
+
+  // R563 (issue #23): fail-closed vrata — BREZ izrecnega env je eksperiment
+  // IZKLOPLJEN in fotografija SE NE pošlje nikamor (niti ne prebere iz baze).
+  if (!vlmExperimentVklopljen()) {
+    return jsonError(503, VLM_IZKLOPLJEN_NASLOV, VLM_IZKLOPLJEN_NAVODILO)
+  }
 
   const body = await req.json().catch(() => null)
   const measurementId = typeof body?.measurementId === 'string' ? body.measurementId : ''

@@ -249,18 +249,25 @@ if s in (200, 201):
     chk(lay.get('totalLengthCm') is not None and lay.get('posts', 0) >= 2, f'geometrija: {lay.get("totalLengthCm")} cm, {lay.get("posts")} stebrov')
 
 s, b = call('POST', '/api/measurement/detect', monter, {})
-chk(s == 400, f'detect brez measurementId → 400 (dejansko {s})')
-
-# detect na drocni testni sliki: VLM cevovod teče, a nič uporabnih točk → 422
-# s poštenim sporočilom (ročni vnos ostane fallback) — pravilno vedenje.
-# Če VLM ni konfiguriran (npr. CI brez .z-ai-config), vrne endpoint PO
-# DOGOVORJENEM KONTRAKTU (issue #10) 502 „Samodejna zaznava trenutno ni na
-# voljo“ — jasna napaka, nikoli lažni uspeh; VLM pot je tu NEPREVERJENA (SKIP).
-s, b = call('POST', '/api/measurement/detect', monter, {'measurementId': photo_id})
-if s == 502 and 'ni na voljo' in b:
-    skip('detect na prazni sliki → 502 „ni na voljo“ — VLM zaznava v tem okolju ni preverjena (ročni vnos je fallback)')
+# R563 (issue #23): detect je zdaj EKSPERIMENT, privzeto IZKLOPLJEN — vrata
+# so PRED validacijo telesa, zato brez env vrne 503 tudi brez measurementId.
+# Če je ROKSAL_VLM_EXPERIMENT=1 (izrecno vklopljen), velja stara pogodba: 400.
+if s == 503:
+    chk('izklopljen' in b.lower(), f'detect brez env → 503 izklopljen (dejansko {s}: {b[:60]})')
 else:
-    chk(s == 422 and 'ni prepoznala' in b, f'detect na prazni sliki → 422 z navodilom (dejansko {s}: {b[:80]})')
+    chk(s == 400, f'detect brez measurementId (eksperiment vklopljen) → 400 (dejansko {s})')
+
+# detect na drocni testni sliki: privzeto (brez env) fail-closed 503 — VLM
+# cevovod se sploh NE zažene in fotografija NE gre nikamor (issue #23 DoD).
+# Ob vklopu eksperimenta velja stara pogodba: 422 „ni prepoznala“ na prazni
+# sliki (ročni vnos je fallback) ali 502, če zunanji model ni dosegljiv.
+s, b = call('POST', '/api/measurement/detect', monter, {'measurementId': photo_id})
+if s == 503 and 'izklopljen' in (b or '').lower():
+    chk(True, 'detect na sliki brez env → 503 izklopljen (fotografija NE gre zunanjemu modelu — issue #23)')
+elif s == 502 and 'ni na voljo' in b:
+    skip('detect: eksperiment vklopljen, a VLM trenutno ni na voljo (502 — zunanja storitev)')
+else:
+    chk(s == 422 and 'ni prepoznala' in b, f'detect na prazni sliki (eksperiment vklopljen) → 422 z navodilom (dejansko {s}: {b[:80]})')
 
 # ══ E. Čiščenje ══════════════════════════════════════════════════════════════
 print('── E. čiščenje ──')
