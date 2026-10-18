@@ -6,6 +6,17 @@
 // SAMODEJNO in IDEMPOTENTNO sinhronizirajo prek POST /api/sync
 // (opId UUID generira ODJEMALEC → podvajanje na strežniku ni mogoče).
 //
+// R552 (tri vrzeli po spletni raziskavi, vzorec R550):
+//   • tryRegisterBackgroundSync() — ob vsaki uvrstitvi opa v vrsto prosimo
+//     brskalnik (Background Sync, tag 'roksal-sync'), naj vrsto izprazni SAM
+//     Service Worker, takoj ko se signal vrne — TUDI z zaprtim zavihkom
+//     (sw.js swSync). iOS Safari tega ne podpira: poskus je tiho brez učinka
+//     in velja staro obnašanje (stran sama ob odprtju/online).
+//   • clearOfflineData() zdaj pobriše tudi predpomnilnik GET /api rezerve
+//     (Cache Storage, pripona '-api' iz sw.js) — poslovni podatki na napravi
+//     ob zamenjavi uporabnika gredo z ostalimi shrambami (enak varnostni
+//     razlog kot queue/photos/cache/drafts, issue #6).
+//
 // Shrambe (baza 'roksal-offline'):
 //   • queue  (keyPath opId)    — vrsta operacij { opId, kind, payload, clientTs, status }
 //   • photos (keyPath photoId) — fotografije { photoId, dataUrl (kompresiran), status }
@@ -162,7 +173,47 @@ export async function queueOp (kind: OfflineOpKind, payload: Record<string, unkn
     seq,
   }
   await tx('queue', 'readwrite', (s) => s.put(op))
+  // R552: prosimo brskalnik, naj vrsto izprazni SW, ko signal vrne (tudi
+  // zaprt zavihek). Registracija NE sme uspeti pokvariti uvrstitvi — tiho.
+  void tryRegisterBackgroundSync()
   return op
+}
+
+// ─── R552: Background Sync (tag 'roksal-sync' — enak niz kot v sw.js) ────────
+
+/** Registration with sync support (SyncManager ni v vseh lib.dom različicah). */
+interface SyncCapableRegistration extends ServiceWorkerRegistration {
+  sync?: { register: (tag: string) => Promise<void> }
+}
+
+/**
+ * R552: prošnja brskalniku, naj izprazni vrsto SAM Service Worker, takoj ko
+ * se signal vrne — tudi z zaprtim zavihkom (MDN "Offline and background
+ * operation"; vzorec dev.to/Background Sync). Pokritje: Chrome/Edge/Android.
+ * iOS Safari in starejši brskalniki: 'sync' ne obstaja → poskus tiho izpusti
+ * in velja staro obnašanje (initOfflineSync: online dogodek + 30 s timer).
+ * Registracija že registriranega taga je po specifikaciji no-op.
+ */
+export async function tryRegisterBackgroundSync (): Promise<void> {
+  try {
+    if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return
+    if (!navigator.serviceWorker.controller) return // razvoj (brez SW) ali še pred prevzemom — vrsto pokrije initOfflineSync
+    const reg = (await navigator.serviceWorker.ready) as SyncCapableRegistration
+    if (!reg.sync) return // iOS Safari / brez podpore — tiho (velja staro obnašanje)
+    await reg.sync.register('roksal-sync')
+  } catch {
+    // Background Sync je POSKUS, ne obveza — vrsta ostane v IndexedDB in jo
+    // pošlje stran sama (initOfflineSync) ali SW ob naslednji prireditvi.
+  }
+}
+
+/**
+ * R552: imena predpomnilnikov GET /api rezerve (roksal-v?-api iz sw.js).
+ * Filtriranje po priponi je verziji-agnostično: kadar SW dvigne VERSION,
+// čiščenje ob zamenjavi uporabnika vseeno zadene.
+ */
+export function apiCacheNames (names: string[]): string[] {
+  return names.filter((n) => n.endsWith('-api'))
 }
 
 export interface QueuePhotoInput {
@@ -554,6 +605,15 @@ export async function clearOfflineData (): Promise<void> {
   for (const store of ['queue', 'photos', 'cache', 'drafts'] as const) {
     await tx(store, 'readwrite', (s) => s.clear()).catch(() => {})
   }
+  // R552: GET /api rezerva (Cache Storage, sw.js) je prav tako poslovni podatek
+  // na napravi — gre z ostalimi shrambami. Imena iščemo po priponi '-api', ker
+  // je verzija predpomnilnika (roksal-v?) definirana v sw.js.
+  try {
+    if (typeof caches !== 'undefined') {
+      const stale = apiCacheNames(await caches.keys())
+      await Promise.all(stale.map((n) => caches.delete(n)))
+    }
+  } catch { /* Cache Storage ni dosegljiva — ne moremo počistiti */ }
 }
 
 /**

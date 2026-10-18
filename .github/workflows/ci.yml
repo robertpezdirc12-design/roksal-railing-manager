@@ -304,6 +304,9 @@ jobs:
           # R551: varnostna vrata — demo dvojna vrata (DEMO_PROD_KEY) + CSP
           # pripravljenost po podatkih (readyToEnforce flip v živo).
           - grupa: r551
+          # R552: offline vzdržnost — Background Sync, update flow toast,
+          # GET /api rezerva, storage.persist (4 vrzeli po spletni raziskavi).
+          - grupa: r552
     services:
       postgres:
         image: postgres:16

@@ -4,8 +4,8 @@ Poslovno-operativni sistem za Roksal — od prvega voda do zaključene montaže 
 fasad in teras: CRM, ponudbe s podpisom, proizvodnja, teren (tudi brez signala),
 računi in **fotomontaža PREJ/POTEM** iz uradnih Roksalovih gradiv.
 
-> **Stanje:** rekonstrukcija zaključena in presežena · izdaja **v1.70.0** ·
-> **58 testnih skupin + E2E skozi pravo aplikacijo** · GitHub je kanonični vir
+> **Stanje:** rekonstrukcija zaključena in presežena · izdaja **v1.71.0** ·
+> **59 testnih skupin + E2E skozi pravo aplikacijo** · GitHub je kanonični vir
 > (zadeve + release vrata), GitLab zrcalo, sinhronizacija po SHA (`ops/sync-check.sh`) ·
 > [docs/](docs/) vsebuje poročila za vsako fazo.
 
@@ -159,6 +159,37 @@ računi in **fotomontaža PREJ/POTEM** iz uradnih Roksalovih gradiv.
    0 novih odvisnosti, 0 DB sprememb; sidra r538/r543/r545 nedotaknjena.
    Testna skupina r551 (58. skupina; popravljena tudi zastareli štetji v
    glavi README — 56 — in opombi pasa — 50). Belt 8 statičnih + 58 skupin.
+17. **Offline vzdržnost (R552, izdaja v1.71.0):** spletna raziskava najboljših
+   praks (MDN, web.dev, Workbox; vzorec R550 kamera) je pokazala, kje smo
+   NAPREJ (idempotentni `opId` UUID iz odjemalca — večina vzorcev nima;
+   fail-closed OBSEG na strežniku; vezava vrste na uporabnika; 24 h purge;
+   korak-na-korak statusna vrstica r508) in 4 vrzeli, ki jih ta izdaja zapira:
+   **(1) Background Sync** — monter zapre aplikacijo, še preden se signal
+   vrne → doslej je vrsta čakala na ponovni odprt; zdaj jo izprazni SAM
+   Service Worker, takoj ko brskalnik spet vidi omrežje (tag
+   `roksal-sync`; odprt zavihek → SW se umakne, vrsta gre s strani — dva
+   pisalca se ne stepeta; iOS Safari dogodka ne podpira, velja staro
+   obnašanje; seja je v httpOnly piškotku `roksal_session` (r538), ki se
+   priloži sam — žeton se NI prenašal nikoli, SW localStorage ne more
+   brati). **(2) Update flow** — nova različica SW ne prevzame več takoj:
+   toast »Nova različica aplikacije« vpraša uporabnika, [Osveži] pošlje
+   `SKIP_WAITING` NOVEMU (čakajočemu) delavcu (stari kontroler bi bil
+   no-op) in ob `controllerchange` naloži stran; prva namestitev
+   (controller `null`) se ne šteje za posodobitev. **(3) GET /api rezerva**
+   — network-first ostaja (svežina pri povezavi), ob IZPADU omrežja pa
+   SW postreže zadnji znani odgovor (`${VERSION}-api`, varovalka 512 KB,
+   SAMO ok odgovori — 401/4xx se ne zamenja s starimi); ob zamenjavi
+   uporabnika `clearOfflineData` pobriše tudi ta predpomnilnik (enak
+   varnostni razlog kot queue/photos, issue #6). **(4)
+   `navigator.storage.persist()`** — brez tega brskalnik pod pritiskom
+   prostora TIHO izvrže IndexedDB (terenski podatki bi izginili).
+   Zavrnjeno zavedno: Periodic Background Sync (za novice, ne za sinhronizacijo
+   ob povezavi) in Blob namesto dataUrl (~33 % manj; globoka sprememba cevovoda,
+   kompresija že drži mejo 8 MB). 0 novih odvisnosti, 0 DB sprememb; sidra
+   r486/r508/r522 (offline.ts) in r544 (manifest) nedotaknjena. Testna skupina
+   r552 (59. skupina; SW je mogoče popolnoma preveriti le v produkciji —
+   registracija je namenoma samo produkcijska, preverjanja so strukturna +
+   strežna). Belt 8 statičnih + 59 skupin.
 
 ## Kaj aplikacija počne
 
@@ -424,6 +455,17 @@ ImageMagick, poppler) — podrobno v `tests/ci-local.sh` glavi.
   izjemi ostajata dokumentirani: viz main ~731 in meritve-kamera ~902 (EN
   komponent s closures nad skupnim stanjem — hook-ekstrakcija ni
   bajtno-identična; disciplina recepta). Nadaljnje razbijanje po potrebi.
+- **Offline arhitektura (R552, izdaja v1.71.0) — 4 vrzeli po spletni raziskavi.**
+  Background Sync (`roksal-sync`): vrsta se izprazni SAM Service Worker, tudi
+  z zaprtim zavihkom (iOS Safari: dogodek ne obstaja — velja staro obnašanje,
+  sinhronizacija ob odprtju aplikacije). Update flow: nova različica SW čaka na
+  toast [Osveži] (SKIP_WAITING gre čakajočemu delavcu). GET /api: ob izpadu
+  omrežja zadnji znani odgovor (network-first ostaja; napake strežnika se ne
+  zamenja; `clearOfflineData` pobriše tudi rezervo). `storage.persist()` ščiti
+  IndexedDB pred tiho izvrženjem. Zavrnjeno zavedno: Periodic Background Sync
+  (za aplikacije, ki koledarsko OSVEŽUJEJO vsebino — novice; naša sinhronizacija
+  se sproži ob povezavi) in Blob namesto dataUrl v IndexedDB (~33 % manj;
+  globoka sprememba cevovoda, kompresija že drži mejo 8 MB — tveganje > korist).
 - **Revizija v1.58.0 (7,9/10) — Top-10 popravki izvedeni (R535–R543), obe
   zadnji odločitvi opremljeni z varnostnimi vrati (R551).** CSP Enforce —
   zmožnost je pripravljena (`CSP_MODE=enforce`, `config/ENV-VARS.md`) in
