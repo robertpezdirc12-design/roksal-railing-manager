@@ -8,7 +8,8 @@ import { db } from '@/lib/db'
 import { jsonError, requirePermission } from '@/lib/auth'
 import { projectIdsZaUporabnika } from '@/lib/fence-run-access'
 import { writeAudit } from '@/lib/audit'
-import { computeQuoteTotals, parseDiscountPct, round2 } from '@/lib/quote-core'
+import { computeQuoteTotals, parseDiscountPct, round2, VAT_RATE } from '@/lib/quote-core'
+import { preveriCeneVrstic, sestaviSnapshot, type PraviloZaUjemanje } from '@/lib/price-approval-core'
 import { parseBody } from '@/lib/validate'
 import { retryOnUnique } from '@/lib/versioning'
 
@@ -127,6 +128,29 @@ export async function POST (req: NextRequest) {
 
   const totals = computeQuoteTotals(lines.map((l) => l.total), discountPct)
 
+  // R564 (issue #24): preveri vir cene vsake vrstice proti AKTIVNIM pravilom
+  // cenikov (ujemanje = SKU v opisu IN enaka efektivna cena ±0,01; odobreni
+  // ceniki imajo prednost). Brez ujemanja NE ugibamo — NEPREVERJENO.
+  const aktivnaPravila = await db.priceRule.findMany({
+    where: { active: true, priceList: { active: true } },
+    include: { priceList: { select: { id: true, name: true, version: true, status: true } }, product: { select: { sku: true } }, item: { select: { sku: true } } },
+  })
+  const pravilaZaUjemanje: PraviloZaUjemanje[] = aktivnaPravila.map((r) => ({
+    ruleId: r.id,
+    price: Number(r.price),
+    discountPct: r.discountPct ?? 0,
+    sku: r.product?.sku ?? r.item?.sku ?? null,
+    priceListId: r.priceList.id,
+    priceListName: r.priceList.name,
+    priceListVersion: r.priceList.version,
+    priceListStatus: r.priceList.status,
+  }))
+  const preveritev = preveriCeneVrstic(
+    lines.map((l) => ({ description: l.description, qty: l.qty, unitPrice: l.unitPrice })),
+    pravilaZaUjemanje
+  )
+  const priceSnapshot = sestaviSnapshot(preveritev, { vatRate: VAT_RATE, discountPct: discountPct > 0 ? discountPct : null })
+
   // R535: koda + zapis v ENI transakciji, ob sočasnem P2002 (dva POST si
   // izračunata isto kodo) do 3 poskusi (retryOnUnique) — read-then-create
   // dirka je s tem zaprta.
@@ -148,6 +172,8 @@ export async function POST (req: NextRequest) {
         subtotal: totals.subtotal,
         vat: totals.vat,
         total: totals.total,
+        priceCheck: preveritev.check,
+        priceSnapshot: priceSnapshot as unknown as Prisma.InputJsonValue,
         lines: { create: lines },
       },
       include: {
@@ -158,7 +184,7 @@ export async function POST (req: NextRequest) {
     })
     await writeAudit({
       userId: auth.user.id, action: 'QUOTE_CREATE', entity: 'quote', entityId: quote.id, projectId,
-      detail: { code: quote.code, customerId, packageId, lines: lines.length, ...totals },
+      detail: { code: quote.code, customerId, packageId, lines: lines.length, priceCheck: preveritev.check, ...totals },
     }, tx)
     return quote
   })

@@ -336,10 +336,12 @@ async function main () {
   console.log('[seed-r442] izdelki:', nProd, '· variante:', nVar, '· komponente (BOM predloge):', nComp)
 
   // ── ceniki: NABAVNA (artikli) / PRODAJNA (izdelki) / MONTAŽA ───────────────
+  // R564 (issue #24): seed cene so DEMO (tehnične vrednosti, NE poslovno
+  // odobrene) — odobritev je izrecna (PATCH /api/price-lists/[id] → APPROVED).
   const lists = [
-    { name: 'Nabavni cenik 2026', type: 'NABAVNA', note: 'Nabavne cene artiklov pri dobaviteljih' },
-    { name: 'Prodajni cenik 2026', type: 'PRODAJNA', note: 'Veljavne prodajne cene izdelkov' },
-    { name: 'Cenik montaž 2026', type: 'MONTAZA', note: 'Cena montaže na enoto izdelka' },
+    { name: 'Nabavni cenik 2026', type: 'NABAVNA', note: 'Nabavne cene artiklov pri dobaviteljih', status: 'DEMO', source: 'seed-demo' },
+    { name: 'Prodajni cenik 2026', type: 'PRODAJNA', note: 'Veljavne prodajne cene izdelkov', status: 'DEMO', source: 'seed-demo' },
+    { name: 'Cenik montaž 2026', type: 'MONTAZA', note: 'Cena montaže na enoto izdelka', status: 'DEMO', source: 'seed-demo' },
   ]
   const listMap = new Map()
   for (const l of lists) {

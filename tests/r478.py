@@ -397,7 +397,7 @@ if PKG:
     if s == 201:
       QT_ID, QT_CODE = d['data']['id'], d['data']['code']
       # označi POSLAN
-      s, d = callj('PATCH', f'/api/quotes/{QT_ID}', admin, body={'status': 'POSLAN'})
+      s, d = callj('PATCH', f'/api/quotes/{QT_ID}', admin, body={'status': 'POSLAN', 'priceOverride': {'reason': 'r478 test — demo cenik, izrecna okvirna ponudba'}})
       chk(s == 200, f'ponudba POSLAN ({s})')
       # uvoz kosovnice → invalidacija
       s, d = post_file('/api/import/bom', admin, {'packageId': PKG, 'mode': 'uvozi'}, 'kosovnica2.csv', csv2, 'text/csv')

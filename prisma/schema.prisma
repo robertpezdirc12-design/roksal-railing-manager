@@ -46,6 +46,7 @@ model User {
   catalogVersions CatalogVersion[] @relation("catalogVersions") // R449: verzije kataloga (issue #8)
   ruleVersions    RuleVersion[] @relation("ruleVersions") // R449: verzije inženirskih pravil (issue #8)
   arSnapshots     ArSnapshot[] @relation("arSnapshots") // R454: AR posnetki avtorja (3D/AR P3)
+  approvedPriceLists PriceList[] @relation("approvedPriceLists") // R564: odobreni ceniki (issue #24)
   vizProjects     VizProject[] @relation("vizProjects") // R454: shranjeni 3D projekti avtorja
   playbookDefs    PlaybookDef[] @relation("playbookAuthor") // R458: avtor verzije playbooka (issue #13)
   playbookRuns    PlaybookRun[] @relation("playbookUser") // R458: zagoni playbookov uporabnika
@@ -221,6 +222,12 @@ model Quote {
   signature  String? // podpis stranke (data URL)
   signedAt   DateTime?
   signedBy   String?
+  // R564 (issue #24): vir cen ponudbe — zavezujoča (POSLAN/SPREJET) je možna
+  // SAMO iz ODODRENega cenika (ali z izrecnim override z razlogom, ki zahteva
+  // quotes.approve in se zapiše v revizijo). NEPREVERJENO = vrstice brez
+  // razpoznavnega vira cene; DEMO = vir v ceniku, ki ni odobren.
+  priceCheck String  @default("NEPREVERJENO") // NEPREVERJENO | DEMO | APPROVED
+  priceSnapshot Json? // R564: snapshot cenika ob izdelavi (različice, vrstica→pravilo, DDV, popust)
   createdAt  DateTime  @default(now())
 
   lines   QuoteLine[]
@@ -1143,6 +1150,15 @@ model PriceList {
   validTo   DateTime?
   active    Boolean  @default(true)
   note      String?
+  // R564 (issue #24): življenjski cikel cenika — seed/import ustvarita DEMO
+  // (demo/tehnične vrednosti NISO poslovno odobrene); odobritev je izrecna
+  // (PATCH /api/price-lists/[id], price.override) in zapiše kdaj/kdo/vir.
+  status        String    @default("DEMO") // DEMO | DRAFT | PENDING_APPROVAL | APPROVED
+  approvedById  String?
+  approvedBy    User?     @relation("approvedPriceLists", fields: [approvedById], references: [id])
+  approvedAt    DateTime?
+  source        String? // vir podatkov (npr. „roksal-uradni-cenik-2026.xlsx“, „seed-demo“)
+  version       Int       @default(1)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

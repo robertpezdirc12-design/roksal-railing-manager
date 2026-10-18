@@ -37,7 +37,8 @@
 - `GET/POST /api/deal-lock`
 - `GET/POST /api/customers` · `GET/PATCH/DELETE /api/customers/[id]` · `POST /api/customers/dedup`
 - `GET/POST /api/customer-addresses` · `GET/PATCH/DELETE /api/customer-addresses/[id]`
-- `GET/POST /api/quotes` · `GET/PATCH/DELETE /api/quotes/[id]` · `GET /api/quotes/[id]/pdf`
+- `GET/POST /api/quotes` · `GET/PATCH/DELETE /api/quotes/[id]` · `GET /api/quotes/[id]/pdf` — R564 (issue #24): PATCH na POSLAN/SPREJET zavrne demo/neodobrene cene (409) razen z `priceOverride.reason` (quotes.approve); podpis (sign) zahteva priceCheck=APPROVED
+- `GET/POST /api/price-lists` · `PATCH /api/price-lists/[id]` (R564: statusi DEMO/DRAFT/PENDING_APPROVAL/APPROVED — odobritev z viri + revizija) · `POST /api/price-lists/[id]/rules` · `POST /api/price-lists/calculate`
 - `GET/POST /api/quote`
 - `GET/POST /api/invoices` · `GET /api/invoices/eslog` (eSLOG XML format)
 - `GET/POST /api/payments` · `GET/PATCH/DELETE /api/payments/[id]` · `POST /api/payments/reconciliation`

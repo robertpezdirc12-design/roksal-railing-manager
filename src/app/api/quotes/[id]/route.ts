@@ -109,6 +109,26 @@ export async function PATCH (req: NextRequest, { params }: Params) {
   }
   if (existing.status === status) return jsonError(400, 'Ponudba je že v tem statusu.')
 
+  // R564 (issue #24): ZAVEZUJOČA ponudba (POSLAN/SPREJET) zahteva cene iz
+  // ODODRENega cenika (priceCheck=APPROVED). Demo/neodobrene/nepreverjene
+  // cene NE postanejo tiho zavezujoče — izjema je IZRECEN override z razlogom
+  // (priceOverride.reason) z dobrimbeno pravico quotes.approve, ki se zapiše
+  // v revizijo; ponudba ostane vidno označena kot okvirna.
+  if ((status === 'POSLAN' || status === 'SPREJET') && existing.priceCheck !== 'APPROVED') {
+    const ov = body?.priceOverride
+    const razlog = typeof ov?.reason === 'string' ? ov.reason.trim().slice(0, 300) : ''
+    if (!razlog) {
+      return jsonError(
+        409,
+        `Ponudba ima cene brez odobritve (${existing.priceCheck === 'DEMO' ? 'demo/neodobren cenik' : 'vir cene ni preverjen'}) in ne more postati zavezujoča.`,
+        'Odobrite cenik (PATCH /api/price-lists/[id] → APPROVED) in ponovno izdelajte ponudbo, ali podajte priceOverride.reason (zahteva quotes.approve) za izrecno okvirno ponudbo.'
+      )
+    }
+    if (!auth.perms.includes('quotes.approve')) {
+      return jsonError(403, 'Override cen zahteva pravico quotes.approve.', 'Samo odgovorna oseba lahko pošlje okvirno ponudbo z neodobljenimi cenami.')
+    }
+  }
+
   // R537 (transakcijska celovitost): sprememba statusa + revizija v ENI transakciji.
   const updated = await db.$transaction(async (tx) => {
     const updated = await tx.quote.update({
@@ -126,7 +146,13 @@ export async function PATCH (req: NextRequest, { params }: Params) {
     })
     await writeAudit({
       userId: auth.user.id, action: 'QUOTE_STATUS', entity: 'quote', entityId: id, projectId: existing.projectId,
-      detail: { code: existing.code, from: existing.status, to: status },
+      detail: {
+        code: existing.code, from: existing.status, to: status,
+        priceCheck: existing.priceCheck,
+        ...(typeof body?.priceOverride?.reason === 'string' && body.priceOverride.reason.trim()
+          ? { priceOverride: body.priceOverride.reason.trim().slice(0, 300) }
+          : {}),
+      },
     }, tx)
     return updated
   })

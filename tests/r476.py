@@ -279,8 +279,8 @@ s, _ = callj('PATCH', f'/api/quotes/{Q1}', admin, {'discountPct': 150})
 chk(s == 400, f'PATCH popust 150 → 400 (dejansko {s})')
 
 # PATCH popust na POSLAN → 400
-s, _ = callj('PATCH', f'/api/quotes/{Q1}', admin, {'status': 'POSLAN'})
-chk(s == 200, f'status POSLAN ({s})')
+s, _ = callj('PATCH', f'/api/quotes/{Q1}', admin, {'status': 'POSLAN', 'priceOverride': {'reason': 'r476 test — demo cenik, izrecna okvirna ponudba'}})
+chk(s == 200, f'status POSLAN (z override — R564 demo cene) ({s})')
 s, _ = callj('PATCH', f'/api/quotes/{Q1}', admin, {'discountPct': 5})
 chk(s == 400, f'PATCH popust na POSLAN 400 (dejansko {s})')
 
@@ -298,8 +298,9 @@ chk(s == 201, f'ponudba za račun ustvarjena ({s})')
 chk(abs(q4.get('discount', 0) - 50.0) < 0.005 and abs(q4.get('total', 0) - 1159.0) < 0.005,
     f"5 %: popust 50,00, skupaj 1.159,00 (dejansko d={q4.get('discount')}, t={q4.get('total')})")
 Q2 = q4.get('id')
-s, _ = callj('PATCH', f'/api/quotes/{Q2}', admin, {'status': 'SPREJET'})
-chk(s == 200, f'ponudba SPREJET ({s})')
+# R564: demo cene → SPREJET zahteva izrecen preglas z razlogom (vidno okvirna)
+s, _ = callj('PATCH', f'/api/quotes/{Q2}', admin, {'status': 'SPREJET', 'priceOverride': {'reason': 'r476 test — demo cenik, izrecna okvirna ponudba'}})
+chk(s == 200, f'ponudba SPREJET (s preglasom — R564) ({s})')
 s, d = callj('POST', '/api/invoices', admin, {'quoteId': Q2})
 inv = d.get('data', {})
 chk(s == 201, f'račun izdan ({s})')

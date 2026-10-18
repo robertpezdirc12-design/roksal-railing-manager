@@ -136,7 +136,7 @@ chk(audit_has(admin, 'QUOTE_CREATE', Q1, P4), 'revizija QUOTE_CREATE')
 # ══ C. Invalidacija ob regeneraciji kosovnice ═══════════════════════════════
 print('── C. Regeneracija kosovnice ──')
 # Q1 najprej POSLAN, nato regen → povrnjen na OSNUTEK + zastavica
-s, _ = callj('PATCH', f'/api/quotes/{Q1}', admin, {'status': 'POSLAN'})
+s, _ = callj('PATCH', f'/api/quotes/{Q1}', admin, {'status': 'POSLAN', 'priceOverride': {'reason': 'r474 test — demo cenik, izrecna okvirna ponudba'}})
 chk(s == 200, f'Q1 → POSLAN ({s})')
 
 s, d = callj('POST', f'/api/project-packages/{PKG}/bom', admin, {})
@@ -161,7 +161,7 @@ print('── D. SPREJET zastavica ──')
 s, d = callj('POST', '/api/quotes', admin, {'projectId': P4, 'packageId': PKG, 'lines': LINES, 'note': f'{TAG} 2'})
 Q2 = d.get('data', {}).get('id')
 chk(s == 201 and bool(Q2), f'druga ponudba povezana ({s})')
-s, _ = callj('PATCH', f'/api/quotes/{Q2}', admin, {'status': 'SPREJET'})
+s, _ = callj('PATCH', f'/api/quotes/{Q2}', admin, {'status': 'SPREJET', 'priceOverride': {'reason': 'r474 test — demo cenik, izrecna okvirna ponudba'}})
 chk(s == 200, f'Q2 → SPREJET ({s})')
 
 # sprememba obsega paketa (qty) → Q2 ostane SPREJET, samo zastavica
@@ -194,7 +194,7 @@ chk(det.get('status') == 'ZAVRNJEN' and not det.get('staleAt'), f'ZAVRNJEN brez 
 print('── F. Izrecni pregled ──')
 s, d = callj('GET', f'/api/quotes/{Q1}', admin)
 chk(bool(d.get('data', {}).get('staleAt')), 'Q1 ima zastavico pred pregledom')
-s, _ = callj('PATCH', f'/api/quotes/{Q1}', admin, {'status': 'POSLAN'})
+s, _ = callj('PATCH', f'/api/quotes/{Q1}', admin, {'status': 'POSLAN', 'priceOverride': {'reason': 'r474 test — demo cenik, izrecna okvirna ponudba'}})
 chk(s == 200, f'Q1 → POSLAN po pregledu ({s})')
 s, d = callj('GET', f'/api/quotes/{Q1}', admin)
 det = d.get('data', {})

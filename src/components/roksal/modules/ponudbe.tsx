@@ -23,6 +23,8 @@ interface QuoteRow {
   id: string
   code: string
   status: string
+  /** R564 (issue #24): vir cen — APPROVED | DEMO | NEPREVERJENO. */
+  priceCheck?: string | null
   subtotal: number
   discountPct: number | null // R476: popust (%) — null = brez
   discount: number // R476: znesek popusta
@@ -150,6 +152,14 @@ export default function PonudbeModule () {
                           </span>
                         ) : null}
                         {qq.status === 'ZAKLENJEN' ? <Lock className="size-3.5 text-amber-600 dark:text-amber-400" aria-label="Zaklenjeno" /> : null}
+                        {qq.priceCheck && qq.priceCheck !== 'APPROVED' ? (
+                          <span
+                            className="inline-flex items-center gap-1 rounded-md bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-900 dark:bg-amber-950 dark:text-amber-300"
+                            title={qq.priceCheck === 'DEMO' ? 'Cene izhajajo iz demo/neodobrenega cenika — zavezujoča ponudba zahteva odobritev cenika ali izrecno potrditev odgovorne osebe.' : 'Vir cen vrstic ni preverjen (ni razpoznavnega pravila cenika) — okvirna ponudba.'}
+                          >
+                            <TriangleAlert className="size-3" aria-hidden /> {qq.priceCheck === 'DEMO' ? 'Okvirna · demo cene' : 'Okvirna · vir ni preverjen'}
+                          </span>
+                        ) : null}
                         <StatusBadge status={qq.status} />
                       </div>
                     </div>
@@ -307,6 +317,14 @@ function QuoteDetailDialog ({ detail, canCreate, canApprove, busy, onStatus, onD
         <div className="flex items-center gap-2">
           <span className="font-mono text-xs font-semibold text-roksal-amber">{detail.code}</span>
           <StatusBadge status={detail.status} />
+          {detail.priceCheck && detail.priceCheck !== 'APPROVED' ? (
+            <span
+              className="inline-flex items-center gap-1 rounded-md bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-900 dark:bg-amber-950 dark:text-amber-300"
+              title={detail.priceCheck === 'DEMO' ? 'Cene iz demo/neodobrenega cenika — za zavezujočo ponudbo odobrite cenik ali podajte izrecno potrditev (razlog).' : 'Vir cen ni preverjen — okvirna ponudba.'}
+            >
+              <TriangleAlert className="size-3" aria-hidden /> {detail.priceCheck === 'DEMO' ? 'Okvirna · demo cene' : 'Okvirna · vir ni preverjen'}
+            </span>
+          ) : null}
         </div>
         <DialogTitle>Ponudba {detail.code}</DialogTitle>
         {detail.staleAt ? (

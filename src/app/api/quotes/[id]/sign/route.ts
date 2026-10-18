@@ -34,6 +34,17 @@ export async function POST (req: NextRequest, { params }: Params) {
   if (!SIGNABLE_STATUSES.includes(quote.status)) {
     return jsonError(400, 'Podpisati je mogoče le ponudbo v statusu Poslan ali Sprejet.', `Trenutni status: ${quote.status}.`)
   }
+  // R564 (issue #24): podpis (zaklep posla) je NAJbolj zavezujoča izdaja —
+  // zahteva cene iz odobrenega cenika. Demo/neodobrene cene se NE zaklenejo
+  // s podpisom (poslovna odločitev issue #24: podpis brez odobrenih cen je
+  // tiha zavezujoča ponudba iz demo vrednosti — prepovedano).
+  if (quote.priceCheck !== 'APPROVED') {
+    return jsonError(
+      409,
+      `Ponudba ima cene brez odobritve (${quote.priceCheck === 'DEMO' ? 'demo/neodobren cenik' : 'vir cene ni preverjen'}) in je ne moremo zakleniti s podpisom.`,
+      'Odobrite cenik (PATCH /api/price-lists/[id] → APPROVED), izdelajte ponudbo znova (priceCheck se izračuna ob izdelavi) in šele nato podpišite.'
+    )
+  }
 
   // R537 (transakcijska celovitost): podpis (zaklep posla) + revizija + zapis
   // obvestila (outbox) v ENI transakciji — padec srednjega koraka NE pusti
