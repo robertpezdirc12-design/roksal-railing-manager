@@ -315,3 +315,48 @@ lastnosti), ne pa napisati novega merilnega ali cenovnega jedra. Vsaka sprememba
 odsek D — čiste funkcije pod `bun -e`) in mora obdržati obstoječe izvoze
 (`buildExportRows`, `exportCsv`) ter obstoječe HTTP kontrakte, razen kadar kontrakt sam
 širi varnostna vrata (potem to utemelji in testiraj).
+
+---
+
+## Priloga (R566, issue #18 §4): KRATKO NAVODILO ZA MONTERJA — kaj zajeti, kdaj ponoviti, kdaj ročno preveriti
+
+> To je terenski povzetek merilnega baseline-a. Tehnična utemeljitev vsakega
+> pravila je v razdelkih zgoraj; tu je samo delovni seznam.
+
+### Pred zajemom (30 sekund)
+1. **Očisti objektiv** in preveri, da imaš dobro svetlobo (brez сонčnega
+   protisvetla, brez globoke sence na merjenem robu).
+2. **Poišči referenco** — predmet znane dolžine v podobni oddaljenosti kot
+   merjeni objekt: vrata (200 cm podboj), stopnica (16–18 cm), ploščica
+   (40–60 cm), merilni trak, ki ga položiš v sceno. BREZ reference fizične
+   mere NE izračunaj — aplikacija to izrecno pove („ocene ni").
+3. Fotografiraj **frontalno** (čim bolj pravokotno na objekt), cel objekt v
+   kadru; pri dolgih objektih zajemi VEČ pogledov (gumb „Dodaj pogled").
+
+### Med zajemom
+4. Označi točke **po merilni poti od leve proti desni** (vogali, robovi
+   segmentov, tla ob stebrih, zgornji rob ročnika).
+5. Kalibriraj na referenci in **zakleni** kalibracijo, preden meriš naprej.
+6. Pri stopnišču/naklonu izmeri naklon z naklonomerom (gumb ob naklonu) ali
+   vnesi kot ročno — nikoli ne ugibaj kota.
+
+### Kdajo PONOVITI meritev (ne spreminjaj podatkov!)
+- slika je **zamegljena** ali poševna (opozorilo kakovosti kadra),
+- **refleksije/sonce** na merjenem robu (posebno inox/steklo),
+- kalibracija je bila narejena na referenci, ki je **bližje/kot objekt**
+  (perspektivna napaka — ponovi s referenco v isti globini),
+- izračun iz točk se **ne ujema** s terensko kontrolo (±2 cm na 2 m) →
+  zajemi znova, NE popravljaj številke „na oko".
+
+### Kdaj zahtevati ROČNO preverjanje / pregled pisarne
+- meritev ima status **OCENA/ESTIMATED/AUTO_SUGGESTED** (ni kalibrirana) in
+  jo nameravaš uporabiti za ponudbo → pregled pisarne OBVEZEN,
+- **vogal** (notranji/zunanji) ali **stopnišče** → vedno dodaj opombo in
+  fotografijo detajla; pri vogalih perspektiva zavaja,
+- sistem javi **MANJKA/PREVERI_ROČNO** pri katerem koli koraku zajema,
+- razlika med dvema zajemoma istega objekta > 2 % → zapiši oba in opombo.
+
+### Zlatično pravilo
+**Številka, ki je niso videli tvoji oči na terenu in ne referenca na sliki,
+ni mera — je ocena.** Ocena je v redu za skico, za ponudbo in proizvodnjo
+pa zahteva potrditev (status CONFIRMED dodeli pisarna po pregledu).

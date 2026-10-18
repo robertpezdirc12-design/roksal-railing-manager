@@ -363,6 +363,11 @@ jobs:
           # drill (PG: sveža baza + migrate + uvoz + app + bralno-PISALNI test;
           # SQLite nespremenjeno; off-site blokada = BLOCKED poročilo, ne uspeh).
           - grupa: r565
+          # R566 (issue #19 DoD): E2E POSLOVNI SCENARIJ — stranka → projekt
+          # → nalog (monter) → meritev → paket → BOM → rezervacija → picking
+          # → proizvodnja → dostava → ponudba (R564 preglas) → račun →
+          # plačilo → prevzem; veriga »en naročilo, isti podatki« + RBAC.
+          - grupa: r566
     services:
       postgres:
         image: postgres:16
