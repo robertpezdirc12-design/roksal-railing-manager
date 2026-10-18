@@ -31,7 +31,7 @@ const RELACIJE = [
   ['WorkOrder→Project', 'SELECT COUNT(*) n FROM "WorkOrder" w LEFT JOIN "Project" p ON w."projectId"=p.id WHERE w."projectId" IS NOT NULL AND p.id IS NULL'],
   ['ProductVariant→Product', 'SELECT COUNT(*) n FROM "ProductVariant" v LEFT JOIN "Product" p ON v."productId"=p.id WHERE p.id IS NULL'],
   ['ProductAsset→Product', 'SELECT COUNT(*) n FROM "ProductAsset" a LEFT JOIN "Product" p ON a."productId"=p.id WHERE a."productId" IS NOT NULL AND p.id IS NULL'],
-  ['StockReservation→StockLot', 'SELECT COUNT(*) n FROM "StockReservation" r LEFT JOIN "StockLot" l ON r."stockLotId"=l.id WHERE l.id IS NULL'],
+  ['StockReservation→InventoryItem', 'SELECT COUNT(*) n FROM "StockReservation" r LEFT JOIN "InventoryItem" i ON r."itemId"=i.id WHERE i.id IS NULL'],
 ]
 
 const sirote = {}
