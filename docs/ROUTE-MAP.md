@@ -76,7 +76,7 @@
 - `POST /api/calculator`
 
 ### 3D vizualizacije & AR
-- `GET/POST /api/ar-snapshots` · `POST /api/ar/analyze` · `POST /api/ar/analyze-multi` (R558: VLM prečka 2–8 fotografij)
+- `GET/POST /api/ar-snapshots` · `POST /api/ar/analyze` · `POST /api/ar/analyze-multi` (R558: VLM prečka 2–8 fotografij) · `POST /api/ar/inspect` (R559: VLM prepoznavanje obstoječe ograje — materiali, okovje, stanje)
 - `GET/POST /api/viz/projects` · `GET/PATCH/DELETE /api/viz/projects/[id]` · `POST /api/viz/projects/[id]/duplicate`
 - `POST /api/viz/render` · `GET /api/viz/render/[jobId]` · `POST /api/viz/stage` · `GET /api/viz/preview` · `GET /api/viz/product-preview`
 - `GET /api/viz/files/[...key]` · `POST /api/viz/gc` (cron)

@@ -322,6 +322,12 @@ jobs:
           # poslovna mera kot razviti prikaz), VLM prečka (2–8 fotografij,
           # HOVER-style).
           - grupa: r558
+          # R559 (vprašanje lastnika: »ali kamera sama zazna, kaj je ograja,
+          # kakšno okovje, keramika ali les«): VLM prepoznavanje obstoječe
+          # ograje — material ročnika/stebrov (les/keramika/inox), polnilo,
+          # okovje (kljuka/tečaji/ključavnica), stanje; vsako s zaupanjem,
+          # NEZNANO kadar ne vidi (disciplina NI_DOKAZA).
+          - grupa: r559
     services:
       postgres:
         image: postgres:16

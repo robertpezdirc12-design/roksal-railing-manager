@@ -60,6 +60,7 @@ import { useAppStore } from '@/lib/store'
 
 import { AnalizaPanel } from './ar/analiza-panel'
 import { PreckaPanel } from './ar/precka-panel'
+import { PrepoznavaPanel } from './ar/prepoznava-panel'
 import { useArGlobina } from './ar/globina'
 import { Nastavitve } from './ar/nastavitve'
 import { PredogledGlava, PredogledNavodila, PredogledPogledi, PredogledViewport } from './ar/predogled'
@@ -470,6 +471,14 @@ export default function ArModule () {
 
           {/* R558 (raziskava V1.4): VLM prečka z več fotografijami (HOVER-style) */}
           <PreckaPanel />
+
+          {/* R559: VLM prepoznavanje obstoječe ograje (materiali, okovje, stanje) —
+              zajem kadra na voljo SAMO ob živem predogledu (brez lažnega gumba) */}
+          <PrepoznavaPanel
+            zajemiKader={mode === 'on'
+              ? () => zajemKadra(viewportRef.current, videoRef.current, svgRef.current, mode, pos, scale, opacity, false)
+              : undefined}
+          />
         </div>
       </div>
 

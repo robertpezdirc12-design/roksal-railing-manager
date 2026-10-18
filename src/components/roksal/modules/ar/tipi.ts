@@ -68,6 +68,10 @@ export interface PreckaAnalysis {
   note: string
 }
 
+/** R559: material ročnika/stebrov iz VLM prepoznavanja (POST /api/ar/inspect) —
+ * tipi živijo v src/lib/inspect-core.ts (čisto jedro, testirljivo). */
+export type { InspectMaterial, InspectOgraja, InspectPolnilo, StanjeOgraje, TipOgraje } from '@/lib/inspect-core'
+
 /** R454: vrstica zgodovine AR posnetkov (GET /api/ar-snapshots — brez params). */
 export interface SnapshotRow {
   id: string

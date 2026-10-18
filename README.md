@@ -4,8 +4,8 @@ Poslovno-operativni sistem za Roksal — od prvega voda do zaključene montaže 
 fasad in teras: CRM, ponudbe s podpisom, proizvodnja, teren (tudi brez signala),
 računi in **fotomontaža PREJ/POTEM** iz uradnih Roksalovih gradiv.
 
-> **Stanje:** rekonstrukcija zaključena in presežena · izdaja **v1.73.0** ·
-> **61 testnih skupin + E2E skozi pravo aplikacijo** · GitHub je kanonični vir
+> **Stanje:** rekonstrukcija zaključena in presežena · izdaja **v1.74.0** ·
+> **63 testnih skupin + E2E skozi pravo aplikacijo** · GitHub je kanonični vir
 > (zadeve + release vrata), GitLab zrcalo, sinhronizacija po SHA (`ops/sync-check.sh`) ·
 > [docs/](docs/) vsebuje poročila za vsako fazo.
 
@@ -286,6 +286,22 @@ računi in **fotomontaža PREJ/POTEM** iz uradnih Roksalovih gradiv.
    **(4) VLM PREČKA** — HOVER-style 2–8 fotografij istega objekta → primerjava
    dimenzij med posnetki, opozorila neskladij + predlog št. stebrov.
    Testna skupina r558 (62. skupina). Belt 8 statičnih + 62 skupin.
+22. **Pametna kamera — prepoznavanje obstoječe ograje (R559, minor v1.74.0):**
+   na vprašanje lastnika (»ali kamera sama zazna, kaj je ograja, kakšno
+   okovje, keramika ali les«) je živa hevristika (R467–R485) znala le
+   klasificirati PODLAGO (trava/les/ploščice na tleh), VLM pa le svetovati
+   kje postaviti NOVO ograjo — materialov obstoječe ograje ni znal nihče.
+   Dodan `POST /api/ar/inspect` (glm-4.6v) + čisto jedro `lib/inspect-core.ts`
+   (parser s sanitizacijo vsakega polja) + panel v AR modulu: zajem kadra
+   iz živega predogleda ALI nalaganje fotografije → prepoznavа ALI JE
+   ograja, tip (balkonska/stopniška/terasna/vrtna), MATERIAL ROČNIKA
+   (les/keramika/inox/aluminij/jeklo/plastika), polnilo (steklo/cevi/
+   profili), stebre (material + ocena števila), OKOVJE (kljuka/tečaji/
+   ključavnica — da/ne/ni vidno) in stanje — VSAKO s stopnjo zaupanja
+   (prepoznano ≥70 % / verjetno ≥40 % / nejasno); kadar komponente ni
+   videti, vrne NEZNANO z 0 % (NIKOLI ne ugiba; izrecno pravilo: keramika
+   ročnika ≠ ploščice na tleh). Material vedno potrdi monter na terenu.
+   Testna skupina r559 (63. skupina). Belt 8 statičnih + 63 skupin.
 
 ## Kaj aplikacija počne
 
