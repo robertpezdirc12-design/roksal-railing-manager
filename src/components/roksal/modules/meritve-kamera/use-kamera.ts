@@ -8,10 +8,11 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  napisSmeri, naslednjaSmer, nastaviTorch, nastaviZoom, poskusiOstrenje, prestejVideoVhode, razloziNapakoKamere, zmogljivostiKamere,
-  type SmerKamere, type ZmogljivostiKamere,
+  izberiNaprave, napisResolucije, napisSmeri, naslednjaSmer, nastaviTorch, nastaviZoom, poskusiOstrenje, prestejVideoVhode, razloziNapakoKamere, zmogljivostiKamere,
+  type NapravaZaIzbiro, type SmerKamere, type ZmogljivostiKamere,
 } from '@/lib/camera-capabilities'
 import { napisNastavitev, nastaviSmer, nastaviSvetilko, preberiNastavitve, shramba, type KameraNastavitve } from '@/lib/camera-prefs'
+import { vzorecSvetlobe } from './kakovost'
 import type { ToastFn } from './tipi'
 
 export function useKamera ({ toast }: { toast: ToastFn }) {
@@ -37,6 +38,16 @@ export function useKamera ({ toast }: { toast: ToastFn }) {
   // vrednosti« (ali zmožnost ni podprta); drsnik takrat stoji na min.
   const [zoomVrednost, setZoomVrednost] = useState<number | null>(null)
 
+  // R553: POŠTENA resolucija toka (getSettings — naprava pove, kaj je ZAGOTOVILA,
+  // ne kaj smo prosili). `null` = ni dokaza → UI ne izpiše ničesar.
+  const [resToka, setResToka] = useState<string | null>(null)
+  // R553: kamere z oznakami za izbirnik objektiva (enumerateDevices PO odobritvi).
+  const [naprave, setNaprave] = useState<NapravaZaIzbiro[]>([])
+  // R553: deviceId toka, ki teče ZDAJ (iz getSettings — ne iz domneve o facing).
+  const [trenutnaNaprava, setTrenutnaNaprava] = useState<string | null>(null)
+  // R553: glajena (EWMA α=0,5) svetlost živega predogleda; `null` = brez vzorca.
+  const [svetloba, setSvetloba] = useState<number | null>(null)
+
   // priprava kamere
   /**
    * R508 (issue #7 §4A/§4D): kaj naprava ZARES zmore. Številka vidnih kamer se
@@ -46,11 +57,31 @@ export function useKamera ({ toast }: { toast: ToastFn }) {
   const zajemiZmogljivosti = useCallback(async (stream: MediaStream): Promise<void> => {
     const track = stream.getVideoTracks()[0] ?? null
     let vhodi: number | null = null
+    let devices: Awaited<ReturnType<typeof navigator.mediaDevices.enumerateDevices>> | null = null
     try {
-      const devices = await navigator.mediaDevices.enumerateDevices()
+      devices = await navigator.mediaDevices.enumerateDevices()
       vhodi = prestejVideoVhode(devices, window.isSecureContext === true)
     } catch { vhodi = null }
     setZmoKamere(zmogljivostiKamere(track, vhodi))
+    // R553: isti enumerate klic — zdaj tudi seznam OZNAČENIH kamer za izbirnik.
+    if (devices !== null) setNaprave(izberiNaprave(devices, window.isSecureContext === true))
+    // R553: POŠTENA resolucija + dejanski deviceId IZ TOKA (getSettings je
+    // edini vir resnice — Snap/web.dev praksa). Ob napaki NE lažemo z vrednostjo.
+    if (track && typeof track.getSettings === 'function') {
+      try {
+        const surovo = track.getSettings()
+        const s = surovo && typeof surovo === 'object' ? surovo as Record<string, unknown> : null
+        setResToka(napisResolucije(s))
+        const id = s !== null ? (s as { deviceId?: unknown }).deviceId : undefined
+        setTrenutnaNaprava(typeof id === 'string' && id.length > 0 ? id : null)
+      } catch {
+        setResToka(null)
+        setTrenutnaNaprava(null)
+      }
+    } else {
+      setResToka(null)
+      setTrenutnaNaprava(null)
+    }
   }, [])
 
   /**
@@ -61,16 +92,21 @@ export function useKamera ({ toast }: { toast: ToastFn }) {
    * pomanjšani sliki). `ideal` (ne `exact`) pomeni pošteno prilagoditev:
    * naprava, ki 1920 ne zmore, dobi najbližjo podprto vrednost.
    * Vzorec najboljših implementacij na spletu (web.dev, Dynamsoft).
+   * R553: `deviceId` (če je podan) izbere DOLOČEN objektiv (multi-lens:
+   * ultraširoka/tele — Twilio/MDN vzorec); `exact` je nujen, sicer bi
+   * brskalnik lahko vrnil katerokoli kamero. Brez deviceId ostaja facingMode.
    */
-  const startCamera = useCallback(async (smer: SmerKamere = smerKamere): Promise<boolean> => {
+  const startCamera = useCallback(async (smer: SmerKamere = smerKamere, deviceId?: string): Promise<boolean> => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: smer }, width: { ideal: 1920 }, height: { ideal: 1080 } },
-      })
+      const videoConstraints: MediaTrackConstraints = deviceId
+        ? { deviceId: { exact: deviceId }, width: { ideal: 1920 }, height: { ideal: 1080 } }
+        : { facingMode: { ideal: smer }, width: { ideal: 1920 }, height: { ideal: 1080 } }
+      const stream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints })
       streamRef.current = stream
       setSmerKamere(smer)
       setTorchNa(false)
       setZoomVrednost(null)
+      setSvetloba(null)
       setCamActive(true)
       // R509: uspešen zagon si zapomni smer (zapisi v brskalnik, ne v bazo).
       if (nastaviSmer(shramba(), smer)) setNastavitve((p) => ({ ...p, smer }))
@@ -79,6 +115,9 @@ export function useKamera ({ toast }: { toast: ToastFn }) {
       return true
     } catch (e) {
       setZmoKamere(zmogljivostiKamere(null, null))
+      setResToka(null)
+      setTrenutnaNaprava(null)
+      setSvetloba(null)
       // R550: napaka po IMENU (NotAllowed/NotFound/NotReadable/…) — monterju
       // povedan UKREP, ne generična opomba; padec na nalaganje ostaja.
       const razlaga = razloziNapakoKamere(e)
@@ -97,6 +136,9 @@ export function useKamera ({ toast }: { toast: ToastFn }) {
     setCamActive(false)
     setTorchNa(false)
     setZoomVrednost(null)
+    setResToka(null)
+    setTrenutnaNaprava(null)
+    setSvetloba(null)
   }, [])
 
   /**
@@ -124,6 +166,35 @@ export function useKamera ({ toast }: { toast: ToastFn }) {
     const uspelo = await startCamera(naslednja)
     if (uspelo) toast({ title: 'Preklop kamere', description: `Aktivna je ${napisSmeri(naslednja)}.` })
   }, [smerKamere, startCamera, stopCamera, toast])
+
+  /**
+   * R553: preklop na DOLOČEN objektiv po deviceId (izbirnik kamer). Uspeh se
+   * trdi SAMO po dejanskem zagonu (ista poštenost kot preklopiSmer); oznaka
+   * v toastu je tista, ki jo je razkril brskalnik — ne naša domneva.
+   */
+  const preklopiNapravo = useCallback(async (deviceId: string): Promise<void> => {
+    const cilj = naprave.find((n) => n.deviceId === deviceId) ?? null
+    stopCamera()
+    const uspelo = await startCamera(smerKamere, deviceId)
+    if (uspelo && cilj) toast({ title: 'Izbira kamere', description: `Aktivna je ${cilj.label}.` })
+  }, [naprave, smerKamere, startCamera, stopCamera, toast])
+
+  /**
+   * R553: živi vzorec svetlosti predogleda (vsakih 1,5 s). Vrednost je EWMA
+   * (α=0,5) — glajenje preprečuje utripanje ob meji (isto past kot auto-torch
+   * oscilacija, le tu brez ukaza: nikoli se NE prižga nič sam). Samo svetlost;
+   * ostrina v živo ni zanesljiva (Laplace na 48 px bi lagal).
+   */
+  useEffect(() => {
+    if (!camActive) return
+    const id = window.setInterval(() => {
+      void vzorecSvetlobe(videoRef.current).then((b) => {
+        if (b === null) return
+        setSvetloba((prej) => prej === null ? b : prej * 0.5 + b * 0.5)
+      })
+    }, 1500)
+    return () => window.clearInterval(id)
+  }, [camActive])
 
   /**
    * Bliskavica: ukaz se posreduje samo, če ga je naprava potrdila, rezultat pa
@@ -169,6 +240,7 @@ export function useKamera ({ toast }: { toast: ToastFn }) {
   return {
     camActive, videoRef, fileRef, torchNa, zmoKamere, nastavitve, smerKamere,
     zoomVrednost, nastaviZoomVrednost, ostrenjeNaTocki,
+    resToka, naprave, trenutnaNaprava, svetloba, preklopiNapravo,
     startCamera, stopCamera, preklopiSmer, preklopiTorch,
   }
 }

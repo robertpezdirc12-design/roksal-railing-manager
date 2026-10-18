@@ -21,6 +21,8 @@ export type StanjeZmogljivosti = 'PODPRTO' | 'NI_PODPRE' | 'NI_DOKAZA'
 export interface TrackLike {
   applyConstraints? (c?: unknown): Promise<void>
   getCapabilities? (): unknown
+  /** R553: getSettings za POŠTENO resolucijo toka (naprava pove, kaj je ZAGOTOVILA). */
+  getSettings? (): unknown
   getContext? (): unknown
   label?: string
 }
@@ -277,6 +279,44 @@ export function razloziNapakoKamere (napaka: unknown): { naslov: string; opis: s
         opis: 'Uporabite nalaganje fotografije ali izberite obstoječo.',
       }
   }
+}
+
+/**
+ * R553: POŠTENA resolucija toka iz `track.getSettings()` — naprava pove, kaj
+ * je ZAGOTOVILA (ne, kar smo mi prosili z `ideal: 1920`). Snap/web.dev
+ * praksa: getSettings je edini vir resnice o dimenzijah toka. Vrne `null`,
+ * kadar števil ni ali niso veljavne — takrat UI NE izpiše ničesar (brez
+ * lažne »1080p« obljube, ki bi lahko bila 640×480).
+ */
+export function napisResolucije (settings: Record<string, unknown> | null | undefined): string | null {
+  if (settings === null || typeof settings !== 'object') return null
+  const w = (settings as { width?: unknown }).width
+  const h = (settings as { height?: unknown }).height
+  if (typeof w !== 'number' || !Number.isFinite(w) || w <= 0) return null
+  if (typeof h !== 'number' || !Number.isFinite(h) || h <= 0) return null
+  return `${Math.round(w)}×${Math.round(h)}`
+}
+
+/** R553: naprava za izbiro v izbirniku — deviceId + VIDNA oznaka. */
+export interface NapravaZaIzbiro { deviceId: string; label: string }
+
+/**
+ * R553: seznam kamer z oznakami za izbirnik OBJEKTIVA (multi-lens telefoni:
+ * ultraširoka/tele). Oznanke brskalnik razkrije ŠELE po odobritvi dovoljenja
+ * — zato zahtevamo neprazno `label` (Twilio/MDN vzorec); brez oznake bi bil
+ * izbirnik dveh »« vrednosti zmeda in ne pomoč. V nezavarovanem kontekstu je
+ * seznam prazen (enaka poštenost kot prestejVideoVhode).
+ */
+export function izberiNaprave (
+  devices: Array<{ kind?: string; deviceId?: string; label?: string }> | null | undefined,
+  zavarovanKontekst: boolean,
+): NapravaZaIzbiro[] {
+  if (!Array.isArray(devices) || !zavarovanKontekst) return []
+  return devices
+    .filter((d) => d.kind === 'videoinput'
+      && typeof d.deviceId === 'string' && d.deviceId.length > 0
+      && typeof d.label === 'string' && d.label.trim().length > 0)
+    .map((d) => ({ deviceId: d.deviceId as string, label: (d.label as string).trim() }))
 }
 
 /**

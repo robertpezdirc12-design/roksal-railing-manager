@@ -4,7 +4,7 @@ Poslovno-operativni sistem za Roksal — od prvega voda do zaključene montaže 
 fasad in teras: CRM, ponudbe s podpisom, proizvodnja, teren (tudi brez signala),
 računi in **fotomontaža PREJ/POTEM** iz uradnih Roksalovih gradiv.
 
-> **Stanje:** rekonstrukcija zaključena in presežena · izdaja **v1.71.0** ·
+> **Stanje:** rekonstrukcija zaključena in presežena · izdaja **v1.72.0** ·
 > **59 testnih skupin + E2E skozi pravo aplikacijo** · GitHub je kanonični vir
 > (zadeve + release vrata), GitLab zrcalo, sinhronizacija po SHA (`ops/sync-check.sh`) ·
 > [docs/](docs/) vsebuje poročila za vsako fazo.
@@ -190,6 +190,33 @@ računi in **fotomontaža PREJ/POTEM** iz uradnih Roksalovih gradiv.
    r552 (59. skupina; SW je mogoče popolnoma preveriti le v produkciji —
    registracija je namenoma samo produkcijska, preverjanja so strukturna +
    strežna). Belt 8 statičnih + 59 skupin.
+18. **Kamera maksimalno, II. krog (R553, izdaja v1.72.0):** nadaljevanje ukaza
+   »izboljšuj kamero« (I. krog = R550); spletna raziskava (MDN Pinch zoom
+   gestures, web.dev/Snap getSettings, Twilio mediaDevices, medium auto-torch
+   past) je pokazala ŠEST novih vrzeli, vse zaprte po disciplini poštenja:
+   **(1) Pinč-zoom** — dvoprstno približevanje nad predogledom (kazalci +
+   `touch-action:none`; `setPointerCapture`; priščevanje na step po istem
+   viru kot drsnik; pravkar končan pinč 500 ms NE sproži ostrenja).
+   **(2) Živa svetloba** — vzorec predogleda (48 px luma) vsakih 1,5 s,
+   EWMA glajenje (α=0,5) proti utripanju ob meji; SVETUJE »Prižgi
+   bliskavico«, NIKOLI ne ukinja (avto-torch oscilacija — past iz raziskave;
+   §7: iz merjenja ne izide ukaz napravi). **(3) Poštena resolucija** —
+   `getSettings()` je edini vir resnice: » · tok 1920×1080« izpišemo, kar
+   je naprava ZAGOTOVILA (640×480 se izpiše kot 640×480, ne kot obljuba).
+   **(4) Izbirnik objektiva** — `enumerateDevices` z oznakami (razkrijejo
+   se po odobritvi); ≥2 OZNAČENI kameri → Select po `deviceId` EXACT
+   (multi-lens: glavna/ultraširoka/tele); trenutna izbira pride IZ TOKA.
+   **(5) Celozaslonski predogled** — Fullscreen API nad predogledom +
+   vodili (video 360px → 75vh); `useSyncExternalStore` (brez setState v
+   efektu); gumb SKRIT brez podpore (iOS Safari — tam NI, ne okvarjen).
+   **(6) Meje svetlobe EN vir** — `TEMNA_MEJA`/`SVETLA_MEJA` izvoženi iz
+   kakovost.ts; analyzeQuality obnašanje bajtno enako. Zavrnjeno zavedno:
+   žiroskopska vodoravnica (formula za roll pri pokončnem držanju/gimbal
+   NI overjena — napačen indikator bi bil laž; statična vodila ostajajo)
+   in ImageCapture.takePhoto (r550: preview-pariteta nad megapiksli).
+   0 novih odvisnosti, 0 DB sprememb; sidra r486–r550 veljajo naprej
+   (regresijske preverbe v r553). Testna skupina r553 (60. skupina).
+   Belt 8 statičnih + 60 skupin.
 
 ## Kaj aplikacija počne
 
@@ -455,6 +482,14 @@ ImageMagick, poppler) — podrobno v `tests/ci-local.sh` glavi.
   izjemi ostajata dokumentirani: viz main ~731 in meritve-kamera ~902 (EN
   komponent s closures nad skupnim stanjem — hook-ekstrakcija ni
   bajtno-identična; disciplina recepta). Nadaljnje razbijanje po potrebi.
+- **Kamera (R550 + R553, izdaje v1.69.0/v1.72.0) — skupno 12 vrzeli po spletni
+  raziskavi.** R550: zoom drsnik, resolucija toka (ideal 1920), zrcaljenje
+  predogleda, shutter odziv, napake po imenu, tap-to-focus. R553: pinč-zoom,
+  živa svetloba (EWMA + svetovanje), poštena resolucija (getSettings), izbirnik
+  objektiva (deviceId exact), celozaslonski predogled, meje svetlobe en vir.
+  Zavedno odlašano: žiroskopska vodoravnica (roll formula pri gimbalu ni
+  overjena — laž bi bila slabša od statičnih vodil); ImageCapture.takePhoto
+  ponovna ocena, če bo kdaj preview-pariteten.
 - **Offline arhitektura (R552, izdaja v1.71.0) — 4 vrzeli po spletni raziskavi.**
   Background Sync (`roksal-sync`): vrsta se izprazni SAM Service Worker, tudi
   z zaprtim zavihkom (iOS Safari: dogodek ne obstaja — velja staro obnašanje,

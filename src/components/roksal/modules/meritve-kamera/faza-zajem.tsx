@@ -7,9 +7,9 @@
 // R537-a: dobesedna selitev iz meritve-kamera.tsx — stanje je skupno (vstop)
 // in pride prek propsov; `capture` je krajevni (živi le tu).
 
-import { useState } from 'react'
+import { useRef, useState, useSyncExternalStore } from 'react'
 import type { Dispatch, RefObject, SetStateAction } from 'react'
-import { Camera, Cpu, Flashlight, FlashlightOff, Grid3x3, Image as ImageIcon, Ruler, SwitchCamera, ZoomIn } from 'lucide-react'
+import { Aperture, Camera, Cpu, Flashlight, FlashlightOff, Grid3x3, Image as ImageIcon, Maximize2, Minimize2, Moon, Ruler, Sun, SwitchCamera, ZoomIn } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -18,13 +18,13 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { ErrorBox } from '@/components/roksal/ui-bits'
 import { fmtDate, useApi } from '@/lib/api-client'
-import { napisZmogljivosti, type SmerKamere, type ZmogljivostiKamere } from '@/lib/camera-capabilities'
+import { napisZmogljivosti, type NapravaZaIzbiro, type SmerKamere, type ZmogljivostiKamere } from '@/lib/camera-capabilities'
 import { napisNastavitev, type KameraNastavitve } from '@/lib/camera-prefs'
 import type { OrientationCheck } from '@/lib/exif-orientation'
 import { MEASURE_MODES, MODE_RULES, recommendMethod, type DeviceCaps, type MeasureMode } from '@/lib/measure-engine'
 import SceneOverlay from '@/components/roksal/scene-overlay'
 import type { SceneUnderstandingState } from '@/hooks/use-scene-understanding'
-import { parsePhoto } from './kakovost'
+import { oceniSvetlobo, parsePhoto } from './kakovost'
 import { MAX_IMG_W, type CachedWoRow, type PhotoRow, type ProjectOption, type WorkOrderOption } from './tipi'
 import { Vodila } from './vodila'
 
@@ -54,6 +54,16 @@ export interface FazaZajemProps {
   nastaviZoomVrednost: (v: number) => Promise<void>
   /** R550: tap-to-focus na normalizirani točki (0..1). */
   ostrenjeNaTocki: (t: { x: number; y: number }) => Promise<void>
+  /** R553: POŠTENA resolucija toka (getSettings) — `null` = brez dokaza. */
+  resToka: string | null
+  /** R553: kamere z oznakami za izbirnik objektiva (≥2 → izbirnik se pokaže). */
+  naprave: NapravaZaIzbiro[]
+  /** R553: deviceId toka, ki teče ZDAJ (iz getSettings — izbirnik predizbere). */
+  trenutnaNaprava: string | null
+  /** R553: preklop na določen objektiv po deviceId. */
+  preklopiNapravo: (deviceId: string) => Promise<void>
+  /** R553: glajena svetlost živega predogleda (EWMA; null = brez vzorca). */
+  svetloba: number | null
   existingPhotos: PhotoRow[]
   pickExisting: (p: PhotoRow) => void
   projects: ReturnType<typeof useApi<{ data: ProjectOption[] }>>
@@ -75,6 +85,7 @@ export function FazaZajem (props: FazaZajemProps) {
     mode, setMode, caps, startCamera, camActive, fileRef, onFile, videoRef, sceneState, guides, setGuides,
     zmoKamere, torchNa, preklopiTorch, preklopiSmer, stopCamera, nastavitve, existingPhotos, pickExisting,
     smerKamere, zoomVrednost, nastaviZoomVrednost, ostrenjeNaTocki,
+    resToka, naprave, trenutnaNaprava, preklopiNapravo, svetloba,
     projects, projectId, setProjectId, workOrderId, setWorkOrderId, orderOptions, orders, online,
     location, setLocation, setOrientacija, acceptImage,
   } = props
@@ -84,6 +95,68 @@ export function FazaZajem (props: FazaZajemProps) {
   const [blisk, setBlisk] = useState(false)
   // R550: prehodni obroč na točki tap-to-focus (izgine po 700 ms).
   const [fokusTocka, setFokusTocka] = useState<{ x: number; y: number } | null>(null)
+
+  // ── R553: celozaslonski predogled ──
+  // useSyncExternalStore (ne setState v efektu): zmožnost se prebere po
+  // pripravi (hidracija dobi false, odjemalec nato resnico), stanje pa sledi
+  // dogodku fullscreenchange — isti vir, brez kaskadnih izrisov.
+  const predogledRef = useRef<HTMLDivElement>(null)
+  const fsNaVoljo = useSyncExternalStore(
+    () => () => { /* zmožnost se med sejo ne spremeni */ },
+    () => document.fullscreenEnabled === true,
+    () => false,
+  )
+  const fsAktiven = useSyncExternalStore(
+    (cb) => {
+      document.addEventListener('fullscreenchange', cb)
+      return () => document.removeEventListener('fullscreenchange', cb)
+    },
+    () => document.fullscreenElement !== null && document.fullscreenElement === predogledRef.current,
+    () => false,
+  )
+  function preklopiFs (): void {
+    const el = predogledRef.current
+    if (!el) return
+    if (document.fullscreenElement === el) {
+      void document.exitFullscreen().catch(() => { /* najboljša zmožnost */ })
+    } else {
+      void el.requestFullscreen().catch(() => { /* najboljša zmožnost */ })
+    }
+  }
+
+  // ── R553: pinč-zoom (MDN Pinch zoom gestures — kazalci, ne dotiki) ──
+  const pinchRef = useRef<{ kazalci: Map<number, { x: number; y: number }>; zacetek: { dist: number; zoom: number } | null }>({ kazalci: new Map(), zacetek: null })
+  const pinchZadnjiRef = useRef(0)
+  function shraniKazalec (e: React.PointerEvent<HTMLVideoElement>): void {
+    pinchRef.current.kazalci.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    try { e.currentTarget.setPointerCapture(e.pointerId) } catch { /* najboljša zmožnost */ }
+  }
+  function premikKazalca (e: React.PointerEvent<HTMLVideoElement>): void {
+    const k = pinchRef.current
+    if (zmoKamere?.zoom.stanje !== 'PODPRTO') return
+    if (!k.kazalci.has(e.pointerId)) return
+    k.kazalci.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    if (k.kazalci.size < 2) return
+    const [a, b] = [...k.kazalci.values()]
+    const dist = Math.hypot(a.x - b.x, a.y - b.y)
+    if (dist <= 0) return
+    if (k.zacetek === null) {
+      k.zacetek = { dist, zoom: zoomVrednost ?? zmoKamere.zoom.min }
+      return
+    }
+    const razmerje = dist / k.zacetek.dist
+    const r = zmoKamere.zoom
+    const cilj = Math.min(r.max, Math.max(r.min, k.zacetek.zoom * razmerje))
+    void nastaviZoomVrednost(cilj) // knjižnica priščepne na step + ograji (isti vir kot drsnik)
+  }
+  function odpustiKazalec (e: React.PointerEvent<HTMLVideoElement>): void {
+    const k = pinchRef.current
+    k.kazalci.delete(e.pointerId)
+    if (k.kazalci.size < 2) {
+      if (k.zacetek !== null) pinchZadnjiRef.current = Date.now()
+      k.zacetek = null
+    }
+  }
 
   function capture (): void {
     const video = videoRef.current
@@ -111,6 +184,9 @@ export function FazaZajem (props: FazaZajemProps) {
 
   /** R550: tap-to-focus — normalizirana točka v okviru videa + prehodni obroč. */
   function naTapPredogled (e: React.MouseEvent<HTMLVideoElement>): void {
+    // R553: pravkar končan pinč NI tap — sproženje ostrenja po umiku prstov
+    // bi bilo nepričakovano (kazalec je ravno takrat nad točko odprta).
+    if (Date.now() - pinchZadnjiRef.current < 500) return
     if (zmoKamere?.fokus !== 'PODPRTO') return
     const rect = e.currentTarget.getBoundingClientRect()
     if (rect.width <= 0 || rect.height <= 0) return
@@ -172,15 +248,22 @@ export function FazaZajem (props: FazaZajemProps) {
           </div>
 
           {camActive ? (
-            <div className="space-y-2 overflow-hidden rounded-lg border bg-black">
+            <div ref={predogledRef} className={`space-y-2 overflow-hidden rounded-lg border bg-black ${fsAktiven ? 'rounded-none border-0' : ''}`}>
               <div className="relative">
                 {/* R550: predogled sprednje kamere je ZRCALJEN (standard nativnih
                     aplikacij — tako monter vidi sebe, kot v ogledalu); zajem
                     ostaja ne-zrcaljen (capture riše surov okvir), zato so točke
                     in kalibracija fizično pravilne. */}
+                {/* R553: touch-none — pinč nad predogledom NE sme povečevati
+                    strani (dogovor s preklopom kamere na najboljših implementacijah
+                    — MDN Pinch zoom gestures: kazalci + touch-action none). */}
                 <video ref={videoRef} autoPlay playsInline muted
                   onClick={naTapPredogled}
-                  className={`max-h-[360px] w-full object-contain ${smerKamere === 'user' ? '-scale-x-100' : ''} ${zmoKamere?.fokus === 'PODPRTO' ? 'cursor-crosshair' : ''}`}
+                  onPointerDown={shraniKazalec}
+                  onPointerMove={premikKazalca}
+                  onPointerUp={odpustiKazalec}
+                  onPointerCancel={odpustiKazalec}
+                  className={`touch-none w-full object-contain ${fsAktiven ? 'max-h-[75vh]' : 'max-h-[360px]'} ${smerKamere === 'user' ? '-scale-x-100' : ''} ${zmoKamere?.fokus === 'PODPRTO' ? 'cursor-crosshair' : ''}`}
                   aria-label="Predogled kamere" />
                 {/* R550: shutter blisk — 180 ms bela zavesa; potrditev zajema. */}
                 {blisk ? <div className="pointer-events-none absolute inset-0 z-20 bg-white/90" aria-hidden /> : null}
@@ -188,6 +271,36 @@ export function FazaZajem (props: FazaZajemProps) {
                 {fokusTocka ? (
                   <div className="pointer-events-none absolute z-10 size-16 -translate-x-8 -translate-y-8 rounded-full border-2 border-white/90 shadow-[0_0_0_2px_rgba(0,0,0,0.35)]"
                     style={{ left: `${Math.round(fokusTocka.x * 100)}%`, top: `${Math.round(fokusTocka.y * 100)}%` }} aria-hidden />
+                ) : null}
+                {/* R553: živi opazovalnik svetlobe — SVETUJE, nikoli ne ukazuje
+                    (avto-bliskavica bi oscilirala — past iz raziskave; §7 poštenost:
+                    iz merjenja NE izide ukaz napravi). Gumb »Prižgi bliskavico«
+                    pokaže SAMO, kadar naprava torch POTRDI in ni že prižgana. */}
+                {oceniSvetlobo(svetloba) === 'PRETEMNO' ? (
+                  <div role="status" className="absolute left-2 top-2 z-10 flex max-w-[85%] flex-wrap items-center gap-x-2 gap-y-1 rounded-lg bg-black/75 px-2.5 py-1.5 text-[11px] font-medium text-white backdrop-blur-sm">
+                    <Moon className="size-3.5 shrink-0" aria-hidden />
+                    <span>Slaba svetloba — zajem bo temen</span>
+                    {zmoKamere?.torch === 'PODPRTO' && !torchNa ? (
+                      <button type="button" onClick={() => void preklopiTorch()} className="rounded font-semibold text-amber-300 underline underline-offset-2 hover:text-amber-200">
+                        Prižgi bliskavico
+                      </button>
+                    ) : null}
+                  </div>
+                ) : oceniSvetlobo(svetloba) === 'PRESVETLO' ? (
+                  <div role="status" className="absolute left-2 top-2 z-10 flex items-center gap-2 rounded-lg bg-black/75 px-2.5 py-1.5 text-[11px] font-medium text-white backdrop-blur-sm">
+                    <Sun className="size-3.5 shrink-0" aria-hidden />
+                    <span>Presvetlo — prestavi se v senco</span>
+                  </div>
+                ) : null}
+                {/* R553: celozaslonski predogled — natančno uokvirjanje brez drsenja
+                    dialoga; gumb se pokaže SAMO, kadar brskalnik Fullscreen API
+                    podpira (iOS Safari ga nima — tam gumb NI, ne okvarjen). */}
+                {fsNaVoljo ? (
+                  <button type="button" onClick={preklopiFs}
+                    aria-label={fsAktiven ? 'Izhod iz celozaslonskega predogleda' : 'Celozaslonski predogled'}
+                    className="absolute right-2 top-2 z-10 rounded-lg bg-black/60 p-1.5 text-white backdrop-blur-sm transition hover:bg-black/80">
+                    {fsAktiven ? <Minimize2 className="size-4" aria-hidden /> : <Maximize2 className="size-4" aria-hidden />}
+                  </button>
                 ) : null}
                 {/* R467 (issue #8 F1): žive zaznave prizora (tla, ovire, struktura) —
                     čist pogled, 2–4 oznake, tap za podatek; nikoli ne blokira zajema */}
@@ -221,6 +334,23 @@ export function FazaZajem (props: FazaZajemProps) {
                   </span>
                 </div>
               ) : null}
+              {/* R553: izbirnik OBJEKTIVA — viden SAMO, kadar brskalnik razkrije
+                  vsaj dve OZNAČENI kameri (multi-lens: glavna/ultraširoka/tele).
+                  Izbira po deviceId preklopi tok na določen objektiv; oznaka
+                  trenutne izbire pride IZ TOKA (getSettings), ne iz domneve. */}
+              {naprave.length >= 2 ? (
+                <div className="flex items-center gap-2 px-2 pt-1">
+                  <Aperture className="size-4 shrink-0 text-white/80" aria-hidden />
+                  <Select value={trenutnaNaprava ?? ''} onValueChange={(id) => { if (id) void preklopiNapravo(id) }}>
+                    <SelectTrigger aria-label="Izbira kamere" className="h-8 flex-1 border-white/25 bg-black/40 text-xs text-white">
+                      <SelectValue placeholder="Kamera" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-48">
+                      {naprave.map((n) => <SelectItem key={n.deviceId} value={n.deviceId}>{n.label}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : null}
               <div className="flex flex-wrap gap-2 p-2">
                 <Button className="flex-1" onClick={capture}><Camera className="size-4" aria-hidden /> Zajemi</Button>
                 {/* R508 (issue #7 §4A): bliskavica in preklop kamer — gumb je viden
@@ -244,7 +374,7 @@ export function FazaZajem (props: FazaZajemProps) {
               </div>
               {zmoKamere ? (
                 <p className="px-2 pb-2 text-[11px] text-muted-foreground">
-                  Naprava: {napisZmogljivosti(zmoKamere)}
+                  Naprava: {napisZmogljivosti(zmoKamere)}{resToka ? ` · tok ${resToka}` : ''}
                 </p>
               ) : null}
               {/* R509 (issue #7 §9): opomba o spominu — svetilke iz spomina ne

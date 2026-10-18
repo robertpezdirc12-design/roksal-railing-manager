@@ -307,6 +307,10 @@ jobs:
           # R552: offline vzdržnost — Background Sync, update flow toast,
           # GET /api rezerva, storage.persist (4 vrzeli po spletni raziskavi).
           - grupa: r552
+          # R553: kamera maksimalno II — pinč-zoom, živa svetloba (EWMA),
+          # poštena resolucija (getSettings), izbirnik objektiva (deviceId),
+          # celozaslonski predogled (6 vrzeli po spletni raziskavi).
+          - grupa: r553
     services:
       postgres:
         image: postgres:16

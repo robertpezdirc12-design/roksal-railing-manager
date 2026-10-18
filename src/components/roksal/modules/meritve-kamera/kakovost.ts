@@ -6,6 +6,15 @@ import { normalizedSize, orientationMatrix, type OrientationCheck, type RawSize 
 import { BLUR_THRESHOLD, MAX_IMG_W, type Quality } from './tipi'
 
 /**
+ * R553: meji svetlobe sta EN vir za analyzeQuality (po zajemu) in za ŽIVI
+ * vzorec predogleda (oceniSvetlobo). Vrednosti 45/225 ostajajo iz prakse
+ * R455 — namerno nespremenjene, da obnašanje obstoječe analize ostane
+ * bajtno enako (nazajzdružljivost).
+ */
+export const TEMNA_MEJA = 45
+export const SVETLA_MEJA = 225
+
+/**
  * Zmanjša sliko na max širino in vrne JPEG dataUrl.
  *
  * issue #15 faza 4 (H8): canvas upošteva EXIF orientacijo SAMO, če jo upošteva
@@ -95,8 +104,8 @@ export async function analyzeQuality (dataUrl: string): Promise<Quality | null> 
         }
         const variance = n > 0 ? lapSq / n - (lapSum / n) ** 2 : 0
         const blurScore = Math.max(0, Math.min(10000, Math.round(variance)))
-        const dark = brightness < 45
-        const bright = brightness > 225
+        const dark = brightness < TEMNA_MEJA
+        const bright = brightness > SVETLA_MEJA
         const blurry = blurScore < BLUR_THRESHOLD
         resolve({ brightness: Math.round(brightness), blurScore, dark, bright, blurry, ok: !dark && !bright && !blurry })
       } catch {
@@ -116,4 +125,47 @@ export function parsePhoto (params: Record<string, unknown> | string | null): st
   if (!p || typeof p !== 'object') return null
   const photo = (p as { photo?: unknown }).photo
   return typeof photo === 'string' && photo.startsWith('data:image/') ? photo : null
+}
+
+/** R553: ocena svetlobe ŽIVEGA predogleda — iste meje kot analyzeQuality. */
+export type OcenaSvetlobe = 'PRETEMNO' | 'PRESVETLO' | 'V_REDU' | 'NI_PODATKA'
+
+/**
+ * R553: čista klasifikacija svetlosti (0..255) za ŽIVI predogled. Namerno
+ * poštena: `NI_PODATKA` ni »v redu« — vzorec se lahko ni izšel (kamera se
+ * še prižiga, video brez okvirja); UI takrat NE pokaže ničesar.
+ */
+export function oceniSvetlobo (b: number | null): OcenaSvetlobe {
+  if (b === null || !Number.isFinite(b)) return 'NI_PODATKA'
+  if (b < TEMNA_MEJA) return 'PRETEMNO'
+  if (b > SVETLA_MEJA) return 'PRESVETLO'
+  return 'V_REDU'
+}
+
+/**
+ * R553: vzorec svetlosti ŽIVEGA predogleda (povprečna luma na 48 px širogem
+ * canvasu — enaka formula kot analyzeQuality, le brez Laplacea, ker ostrina
+ * v živo ni zanesljiva). Vrne `null`, kadar vzorca ni mogoče vzeti (video se
+ * še prižiga / brez okvirja / canvas zavrne) — klicatelj NE laže z vrednostjo.
+ */
+export async function vzorecSvetlobe (video: HTMLVideoElement | null): Promise<number | null> {
+  if (!video || !video.videoWidth || !video.videoHeight) return null
+  try {
+    const w = 48
+    const h = Math.max(1, Math.round((video.videoHeight / video.videoWidth) * w)) || 1
+    const canvas = document.createElement('canvas')
+    canvas.width = w; canvas.height = h
+    const ctx = canvas.getContext('2d', { willReadFrequently: true })
+    if (!ctx) return null
+    ctx.drawImage(video, 0, 0, w, h)
+    const d = ctx.getImageData(0, 0, w, h).data
+    let sum = 0
+    for (let i = 0; i < w * h; i++) {
+      sum += 0.299 * d[i * 4] + 0.587 * d[i * 4 + 1] + 0.114 * d[i * 4 + 2]
+    }
+    const b = sum / (w * h)
+    return Number.isFinite(b) ? b : null
+  } catch {
+    return null
+  }
 }
