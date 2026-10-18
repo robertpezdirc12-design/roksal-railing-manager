@@ -296,6 +296,9 @@ jobs:
           # r464-pricing ostaja na viz.tsx in JE preživel razbitje).
           # Nova skupina MORA biti tudi v tests/ci-matrix.sh.
           - grupa: r548
+          # R549: razbitje zadnje vrste (playbook/dostave/montaza-qa) — meritve-kamera
+          # zavedna izjema (R537 jedro, 39 sidr ostaja nedotaknjeno).
+          - grupa: r549
     services:
       postgres:
         image: postgres:16

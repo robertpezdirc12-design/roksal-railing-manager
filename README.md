@@ -4,8 +4,8 @@ Poslovno-operativni sistem za Roksal — od prvega voda do zaključene montaže 
 fasad in teras: CRM, ponudbe s podpisom, proizvodnja, teren (tudi brez signala),
 računi in **fotomontaža PREJ/POTEM** iz uradnih Roksalovih gradiv.
 
-> **Stanje:** rekonstrukcija zaključena in presežena · izdaja **v1.67.0** ·
-> **55 testnih skupin + E2E skozi pravo aplikacijo** · GitHub je kanonični vir
+> **Stanje:** rekonstrukcija zaključena in presežena · izdaja **v1.68.0** ·
+> **56 testnih skupin + E2E skozi pravo aplikacijo** · GitHub je kanonični vir
 > (zadeve + release vrata), GitLab zrcalo, sinhronizacija po SHA (`ops/sync-check.sh`) ·
 > [docs/](docs/) vsebuje poročila za vsako fazo.
 
@@ -106,6 +106,19 @@ računi in **fotomontaža PREJ/POTEM** iz uradnih Roksalovih gradiv.
    premikom pošteno; r464-pricing OSTAJA na viz.tsx in JE preživel razbitje
    (strežniški klic cenika ni bil odnesen). Testna skupina r548 (55. skupina).
    Belt 8 statičnih + 55 skupin.
+14. **Razbitje zadnje vrste (R549, izdaja v1.68.0):** playbook (971), dostave
+   (931) in montaza-qa (850) po istem receptu razbiti v 15 poddatotek
+   (playbook 59, dostave 46, montaza-qa 22): `playbook-{shared,home,run,korak,
+   admin}` (main = izbira pogleda; run sestavi korak), `dostave-{shared,tab,
+   detail,nova,vozila,ekipe}` (main = zavihki; tab sestavi detail + nova),
+   `montaza-qa-{shared,kontrola,odstopanja,primopredaja}` (main = BAREL —
+   javni API `MontazaQaSection`/`HandoverSection` za danes-detail ostaja na
+   isti poti). **meritve-kamera (902) je zavedna izjema** (kot viz 731): R537
+   je že izvlekla 15 poddatotek, preostali main je EN komponent s ~13 closures
+   nad skupnim stanjem — hook-ekstrakcija ni bajtno-identična; 39 sidr v 9
+   testih ostaja nedotaknjenih. 0 testnih sidr se je premaknilo (noben test
+   ni sidril teh treh modulov — preverjeno pred rezom). Testna skupina r549
+   (56. skupina). Belt 8 statičnih + 56 skupin.
 
 ## Kaj aplikacija počne
 
@@ -342,11 +355,11 @@ ImageMagick, poppler) — podrobno v `tests/ci-local.sh` glavi.
 | Pot | Vsebina |
 |---|---|
 | `src/app/api/` | 195 API rut (App Router) |
-| `src/components/roksal/` | 50 modulov + ogrodje (app-shell, module-view) + 40 gradnikov razbitij (12 velikanov R546 + 14 srednjih R547 + 14 naslednje vrste `katalog/danes/viz/nalogi-*` R548) |
+| `src/components/roksal/` | 50 modulov + ogrodje (app-shell, module-view) + 55 gradnikov razbitij (12 velikanov R546 + 14 srednjih R547 + 14 naslednje vrste R548 + 15 zadnje vrste `playbook/dostave/montaza-qa-*` R549) |
 | `src/lib/` | 78 knjižnic: photo-replace-{mask,texture,core,engine}, permissions-core, nav-registry, audit, notify (outbox), json (jsonb pomožniki), csp (en vir CSP politike), deep-link (URL odraz zavihka), … |
 | `prisma/` | shema (94 modelov) + 17 migracij + semenske skripte (`db:seed` veriga) |
 | `public/assets/roksal/src/` | uradni Roksalovi viri, `MANIFEST.json` s SHA-256 |
-| `tests/` | 55 skupin + `ci-local.sh` / `ci-matrix.sh` + fixtures |
+| `tests/` | 56 skupin + `ci-local.sh` / `ci-matrix.sh` + fixtures |
 | `ops/` | E2E skripte, izrisi-dokazi, backup/restore/drill, secret-audit |
 | `docs/` | poročila po fazah (RECOVERY, FOTOZAMENJAVA, E2E, …) |
 | `.zscripts/` | vzdrževanje peskovnika: dev-detach, git-retry, ci-mirror |
@@ -364,12 +377,13 @@ ImageMagick, poppler) — podrobno v `tests/ci-local.sh` glavi.
   odločitev; benchmark fizičnih meritev (faza 7) zahteva pravo napravo.
   Seznam v
   [`docs/FOTOZAMENJAVA-POROCILO-14.md`](docs/FOTOZAMENJAVA-POROCILO-14.md) §5.
-- **Tehnični dolg — tri vrste razbite (R546–R548), ostaja zadnja vrsta (~950).**
-  Velikani, srednji in naslednja vrsta (katalog/danes/viz/nalogi) so razbiti
-  (viz main ~731 je zavedna izjema — koheziven stanjski del); isti vzorec čaka
-  zadnjo vrsto po potrebi (playbook 971, dostave 931, meritve-kamera 902,
-  montaza-qa 850) — po istem receptu (shared list → gradniki → tanka lupina,
-  sidra testov posodobljena pošteno).
+- **Tehnični dolg — VSE ŠTIRI VRSTE razbite (R546–R549), kampanja zaključena.**
+  Velikani (konfigurator/pregled/projekti), srednji (zajem/servis/ogradnja),
+  naslednja vrsta (katalog/danes/viz/nalogi) in zadnja vrsta (playbook/dostave/
+  montaza-qa) so razbiti — 55 gradnikov, vsi moduli pod 760. Dve ZAVEDNI
+  izjemi ostajata dokumentirani: viz main ~731 in meritve-kamera ~902 (EN
+  komponent s closures nad skupnim stanjem — hook-ekstrakcija ni
+  bajtno-identična; disciplina recepta). Nadaljnje razbijanje po potrebi.
 - **Revizija v1.58.0 (7,9/10) — Top-10 popravki izvedeni (R535–R543).** Še
   odprto za naslednje kroge (po prioriteti): CSP Enforce — zmožnost je
   pripravljena (`CSP_MODE=enforce`, `config/ENV-VARS.md`) in odločitev je
