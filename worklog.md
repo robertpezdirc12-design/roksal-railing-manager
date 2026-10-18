@@ -5613,3 +5613,10 @@ Stage Summary:
 - BROWSER verifikacija z lažnim tokom = najgloblja do zdaj: pinč fizika, zaščita tapa, EWMA žeton, fullscreen, deviceId-exact, vse ŽIVO v brezglavi napravi + 390 px.
 - PRODUKCIJA v1.72.0 (samodejni Vercel deploy s GitHub pushom).
 - OPOMNIKI: (1) rotacija žetonov ob zaključku seje (GitHub ghp_VZHq…, GitLab glpat-… S CELOTNO priponko, Vercel vcp_3Xwo…); (2) GitLab zrcalo sinhronizacija, takoj ko lastnik podá žeton; (3) naslednji kandidati po želji lastnika: rotacija žetonov ima prednost, nato odprte točke README (žiroskopska vodoravnica, če bo formula overjena).
+
+**R553 dopolnitev (isti zapis, po potisku):** PRODUKCIJA v1.72.0 ŽIVA
+(health 1.72.0, db ok, uptime 60 s po gradnji; globoka povezava ×4 200).
+GitHub: main + tag v1.72.0 = dc9f0ed (ls-remote verify). GitLab zrcalo
+ostaja BLOKIRANO (žeton nič na voljo v seji — sinhronizacija z enim
+ukazom, takoj ko lastnik podá žeton; GitHub kanonični vir + Vercel
+nista odvisna od zrcala).
