@@ -4,7 +4,7 @@ Poslovno-operativni sistem za Roksal — od prvega voda do zaključene montaže 
 fasad in teras: CRM, ponudbe s podpisom, proizvodnja, teren (tudi brez signala),
 računi in **fotomontaža PREJ/POTEM** iz uradnih Roksalovih gradiv.
 
-> **Stanje:** rekonstrukcija zaključena in presežena · izdaja **v1.68.0** ·
+> **Stanje:** rekonstrukcija zaključena in presežena · izdaja **v1.69.0** ·
 > **56 testnih skupin + E2E skozi pravo aplikacijo** · GitHub je kanonični vir
 > (zadeve + release vrata), GitLab zrcalo, sinhronizacija po SHA (`ops/sync-check.sh`) ·
 > [docs/](docs/) vsebuje poročila za vsako fazo.
@@ -119,6 +119,27 @@ računi in **fotomontaža PREJ/POTEM** iz uradnih Roksalovih gradiv.
    testih ostaja nedotaknjenih. 0 testnih sidr se je premaknilo (noben test
    ni sidril teh treh modulov — preverjeno pred rezom). Testna skupina r549
    (56. skupina). Belt 8 statičnih + 56 skupin.
+15. **Kamera nad gravom (R550, izdaja v1.69.0):** primerjava z najboljšimi
+   implementacijami na spletu (web.dev PTZ, Chrome Image Capture samples,
+   Dynamsoft, webrtchacks, MDN) je odkrila ŠEST VRZELI — vse zaprte po
+   disciplini poštenja (PODPRTO/NI_PODPRE/NI_DOKAZA): **zoom** (drsnik z
+   razponom IZKLJUČNO iz `getCapabilities().zoom`, prikaz mnogokratnika
+   najmanjšega približanja, tihi uspeh/napaka se pove), **resolucija toka**
+   (`width/height {ideal: 1920/1080}` — brez tega brskalnik pogosto ponudi
+   640×480, kar je za merilne točke preslabo; zajem sedaj pade na 1600 namesto
+   640), **zrcaljenje predogleda** sprednje kamere (`-scale-x-100`; zajem
+   ostaja ne-zrcaljen — točke/meritve fizično pravilne), **shutter odziv**
+   (beli blisk 180 ms + `navigator.vibrate(25)` po najboljši zmožnosti),
+   **napake po imenu** (NotAllowed/NotFound/NotReadable/Overconstrained/
+   Security — vsak s svojim UKREPOM iz MDN, ne generična »kamera ni
+   dosegljiva«) in **tap-to-focus** (focusMode/pointsOfInterest, Chrome
+   Android — POSKUS ne dokaz; obroč 700 ms). `ImageCapture.takePhoto()` se
+   NAMERNO ne uporabi: polna ločljivost senzorja ni preview-pariteta (druga
+   izrez), za merilne fotografije je pariteta pomembnejša od megapikselov.
+   Lib razširjen (`zoomRazpon`, `nastaviZoom`, `poskusiOstrenje`,
+   `razloziNapakoKamere`); sidra 9 kamer skupin (r486/r487/r500/r501/r503/
+   r508/r509/r513/r522) nedotaknjena. Testna skupina r550 (57. skupina).
+   Belt 8 statičnih + 57 skupin.
 
 ## Kaj aplikacija počne
 
@@ -359,7 +380,7 @@ ImageMagick, poppler) — podrobno v `tests/ci-local.sh` glavi.
 | `src/lib/` | 78 knjižnic: photo-replace-{mask,texture,core,engine}, permissions-core, nav-registry, audit, notify (outbox), json (jsonb pomožniki), csp (en vir CSP politike), deep-link (URL odraz zavihka), … |
 | `prisma/` | shema (94 modelov) + 17 migracij + semenske skripte (`db:seed` veriga) |
 | `public/assets/roksal/src/` | uradni Roksalovi viri, `MANIFEST.json` s SHA-256 |
-| `tests/` | 56 skupin + `ci-local.sh` / `ci-matrix.sh` + fixtures |
+| `tests/` | 57 skupin + `ci-local.sh` / `ci-matrix.sh` + fixtures |
 | `ops/` | E2E skripte, izrisi-dokazi, backup/restore/drill, secret-audit |
 | `docs/` | poročila po fazah (RECOVERY, FOTOZAMENJAVA, E2E, …) |
 | `.zscripts/` | vzdrževanje peskovnika: dev-detach, git-retry, ci-mirror |

@@ -299,6 +299,8 @@ jobs:
           # R549: razbitje zadnje vrste (playbook/dostave/montaza-qa) — meritve-kamera
           # zavedna izjema (R537 jedro, 39 sidr ostaja nedotaknjeno).
           - grupa: r549
+          # R550: kamera nad gravom — zoom/resolucija/zrcaljenje/shutter/napake/ostrenje.
+          - grupa: r550
     services:
       postgres:
         image: postgres:16

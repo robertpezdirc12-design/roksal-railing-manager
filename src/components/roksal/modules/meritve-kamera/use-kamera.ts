@@ -8,7 +8,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  nastaviTorch, naslednjaSmer, napisSmeri, prestejVideoVhode, zmogljivostiKamere,
+  napisSmeri, naslednjaSmer, nastaviTorch, nastaviZoom, poskusiOstrenje, prestejVideoVhode, razloziNapakoKamere, zmogljivostiKamere,
   type SmerKamere, type ZmogljivostiKamere,
 } from '@/lib/camera-capabilities'
 import { napisNastavitev, nastaviSmer, nastaviSvetilko, preberiNastavitve, shramba, type KameraNastavitve } from '@/lib/camera-prefs'
@@ -33,6 +33,10 @@ export function useKamera ({ toast }: { toast: ToastFn }) {
   const streamRef = useRef<MediaStream | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
+  // R550: trenutna vrednost zooma — `null` pomeni »naprava še ni potrdila
+  // vrednosti« (ali zmožnost ni podprta); drsnik takrat stoji na min.
+  const [zoomVrednost, setZoomVrednost] = useState<number | null>(null)
+
   // priprava kamere
   /**
    * R508 (issue #7 §4A/§4D): kaj naprava ZARES zmore. Številka vidnih kamer se
@@ -52,24 +56,35 @@ export function useKamera ({ toast }: { toast: ToastFn }) {
   /**
    * R508: zagon kamere vrne `true` SAMO, če je zagon uspel — preklop sicer ne
    * sme trditi »aktivna je zadnja kamera«, ko kamera ni dosegljiva (§7).
+   * R550: idealna resolucija toka — bez nje brskalnik pogosto ponudi privzeti
+   * 640×480, kar je za merilne fotografije preslabo (točke se oddajo na
+   * pomanjšani sliki). `ideal` (ne `exact`) pomeni pošteno prilagoditev:
+   * naprava, ki 1920 ne zmore, dobi najbližjo podprto vrednost.
+   * Vzorec najboljših implementacij na spletu (web.dev, Dynamsoft).
    */
   const startCamera = useCallback(async (smer: SmerKamere = smerKamere): Promise<boolean> => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: smer } } })
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: smer }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+      })
       streamRef.current = stream
       setSmerKamere(smer)
       setTorchNa(false)
+      setZoomVrednost(null)
       setCamActive(true)
       // R509: uspešen zagon si zapomni smer (zapisi v brskalnik, ne v bazo).
       if (nastaviSmer(shramba(), smer)) setNastavitve((p) => ({ ...p, smer }))
       requestAnimationFrame(() => { if (videoRef.current) videoRef.current.srcObject = stream })
       await zajemiZmogljivosti(stream)
       return true
-    } catch {
+    } catch (e) {
       setZmoKamere(zmogljivostiKamere(null, null))
+      // R550: napaka po IMENU (NotAllowed/NotFound/NotReadable/…) — monterju
+      // povedan UKREP, ne generična opomba; padec na nalaganje ostaja.
+      const razlaga = razloziNapakoKamere(e)
       toast({
-        title: 'Kamera ni dosegljiva.',
-        description: 'Uporabite nalaganje fotografije ali izberite obstoječo.',
+        title: razlaga.naslov,
+        description: razlaga.opis,
       })
       fileRef.current?.click()
       return false
@@ -81,7 +96,26 @@ export function useKamera ({ toast }: { toast: ToastFn }) {
     streamRef.current = null
     setCamActive(false)
     setTorchNa(false)
+    setZoomVrednost(null)
   }, [])
+
+  /**
+   * R550: zoom drsnik — vrednost živi SAMO, kadar jo je naprava potrdila
+   * (zmoKamere.zoom PODPRTO). Uspeh je TIH (drsanje je zvezno, toast ob vsakem
+   * premiku bi bil vsiljiv — vzorec web.dev); napaka pa se POVE, s postopkom.
+   */
+  const nastaviZoomVrednost = useCallback(async (zeljena: number): Promise<void> => {
+    const track = streamRef.current?.getVideoTracks()[0] ?? null
+    const izid = await nastaviZoom(track, zeljena)
+    if (izid.uporabljena !== null) setZoomVrednost(izid.uporabljena)
+    if (!izid.uspesno) {
+      toast({
+        title: 'Približanje',
+        description: izid.sporocilo,
+        variant: 'destructive',
+      })
+    }
+  }, [toast])
 
   /** Preklop spredaj/zadaj — ponovni zagon z izbrano smerjo (brez domneve o napravi). */
   const preklopiSmer = useCallback(async (): Promise<void> => {
@@ -115,10 +149,26 @@ export function useKamera ({ toast }: { toast: ToastFn }) {
     })
   }, [torchNa, toast])
 
+  /**
+   * R550: tap-to-focus — posredovanje POSKUSA ostrenja na normalizirano točko
+   * (0..1 v okviru videa). Lastništvo tracka ostaja v hooku (isti vzorec kot
+   * torch); izid je pošteno sporočilo, izida pa monterju ne lažemo (POSKUS).
+   */
+  const ostrenjeNaTocki = useCallback(async (tocka: { x: number; y: number }): Promise<void> => {
+    const track = streamRef.current?.getVideoTracks()[0] ?? null
+    const izid = await poskusiOstrenje(track, tocka)
+    if (izid.stanje === 'POSKUS') {
+      toast({ title: 'Ostrenje', description: izid.sporocilo })
+    } else if (izid.stanje === 'NAPAKA') {
+      toast({ title: 'Ostrenje', description: izid.sporocilo, variant: 'destructive' })
+    }
+  }, [toast])
+
   useEffect(() => () => stopCamera(), [stopCamera])
 
   return {
-    camActive, videoRef, fileRef, torchNa, zmoKamere, nastavitve,
+    camActive, videoRef, fileRef, torchNa, zmoKamere, nastavitve, smerKamere,
+    zoomVrednost, nastaviZoomVrednost, ostrenjeNaTocki,
     startCamera, stopCamera, preklopiSmer, preklopiTorch,
   }
 }
