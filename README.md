@@ -4,8 +4,8 @@ Poslovno-operativni sistem za Roksal — od prvega voda do zaključene montaže 
 fasad in teras: CRM, ponudbe s podpisom, proizvodnja, teren (tudi brez signala),
 računi in **fotomontaža PREJ/POTEM** iz uradnih Roksalovih gradiv.
 
-> **Stanje:** rekonstrukcija zaključena in presežena · izdaja **v1.69.0** ·
-> **56 testnih skupin + E2E skozi pravo aplikacijo** · GitHub je kanonični vir
+> **Stanje:** rekonstrukcija zaključena in presežena · izdaja **v1.70.0** ·
+> **58 testnih skupin + E2E skozi pravo aplikacijo** · GitHub je kanonični vir
 > (zadeve + release vrata), GitLab zrcalo, sinhronizacija po SHA (`ops/sync-check.sh`) ·
 > [docs/](docs/) vsebuje poročila za vsako fazo.
 
@@ -140,6 +140,25 @@ računi in **fotomontaža PREJ/POTEM** iz uradnih Roksalovih gradiv.
    `razloziNapakoKamere`); sidra 9 kamer skupin (r486/r487/r500/r501/r503/
    r508/r509/r513/r522) nedotaknjena. Testna skupina r550 (57. skupina).
    Belt 8 statičnih + 57 skupin.
+16. **Varnostna vrata (R551, izdaja v1.70.0):** dve zadnji varnostni odločitvi
+   iz odprtih točk sta zaprti v stanje, ki ga lastnik presoja. **Demo
+   dvojna vrata** — demo gesla so javno znana (javni repozitorij), en sam
+   `DEMO_ACCESS=on` v produkciji pa je pomenil admin-prijava za vsakogar;
+   zdaj produkcija zahteva še `DEMO_PROD_KEY` s točno besedno zvezo
+   (`ZNAM-DA-ODPIRAM-DEMO-V-PRODUKCIJI` — namerna potrditev po vzorcu
+   »type this exact phrase«, ne skrivnost): brez nje se `/api/auth/demo`
+   odzove, kot da je izklopljena (GET `enabled:false`, POST 404 — notranje
+   stanje se ne razkriva); razvoj/PAS ostaja na enih vratih (BREZ regresije);
+   `src/instrumentation.ts` opozorilo je tri-stanjsko (zavrnjena / NAMERNO
+   odprta). **CSP pripravljenost po podatkih** — `/api/csp-reports` nosi
+   `readyToEnforce` (true SAMO v report načinu z 0 kršitvami v zadnjih 7 dneh
+   = TTL okno csp-gc) in zavihek Varnost → CSP poročila izriše zeleni/rumeni
+   banner presoje z natančnim navodilom (`CSP_MODE=enforce`); preklop sam
+   ostane lastnikova odločitev ob namestitvi (filozofija R545 — aplikacija
+   omogoča, ne odloča). Čist modul `src/lib/demo-access.ts` (vzorec `csp.ts`),
+   0 novih odvisnosti, 0 DB sprememb; sidra r538/r543/r545 nedotaknjena.
+   Testna skupina r551 (58. skupina; popravljena tudi zastareli štetji v
+   glavi README — 56 — in opombi pasa — 50). Belt 8 statičnih + 58 skupin.
 
 ## Kaj aplikacija počne
 
@@ -308,7 +327,7 @@ hitro demo prijavo se izrišejo samo z `DEMO_ACCESS=on`.
 
 ```bash
 bash tests/ci-local.sh        # ENO VSTOPNO MESTO: typecheck + lint + migracije + seed
-                              # + živa aplikacija + VSE skupine (50); logi v .ci-local-logs/
+                              # + živa aplikacija + VSE skupine (58); logi v .ci-local-logs/
 bash tests/ci-matrix.sh --list    # seznam skupin — edini vir resnice
 bash tests/ci-matrix.sh r524       # ena skupina (točno tako jih poganja CI)
 ```
@@ -377,10 +396,10 @@ ImageMagick, poppler) — podrobno v `tests/ci-local.sh` glavi.
 |---|---|
 | `src/app/api/` | 195 API rut (App Router) |
 | `src/components/roksal/` | 50 modulov + ogrodje (app-shell, module-view) + 55 gradnikov razbitij (12 velikanov R546 + 14 srednjih R547 + 14 naslednje vrste R548 + 15 zadnje vrste `playbook/dostave/montaza-qa-*` R549) |
-| `src/lib/` | 78 knjižnic: photo-replace-{mask,texture,core,engine}, permissions-core, nav-registry, audit, notify (outbox), json (jsonb pomožniki), csp (en vir CSP politike), deep-link (URL odraz zavihka), … |
+| `src/lib/` | 79 knjižnic: photo-replace-{mask,texture,core,engine}, permissions-core, nav-registry, audit, notify (outbox), json (jsonb pomožniki), csp (en vir CSP politike), demo-access (dvojna vrata demo prijave R551), deep-link (URL odraz zavihka), … |
 | `prisma/` | shema (94 modelov) + 17 migracij + semenske skripte (`db:seed` veriga) |
 | `public/assets/roksal/src/` | uradni Roksalovi viri, `MANIFEST.json` s SHA-256 |
-| `tests/` | 57 skupin + `ci-local.sh` / `ci-matrix.sh` + fixtures |
+| `tests/` | 58 skupin + `ci-local.sh` / `ci-matrix.sh` + fixtures |
 | `ops/` | E2E skripte, izrisi-dokazi, backup/restore/drill, secret-audit |
 | `docs/` | poročila po fazah (RECOVERY, FOTOZAMENJAVA, E2E, …) |
 | `.zscripts/` | vzdrževanje peskovnika: dev-detach, git-retry, ci-mirror |
@@ -405,14 +424,17 @@ ImageMagick, poppler) — podrobno v `tests/ci-local.sh` glavi.
   izjemi ostajata dokumentirani: viz main ~731 in meritve-kamera ~902 (EN
   komponent s closures nad skupnim stanjem — hook-ekstrakcija ni
   bajtno-identična; disciplina recepta). Nadaljnje razbijanje po potrebi.
-- **Revizija v1.58.0 (7,9/10) — Top-10 popravki izvedeni (R535–R543).** Še
-  odprto za naslednje kroge (po prioriteti): CSP Enforce — zmožnost je
-  pripravljena (`CSP_MODE=enforce`, `config/ENV-VARS.md`) in odločitev je
-  opira na podatke: zavihek CSP poročila (R545) pokaže, kdaj je opazovalno
-  obdobje na produkciji čisto (poročila se od R543 zbirajo v tabeli
-  `CspReport`), `DEMO_ACCESS=on` v produkcjskem okolju (lastnikova
-  odločitev ob namestitvi; ob zagonu strežnika ga zdaj glasno opozori
-  `src/instrumentation.ts`).
+- **Revizija v1.58.0 (7,9/10) — Top-10 popravki izvedeni (R535–R543), obe
+  zadnji odločitvi opremljeni z varnostnimi vrati (R551).** CSP Enforce —
+  zmožnost je pripravljena (`CSP_MODE=enforce`, `config/ENV-VARS.md`) in
+  odločitev opira na podatke: zavihek CSP poročila (R545) od R551 pokaže
+  tudi banner presoje `readyToEnforce` (0 kršitev v zadnjih 7 dneh =
+  preklop varen po podatkih; poročila se od R543 zbirajo v tabeli
+  `CspReport`) — preklop SAM ostane lastnikova odločitev ob namestitvi.
+  `DEMO_ACCESS=on` v produkcijskem okolju ima od R551 DVOJNA VRATA: brez
+  `DEMO_PROD_KEY` (točna besedna zveza, `config/ENV-VARS.md`) demo prijava
+  v produkciji ostane ZAPRTA, kot da je izklopljena; ob zagonu strežnika
+  stanje glasno (tri-stanjsko) opozori `src/instrumentation.ts`.
 
 ## Tehnologija
 

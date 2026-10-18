@@ -3,16 +3,21 @@ import { db } from '@/lib/db'
 import { authRateLimited } from '@/lib/rate-limit'
 import { createSession, jsonError, setSessionCookie, toSessionUser } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
+import { demoVrata } from '@/lib/demo-access'
 
 // /api/auth/demo — demo dostop (route-map izvirnika; zahteva DEMO_ACCESS=on)
 // R496: gesla demo računov NI VEČ v odjemalskem svežnju. Odjemalec pozna le
 // e-pošto in oznako; sejo odpre strežnik SAM, potem ko preveri stikalo in
 // seznam dovoljenih naslovov.
-// GET  (javno): { enabled, accounts } — brez gesel; enabled = DEMO_ACCESS=on
+// GET  (javno): { enabled, accounts } — brez gesel; enabled = vrata odprta
 // POST (javno): { email } → seja, SAMO za naštete račune in SAMO z vključenim stikalom
 // Revizija: LOGIN_DEMO.
 // R538: uspešna demo prijava poleg žetona v telesu nastavi TUDI httpOnly
 // piškotek `roksal_session` (enako kot navadna prijava).
+// R551: DVOJNA VRATA — v produkciji DEMO_ACCESS=on SAMO NE ZADOŠČA več:
+// zahteva še DEMO_PROD_KEY = DEMO_PROD_KEY_FRAZA (glej src/lib/demo-access.ts
+// za pošteno tabelo stanj). Zavrnjena pot se odzove ENAKO kot izklopljena
+// (GET enabled:false, POST 404) — ne razkriva notranjega stanja.
 
 export const dynamic = 'force-dynamic'
 
@@ -28,7 +33,13 @@ const DEMO_ACCOUNTS = [
 const DEMO_EMAILS = new Set<string>(DEMO_ACCOUNTS.map((a) => a.email))
 
 function demoEnabled (): boolean {
-  return process.env.DEMO_ACCESS === 'on'
+  // R551: ena vrata v razvoju, dvojni v produkciji (čista logika v lib —
+  // testabilna z bun, en vir za route + instrumentation).
+  return demoVrata({
+    DEMO_ACCESS: process.env.DEMO_ACCESS,
+    DEMO_PROD_KEY: process.env.DEMO_PROD_KEY,
+    NODE_ENV: process.env.NODE_ENV,
+  }).odprt
 }
 
 export async function GET () {

@@ -9,10 +9,14 @@ import { writeAudit } from '@/lib/audit'
 // aplikaciji, da lastnik opazovalno obdobje (Report-Only) dejansko lahko oceni
 // in odloči o preklopu CSP_MODE=enforce (glej config/ENV-VARS.md).
 //
-//   GET    ?limit=N  → { mode, summary { total, last24h, last7d, byDirective, topDocuments }, data[] }
+//   GET    ?limit=N  → { mode, readyToEnforce, summary { total, last24h, last7d, byDirective, topDocuments }, data[] }
 //   DELETE           → počisti VSA poročila (diagnostika, ne poslovni podatek) + revizija
 //
 // Vrata: security.read (ADMIN — enako kot seje/dnevnik obvestil; VODJA izrecno brez).
+// R551: odgovor nosi readyToEnforce — POGLEDNICA PO PODATKIH za preklop v
+// CSP_MODE=enforce (true SAMO v report načinu z 0 kršitvami v zadnjih 7 dneh,
+// ker je to TTL okno poročil csp-gc). Odločitev o preklopu ostane LASTNIKOVA —
+// aplikacija jo le omogoča z vidljivimi podatki (filozofija R545).
 
 export const dynamic = 'force-dynamic'
 
@@ -58,10 +62,18 @@ export async function GET (req: NextRequest) {
     }),
   ])
 
+  // Način politike (R543): Report-Only javlja brez blokade, Enforce blokira.
+  // Brano ob vsakem klicu — sprememba env zahteva nov build/deploy.
+  const mode = process.env.CSP_MODE === 'enforce' ? 'enforce' : 'report'
+
   return NextResponse.json({
-    // Način politike (R543): Report-Only javlja brez blokade, Enforce blokira.
-    // Brano ob vsakem klicu — sprememba env zahteva nov build/deploy.
-    mode: process.env.CSP_MODE === 'enforce' ? 'enforce' : 'report',
+    mode,
+    // R551: pripravljenost za preklop v enforce PO PODATKIH — true samo, ko
+    // politika še teče v report načinu in je TTL okno (7 dni) čisto. Ni
+    // zahteve po minimalnem obdobju opazovanja: poročila se zbirajo od R543,
+    // dolžino opazovalnega obdobja presodi lastnik (fresh deploy s 0 kršitvami
+    // je dejstvo, ne napaka — banner izpiše število, ne sklepa).
+    readyToEnforce: mode === 'report' && last7d === 0,
     summary: {
       total,
       last24h,

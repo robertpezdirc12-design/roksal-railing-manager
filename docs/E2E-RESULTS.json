@@ -2098,8 +2098,8 @@
       "note": "allow=200 dobil=400"
     },
     "GET /api/picking/:id": {
-      "status": "PASS",
-      "http": 200,
+      "status": "NO_FIXTURE",
+      "http": 404,
       "permission": "inventory.read",
       "roles": [
         "ADMIN",
@@ -2108,7 +2108,7 @@
         "SKLADISCE",
         "PROIZVODNJA"
       ],
-      "note": ""
+      "note": "allow=200 dobil=404"
     },
     "PATCH /api/picking/:id": {
       "status": "PASS_VALIDATION",
@@ -3277,8 +3277,8 @@
       "note": "allow=201 dobil=409"
     },
     "GET /api/weather": {
-      "status": "PASS",
-      "http": 200,
+      "status": "PASS_EXTERNAL",
+      "http": 502,
       "permission": "nalog.read",
       "roles": [
         "ADMIN",
@@ -3286,7 +3286,7 @@
         "MONTER",
         "PROIZVODNJA"
       ],
-      "note": ""
+      "note": "allow=200 dobil=502"
     },
     "PATCH /api/webhooks/:id": {
       "status": "PASS_VALIDATION",
@@ -7054,46 +7054,46 @@
       "method": "GET",
       "path": "/api/picking/:id",
       "role": "ADMIN",
-      "http": 200,
+      "http": 404,
       "expected": "ALLOW",
-      "ok": true,
-      "status": "PASS"
+      "ok": null,
+      "status": "NO_FIXTURE"
     },
     {
       "method": "GET",
       "path": "/api/picking/:id",
       "role": "VODJA",
-      "http": 200,
+      "http": 404,
       "expected": "ALLOW",
-      "ok": true,
-      "status": "PASS"
+      "ok": null,
+      "status": "NO_FIXTURE"
     },
     {
       "method": "GET",
       "path": "/api/picking/:id",
       "role": "MONTER",
-      "http": 200,
+      "http": 404,
       "expected": "ALLOW",
-      "ok": true,
-      "status": "PASS"
+      "ok": null,
+      "status": "NO_FIXTURE"
     },
     {
       "method": "GET",
       "path": "/api/picking/:id",
       "role": "SKLADISCE",
-      "http": 200,
+      "http": 404,
       "expected": "ALLOW",
-      "ok": true,
-      "status": "PASS"
+      "ok": null,
+      "status": "NO_FIXTURE"
     },
     {
       "method": "GET",
       "path": "/api/picking/:id",
       "role": "PROIZVODNJA",
-      "http": 200,
+      "http": 404,
       "expected": "ALLOW",
-      "ok": true,
-      "status": "PASS"
+      "ok": null,
+      "status": "NO_FIXTURE"
     },
     {
       "method": "GET",
@@ -9169,14 +9169,15 @@
   "summary": {
     "endpoints": 297,
     "smoke": {
-      "PASS": 145,
+      "PASS": 143,
       "SKIPPED_SAFE": 9,
       "PASS_VALIDATION": 125,
-      "NO_FIXTURE": 18
+      "NO_FIXTURE": 19,
+      "PASS_EXTERNAL": 1
     },
     "rbacChecks": 645,
     "rbacFailures": 0,
-    "rbacNoFixture": 75,
+    "rbacNoFixture": 80,
     "noFixturePaths": [
       "GET /api/ar-snapshots/:id",
       "GET /api/ar-snapshots/:id/scene-element",
@@ -9193,6 +9194,7 @@
       "GET /api/fence-run/:id/review",
       "GET /api/fence-run/:id/review-link",
       "GET /api/photo-visualization/:id",
+      "GET /api/picking/:id",
       "GET /api/pins",
       "GET /api/playbook/runs/:id",
       "GET /api/viz/projects/:id"

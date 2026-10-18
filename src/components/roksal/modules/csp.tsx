@@ -17,7 +17,7 @@
 // ne napake. Prazna tabela je DOBRO stanje, ne praznina brez pomena.
 
 import { useState } from 'react'
-import { Activity, Ban, FileWarning, RefreshCw, ShieldCheck, Trash2 } from 'lucide-react'
+import { Activity, AlertTriangle, Ban, FileWarning, RefreshCw, ShieldCheck, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -39,6 +39,9 @@ interface CspRow {
 
 interface CspResponse {
   mode: 'report' | 'enforce'
+  /** R551: pripravljenost za preklop v enforce PO PODATKIH — true samo v
+   *  report načinu z 0 kršitvami v zadnjih 7 dneh (TTL okno csp-gc). */
+  readyToEnforce: boolean
   summary: {
     total: number
     last24h: number
@@ -132,6 +135,45 @@ export default function CspModule () {
               <CardContent />
             </Card>
           </div>
+
+          {/* ── R551: pripravljenost za preklop v Enforce PO PODATKIH ── */}
+          {resp.data && (
+            <Card
+              data-testid="csp-pripravljenost"
+              className={resp.data.mode === 'enforce'
+                ? 'border-roksal-green/40'
+                : resp.data.readyToEnforce
+                  ? 'border-roksal-green/40 bg-roksal-green/5'
+                  : 'border-roksal-amber/40 bg-roksal-amber/5'}
+            >
+              <CardContent className="flex items-start gap-3 p-4">
+                {resp.data.mode === 'report' && !resp.data.readyToEnforce
+                  ? <AlertTriangle className="mt-0.5 size-5 shrink-0 text-roksal-amber" aria-hidden />
+                  : <ShieldCheck className="mt-0.5 size-5 shrink-0 text-roksal-green" aria-hidden />}
+                <div className="min-w-0 space-y-1 text-sm">
+                  {resp.data.mode === 'enforce' ? (
+                    <>
+                      <p className="font-medium text-roksal-green">Politika že teče v načinu ENFORCE.</p>
+                      <p className="text-muted-foreground">Kršitve se blokirajo in hkrati poročajo — pripravljenost za preklop ni več vprašanje.</p>
+                    </>
+                  ) : resp.data.readyToEnforce ? (
+                    <>
+                      <p className="font-medium text-roksal-green">Pripravljenost po podatkih: 0 kršitev v zadnjih 7 dneh — preklop v Enforce je varen.</p>
+                      <p className="text-muted-foreground">
+                        Opazovalno obdobje (Report-Only) je čisto. Preklop je lastnikova odločitev ob namestitvi: v produkciji nastavi{' '}
+                        <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">CSP_MODE=enforce</code> (glej config/ENV-VARS.md).
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="font-medium text-roksal-amber">Preklop še ni varen: {resp.data.summary.last7d} kršitev v zadnjih 7 dneh.</p>
+                      <p className="text-muted-foreground">Enforce bi te vire blokiral. Pregledaj direktive in strani spodaj, odpravi vzroke, nato počakaj čisto 7-dnevno okno.</p>
+                    </>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* ── razčlenba ── */}
           <div className="grid gap-4 lg:grid-cols-2">

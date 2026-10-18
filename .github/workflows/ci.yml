@@ -301,6 +301,9 @@ jobs:
           - grupa: r549
           # R550: kamera nad gravom — zoom/resolucija/zrcaljenje/shutter/napake/ostrenje.
           - grupa: r550
+          # R551: varnostna vrata — demo dvojna vrata (DEMO_PROD_KEY) + CSP
+          # pripravljenost po podatkih (readyToEnforce flip v živo).
+          - grupa: r551
     services:
       postgres:
         image: postgres:16
