@@ -4,8 +4,8 @@ Poslovno-operativni sistem za Roksal — od prvega voda do zaključene montaže 
 fasad in teras: CRM, ponudbe s podpisom, proizvodnja, teren (tudi brez signala),
 računi in **fotomontaža PREJ/POTEM** iz uradnih Roksalovih gradiv.
 
-> **Stanje:** rekonstrukcija zaključena in presežena · izdaja **v1.75.0** ·
-> **64 testnih skupin + E2E skozi pravo aplikacijo** · GitHub je kanonični vir
+> **Stanje:** rekonstrukcija zaključena in presežena · izdaja **v1.76.0** ·
+> **65 testnih skupin + E2E skozi pravo aplikacijo** · GitHub je kanonični vir
 > (zadeve + release vrata), GitLab zrcalo, sinhronizacija po SHA (`ops/sync-check.sh`) ·
 > [docs/](docs/) vsebuje poročila za vsako fazo.
 
@@ -327,6 +327,33 @@ računi in **fotomontaža PREJ/POTEM** iz uradnih Roksalovih gradiv.
    ugibaj zlitine (A2/A4 vizualno ni ločljivo) — material in mere vedno
    potrdi monter na terenu.
    Testna skupina r560 (64. skupina). Belt 8 statičnih + 64 skupin.
+
+24. **Odprta inventura — program razume VSE, kar je na fotografiji (R561,
+   minor v1.76.0):** na vprašanje lastnika (»kako TI zaznavaš, kaj je na
+   fotografiji — če ti dam sliko, veš VSE, kar je na njej; naj program tudi
+   razume VSE, kar je na sliki«): do R560 je program VLM spraševal po FIXNEM
+   seznamu (ograja + gradbene kategorije) — orodja, lestve, kabli, pohištvo,
+   rastlinje, vozila, živali, prizor (svetloba/vreme/delo v teku) in
+   varnostna opažanja niso obstajali. ISTI klic `POST /api/ar/inspect`
+   (glm-4.6v) zdaj vsebuje ŠE ODPRTA INVENTURO, NEODVISNO od jeOgraja:
+   PRIZOR (11 tipov — terasa/balkon/stopnišče/vrt/dvorišče/notranjost/
+   gradbišče/streha/cesta + svetloba + vreme SAMO zunaj + deloVTeku
+   tri-state z definicijo znakov dela), PREDMETI (največ 20 s PROSTIM
+   imenom v slovenščini — npr. aluminijasta lestev, akumulatorski vijačnik,
+   vedro z malto, smreka — + kategorija orodje/material/oprema/stavbni
+   element/instalacija/pohištvo/rastlinje/vozilo/oseba/žival + ocena
+   števila ×N + kje + zaupanje; enake predmete VLM združi) in VARNOSTNA
+   OPAŽANJA za monterja (največ 5 — neovargan rob, kabel čez hodnik,
+   orodje na robu; brez nevarnosti → prazen seznam, nikoli ugibanje).
+   Zasebnost (r485): OSEBA samo prisotnost + obleka/zaščita — BREZ imen,
+   obrazov ali identifikacije. Parser sanitizira vsak razdelek neodvisno
+   (cap 20 predmetov / 5 opažanj, neveljavna kategorija → DRUGO, število
+   1..500, vreme/svetloba cap 60), stari r560 odgovor (brez novih ključev)
+   → privzete vrednosti (združljivost); verziji pin r553/r556/r559/r560
+   dvignjeni na trenutno (vzorec r554). Audit dopolnjen
+   (prizorTip/objektiStevilo/varnostStevilo). Seznam predmetov v UI z
+   max-h-72 scroll (dolg seznam).
+   Testna skupina r561 (65. skupina). Belt 8 statičnih + 65 skupin.
 
 ## Kaj aplikacija počne
 

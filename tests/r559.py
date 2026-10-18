@@ -279,7 +279,7 @@ rd = src('README.md')
 chk(_re.search(r'63\. skupin|63 skupin|63/63', rd) is not None, 'E3 README: 63. skupina odražena')
 chk('v1.74.0' in rd, 'E4 README: izdaja v1.74.0')
 pkg = src('package.json')
-chk('"version": "1.74.0"' in pkg, 'E5 package.json: verzija 1.74.0')
+chk('"version": "1.76.0"' in pkg, 'E5 package.json: verzija 1.76.0 (dvignil R561 — vzorec r553/r554)')
 rmap = src('docs/ROUTE-MAP.md')
 chk('api/ar/inspect' in rmap, 'E6 ROUTE-MAP: inspect zabeležena')
 

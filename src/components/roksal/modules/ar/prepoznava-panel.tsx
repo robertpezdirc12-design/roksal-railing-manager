@@ -12,6 +12,13 @@
 // gradbenega prepoznavanja, NEODVISNE od jeOgraja — materiali, vijaki,
 // tla (+ dimenzije ploščice), vogali (+ kot) in mere (dolžina/višina/širina
 // z referenco); prazno stanje je poštena vrstica, ne ugibanje.
+//
+// R561 (vprašanje lastnika: »kako TI zaznavaš, kaj je na fotografiji — veš
+// VSE; naj program tudi razume VSE, kar je na sliki«): ODPRTA INVENTURA —
+// program VLM zdaj sprašuje enako odprto kot človek: PRIZOR (tip, svetloba,
+// vreme, delo v teku), VSI vidni PREDMETI s prostim imenom (orodja, lestve,
+// kabli, pohištvo, rastlinje, vozila, živali … — ne le gradbene kategorije)
+// in VARNOSTNA OPAŽANJA za monterja; vsak predmet s stopnjo zaupanja.
 
 import { useRef, useState } from 'react'
 
@@ -19,10 +26,10 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { Camera, CheckCircle2, Loader2, MinusCircle, ScanSearch, Upload, X, XCircle } from 'lucide-react'
+import { Camera, CheckCircle2, Loader2, MinusCircle, ScanSearch, TriangleAlert, Upload, X, XCircle } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { apiPost } from '@/lib/api-client'
-import type { GradbeniMaterial, InspectMaterial, InspectOgraja, MaterialVijaka, OsaMere, TipVijaka, TipVogala, VrstaTal } from './tipi'
+import type { GradbeniMaterial, InspectMaterial, InspectOgraja, InspectPrizor, MaterialVijaka, ObjektKategorija, OsaMere, PrizorTip, TipVijaka, TipVogala, VrstaTal } from './tipi'
 
 /** slovenske oznake materialov (NEZNANO prikažemo ločeno — sivo). */
 const MATERIALI: Record<InspectMaterial, string> = {
@@ -71,6 +78,53 @@ const VOGALI: Record<TipVogala, string> = {
 
 const OSA: Record<OsaMere, string> = {
   DOLZINA: 'dolžina', VISINA: 'višina', SIRINA: 'širina',
+}
+
+// ── R561: odprta inventura — prizor + predmeti z prostim imenom ──
+const PRIZOR: Record<PrizorTip, string> = {
+  TERASA: 'Terasa', BALKON: 'Balkon', STOPNISCE: 'Stopnišče', VRT: 'Vrt',
+  DVORISCE: 'Dvorišče', NOTRANJOST: 'Notranjost', GRADBISCE: 'Gradbišče',
+  STREHA: 'Streha', CESTA: 'Cesta / prihod', DRUGO: 'Drugo', NEZNANO: 'Neznano',
+}
+
+const KATEGORIJE: Record<ObjektKategorija, string> = {
+  ORODJE: 'Orodje', MATERIAL: 'Material', OPREMA: 'Oprema', STAVBNI_ELEMENT: 'Stavbni element',
+  INSTALACIJA: 'Instalacija', POHISTVO: 'Pohištvo', RASTLINJE: 'Rastlinje', VOZILO: 'Vozilo',
+  OSEBA: 'Oseba', ZIVAL: 'Žival', DRUGO: 'Drugo', NEZNANO: 'Neznano',
+}
+
+/** R561 (živa lekcija iz brskalnika): ODPORA NORMALIZACIJA odgovora — odgovor
+ * iz STAREGA deploya (zavihek odprt pred izdajo, offline osnutek PWA) lahko
+ * manjka razdelke (prizor/objekti/varnost ali starejše materiale/mere) — brez
+ * tega bi render padel na undefined.length/tip (ModuleErrorBoundary).
+ * Ena točka resnice ob setRezultat — render lahko zaupa invariantam. */
+const PRAZEN_PRIZOR: InspectPrizor = { tip: 'NEZNANO', opis: '', svetloba: '', vreme: null, deloVTeku: null, zaupanje: 0 }
+
+function normalizirajInspect (d: Partial<InspectOgraja> | null | undefined): InspectOgraja | null {
+  if (d == null) return null
+  return {
+    ...d,
+    jeOgraja: d.jeOgraja === true,
+    scene: d.scene ?? '',
+    tipOgraje: d.tipOgraje ?? 'NEZNANO',
+    stanje: d.stanje ?? 'NEZNANO',
+    stanjeOpis: d.stanjeOpis ?? '',
+    ocenaVisineCm: d.ocenaVisineCm ?? null,
+    ocenaDolzineCm: d.ocenaDolzineCm ?? null,
+    rocnik: d.rocnik ?? { material: 'NEZNANO', opis: '', barva: null, zaupanje: 0 },
+    polnilo: d.polnilo ?? { vrsta: 'NEZNANO', opis: '', zaupanje: 0 },
+    stebri: d.stebri ?? { material: 'NEZNANO', steviloOcena: null, opis: '', zaupanje: 0 },
+    okovje: d.okovje ?? { kljuka: null, tecaji: null, kljucavnica: null, opis: null },
+    opombe: d.opombe ?? [],
+    materiali: d.materiali ?? [],
+    vijaki: d.vijaki ?? { vidni: null, tip: 'NEZNANO', material: 'NEZNANO', steviloOcena: null, kje: '', zaupanje: 0 },
+    tla: d.tla ?? { vrsta: 'NEZNANO', opis: '', ploscicaDolzinaCm: null, ploscicaSirinaCm: null, zaupanje: 0 },
+    vogali: d.vogali ?? { steviloOcena: null, tipGlavni: 'NEZNANO', kot: null, opis: '', zaupanje: 0 },
+    mere: d.mere ?? [],
+    prizor: d.prizor ?? PRAZEN_PRIZOR,
+    objekti: d.objekti ?? [],
+    varnost: d.varnost ?? [],
+  }
 }
 
 /** Badge zaupanja: ≥0,7 prepoznano (zeleno) · 0,4–0,69 verjetno (amber) · sicer nejasno (sivo). */
@@ -163,11 +217,12 @@ export function PrepoznavaPanel ({ zajemiKader }: {
         photo,
         hint: hint.trim() || undefined,
       })
-      setRezultat(res.data)
+      const rez = normalizirajInspect(res.data)
+      setRezultat(rez)
       toast({
-        title: res.data.jeOgraja ? 'Ograja prepoznana.' : 'Ograja ni bila prepoznana.',
-        description: res.data.jeOgraja
-          ? `Ročnik: ${MATERIALI[res.data.rocnik.material]}${res.data.rocnik.zaupanje > 0 ? ` (${Math.round(res.data.rocnik.zaupanje * 100)} %)` : ''} — preverite na terenu.`
+        title: rez?.jeOgraja ? 'Ograja prepoznana.' : 'Ograja ni bila prepoznana.',
+        description: rez?.jeOgraja
+          ? `Ročnik: ${MATERIALI[rez.rocnik.material]}${rez.rocnik.zaupanje > 0 ? ` (${Math.round(rez.rocnik.zaupanje * 100)} %)` : ''} — preverite na terenu.`
           : 'Poskusite z bolj frontalno fotografijo ograje.',
       })
     } catch (e) {
@@ -206,6 +261,8 @@ export function PrepoznavaPanel ({ zajemiKader }: {
               ter splošne gradbene elemente: <span className="font-medium text-foreground">materiale (les, WPC, železo, inox/rostfraj, keramika)</span>,
               <span className="font-medium text-foreground"> vijake</span>, <span className="font-medium text-foreground">tla (ploščice + dimenzije)</span>,
               <span className="font-medium text-foreground"> vogale</span> in <span className="font-medium text-foreground">mere (dolžina / višina / širina)</span> —
+              in še <span className="font-medium text-foreground">VSE ostalo na sliki</span>: prizor (svetloba, vreme, delo v teku),
+              odprt seznam predmetov (orodja, lestve, kabli, pohištvo, rastlinje, vozila …) in varnostna opažanja —
               vsako s stopnjo zaupanja; kadar komponente ne vidi, to iskreno pove.
             </p>
             <input
@@ -401,6 +458,71 @@ export function PrepoznavaPanel ({ zajemiKader }: {
                 ) : null}
                 {rezultat.materiali.length === 0 && rezultat.vijaki.vidni !== true && rezultat.tla.vrsta === 'NEZNANO' && rezultat.tla.ploscicaDolzinaCm == null && rezultat.vogali.steviloOcena == null && rezultat.mere.length === 0 ? (
                   <li className="text-sm text-muted-foreground">Splošnih gradbenih elementov (materiali, vijaki, tla, vogali, mere) na tej sliki ni bilo mogoče prepoznati.</li>
+                ) : null}
+              </ul>
+            </div>
+            {/* ── R561: VSE na fotografiji — odprta inventura (NEODVISNO od jeOgraja) ── */}
+            <div className="space-y-1.5">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Vse na fotografiji — odprta inventura</h3>
+              <ul className="space-y-1.5">
+                {rezultat.prizor.tip !== 'NEZNANO' || rezultat.prizor.opis || rezultat.prizor.svetloba ? (
+                  <li className="rounded-lg border bg-secondary/40 p-2.5">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Prizor</p>
+                    <div className="mt-1 flex flex-wrap items-center gap-2 text-sm">
+                      <span className="font-semibold">{PRIZOR[rezultat.prizor.tip]}</span>
+                      <ZaupanjeBadge v={rezultat.prizor.zaupanje} />
+                      {rezultat.prizor.deloVTeku != null ? (
+                        <Badge variant={rezultat.prizor.deloVTeku ? 'destructive' : 'secondary'}>
+                          delo v teku: {rezultat.prizor.deloVTeku ? 'da' : 'ne'}
+                        </Badge>
+                      ) : null}
+                    </div>
+                    {/* R561: svetloba/vreme sta PROSTO BESEDILO VLM (npr. »dnevna polna
+                        svetloba, sončna osvetlitev, mehke sence«) — NE badge (nowrap
+                        bi prelil 390 px mobilni layout, živo izmerjeno 423 > 390) */}
+                    {rezultat.prizor.svetloba || rezultat.prizor.vreme ? (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {rezultat.prizor.svetloba ? <>svetloba: {rezultat.prizor.svetloba}</> : null}
+                        {rezultat.prizor.svetloba && rezultat.prizor.vreme ? ' · ' : null}
+                        {rezultat.prizor.vreme ? <>vreme: {rezultat.prizor.vreme}</> : null}
+                      </p>
+                    ) : null}
+                    {rezultat.prizor.opis ? <p className="mt-1 text-sm text-muted-foreground">{rezultat.prizor.opis}</p> : null}
+                  </li>
+                ) : null}
+                {rezultat.objekti.length > 0 ? (
+                  <li className="rounded-lg border bg-secondary/40 p-2.5">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Predmeti ({rezultat.objekti.length}) — vse, kar je videti
+                    </p>
+                    <ul className="mt-1 max-h-72 space-y-1 overflow-y-auto pr-1">
+                      {rezultat.objekti.map((o, i) => (
+                        <li key={i} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm">
+                          <span className="font-semibold">{o.ime}</span>
+                          <Badge variant="outline" className="text-[10px]">{KATEGORIJE[o.kategorija]}</Badge>
+                          {o.steviloOcena != null ? (
+                            <Badge variant="outline" className="border-roksal-amber/40 text-roksal-amber">× {o.steviloOcena}</Badge>
+                          ) : null}
+                          <ZaupanjeBadge v={o.zaupanje} />
+                          {o.kje ? <span className="text-xs text-muted-foreground">· {o.kje}</span> : null}
+                          {o.opis ? <span className="w-full text-xs text-muted-foreground">{o.opis}</span> : null}
+                        </li>
+                      ))}
+                    </ul>
+                  </li>
+                ) : null}
+                {rezultat.varnost.length > 0 ? (
+                  <li className="rounded-lg border border-amber-300 bg-amber-50 p-2.5 dark:border-amber-900 dark:bg-amber-950/30">
+                    <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">
+                      <TriangleAlert className="size-3.5" aria-hidden /> Varnostna opažanja za monterja
+                    </p>
+                    <ul className="mt-1 list-inside list-disc space-y-0.5 text-sm">
+                      {rezultat.varnost.map((v, i) => <li key={i}>{v}</li>)}
+                    </ul>
+                  </li>
+                ) : null}
+                {rezultat.prizor.tip === 'NEZNANO' && !rezultat.prizor.opis && rezultat.objekti.length === 0 && rezultat.varnost.length === 0 ? (
+                  <li className="text-sm text-muted-foreground">Odprtega seznama predmetov na tej sliki ni bilo mogoče prepoznati.</li>
                 ) : null}
               </ul>
             </div>

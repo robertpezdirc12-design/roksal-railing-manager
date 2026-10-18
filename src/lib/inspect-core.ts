@@ -12,6 +12,16 @@
 // razdelki (materiali/vijaki/tla/vogali/mere) — prizor BREZ ograje ima
 // lahko tla, vogale, materiale in mere; vsak del s svojim zaupanjem;
 // NEZNANO 0, kadar ni vidno — nikoli ne ugibamo.
+//
+// R561 (vprašanje lastnika: »kako TI zaznavaš, kaj je na fotografiji — če ti
+// dam sliko, veš VSE, kar je na njej; naj program tudi razume VSE, kar je
+// na sliki«): ODPRTA INVENTURA — program je do zdaj spraševal VLM po FIXNEM
+// seznamu (ograja R559 + gradbene kategorije R560); zdaj ga sprašuje
+// ENAKO ODPRTO kot človek: prizor (tip/svetloba/vreme/delo v teku), VSI
+// vidni predmeti s PROSTIM imenom (orodja, lestve, kabli, pohištvo,
+// rastlinje, vozila, živali …) in varnostna opažanja za monterja.
+// OSEBA brez imen/obrazov (zasebnost); NEZNANO/prazno, kadar ni vidno —
+// nikoli ne ugibamo.
 
 export type InspectMaterial = 'LES' | 'KERAMIKA' | 'INOX' | 'ALUMINIJ' | 'JEKLO' | 'PLASTIKA' | 'DRUGO' | 'NEZNANO'
 export type InspectPolnilo = 'STEKLO' | 'NAVPICNE_CEVI' | 'VODORAVNE_CEVI' | 'NAVPICNI_PROFILI' | 'BREZ' | 'DRUGO' | 'NEZNANO'
@@ -26,6 +36,10 @@ export type VrstaTal = 'KERAMICNE_PLOSCICE' | 'PORCELANAT' | 'LAMINAT' | 'PARKET
 export type TipVogala = 'NOTRANJI' | 'ZUNANJI' | 'DRUGO' | 'NEZNANO'
 export type OsaMere = 'DOLZINA' | 'VISINA' | 'SIRINA'
 
+// ── R561: odprta inventura (»razume VSE, kar je na sliki«) ──
+export type ObjektKategorija = 'ORODJE' | 'MATERIAL' | 'OPREMA' | 'STAVBNI_ELEMENT' | 'INSTALACIJA' | 'POHISTVO' | 'RASTLINJE' | 'VOZILO' | 'OSEBA' | 'ZIVAL' | 'DRUGO' | 'NEZNANO'
+export type PrizorTip = 'TERASA' | 'BALKON' | 'STOPNISCE' | 'VRT' | 'DVORISCE' | 'NOTRANJOST' | 'GRADBISCE' | 'STREHA' | 'CESTA' | 'DRUGO' | 'NEZNANO'
+
 /** R560: posamezen viden gradbeni material (kje + zaupanje). */
 export interface InspectMaterialViden { vrsta: GradbeniMaterial; kje: string; opis: string; zaupanje: number }
 /** R560: vijaki na sliki (vidni tri-state; tip/material/ocena števila). */
@@ -36,6 +50,10 @@ export interface InspectTla { vrsta: VrstaTal; opis: string; ploscicaDolzinaCm: 
 export interface InspectVogali { steviloOcena: number | null; tipGlavni: TipVogala; kot: number | null; opis: string; zaupanje: number }
 /** R560: ocena mere predmeta z referenco (brez reference → ocenaCm null). */
 export interface InspectMera { predmet: string; osa: OsaMere; ocenaCm: number | null; referenca: string; zaupanje: number }
+/** R561: kontekst celotnega prizora (tip, svetloba, vreme zunaj, znaki dela). */
+export interface InspectPrizor { tip: PrizorTip; opis: string; svetloba: string; vreme: string | null; deloVTeku: boolean | null; zaupanje: number }
+/** R561: vidni predmet s PROSTIM imenom (odprt seznam — ne le gradbeni materiali). */
+export interface InspectObjekt { ime: string; kategorija: ObjektKategorija; steviloOcena: number | null; kje: string; opis: string; zaupanje: number }
 
 export interface InspectOgraja {
   jeOgraja: boolean
@@ -56,6 +74,10 @@ export interface InspectOgraja {
   tla: InspectTla
   vogali: InspectVogali
   mere: InspectMera[]
+  // ── R561: odprta inventura — NEODVISNA od jeOgraja (prizor obstaja vedno) ──
+  prizor: InspectPrizor
+  objekti: InspectObjekt[]
+  varnost: string[]
 }
 
 /** R559: prompt za VLM (glm-4.6v) — slovenščina, izrecna poštenostna pravila:
@@ -80,7 +102,10 @@ Vrni SAMO veljaven JSON (brez kode, brez markdown) točno te oblike:
   "vijaki": { "vidni": true, "tip": "TORX | INBUS | KRIZNI | SESTROBI | DRUGO | NEZNANO", "material": "INOX | POCINKANO | CRNO | JEKLO | DRUGO | NEZNANO", "steviloOcena": 12, "kje": "npr. stebri, ročnik, talna obloga", "zaupanje": 0.5 },
   "tla": { "vrsta": "KERAMICNE_PLOSCICE | PORCELANAT | LAMINAT | PARKET | KAMEN | BETON | TLAK | TRAVA | ZEMLJA | ASFALT | GRAMOZ | DRUGO | NEZNANO", "opis": "kratek opis tal", "ploscicaDolzinaCm": 60, "ploscicaSirinaCm": 60, "zaupanje": 0.7 },
   "vogali": { "steviloOcena": 2, "tipGlavni": "NOTRANJI | ZUNANJI | DRUGO | NEZNANO", "kot": 90, "opis": "kratek opis vogalov (stičišča sten, zavoji ograje)", "zaupanje": 0.6 },
-  "mere": [{ "predmet": "npr. hodnik/tla, odprtina, ograja", "osa": "DOLZINA | VISINA | SIRINA", "ocenaCm": 110, "referenca": "npr. ploščica 60 cm; vrata ≈ 200 cm", "zaupanje": 0.6 }]
+  "mere": [{ "predmet": "npr. hodnik/tla, odprtina, ograja", "osa": "DOLZINA | VISINA | SIRINA", "ocenaCm": 110, "referenca": "npr. ploščica 60 cm; vrata ≈ 200 cm", "zaupanje": 0.6 }],
+  "prizor": { "tip": "TERASA | BALKON | STOPNISCE | VRT | DVORISCE | NOTRANJOST | GRADBISCE | STREHA | CESTA | DRUGO | NEZNANO", "opis": "kratek opis celotnega prizora (kaj je to za prostor)", "svetloba": "npr. dnevna polna svetloba; senca; oblačno; umetna razsvetljava", "vreme": "npr. sončno; deževno; sneži — SAMO zunaj, sicer null", "deloVTeku": true, "zaupanje": 0.8 },
+  "objekti": [{ "ime": "PROSTO ime predmeta v slovenščini (npr. aluminijasta lestev, akumulatorski vijačnik, vedro z malto, kabelska doza, smreka, oseba s čelado)", "kategorija": "ORODJE | MATERIAL | OPREMA | STAVBNI_ELEMENT | INSTALACIJA | POHISTVO | RASTLINJE | VOZILO | OSEBA | ZIVAL | DRUGO", "steviloOcena": 2, "kje": "levo / desno / sredina / ozadje / na tleh …", "opis": "kratek opis (barva, stanje, posebnost)", "zaupanje": 0.8 }],
+  "varnost": ["varnostno opažanje za monterja — samo dejansko videno; če ga ni, prazen seznam"]
 }
 Pravila:
 - jeOgraja: true SAMO, če je na sliki dejansko ograja z ročnikom; sicer false in VSE ostalo NEZNANO/null;
@@ -95,7 +120,10 @@ Pravila:
 - vijaki: vidni=true SAMO, če so glave res vidne (makro/kôta); tip po glavi (zvezdasta = TORX, šesterojni utor = INBUS, križna = KRIZNI, šestrobna glava = SESTROBI); material: svetleč se = INOX, mat rumenkasto = POCINKANO, črno = CRNO; sicer NEZNANO in zaupanje 0;
 - tla: vrsta + dimenzije ploščice SAMO, če so ploščice vidne (ploscicaDolzinaCm/ploscicaSirinaCm 5..300, sicer null); laminat/parket/gramoz → dimenzije null;
 - vogali: stičišča sten/ogradb ali zavoji ograje; notranji (kot < 180°), zunanji (> 180°); kot 15..180 (tipično 90/135); število 0..20;
-- mere (največ 8): dolžina/višina/širina predmetov na sliki — mero oceni SAMO iz referenc (vrata ≈ 200 cm, stopnica ≈ 17 cm, ploščica 40/60 cm, oseba ≈ 170 cm); brez reference → ocenaCm null in referenca »ni reference«.`
+- mere (največ 8): dolžina/višina/širina predmetov na sliki — mero oceni SAMO iz referenc (vrata ≈ 200 cm, stopnica ≈ 17 cm, ploščica 40/60 cm, oseba ≈ 170 cm); brez reference → ocenaCm null in referenca »ni reference«.
+- prizor: tip celotnega prizora; svetloba kratek opis; vreme SAMO zunaj (notri null); deloVTeku: true = vidni znaki dela (razloženo orodje, delno vgrajena/konstrukcija, odprta gradbiščna jama), false = urejen/lasen prizor brez znakov dela, null = iz slike ni razvidno;
+- objekti (največ 20): NAŠTEJ VSE vidne predmete na sliki — ODPRT seznam, ne le gradbeni materiali: orodja, posode, kabli, lestve, odri, pohištvo, okna, vrata, svetila, rastlinje, vozila, oprema, živali …; ime je PROSTO besedilo v slovenščini; enake predmete ZDRUŽI z oceno števila (npr. lesena deska ×6); OSEBA: zapiši SAMO prisotnost in obleko/zaščito — BREZ imen, obrazov ali identifikacije (zasebnost); kadar predmeta ne vidiš jasno, ga NE naštej;
+- varnost (največ 5): samo DEJANSKO VIDNE nevarnosti za monterja (neovargan rob višine, kabel čez hodnik, orodje na robu, poškodovano steklo, žival pod nogami); če nevarnosti ni videti → prazen seznam — NIKOLI NE UGIBAJ.`
 
 const ROCNIK_MATERIJALI: readonly InspectMaterial[] = ['LES', 'KERAMIKA', 'INOX', 'ALUMINIJ', 'JEKLO', 'PLASTIKA', 'DRUGO', 'NEZNANO']
 const POLNILA: readonly InspectPolnilo[] = ['STEKLO', 'NAVPICNE_CEVI', 'VODORAVNE_CEVI', 'NAVPICNI_PROFILI', 'BREZ', 'DRUGO', 'NEZNANO']
@@ -109,6 +137,10 @@ const MATERIALI_VIJAKOV: readonly MaterialVijaka[] = ['INOX', 'POCINKANO', 'CRNO
 const VRSTE_TAL: readonly VrstaTal[] = ['KERAMICNE_PLOSCICE', 'PORCELANAT', 'LAMINAT', 'PARKET', 'KAMEN', 'BETON', 'TLAK', 'TRAVA', 'ZEMLJA', 'ASFALT', 'GRAMOZ', 'DRUGO', 'NEZNANO']
 const TIPI_VOGALOV: readonly TipVogala[] = ['NOTRANJI', 'ZUNANJI', 'DRUGO', 'NEZNANO']
 const OSE_MER: readonly OsaMere[] = ['DOLZINA', 'VISINA', 'SIRINA']
+
+// ── R561: odprta inventura seznami ──
+const KATEGORIJE: readonly ObjektKategorija[] = ['ORODJE', 'MATERIAL', 'OPREMA', 'STAVBNI_ELEMENT', 'INSTALACIJA', 'POHISTVO', 'RASTLINJE', 'VOZILO', 'OSEBA', 'ZIVAL', 'DRUGO', 'NEZNANO']
+const PRIZOR_TIPI: readonly PrizorTip[] = ['TERASA', 'BALKON', 'STOPNISCE', 'VRT', 'DVORISCE', 'NOTRANJOST', 'GRADBISCE', 'STREHA', 'CESTA', 'DRUGO', 'NEZNANO']
 
 /** varna enum vrednost — neznano, če VLM ni odgovoril s predvideno vrednostjo. */
 function enumVal<T extends string> (v: unknown, dovoljene: readonly T[], pad: T): T {
@@ -184,14 +216,138 @@ function parseMere (v: unknown): InspectMera[] {
   return out
 }
 
+/** R561: kontekst prizora (neodvisno od jeOgraja — prizor obstaja vedno). */
+function parsePrizor (v: unknown): InspectPrizor {
+  const p = (v != null && typeof v === 'object' ? v : {}) as Record<string, unknown>
+  return {
+    tip: enumVal(p.tip, PRIZOR_TIPI, 'NEZNANO'),
+    opis: varnoBesedilo(p.opis, 300),
+    svetloba: varnoBesedilo(p.svetloba, 60),
+    vreme: varnoBesedilo(p.vreme, 60) || null,
+    deloVTeku: varnoTri(p.deloVTeku),
+    zaupanje: varnoZaupanje(p.zaupanje),
+  }
+}
+
+/** R561: odprta inventura predmetov (cap 20; PROSTO ime obvezno;
+ * neveljavna kategorija → DRUGO, ne izgubimo predmeta). */
+function parseObjekti (v: unknown): InspectObjekt[] {
+  if (!Array.isArray(v)) return []
+  const out: InspectObjekt[] = []
+  for (const x of v) {
+    if (out.length >= 20) break
+    if (x == null || typeof x !== 'object') continue
+    const o = x as Record<string, unknown>
+    const ime = varnoBesedilo(o.ime, 60)
+    if (!ime) continue
+    out.push({
+      ime,
+      kategorija: enumVal(o.kategorija, KATEGORIJE, 'DRUGO'),
+      steviloOcena: varnoStevilo(o.steviloOcena, 1, 500),
+      kje: varnoBesedilo(o.kje, 60),
+      opis: varnoBesedilo(o.opis, 200),
+      zaupanje: varnoZaupanje(o.zaupanje),
+    })
+  }
+  return out
+}
+
+/** R561: varnostna opažanja (cap 5 × 200; samo nizi). */
+function parseVarnost (v: unknown): string[] {
+  if (!Array.isArray(v)) return []
+  return v
+    .filter((x): x is string => typeof x === 'string' && x.trim().length > 0)
+    .slice(0, 5)
+    .map((x) => x.trim().slice(0, 200))
+}
+
+/** R561: POPRAVEK znanih VLM tipkarskih napak v JSON — SAMO ob padcu
+ * JSON.parse (veljavnih odgovorov nikoli ne dotaknemo). Živ primer
+ * (glm-4.6v, 45 s / 4,7 kB): `"tla": { …, "ploscicaDolzinaCm: 60,
+ * ploscicaSirinaCm: 60, "zaupanje": 0.8 }` — DVE napaki v eni vrstici:
+ * (a) izpuščen zaklepajoči narekovaj imena ključa ("key: 60),
+ * (b) ključ brez obeh narekovajev (key: 60);
+ * (c) podpijaj pred } ali ] (trailing comma).
+ * Hodnik po znakih z vestjo o nizih (v nizu se NE popravlja) + STRUKTURNA
+ * straža: narekovaj/ključ se popravi SAMO, ko gre za položaj ključa
+ * (predhodni ne-presleden znak je `{` ali `,`) — vrednost, ki se začne z
+ * »TORX: zvezdasta« (predhodnik `:`), ostane nedotaknjena. */
+export function popraviVlmJson (s: string): string {
+  let out = ''
+  let vNizu = false
+  let prej = '' // zadnji izpisani ne-presleden znak ZUNAJ niza
+  let i = 0
+  while (i < s.length) {
+    const c = s[i]
+    if (vNizu) {
+      out += c
+      if (c === '\\') { out += s[i + 1] ?? ''; i += 2; continue }
+      if (c === '"') vNizu = false
+      i += 1
+      continue
+    }
+    if (c === '"') {
+      // (a) `"key: vrednost…` — manjka zaklepajoči narekovaj ključa:
+      // veljaven SAMO v položaju ključa (za `{` ali `,`)
+      const m = /^([A-Za-z0-9_]+):(\s)/.exec(s.slice(i + 1))
+      if (m && (prej === '{' || prej === ',')) {
+        out += `"`
+        out += m[1]
+        out += `":`
+        i += 1 + m[0].length
+        prej = ':'
+        continue
+      }
+      vNizu = true
+      out += c
+      i += 1
+      continue
+    }
+    if (c === ',') {
+      // (c) podpijaj pred } ali ] — pobriši
+      const naprej = /^[ \t\r\n]*[}\]]/.exec(s.slice(i + 1))
+      if (naprej) { i += 1; continue }
+      out += c
+      prej = ','
+      i += 1
+      continue
+    }
+    if (/[A-Za-z_]/.test(c)) {
+      // (b) goli ključ `key:` brez narekovajev — veljaven SAMO v položaju
+      // ključa (za `{` ali `,`) in SAMO, če sledi dvopičje
+      const m = /^([A-Za-z0-9_]+)([ \t\r\n]*):/.exec(s.slice(i))
+      if (m && (prej === '{' || prej === ',')) {
+        out += `"`
+        out += m[1]
+        out += `":`
+        i += m[0].length
+        prej = ':'
+        continue
+      }
+    }
+    if (!/\s/.test(c)) prej = c
+    out += c
+    i += 1
+  }
+  return out
+}
+
 /** Parser VLM odgovora: izlušči prvi veljavni JSON objekt in ga SANITIZIRAJ
- * (vsako polje neodvisno — polomljen VLM odgovor ne sesuje celotnega rezultata). */
+ * (vsako polje neodvisno — polomljen VLM odgovor ne sesuje celotnega rezultata).
+ * R561: če JSON.parse pade, poskusimo DETERMINISTIČEN popravek znanih napak
+ * (popraviVlmJson) — brez njega bi celo 4,7 kB odgovor z eno tipkarsko
+ * napako propadel kot 422. */
 export function parseInspectJson (raw: string): InspectOgraja | null {
   const start = raw.indexOf('{')
   const end = raw.lastIndexOf('}')
   if (start === -1 || end <= start) return null
   try {
-    const p = JSON.parse(raw.slice(start, end + 1)) as Record<string, unknown>
+    let p: Record<string, unknown>
+    try {
+      p = JSON.parse(raw.slice(start, end + 1)) as Record<string, unknown>
+    } catch {
+      p = JSON.parse(popraviVlmJson(raw.slice(start, end + 1))) as Record<string, unknown>
+    }
     const r = (p.rocnik ?? {}) as Record<string, unknown>
     const po = (p.polnilo ?? {}) as Record<string, unknown>
     const st = (p.stebri ?? {}) as Record<string, unknown>
@@ -269,6 +425,10 @@ export function parseInspectJson (raw: string): InspectOgraja | null {
       tla,
       vogali,
       mere: parseMere(p.mere),
+      // ── R561: odprta inventura — NEODVISNA od jeOgraja (prizor obstaja vedno) ──
+      prizor: parsePrizor(p.prizor),
+      objekti: parseObjekti(p.objekti),
+      varnost: parseVarnost(p.varnost),
     }
   } catch {
     return null

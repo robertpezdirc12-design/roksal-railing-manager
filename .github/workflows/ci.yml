@@ -337,6 +337,15 @@ jobs:
           # in mere (dolžina/višina/širina z referenco); NEZNANO 0, nikoli
           # ugibanje (disciplina NI_DOKAZA).
           - grupa: r560
+          # R561 (vprašanje lastnika: »kako TI zaznavaš, kaj je na fotografiji
+          # — veš VSE; naj program tudi razume VSE, kar je na sliki«):
+          # ODPRTA INVENTURA — VLM zdaj sprašuje enako odprto kot človek:
+          # prizor (tip/svetloba/vreme/delo v teku), VSI vidni predmeti s
+          # PROSTIM imenom (orodja, lestve, kabli, pohištvo, rastlinje,
+          # vozila, živali …) in varnostna opažanja za monterja;
+          # OSEBA brez imen/obrazov (zasebnost); NEZNANO/prazno, nikoli
+          # ugibanje (disciplina NI_DOKAZA).
+          - grupa: r561
     services:
       postgres:
         image: postgres:16

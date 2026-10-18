@@ -86,6 +86,10 @@ export async function POST (req: NextRequest) {
       tlaVrsta: inspect.tla.vrsta,
       materialiStevilo: inspect.materiali.length,
       merStevilo: inspect.mere.length,
+      // R561: odprta inventura v audit zapisu
+      prizorTip: inspect.prizor.tip,
+      objektiStevilo: inspect.objekti.length,
+      varnostStevilo: inspect.varnost.length,
       hint: hint || null,
     },
   })

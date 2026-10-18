@@ -80,6 +80,14 @@ export type {
   InspectVogali, MaterialVijaka, OsaMere, TipVijaka, TipVogala, VrstaTal,
 } from '@/lib/inspect-core'
 
+/** R561 (vprašanje lastnika: »kako ti zaznavaš, kaj je na fotografiji —
+ *  veš VSE; naj program tudi razume VSE, kar je na sliki«): ODPRTA
+ *  inventura — prizor + vsi predmeti s PROSTIM imenom + varnostna
+ *  opažanja; NEODVISNO od jeOgraja. Tipi živijo v inspect-core. */
+export type {
+  InspectObjekt, InspectPrizor, ObjektKategorija, PrizorTip,
+} from '@/lib/inspect-core'
+
 /** R454: vrstica zgodovine AR posnetkov (GET /api/ar-snapshots — brez params). */
 export interface SnapshotRow {
   id: string

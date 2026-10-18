@@ -244,7 +244,7 @@ rd = src('README.md')
 chk(_re.search(r'61\. skupin|61 skupin|61/61', rd) is not None, 'D3 README: 61. skupina odražena')
 chk('R556' in rd and 'fmtNumInput' in rd and '100×' in rd, 'D4 README: R556 popravki popisani (vključno z enotami ×100)')
 pkg = src('package.json')
-chk('"version": "1.72.2"' in pkg, 'D5 package.json: različica 1.72.2')
+chk('"version": "1.76.0"' in pkg, 'D5 package.json: različica 1.76.0 (dvignil R561 — vzorec r553/r554)')
 
 print(f'═══ {TAG} KONEC: {PASS} ✓ / {FAIL} ✗ / {SKIP} ⏸ ═══')
 sys.exit(1 if FAIL else 0)
