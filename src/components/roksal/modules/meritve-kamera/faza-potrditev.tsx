@@ -71,7 +71,7 @@ export interface FazaPotrditevProps {
   onClose: () => void
   past: RefObject<ZgodovinaVnos[]>
   future: RefObject<ZgodovinaVnos[]>
-  uploadPhoto: () => Promise<void>
+  uploadPhoto: (namen?: 'KALIBRACIJA' | 'POTRDITEV') => Promise<void>
   rocnoCnt: number
 }
 
@@ -167,7 +167,7 @@ export function FazaPotrditev (props: FazaPotrditevProps) {
           : undefined,
         confidence: multi.conf,
         manualOverride: overrideOn
-          ? { computedLengthCm: multi.mean !== null && multi.lengths.length > 1 ? Math.round(multi.mean * 10) / 10 : calc.totalCm ?? 0, reason: overrideReason.trim() }
+          ? { computedLengthCm: multi.mean !== null && multi.lengths.length > 1 ? Math.round(multi.mean * 10) / 10 : (calc.totalCm !== null ? Math.round(calc.totalCm * 10) / 10 : 0), reason: overrideReason.trim() }
           : undefined,
         // R457 (issue #12): način izmere + rezultat engine-a (§2, §7)
         mode,
@@ -277,7 +277,7 @@ export function FazaPotrditev (props: FazaPotrditevProps) {
           : null,
         confidence: multi.conf,
         manualOverride: overrideOn
-          ? { computedLengthCm: multi.mean !== null && multi.lengths.length > 1 ? Math.round(multi.mean * 10) / 10 : calc.totalCm ?? 0, reason: overrideReason.trim() }
+          ? { computedLengthCm: multi.mean !== null && multi.lengths.length > 1 ? Math.round(multi.mean * 10) / 10 : (calc.totalCm !== null ? Math.round(calc.totalCm * 10) / 10 : 0), reason: overrideReason.trim() }
           : null,
         mode,
         engine: analysis
@@ -370,7 +370,7 @@ export function FazaPotrditev (props: FazaPotrditevProps) {
                 </div>
               ) : null}
               {!views[0].photoId && online ? (
-                <Button size="sm" variant="outline" onClick={() => void uploadPhoto()} disabled={busy}>
+                <Button size="sm" variant="outline" onClick={() => void uploadPhoto('POTRDITEV')} disabled={busy}>
                   {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null} Najprej naloži fotografijo
                 </Button>
               ) : null}

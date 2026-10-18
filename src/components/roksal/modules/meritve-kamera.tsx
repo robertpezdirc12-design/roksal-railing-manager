@@ -548,8 +548,11 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
     void addView(url)
   }
 
-  /** Naloži fotografijo (POST /api/measure/photo) za AKTIVNI pogled. */
-  async function uploadPhoto (): Promise<void> {
+  /** Naloži fotografijo (POST /api/measure/photo) za AKTIVNI pogled.
+   *  R556-d: opis tosta je NAMEN-specifičen — isti gumb je na dveh fazah:
+   *  v KALIBRACIJI monterju reče »zdaj kalibriraj«, v POTRDITVI pa ne sme
+   *  (uporabnik je že za kalibracijo; tam je nalaganje pogoj za shranitev). */
+  async function uploadPhoto (namen: 'KALIBRACIJA' | 'POTRDITEV' = 'KALIBRACIJA'): Promise<void> {
     if (!view) return
     setBusy(true)
     try {
@@ -561,7 +564,12 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
       })
       snapshot()
       setViews((vs) => vs.map((v) => (v.key === view.key ? { ...v, photoId: res.data.id } : v)))
-      toast({ title: 'Fotografija shranjena.', description: 'Zdaj kalibrirajte merilo in označite točke.' })
+      toast({
+        title: 'Fotografija shranjena.',
+        description: namen === 'KALIBRACIJA'
+          ? 'Zdaj kalibrirajte merilo in označite točke.'
+          : 'Fotografija je pripeta k meritvi — nadaljujte s potrditvijo.',
+      })
     } catch (e) {
       toast({ title: 'Napaka pri nalaganju fotografije', description: e instanceof Error ? e.message : undefined, variant: 'destructive' })
     } finally { setBusy(false) }
@@ -678,13 +686,23 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
   const finalLengthCm = useMemo(() => {
     if (overrideOn) {
       const v = Number(overrideLen.replace(',', '.'))
-      return Number.isFinite(v) && v > 0 ? v : null
+      // R556-e: vnosno polje je v METRIH (oznaka »Dolžina (m)« + predizpolnitev
+      // finalLengthCm/100), ta memo pa vrača CENTIMETRE (lengthCm v potrditvi,
+      // vrsta brez signala, tosti in izpisi delijo s 100). Do R556 je vrednost
+      // šla NEPRETVORJENO — 5,20 m se je shranilo kot lengthCm 5,2 (100×
+      // premalo; živo ujeto v sprehodu R556). Round1 po konvenciji R556-a.
+      return Number.isFinite(v) && v > 0 ? Math.round(v * 1000) / 10 : null
     }
     if (multi.mean !== null && multi.lengths.length > 1) {
       if (multi.spreadPct !== null && multi.spreadPct > 5) return null // konflikt → rešitev ali popravek
       return Math.round(multi.mean * 10) / 10
     }
-    return calc.totalCm
+    // R556-a: ena-pogled pot zaokroži na 1 decimalko (0,1 cm) — ISTA konvencija
+    // kot več-pogled zgoraj, nagib v confirm in fence-run round1. Surovi px→cm
+    // zmnožek ima podmilimetrke iz plavajoče vejice (npr. 430.6000061035156),
+    // ki niso merilna natančnost, ampak aritmetični šum; točke in kalibracija
+    // ostanejo shranjene v polni natančnosti, zato dokazljivost ni prizadeta.
+    return calc.totalCm !== null ? Math.round(calc.totalCm * 10) / 10 : null
   }, [overrideOn, overrideLen, multi, calc])
 
   /** R487 (issue #3 §4C): konflikt pogledov (razpršenost > 5 %) brez rešitve —

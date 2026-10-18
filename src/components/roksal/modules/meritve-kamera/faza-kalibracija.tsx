@@ -28,7 +28,7 @@ export interface FazaKalibracijaProps {
   view: View
   busy: boolean
   orientacija: OrientationCheck | null
-  uploadPhoto: () => Promise<void>
+  uploadPhoto: (namen?: 'KALIBRACIJA' | 'POTRDITEV') => Promise<void>
   detect: () => Promise<void>
   detecting: boolean
   resetAll: () => void
@@ -95,7 +95,7 @@ export function FazaKalibracija (props: FazaKalibracijaProps) {
               </Badge>
             ) : null}
             {!view.photoId ? (
-              <Button size="sm" onClick={() => void uploadPhoto()} disabled={busy}>
+              <Button size="sm" onClick={() => void uploadPhoto('KALIBRACIJA')} disabled={busy}>
                 {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null} Naloži fotografijo
               </Button>
             ) : null}

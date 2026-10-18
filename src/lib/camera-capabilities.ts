@@ -324,7 +324,7 @@ export function izberiNaprave (
  * R550: zoom in ostrenje se omenita SAMO, kadar ju je naprava potrdila.
  */
 export function napisZmogljivosti (zmo: ZmogljivostiKamere): string {
-  const t = zmo.torch === 'PODPRTO' ? 'bliskavica' : zmo.torch === 'NI_PODPRE' ? 'brez bliskavice' : 'blaskavica ni potrjena'
+  const t = zmo.torch === 'PODPRTO' ? 'bliskavica' : zmo.torch === 'NI_PODPRE' ? 'brez bliskavice' : 'bliskavica ni potrjena'
   const p = zmo.preklop === 'PODPRTO' ? 'zamenjava kamer' : zmo.preklop === 'NI_PODPRE' ? 'samo ena kamera' : 'zamenjava ni potrjena'
   const deli = [`${t} · ${p}`]
   if (zmo.zoom?.stanje === 'PODPRTO') deli.push('približevanje')

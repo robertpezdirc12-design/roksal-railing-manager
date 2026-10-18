@@ -49,7 +49,7 @@ Preverja:
      - LEAD viden v /api/crm (crm.read) z virom VIZUALIZATOR.
   G) Idempotentno čiščenje vseh testnih zapisov (direktno prek Prisma).
 """
-import base64, json, os, subprocess, sys, urllib.request, urllib.error
+import base64, json, os, subprocess, sys, time, urllib.request, urllib.error
 
 BASE = os.environ.get('BASE_URL', 'http://localhost:3000')
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -510,6 +510,16 @@ s, _, _ = call('POST', f'/api/public/viz-choice?token=neobstaja-zi-1234', None, 
 chk(s == 404, 'izbira z napačnim žetonom 404')
 
 # tempomat 10/min (ločen ključ od GET) → 429
+# R556: tempomat šteje PO FIKSNIH oknih 60 s (floor(now/60s)) — zanka, ki bi
+# začela tik pred mejo, bi dobila dve polovični okni: do 15×201 brez 429
+# (pas r556 je to živo ujel). Zato: če do meje ostane < 10 s (zanka 15 klicev
+# na ogreti poti traja ~2–5 s), počakamo na SVEŽE okno — sicer začnemo takoj.
+# Pot (viz-link + viz-choice POST) je ob tem koraku že ogreta iz prejšnjih
+# preverb tega suite-a, zato je prag 10 s s široko rezervo.
+_cakajNaOkno = 60 - (time.time() % 60)
+if _cakajNaOkno < 10:
+    print(f'  ⏳ poravnava na sveže okno tempomata (~{int(_cakajNaOkno)} s)')
+    time.sleep(_cakajNaOkno + 0.5)
 s, L3 = callj('POST', f'/api/projects/{P4}/viz-link', admin, {'note': TAG + '-rate'})
 T3 = L3.get('data', {}).get('token', '')
 oks, saw429p = 0, False

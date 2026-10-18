@@ -107,6 +107,16 @@ const numOrNull = (v: string): number | null => {
   return Number.isFinite(n) && n >= 0 ? n : null
 }
 
+// R556-a: število IZ BAZE v input popravljalnega obrazca — nikoli surovo.
+// Kamerina pot je (do R556) lahko shranila plavajoče-vejični šum px→cm
+// zmnožka (npr. 430.6000061035156); vnosno polje pokaže čisto vrednost po
+// isti konvenciji kot preostala aplikacija (zaokroženo na 0,1). Celo število
+// ostane celo, null/NaN/brez vrednosti → prazno polje.
+const fmtNumInput = (v: number | null | undefined): string => {
+  if (typeof v !== 'number' || !Number.isFinite(v)) return ''
+  return String(Math.round(v * 10) / 10)
+}
+
 export default function MeritveModule () {
   const user = useAppStore((s) => s.user)
   const [type, setType] = useState('all')
@@ -363,12 +373,12 @@ function MeasurementForm ({ mode, open, initial, onClose, onSaved, onRefresh }: 
   const [form, setForm] = useState<FormState>({
     type: initial?.type ?? 'OGRAJA',
     location: initial?.location ?? '',
-    lengthCm: initial?.lengthCm != null ? String(initial.lengthCm) : '',
-    heightCm: initial?.heightCm != null ? String(initial.heightCm) : '',
-    posts: initial?.posts != null ? String(initial.posts) : '',
-    segments: initial?.segments != null ? String(initial.segments) : '',
+    lengthCm: fmtNumInput(initial?.lengthCm),
+    heightCm: fmtNumInput(initial?.heightCm),
+    posts: fmtNumInput(initial?.posts),
+    segments: fmtNumInput(initial?.segments),
     handrail: initial?.handrail ?? true,
-    slopeDeg: initial?.slopeDeg != null ? String(initial.slopeDeg) : '',
+    slopeDeg: fmtNumInput(initial?.slopeDeg),
     note: initial?.note ?? '',
     projectId: 'none',
     workOrderId: 'none',

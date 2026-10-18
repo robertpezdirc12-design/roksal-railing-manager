@@ -311,6 +311,11 @@ jobs:
           # poštena resolucija (getSettings), izbirnik objektiva (deviceId),
           # celozaslonski predogled (6 vrzeli po spletni raziskavi).
           - grupa: r553
+          # R556: produkcija (Vercel) — čista dolžina v popravku (fmtNumInput
+          # + round1 vira), fazno pošten toast nalaganja, tipkarska bliskavica,
+          # enote ročnega popravka (m → cm ×100, živo najdeno v sprehodu);
+          # lažna alarma R555 dokumentirana (priporočena metoda, toast izbirnik).
+          - grupa: r556
     services:
       postgres:
         image: postgres:16

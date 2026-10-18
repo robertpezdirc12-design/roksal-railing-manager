@@ -4,8 +4,8 @@ Poslovno-operativni sistem za Roksal — od prvega voda do zaključene montaže 
 fasad in teras: CRM, ponudbe s podpisom, proizvodnja, teren (tudi brez signala),
 računi in **fotomontaža PREJ/POTEM** iz uradnih Roksalovih gradiv.
 
-> **Stanje:** rekonstrukcija zaključena in presežena · izdaja **v1.72.1** ·
-> **59 testnih skupin + E2E skozi pravo aplikacijo** · GitHub je kanonični vir
+> **Stanje:** rekonstrukcija zaključena in presežena · izdaja **v1.72.2** ·
+> **61 testnih skupin + E2E skozi pravo aplikacijo** · GitHub je kanonični vir
 > (zadeve + release vrata), GitLab zrcalo, sinhronizacija po SHA (`ops/sync-check.sh`) ·
 > [docs/](docs/) vsebuje poročila za vsako fazo.
 
@@ -235,6 +235,36 @@ računi in **fotomontaža PREJ/POTEM** iz uradnih Roksalovih gradiv.
    preverjen (monter vidi 31 zavihkov, ne 42 — fail-closed). Demo baza
    površena v seed stanje (izbrisani vsi testni zapisi sprehoda +
    star ostanek R457-TEST). 0 novih odvisnosti, 0 DB sprememb.
+20. **Popravki s produkcije (R556, patch v1.72.2):** vsi kandidati sprehodov
+   R554/R555 so bili pred popravkom ŽIVO reproducirani na Vercel produkciji
+   (tablet 820×1180, prijavljeni obe vlogi). Pet popravljenih (5. je živo
+   našel sprehod R556 sam, ko je prvič izvedel ročni popravek do konca):
+   **(1)**
+   surova plavajoča dolžina (430.6000061035156) v popravljalnem obrazcu —
+   dvoplastno: vir (`finalLengthCm` ena-pogled pot zaokroži na 0,1 cm, ista
+   konvencija kot več-pogled/nagib/round1; točke in kalibracija ostanejo v
+   polni natančnosti) + prikaz (`fmtNumInput` v obrazcu — obrambno za ŽE
+   shranjene vrstice s šumom); **(2)** auditorski `manualOverride.
+   computedLengthCm` prav tako round1 v confirm in offline poti; **(3)**
+   toast »Fotografija shranjena. Zdaj kalibrirajte merilo…« je v fazi
+   POTRDITVE govoril kalibracijo — `uploadPhoto(namen)` zdaj fazno pošten
+   (»…pripeta k meritvi — nadaljujte s potrditvijo«); **(4)** tipkarska
+   »blaskavica« → »bliskavica ni potrjena« (statusna vrstica kamere);
+   **(5)** ENOTE ročnega popravka — vnos »Dolžina (m)« je šel nepretvorjen v
+   `finalLengthCm` (cm): 5,20 m se je shranilo kot `lengthCm` 5,2 (100×
+   premalo, toast »0,1 m«); napaka od R455, brez testnega pokritja — zdaj
+   metri × 100 z round1; živo dokazano: vpis 2,70 m → toast »2,7 m«, v bazi
+   `lengthCm` 270, `computedLengthCm` 268,1 (auditski round1).
+   TRIJE LAŽNI ALARMI so bili živo ovrženi in dokumentirani (brez
+   popravka): »Priporočena metoda« NI prazna (odrezan a11y izrezek);
+   kamera na produkciji NI tiha (toast pride; R555 je iskal z napačnim
+   izbirnikom — `[data-radix-toast-viewport]` v tej različici Radixa ne
+   obstaja, pravi viewport je `ol.fixed.top-0`); obvestila ×10 »izbrala
+   varianto« so po zasnovi (vsak javni izbor = svoje obvestilo, dedup po
+   choice id); BONUS lekcija: a11y vrednosti number inputov lahko pokažejo
+   fantomski plavajoči šum (DOM »5.20«, a11y 5.199999809265137) — resnica
+   je vedno `#id .value`. Testna skupina r556 (61. skupina). Belt 8 statičnih +
+   61 skupin.
 
 ## Kaj aplikacija počne
 
@@ -508,6 +538,10 @@ ImageMagick, poppler) — podrobno v `tests/ci-local.sh` glavi.
   Zavedno odlašano: žiroskopska vodoravnica (roll formula pri gimbalu ni
   overjena — laž bi bila slabša od statičnih vodil); ImageCapture.takePhoto
   ponovna ocena, če bo kdaj preview-pariteten.
+- **Toast izbirnik (R556, zapis izkušnje):** viewport shadcn/Radix toasta je
+  `ol.fixed.top-0` — atribut `data-radix-toast-viewport` v trenutni različici
+  Radixa NE obstaja. Živo preverjeno na dev in produkciji (R555 je z njim
+  lažno sklepal, da toasta ni).
 - **Offline arhitektura (R552, izdaja v1.71.0) — 4 vrzeli po spletni raziskavi.**
   Background Sync (`roksal-sync`): vrsta se izprazni SAM Service Worker, tudi
   z zaprtim zavihkom (iOS Safari: dogodek ne obstaja — velja staro obnašanje,
