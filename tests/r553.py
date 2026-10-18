@@ -314,7 +314,7 @@ rd = src('README.md')
 chk(_re.search(r'60\. skupin|60 skupin|60/60', rd) is not None, 'D3 README: 60. skupina odražena')
 chk('R553' in rd and 'pinč' in rd.lower(), 'D4 README: R553 kamera izboljšave popisane')
 pkg = src('package.json')
-chk('"version": "1.76.0"' in pkg, 'D5 package.json: različica 1.76.0 (v1.72.1 R554; v1.72.2 R556; 1.76.0 R561 — vedno trenutna)')
+chk('"version": "1.77.0"' in pkg, 'D5 package.json: različica 1.77.0 (v1.72.1 R554; v1.72.2 R556; 1.77.0 R561 — vedno trenutna)')
 
 print(f'═══ {TAG} KONEC: {PASS} ✓ / {FAIL} ✗ / {SKIP} ⏸ ═══')
 raise SystemExit(0 if FAIL == 0 else 1)

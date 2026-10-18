@@ -26,9 +26,9 @@
 #      Varnostna opažanja/delo v teku).
 #   D) HTTP: 401 brez žetona + 1 živ VLM klic z generirano 32×32 PNG
 #      (siva — VLM pošteno odgovori; struktura NOVIH razdelkov).
-#   E) registracija (ci-matrix/ci.yml/README 65./v1.76.0) + REGRESIJE:
+#   E) registracija (ci-matrix/ci.yml/README 65./v1.77.0) + REGRESIJE:
 #      r559/r560 pogodbe + verziji pin r553/r556/r559/r560 dvignjeni na
-#      1.76.0 (vzorec »r553 D5 verzija dvignjena« iz R554) + analyze
+#      1.77.0 (vzorec »r553 D5 verzija dvignjena« iz R554) + analyze
 #      (R454) + analyze-multi (R558) nedotaknjena.
 
 import base64
@@ -364,14 +364,14 @@ yml = src('.github/workflows/ci.yml')
 chk(_re.search(r'(?<![\w-])r561(?![\w-])', yml) is not None, 'E2 ci.yml: r561 v matriki')
 rd = src('README.md')
 chk(_re.search(r'65\. skupin|65 skupin|65/65', rd) is not None, 'E3 README: 65. skupina odražena')
-chk('v1.76.0' in rd, 'E4 README: izdaja v1.76.0')
+chk('v1.77.0' in rd, 'E4 README: izdaja v1.77.0')
 pkg = src('package.json')
-chk('"version": "1.76.0"' in pkg, 'E5 package.json: verzija 1.76.0')
+chk('"version": "1.77.0"' in pkg, 'E5 package.json: verzija 1.77.0')
 
 # verzije pin starejših skupin dvignjene na trenutno (vzorec »r553 D5 verzija
 # dvignjena« iz R554/R556 — sicer polni pas pade na stare reference)
 for stara in ('r553', 'r556', 'r559', 'r560'):
-    chk(f'"version": "1.76.0"' in src(f'tests/{stara}.py'), f'E6-{stara} verzija pin dvignjena na 1.76.0')
+    chk(f'"version": "1.77.0"' in src(f'tests/{stara}.py'), f'E6-{stara} verzija pin dvignjena na 1.77.0')
 
 e7 = [
     (f'{LIB}/inspect-core.ts', 'NIKOLI NE UGIBAJ', 'REGRESIJA r559: prepoved ugibanja ostaja'),

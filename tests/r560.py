@@ -356,7 +356,7 @@ rd = src('README.md')
 chk(_re.search(r'64\. skupin|64 skupin|64/64', rd) is not None, 'E3 README: 64. skupina odražena')
 chk('v1.75.0' in rd, 'E4 README: izdaja v1.75.0')
 pkg = src('package.json')
-chk('"version": "1.76.0"' in pkg, 'E5 package.json: verzija 1.76.0 (dvignil R561 — vzorec r553/r554)')
+chk('"version": "1.77.0"' in pkg, 'E5 package.json: verzija 1.77.0 (dvignil R561 — vzorec r553/r554)')
 
 e6 = [
     (f'{LIB}/inspect-core.ts', 'NIKOLI NE UGIBAJ', 'REGRESIJA r559: prepoved ugibanja ostaja'),

@@ -4,8 +4,8 @@ Poslovno-operativni sistem za Roksal — od prvega voda do zaključene montaže 
 fasad in teras: CRM, ponudbe s podpisom, proizvodnja, teren (tudi brez signala),
 računi in **fotomontaža PREJ/POTEM** iz uradnih Roksalovih gradiv.
 
-> **Stanje:** rekonstrukcija zaključena in presežena · izdaja **v1.76.0** ·
-> **65 testnih skupin + E2E skozi pravo aplikacijo** · GitHub je kanonični vir
+> **Stanje:** rekonstrukcija zaključena in presežena · izdaja **v1.77.0** ·
+> **69 testnih skupin + E2E skozi pravo aplikacijo** · GitHub je kanonični vir
 > (zadeve + release vrata), GitLab zrcalo, sinhronizacija po SHA (`ops/sync-check.sh`) ·
 > [docs/](docs/) vsebuje poročila za vsako fazo.
 
@@ -354,6 +354,8 @@ računi in **fotomontaža PREJ/POTEM** iz uradnih Roksalovih gradiv.
    (prizorTip/objektiStevilo/varnostStevilo). Seznam predmetov v UI z
    max-h-72 scroll (dolg seznam).
    Testna skupina r561 (65. skupina). Belt 8 statičnih + 65 skupin.
+
+25. **Zaprtje odprtih zadeb (R563–R567, v1.77.0):** kamera brez runtime VLM (VLM zaznava iz merilnega toka izločena v privzeto izklopljen eksperiment — `ROKSAL_VLM_EXPERIMENT=1`; običajno merjenje deluje brez ZAI) · uradni cenik z življenjskim ciklom (DEMO/DRAFT/PENDING_APPROVAL/APPROVED; zavezujoča ponudba in podpis zavrnjena brez odobrenih cen, razen z izrecnim preglasom z razlogom; snapshot cen ob izdelavi ponudbe) · PostgreSQL recovery drill (FK-urejen uvoz export/*.json, preverba tujih ključev, provider-zaveden drill — dokaz RTO 56 s) · E2E poslovni scenarij (stranka → … → račun → plačilo → prevzem v enem testu) · poskus obhoda roksal.com za knjižnico gradiv BLOKIRAN (izziv-lupina; iskreno zabeleženo, brez obvajanja).
 
 ## Kaj aplikacija počne
 

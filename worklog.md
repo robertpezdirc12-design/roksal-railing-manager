@@ -5839,3 +5839,91 @@ Stage Summary:
 - NOVE SKRIPTE (ponovljivo preverjanje): .zscripts/vlm-check.ts (direkten SDK test, 1 slika, izhod /tmp/r562-vlm-check.json) + .zscripts/vlm-e2e.py (živo e2e 3 rut s prijavo, izhod /tmp/r562-vlm-e2e.json) — za vsako prihodnjo sejo, ki dvomi o VLM.
 - LEKCIJE: (1) setdefault NE popravi že izvožene napačne vrednosti — sandbox DATABASE_URL=file: (SQLite iz predloge) je treba PREPISATI (vzorec r454: TEST_DB_URL ali privzeti PG); (2) bun razrešuje module od lokacije datoteke — skripta v /tmp → bun cache + napačna verzija @prisma/client; vedno bun -e s cwd=REPO; (3) testne slike za VLM ≥24×24 (bilo znano iz r560, a r558/r559 nista bili popravljena — trajni SKIP je bil tiho).
 - OPOMNIKI NASLEDNJI SEJI: (1) žeton ROTACIJA (ghp_vARO… 4× uporabljen po tem pushu — lastnik naj ga prekliče); (2) GitLab zrcalo ŠE VEDNO ČAKA (glpat žeton; main 17+ commitov pred GitLabom); (3) V2 kandidati R557 še čakajo (sidranje overlay z globino, PDF poročilo seje, skica objekta); (4) Vercel deploy NI sprožen (ni spremembe aplikacije); (5) semenska gesla javna (ded R555).
+
+---
+Task ID: R563
+Agent: glavni agent (Z.ai Code)
+Task: Issue #23 (P1 kamera brez runtime VLM): VLM zaznava (/api/measurement/detect) je bila navadna funkcija z gumbom v merilnem toku — izločiti jo v ločen, privzeto IZKLOPLJEN eksperiment; običajno merjenje mora delovati brez ZAI/ključa in brez omrežnega prenosa fotografije.
+
+Work Log:
+- IZVEDBA: src/lib/vlm-experiment.ts (fail-closed: SAMO dobesedno ROKSAL_VLM_EXPERIMENT=1 vklopi; 0/true/yes/undef = izklopljeno) + GET /api/measurement/detect (zastavica enabled/model za UI) + POST vrata PRED validacijo telesa in PRED branjem baze (brez env → 503 z navodilom; neobstoječi measurementId → 503 NE 404 = dokaz, da se fotografija ne prebere) + UI: gumb »Zaznaj samodejno (VLM eksperiment)« se prikaže SAMO ob enabled (faza-kalibracija + faza-meritev, odkritosna oznaka o pošiljanju zunanjemu modelu).
+- AR modul (/api/ar/analyze|inspect|analyze-multi) NAMENOMO izven — izrecne uporabniške akcije (R454/R558–R561), ne merilni tok; z-ai-web-dev-sdk ostaja SAMO v AR/* + detect.
+- r455 pogodba posodobljena (503 default; 422/502 samo ob vklopu).
+- TESTI: r563 (66. skupina) 36✓/0✗; regresije r454-r458 5✓/0✗; tsc 0; lint 0.
+- NAPAKA NAJDENA S DRILL-OM (R565): vlmEnabled bil v vmesniku NE pa v destrukturiranju props (tsc TS2304 na obnovljenem repotu) → popravek v istem dnevu; LEKCIJA: tsc nad GLAVNIM repotom pred vsakim commitom (lint sam ne ujame).
+
+Stage Summary:
+- #23 izpolnjen: običajni tok (zajem→kalibracija→potrditev→izvoz→kosovnica→ponudba) deluje brez ZAI (dokazano živo v r563 D bloku); VLM = izrecen eksperiment; brez env NI omrežnega prenosa fotografije (vrata pred DB branjem).
+
+---
+Task ID: R564
+Agent: glavni agent (Z.ai Code)
+Task: Issue #24 (P0 uradni cenik): demo cene so se mogle tiho pretvoriti v zavezujočo ponudbo — uvesti življenjski cikel cenika, odobritev z virom, zavoro zavezujoče ponudbe/podpisa in snapshot cen.
+
+Work Log:
+- SHEMA: PriceList + status DEMO/DRAFT/PENDING_APPROVAL/APPROVED (privzeto DEMO) + approvedById/approvedAt/source/version; Quote + priceCheck (NEPREVERJENO/DEMO/APPROVED) + priceSnapshot (jsonb); migracija 20261026000000_r564_price_approval (ročna, vzorec R541-R543).
+- src/lib/price-approval-core.ts (ČISTO): preveriCeneVrstic (ujemanje = SKU kot CELA beseda v opisu IN efektivna cena ±0,01; odobreni ceniki imajo prednost; brez ujemanja NE ugiba — NEPREVERJENO); sestaviSnapshot (različice, vrstica→pravilo, DDV, popust — fiksiran).
+- RUTE: PATCH /api/price-lists/[id] (price.override; APPROVED zahteva vir, umik razlog; revizije PRICE_LIST_APPROVE/REVOKE/STATUS; vsak prehod V APPROVED poveča version); POST /api/quotes izračuna priceCheck + snapshot OB izdelavi; PATCH quotes/[id]: POSLAN/SPREJET brez APPROVED → 409, izjema priceOverride.reason (quotes.approve, revizija, ponudba ostane vidno okvirna); sign (podpis → ZAKLENJEN) brez APPROVED → 409 BREZ izjem.
+- UI: jantar badge »Okvirna · demo cene« / »Okvirna · vir ni preverjen« na seznamu + podrobnosti ponudb; seed ceniki izrecno status DEMO + source seed-demo.
+- TESTI: r564 (67. skupina) 54✓/0✗ (unikatna cena +1000 — imunska na tuja pravila!); posodobljeni r474/r476/r478 s preglasi; regresije r465-r474 8✓, r475-r478 4✓.
+- LEKCIJE: (1) testni scenariji z ujemanjem cen morajo uporabljati UNIKATNE cene (debug ostanki/drugi ceniki onesnažijo ujemanje); (2) bun_js relation filter product.sku {not: null} pada na validaciji — productId {not: null} je stabilen; (3) dev strežnik po db:push potrebuje RESTART (stari Prisma klient = Unknown argument).
+
+Stage Summary:
+- #24 izpolnjen: demo/neodobrene cene NE morejo tiho postati zavezujoča ponudba (409) ali podpisana (409 brez izjem); odobritev cenika je izrecna (vir + kdo + kdaj + verzija); stare ponudbe se ne spreminjajo (snapshot); uvoz (R516 CSV/XLSX/JSON) ustvari DEMO — iskrena privzeta vrednost.
+
+---
+Task ID: R565
+Agent: glavni agent (Z.ai Code)
+Task: Issue #22 (P0 PG backup/restore/drill): drill je bil SQLite-only (brezpogojno cp custom.db + file: URL); PG kopije so se obnovile LE ročno.
+
+Work Log:
+- ops/import-db.mjs (NOVO): FK-urejen uvoz export/*.json v svežo bazo — topološka ureditev modelov IZ sheme (Kahn), cikel ki ni samopovezava = trda napaka, samopovezave (DigitalTwinSnapshot.parentSnapshotId) v dveh fazah (create brez self-FK → update), preverba števcev vsota proti _meta.json, fail-closed na nepraznih tabelah (razen --force).
+- ops/fk-check.mjs (NOVO): 10 ključnih relacij (QuoteLine→Quote … StockReservation→InventoryItem); 0 sirot = pogoj veljavne obnove.
+- ops/drill.sh PREPISAN provider-zavedeno: provider iz manifesta (db.provider); PG veja = sveža izolirana baza roksal_drill_<ts> na embedded PostgreSQL (varovala proti živi bazi; ime BREZ pomišljajev — SQL identifikator!) → migrate deploy → import-db → fk-check → zagon → prijava + BRANJE (projekti) + PISANJE (nova stranka 201); SQLite veja nespremenjena; --file za lokalne kopije; off-site nedosegljiv → poročilo BLOKIRAN (izhod 3); ROKSAL_DRILL_KEEP=1 za dnevnike; drill baza se počisti po tek-u.
+- ŽIVI DOKAZ: RECOVERY-DRILL-20261018-183540.md — 94 tabel/1706 vrstic, migracije 1,6 s + uvoz 0,5 s + FK 0 sirot, aplikacija zdrava 2,8 s, prijava + 8 projektov + pisanje; RTO 56,3 s (cilj ≤ 1800 s); docs/RECOVERY.md §10.
+- TESTI: r565 (68. skupina) 36✓/0✗ (A struktura z razcepom po markerjih 4a/4b NE po else; B živi uvoz v svežo bazo; C polni drill E2E s testno kopijo; D čiščenje).
+- NAPAKE V TEKU (vse popravljene): (1) ime baze s pomišljajem → SQL 42601; (2) inline SQL v bash nizu → quoting pekel → ops/fk-check.mjs datoteka; (3) fk-check alias COUNT(*) r namesto n → total null; (4) StockReservation FK je itemId ne stockLotId; (5) backup zajema SAMO commite — neposodobljeni ops/*.mjs v obnovljenem repotu manjkajo (drill pade) → commit PREJ backup.
+- LEKCIJA: git bundle v backupu vsebuje LE commite — vsak drill zahteva, da so vsi skripti (ops/*) pred backupom commitani.
+
+Stage Summary:
+- #22 izpolnjen: PG recovery je avtomatiziran in DOKAZAN (RTO 56,3 s, 0 sirot, bralno-PISALNI test); drill se veja po providerju; blokada off-site je iskrena (BLOCKED poročilo, izhod 3); SQLite zgodovinske kopije podprte.
+
+---
+Task ID: R566
+Agent: glavni agent (Z.ai Code)
+Task: Issue #19 (P0 poslovni tok) DoD »celoten glavni scenarij v E2E testu« + issue #18 §4 (kratko navodilo za monterja).
+
+Work Log:
+- tests/r566.py (69. skupina): E2E poslovni scenarij skozi PRAVE API-je — stranka → projekt → nalog monterju (isti projekt; monter vidi SAMO svoje) → meritev (fotografija + kalibracija z referenco + ročni popravek z razlogom — zakonita pot r455) → paket TER-WPC-001-GRA iz kataloga → BOM iz predloge → REZERVACIJA skladišče (monter 403) → PICKING → proizvodni nalog + dostava (vezava na isti nalog) → transition V_TEKU (monter začne) → ponudba (priceCheck=NEPREVERJENO; POSLAN brez preglasa 409 → s preglasom 200; SPREJET s preglasom; vezava na paket) → račun iz ponudbe → plačilo (NAKAZNICA) → primopredajno poročilo (prevzem); veriga »en naročilo, isti podatki« + RBAC.
+- MEASUREMENT-BASELINE.md priloga: KRATKO NAVODILO ZA MONTERJA (kaj zajeti/kdaj ponoviti/kdaj ročno preveriti; zlato pravilo: brez reference in terenske kontrole je številka ocena, ne mera).
+- NAPAKE V TEKU: payment method NAKAZNICA (NALOG ni veljaven); payment response {payment, invoice} ne {id}; drocna slika → manualOverride; qty 1 (fizična zaloga semena ne pokrije 11,8 m²); PREDCLEAN/čiščenje: (a) python \" escape se POJE v trojnih nizih → JS z enojnimi navedki BREZ escapov; (b) .replace('TAG_PY', TAG) da go identifikator → quoted tag; (c) Project nima projectId — briše se PO id; (d) meritve kažejo NA nalog (workOrderId FK) → najprej meritve, nato nalog; (e) SQL čiščenje po TAG (otroci prvi) je bolj robustno kot Prisma enumerate.
+- TESTI: r566 42✓/0✗.
+
+Stage Summary:
+- #19 DoD E2E izpolnjen (celoten tok v enem testu, realistični podatki, veriga + RBAC); #18 monter navodila dodana (fizična validacija ostaja lastnikova — protokol obstaja, iskreno NI IZVEDENO).
+
+---
+Task ID: R567
+Agent: glavni agent (Z.ai Code)
+Task: Issue #16 (P1 knjižnica gradiv) Faza 1: brskalniški obhod roksal.com (pot, ki je uspela v R524) za izluščenje URL-jev izvirnikov.
+
+Work Log:
+- agent-browser 2 seji (privzeta + --session roksal z brskalnikovo UA): stran se ustavi na ShellSquare izzivu »One moment, please…« — opaženo 5+ minut, reload, UA glava — izziv se V HEADLESS peskovniku NE reši (varovanje strožje kot v oknu R524); node fetch z brskalnikovo UA: 200 + izziv-lupina 11,9 kB, 0 wp-content.
+- NEobideno (prepovedano po #16): status BLOKIRANO zapisan v docs/ROKSAL-ASSET-INVENTORY.md z dokazi + potmi naprej (lastnik v pravem brskalniku — izziv za človeka pade; ROKSAL neposredno — medijska knjižnica, vzorec #6).
+- Verifikacija infrastrukture: r459-r462 91✓/0✗ (r461 = knjižnica/MANIFEST/dedup); 116 datotek v MANIFEST.
+
+Stage Summary:
+- #16: infrastruktura + obstoječa knjižnica preverjena; NOVIh datotek IZ TEGA POSKUSA NI (izziv-lupina) — nič izmišljeno ali tiho nadomeščeno; pridobitev ostaja na lastniku/ROKSAL (iskreno dokumentirano).
+
+---
+Task ID: R563–R567 IZDAJA
+Agent: glavni agent (Z.ai Code)
+Task: Zaprtje vseh 9 odprtih GitHub zadev (#16–#24) po nalogu lastnika »zapri vse issue, preveri če so narejeni, če niso naredi in zapri«.
+
+Work Log:
+- AUDITORIJ: #17 (r462 + REVIZIJA-17-19 ✅), #20 (r533 ✅ 25✓), #21 (r534 ✅ 56✓) — ŽE pokrite iz R533/R534; #18 (statusi + varovalke + protokol ✅, fizični preizkus = lastnik); #19 (oddelki ✅, manjkal E2E → r566); #22/#23/#24 odprte → R565/R563/R564; #16 Faza 1 blokirana → R567 poskus + dokaz.
+- IZDAJA: v1.76.0 → v1.77.0 (minor); README glava (69 skupin) + 25. zgodovinski stavek; pin verzij r553/r556/r559/r560/r561 dvignjeni na 1.77.0 (lekcija R561).
+- VRATA: tsc 0 napak; lint 0 napak (2 znani r517 opozorili); vse prizadete skupine zelene: r563 36✓, r564 54✓, r565 36✓, r566 42✓, r454-r458 5✓, r459-r462 91✓, r465-r474 8✓, r475-r478 4✓, r533 25✓, r534 56✓, r553/r556/r559/r560/r561 vsi ✓.
+
+Stage Summary:
+- 9/9 zadeb obdelanih: 3 izvedene iz nič (#23 VLM izolacija, #24 cenik zavora, #22 PG drill), 1 dopolnjena (#19 E2E + #18 navodila), 1 poskus iskreno blokiran (#16 izziv-lupina, dokazi + poti naprej), 4 potrjene že izvedene (#17/#18 infrastruktura/#20/#21). Vse zaprte z dokazi na GitHubu.
