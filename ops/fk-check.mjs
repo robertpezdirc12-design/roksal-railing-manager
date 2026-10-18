@@ -23,7 +23,7 @@ await c.connect()
 
 const RELACIJE = [
   ['QuoteLine→Quote', 'SELECT COUNT(*) n FROM "QuoteLine" l LEFT JOIN "Quote" q ON l."quoteId"=q.id WHERE q.id IS NULL'],
-  ['PriceRule→PriceList', 'SELECT COUNT(*) r FROM "PriceRule" r LEFT JOIN "PriceList" l ON r."priceListId"=l.id WHERE l.id IS NULL'],
+  ['PriceRule→PriceList', 'SELECT COUNT(*) n FROM "PriceRule" r LEFT JOIN "PriceList" l ON r."priceListId"=l.id WHERE l.id IS NULL'],
   ['Quote→Customer', 'SELECT COUNT(*) n FROM "Quote" q LEFT JOIN "Customer" c ON q."customerId"=c.id WHERE q."customerId" IS NOT NULL AND c.id IS NULL'],
   ['Quote→Project', 'SELECT COUNT(*) n FROM "Quote" q LEFT JOIN "Project" p ON q."projectId"=p.id WHERE q."projectId" IS NOT NULL AND p.id IS NULL'],
   ['Measurement→Project', 'SELECT COUNT(*) n FROM "Measurement" m LEFT JOIN "Project" p ON m."projectId"=p.id WHERE m."projectId" IS NOT NULL AND p.id IS NULL'],
