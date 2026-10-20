@@ -73,3 +73,18 @@ tests/__pycache__/
 
 # PID datoteka lokalnega dev strežnika (okoljski artefakt — peskovnik jo je samodejno commitnil v dde9734)
 .zscripts/dev.pid
+
+# Professional cleanup — prevent dev artifacts in repo
+/worklog.md
+/chunks.txt
+/BUILD-LOG.txt
+/ops/*.png
+/ops/*.jpg
+/ops/*.out
+/ops/*.mjs
+/prisma/test-slike/
+/.zscripts/
+/tests/r[0-9]*.py
+/tests/r[0-9]*.sh
+/docs/RECOVERY-DRILL-*.md
+/docs/*-POROCILO-*.md
