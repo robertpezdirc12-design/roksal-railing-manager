@@ -7,6 +7,7 @@ import { useMemo, useState } from 'react'
 import { Calculator, ListTree, Plus, Ruler, Search, Shapes, Tag } from '@/components/roksal/custom-icons'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { AnimatedList, AnimatedListItem } from '@/components/roksal/motion-bits'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
@@ -97,9 +98,9 @@ export function ProductsTab () {
       {products.loading ? <LoadingRows /> : !products.error && rows.length === 0 ? (
         <EmptyState title="Ni izdelkov" desc={`V družini ${familyName} ni izdelkov ali iskanje ni našlo zadetkov.`} icon={Shapes} />
       ) : (
-        <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <AnimatedList className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {rows.map((p) => (
-            <li key={p.id}>
+            <AnimatedListItem key={p.id}>
               <Card className="h-full transition hover:border-roksal-amber/60 hover:shadow-sm">
                 <CardContent className="flex h-full flex-col gap-2 p-4">
                   <div className="flex items-center justify-between gap-2">
@@ -137,9 +138,9 @@ export function ProductsTab () {
                   </div>
                 </CardContent>
               </Card>
-            </li>
+            </AnimatedListItem>
           ))}
-        </ul>
+        </AnimatedList>
       )}
 
       <Dialog open={!!selected} onOpenChange={(o) => { if (!o) setSelected(null) }}>
