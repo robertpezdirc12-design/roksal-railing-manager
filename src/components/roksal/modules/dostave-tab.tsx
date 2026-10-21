@@ -9,6 +9,7 @@ import { CalendarClock, CarFront, ClipboardList, HardHat, MapPin, Plus, Truck, U
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { AnimatedList, AnimatedListItem } from '@/components/roksal/motion-bits'
 import { Dialog } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useAppStore } from '@/lib/store'
@@ -60,9 +61,9 @@ export function DostaveTab () {
           icon={Truck}
         />
       ) : (
-        <ul className="space-y-2">
+        <AnimatedList className="space-y-2">
           {rows.map((d) => (
-            <li key={d.id}>
+            <AnimatedListItem key={d.id}>
               <Card className="transition hover:border-roksal-amber/60">
                 <CardContent className="space-y-1.5 p-4">
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -86,9 +87,9 @@ export function DostaveTab () {
                   </Button>
                 </CardContent>
               </Card>
-            </li>
+            </AnimatedListItem>
           ))}
-        </ul>
+        </AnimatedList>
       )}
 
       <Dialog open={!!selected} onOpenChange={(o) => { if (!o) setSelected(null) }}>
