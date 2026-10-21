@@ -19,6 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useToast } from '@/hooks/use-toast'
 import { haptic } from '@/lib/haptics'
+import { useLongPress } from '@/lib/use-swipe'
 import { useAppStore } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import { apiDelete, apiPatch, apiPost, fmtDate, fmtDateTime, useApi } from '@/lib/api-client'
@@ -133,6 +134,8 @@ export default function MeritveModule () {
   )
 
   const canWrite = hasPerm(user?.perms, 'measurements.write')
+  const { toast } = useToast()
+  const longPress = useLongPress(() => { haptic('medium'); toast({ title: 'Meritev', description: 'Dolgi pritisk — kontekstni meni' }) }, 500)
 
   const rows = useMemo(() => {
     const all = list.data?.data ?? []
@@ -184,7 +187,7 @@ export default function MeritveModule () {
       ) : (
         <div className="max-h-96 space-y-2 overflow-y-auto pr-1" aria-label="Seznam meritev" data-tour="meritve-list">
           {rows.map((m) => (
-            <button key={m.id} type="button" className="w-full text-left" onClick={() => { haptic("light"); setEditRow(m) }} aria-label={`Odpri meritev ${m.location ?? m.type}`}>
+            <button key={m.id} type="button" className="w-full text-left" onClick={() => { haptic("light"); setEditRow(m) }} onTouchStart={longPress.onTouchStart} onTouchEnd={longPress.onTouchEnd} onTouchMove={longPress.onTouchMove} onMouseDown={longPress.onMouseDown} onMouseUp={longPress.onMouseUp} onMouseLeave={longPress.onMouseLeave} aria-label={`Odpri meritev ${m.location ?? m.type}`}>
               <CardHover>
               <Card className="transition hover:border-roksal-amber/60 hover:shadow-sm">
                 <CardContent className="p-4">

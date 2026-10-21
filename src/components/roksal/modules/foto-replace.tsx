@@ -29,7 +29,7 @@ import { Label } from '@/components/ui/label'
 import { EmptyState, ErrorBox, LoadingRows, PageHeader } from '@/components/roksal/ui-bits'
 import { useToast } from '@/hooks/use-toast'
 import { haptic } from '@/lib/haptics'
-import { useSwipe } from '@/lib/use-swipe'
+import { useSwipe, useLongPress } from '@/lib/use-swipe'
 import { useAppStore } from '@/lib/store'
 import { apiGet, apiPatch, apiPost, fmtDate } from '@/lib/api-client'
 import { hasPerm } from '@/lib/permissions-core'
@@ -91,6 +91,7 @@ export default function FotoReplaceModule () {
     onSwipeLeft: () => { const idx = variantOrder.indexOf(active); if (idx < variantOrder.length - 1) preklopiVarianto(variantOrder[idx + 1]) },
     onSwipeRight: () => { const idx = variantOrder.indexOf(active); if (idx > 0) preklopiVarianto(variantOrder[idx - 1]) },
   })
+  const longPress = useLongPress(() => { haptic('medium'); toast({ title: 'Varianta ' + active, description: 'Dolgi pritisk — kontekstni meni za varianto ' + active }) }, 500)
   const updateSlot = useCallback((fn: (s: SlotState) => SlotState): void => {
     setSlots((prev) => ({ ...prev, [active]: fn(prev[active]) }))
   }, [active])
@@ -423,7 +424,7 @@ export default function FotoReplaceModule () {
                 </div>
               </div>
               {photo ? (
-                <figure className="space-y-1.5" onTouchStart={swipe.onTouchStart} onTouchEnd={swipe.onTouchEnd}>
+                <figure className="space-y-1.5" onTouchStart={(e) => { swipe.onTouchStart(e); longPress.onTouchStart() }} onTouchEnd={(e) => { swipe.onTouchEnd(e); longPress.onTouchEnd() }} onTouchMove={longPress.onTouchMove} onMouseDown={longPress.onMouseDown} onMouseUp={longPress.onMouseUp} onMouseLeave={longPress.onMouseLeave}>
                   <img src={photo} alt="Originalna fotografija objekta" className="max-h-72 w-full rounded-lg border object-contain" />
                   <figcaption className="text-xs text-muted-foreground">Vir: {photoName || 'naložena fotografija'}</figcaption>
                 </figure>

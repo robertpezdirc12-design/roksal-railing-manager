@@ -18,7 +18,9 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useAppStore } from '@/lib/store'
 import { fmtDate, fmtEUR, useApi } from '@/lib/api-client'
+import { useToast } from '@/hooks/use-toast'
 import { haptic } from '@/lib/haptics'
+import { useLongPress } from '@/lib/use-swipe'
 import { EmptyState, ErrorBox, LoadingRows, PageHeader, StatusBadge } from '@/components/roksal/ui-bits'
 import { hasPerm } from '@/lib/permissions-core'
 import { STATUSES, type ProjectDetail, type ProjectRow } from './projekti-shared'
@@ -33,6 +35,8 @@ export default function ProjektiModule () {
   const [status, setStatus] = useState<string>('all')
   const [selected, setSelected] = useState<string | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
+  const { toast } = useToast()
+  const longPress = useLongPress(() => { haptic('medium'); toast({ title: 'Projekt', description: 'Dolgi pritisk — kontekstni meni' }) }, 500)
 
   const list = useApi<{ data: ProjectRow[] }>(
     `/api/projects?q=${encodeURIComponent(q)}${status !== 'all' ? `&status=${status}` : ''}`,
@@ -73,7 +77,7 @@ export default function ProjektiModule () {
           {rows.map((p) => (
             <AnimatedListItem key={p.id}>
             <li>
-              <button type="button" className="w-full text-left" onClick={() => { haptic("light"); setSelected(p.id) }} aria-label={`Odpri projekt ${p.code}`}>
+              <button type="button" className="w-full text-left" onClick={() => { haptic("light"); setSelected(p.id) }} onTouchStart={longPress.onTouchStart} onTouchEnd={longPress.onTouchEnd} onTouchMove={longPress.onTouchMove} onMouseDown={longPress.onMouseDown} onMouseUp={longPress.onMouseUp} onMouseLeave={longPress.onMouseLeave} aria-label={`Odpri projekt ${p.code}`}>
                 <Card className="transition hover:border-roksal-amber/60 hover:shadow-sm">
                   <CardContent className="p-4">
                     <div className="flex items-center justify-between gap-2">
