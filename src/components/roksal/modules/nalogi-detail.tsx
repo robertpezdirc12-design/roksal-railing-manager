@@ -12,6 +12,7 @@ import {
 } from '@/components/roksal/custom-icons'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { AnimatedList, AnimatedListItem } from '@/components/roksal/motion-bits'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -364,9 +365,9 @@ export function NalogDetail ({ detail, offline = false, canTransition, canResche
         {detail.measurements.length === 0 ? (
           <p className="text-sm text-muted-foreground">Ni meritev — zajemite jih na terenu (zavihek Meritve / Foto).</p>
         ) : (
-          <ul className="max-h-96 space-y-1.5 overflow-y-auto pr-1">
+          <AnimatedList className="max-h-96 space-y-1.5 overflow-y-auto pr-1">
             {detail.measurements.map((m) => (
-              <li key={m.id} className="rounded-lg border p-2.5 text-sm">
+              <AnimatedListItem key={m.id} className="rounded-lg border p-2.5 text-sm">
                 <div className="flex flex-wrap items-center justify-between gap-x-2">
                   <span className="flex items-center gap-2 font-medium">
                     <MeasurementTypeBadge type={m.type} />
@@ -381,9 +382,9 @@ export function NalogDetail ({ detail, offline = false, canTransition, canResche
                   {typeof m.slopeDeg === 'number' ? <span>Nagib: <strong className="text-foreground">{m.slopeDeg.toFixed(2)}°</strong></span> : null}
                 </div>
                 {m.note ? <p className="mt-1 text-xs text-muted-foreground">{m.note}</p> : null}
-              </li>
+              </AnimatedListItem>
             ))}
-          </ul>
+          </AnimatedList>
         )}
       </section>
     </>
