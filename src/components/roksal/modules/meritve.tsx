@@ -9,7 +9,7 @@ import { Camera, Check, Copy, History, Link2, Loader2, MapPin, Plus, Ruler, Save
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { CardHover } from '@/components/roksal/motion-bits'
+import { CardHover, AnimatedList, AnimatedListItem } from '@/components/roksal/motion-bits'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -596,17 +596,17 @@ function MeasurementForm ({ mode, open, initial, onClose, onSaved, onRefresh }: 
               <p className="text-xs text-muted-foreground">Ni še shranjenih verzij.</p>
             ) : (
               <ScrollArea className="max-h-48 rounded-lg border">
-                <ul className="divide-y text-xs">
+                <AnimatedList className="divide-y text-xs">
                   {(verzije.data?.data ?? []).map((v) => (
-                    <li key={v.id} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 px-3 py-2">
+                    <AnimatedListItem key={v.id} className="flex flex-wrap items-center gap-x-2 gap-y-0.5 px-3 py-2">
                       <Badge variant="secondary" className="border-transparent bg-secondary font-mono">v{v.version}</Badge>
                       <span className="font-medium">{v.note ?? 'brez opombe'}</span>
                       <span className="ml-auto text-muted-foreground">
                         {v.user?.name ?? '—'} · {fmtDateTime(v.createdAt)}
                       </span>
-                    </li>
+                    </AnimatedListItem>
                   ))}
-                </ul>
+                </AnimatedList>
               </ScrollArea>
             )}
           </div>
