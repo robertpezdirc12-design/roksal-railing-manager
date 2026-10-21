@@ -9,6 +9,7 @@ import { ArrowLeftRight, Camera, CheckCircle2, Film, Info, Loader2, MapPin, Mess
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { AnimatedList, AnimatedListItem } from '@/components/roksal/motion-bits'
 import { DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -273,12 +274,12 @@ export function PinsCard ({
         ) : filtered.length === 0 ? (
           <p className="text-xs text-muted-foreground"> Nobena pripomba ne ustreza filtru.</p>
         ) : (
-          <ul className="space-y-2">
+          <AnimatedList className="space-y-2">
             {filtered.map((p) => {
               const tone = PIN_TONE[p.status] ?? PIN_TONE.ZAPRT
               const snap = pinSnapshotSummary(p)
               return (
-                <li key={p.id} className="rounded-lg border p-2.5">
+                <AnimatedListItem key={p.id} className="rounded-lg border p-2.5">
                   <div className="flex flex-wrap items-center gap-1.5">
                     <Badge variant="secondary" className={tone.cls}>{tone.label}</Badge>
                     <code className="rounded bg-muted px-1 py-0.5 font-mono text-[10px] text-muted-foreground">
@@ -325,10 +326,10 @@ export function PinsCard ({
                       )}
                     </div>
                   )}
-                </li>
+                </AnimatedListItem>
               )
             })}
-          </ul>
+          </AnimatedList>
         )}
         <p className="text-[11px] text-muted-foreground">
           Prehodi so enosmerni (odprto → rešeno/zaprto → zaprto) — zgodovina ostane v reviziji. Pripombe ne spreminjajo meritev.
