@@ -8,6 +8,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { ArrowLeft, Ban, BookOpen, Loader2, Pencil, Play, Save } from '@/components/roksal/custom-icons'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { AnimatedList, AnimatedListItem } from '@/components/roksal/motion-bits'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { useToast } from '@/hooks/use-toast'
@@ -110,9 +111,9 @@ export function AdminDefs ({ onNazaj }: { onNazaj: () => void }) {
               </Button>
             </div>
 
-            <ul className="divide-y rounded-lg border">
+            <AnimatedList className="divide-y rounded-lg border">
               {verzije.map((v) => (
-                <li key={v.id} className="flex flex-wrap items-center gap-2 px-3 py-2 text-sm">
+                <AnimatedListItem key={v.id} className="flex flex-wrap items-center gap-2 px-3 py-2 text-sm">
                   <BookOpen className="size-4 text-muted-foreground" aria-hidden />
                   <span className="font-mono text-xs">v{v.version}</span>
                   <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
@@ -136,9 +137,9 @@ export function AdminDefs ({ onNazaj }: { onNazaj: () => void }) {
                       </Button>
                     )}
                   </span>
-                </li>
+                </AnimatedListItem>
               ))}
-            </ul>
+            </AnimatedList>
 
             {urejanje === key ? (
               <div className="space-y-2 rounded-lg border bg-secondary/20 p-3">
