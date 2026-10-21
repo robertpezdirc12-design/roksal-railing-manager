@@ -61,6 +61,7 @@ import {
   type AnalyzeResult, type CalibrationMethod, type DeviceCaps, type DomainOptions, type MeasureMode,
 } from '@/lib/measure-engine'
 import { checkOrientationFromBytes, type OrientationCheck } from '@/lib/exif-orientation'
+import { nastaviVodila as nastaviVodilaPref, preberiNastavitve, shramba } from '@/lib/camera-prefs'
 import { useSceneUnderstanding } from '@/hooks/use-scene-understanding'
 import { CALC_PRAZEN, calcView } from './meritve-kamera/geometrija'
 import { MAX_VIEWS, type CachedWoRow, type DragState, type LensState, type PhotoRow, type ProjectOption, type Pt, type View, type WorkOrderOption } from './meritve-kamera/tipi'
@@ -106,7 +107,16 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
   const sceneState = useSceneUnderstanding(videoRef, camActive, {
     getPhoneRollDeg: () => phoneRollRef.current,
   })
-  const [guides, setGuides] = useState(true) // R455: vodila v živem predogledu (§4)
+  // R573: vodila si ZAPOMNIJO izbiro (vzorec R509 — nastavitve naprave so
+  // lokalne, localStorage). Privzeto vklopljena (R455 §4), a monterjev izklop
+  // preživi ponovni zagon kamere — kot Grid na najboljših kamerah (iPhone
+  // Settings > Camera > Grid). SSR/bralnik brez shrambe → privzeto, brez trditve.
+  const [guides, setGuides] = useState(() => preberiNastavitve(shramba()).vodila)
+  /** R573: preklop vodil — stanje IN spomin v enem koraku (lastnik stanja). */
+  function nastaviVodila (na: boolean): void {
+    setGuides(na)
+    nastaviVodilaPref(shramba(), na)
+  }
 
   // R455: pogledi (fotografije istega objekta) + aktivni zavihek
   const [views, setViews] = useState<View[]>([])
@@ -837,7 +847,7 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
         <FazaZajem
           mode={mode} setMode={setMode} caps={caps} startCamera={startCamera} camActive={camActive}
           fileRef={fileRef} onFile={onFile} videoRef={videoRef} sceneState={sceneState} guides={guides}
-          setGuides={setGuides} zmoKamere={zmoKamere} torchNa={torchNa} preklopiTorch={preklopiTorch}
+          nastaviVodila={nastaviVodila} zmoKamere={zmoKamere} torchNa={torchNa} preklopiTorch={preklopiTorch}
           preklopiSmer={preklopiSmer} stopCamera={stopCamera} nastavitve={nastavitve}
           smerKamere={smerKamere} zoomVrednost={zoomVrednost} nastaviZoomVrednost={nastaviZoomVrednost}
           ostrenjeNaTocki={ostrenjeNaTocki}

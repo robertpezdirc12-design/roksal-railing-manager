@@ -9,7 +9,7 @@
 
 import { useRef, useState, useSyncExternalStore } from 'react'
 import type { Dispatch, RefObject, SetStateAction } from 'react'
-import { Aperture, Camera, Cpu, Flashlight, FlashlightOff, Grid3x3, Image as ImageIcon, Maximize2, Minimize2, Moon, Ruler, Sun, SwitchCamera, ZoomIn } from '@/components/roksal/custom-icons'
+import { Aperture, Camera, ChevronDown, Cpu, Flashlight, FlashlightOff, Grid3x3, Image as ImageIcon, Info, Maximize2, Minimize2, Moon, Ruler, Sun, SwitchCamera, ZoomIn } from '@/components/roksal/custom-icons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -41,7 +41,8 @@ export interface FazaZajemProps {
   videoRef: RefObject<HTMLVideoElement | null>
   sceneState: SceneUnderstandingState
   guides: boolean
-  setGuides: Dispatch<SetStateAction<boolean>>
+  /** R573: preklop vodil — lastnik stanja hkrati ZAPISE spomin (localStorage). */
+  nastaviVodila: (na: boolean) => void
   zmoKamere: ZmogljivostiKamere | null
   torchNa: boolean
   preklopiTorch: () => Promise<void>
@@ -84,7 +85,7 @@ export interface FazaZajemProps {
 
 export function FazaZajem (props: FazaZajemProps) {
   const {
-    mode, setMode, caps, startCamera, camActive, fileRef, onFile, videoRef, sceneState, guides, setGuides,
+    mode, setMode, caps, startCamera, camActive, fileRef, onFile, videoRef, sceneState, guides, nastaviVodila,
     zmoKamere, torchNa, preklopiTorch, preklopiSmer, stopCamera, nastavitve, existingPhotos, pickExisting,
     smerKamere, zoomVrednost, nastaviZoomVrednost, ostrenjeNaTocki,
     resToka, naprave, trenutnaNaprava, preklopiNapravo, svetloba,
@@ -97,6 +98,10 @@ export function FazaZajem (props: FazaZajemProps) {
   const [blisk, setBlisk] = useState(false)
   // R550: prehodni obroč na točki tap-to-focus (izgine po 700 ms).
   const [fokusTocka, setFokusTocka] = useState<{ x: number; y: number } | null>(null)
+  // R573: tehnične podrobnosti naprave so privzeto SKRITE — raziskava R572
+  // (VLM: pogled preobremenjen) + vzorec najboljših: razhroščevalna info je
+  // dosegljiva, a NE zaseda pogleda za zajemom.
+  const [podrobnostiOdprte, setPodrobnostiOdprte] = useState(false)
 
   // ── R553: celozaslonski predogled ──
   // useSyncExternalStore (ne setState v efektu): zmožnost se prebere po
@@ -272,23 +277,49 @@ export function FazaZajem (props: FazaZajemProps) {
           <SwitchCamera className="size-4" aria-hidden /> Preklopi kamero
         </Button>
       ) : null}
-      <Button variant="outline" onClick={() => setGuides((g) => !g)} aria-pressed={guides}>
-        <Grid3x3 className="size-4" aria-hidden /> Vodila {guides ? 'vklop' : 'izklop'}
+      {/* R573: ikonski preklop vodil — vzorec najboljših kamer (mreža je
+          ikona z aktivnim stanjem, ne besedilni gumb). Aktiven = privzeti
+          (polnjen) kot pri bliskavici zgoraj — enak vzorec, enak vir resnice. */}
+      <Button
+        variant={guides ? 'default' : 'outline'}
+        size="icon"
+        onClick={() => nastaviVodila(!guides)}
+        aria-pressed={guides}
+        aria-label={guides ? 'Vodila: izklopi mrežo' : 'Vodila: vklopi mrežo'}
+        title={guides ? 'Vodila (mreža) — izklopi' : 'Vodila (mreža) — vklopi'}
+      >
+        <Grid3x3 className="size-4" aria-hidden />
       </Button>
       <Button variant="outline" onClick={stopCamera}>Prekliči</Button>
     </div>
   )
+  {/* R573: tehnične podrobnosti (zmogljivosti + spomin) — RAZPENJLJIVE,
+      privzeto SKRITE; odkrijejo se na zahtevo (aria-expanded), kot »details«. */}
   const infoVrstice = (
-    <>
-      {zmoKamere ? (
-        <p className={fsAktiven ? 'px-2 pb-1 text-[11px] text-white/70' : 'px-2 pb-2 text-[11px] text-muted-foreground'}>
-          Naprava: {napisZmogljivosti(zmoKamere)}{resToka ? ` · tok ${resToka}` : ''}
-        </p>
+    <div className={fsAktiven ? 'px-2 pb-1' : 'px-2 pb-2'}>
+      <button
+        type="button"
+        onClick={() => setPodrobnostiOdprte((o) => !o)}
+        aria-expanded={podrobnostiOdprte}
+        className={`flex w-full items-center gap-1 text-[11px] font-medium transition-colors ${fsAktiven ? 'text-white/60 hover:text-white/85' : 'text-muted-foreground hover:text-foreground'}`}
+      >
+        <Info className="size-3.5 shrink-0" aria-hidden />
+        Podrobnosti naprave
+        <ChevronDown className={`size-3.5 shrink-0 transition-transform ${podrobnostiOdprte ? 'rotate-180' : ''}`} aria-hidden />
+      </button>
+      {podrobnostiOdprte ? (
+        <>
+          {zmoKamere ? (
+            <p className={fsAktiven ? 'pt-1 text-[11px] text-white/70' : 'pt-1 text-[11px] text-muted-foreground'}>
+              Naprava: {napisZmogljivosti(zmoKamere)}{resToka ? ` · tok ${resToka}` : ''}
+            </p>
+          ) : null}
+          {/* R509 (issue #7 §9): opomba o spominu — svetilke iz spomina ne
+              prižgemo sami; monter jo mora prižgati. */}
+          <p className={fsAktiven ? 'text-[11px] text-white/70' : 'text-[11px] text-muted-foreground'}>{napisNastavitev(nastavitve, torchNa)}</p>
+        </>
       ) : null}
-      {/* R509 (issue #7 §9): opomba o spominu — svetilke iz spomina ne
-          prižgemo sami; monter jo mora prižgati. */}
-      <p className={fsAktiven ? 'px-2 pb-1 text-[11px] text-white/70' : 'px-2 pb-2 text-[11px] text-muted-foreground'}>{napisNastavitev(nastavitve, torchNa)}</p>
-    </>
+    </div>
   )
 
   return (

@@ -4,8 +4,8 @@ Poslovno-operativni sistem za Roksal — od prvega voda do zaključene montaže 
 fasad in teras: CRM, ponudbe s podpisom, proizvodnja, teren (tudi brez signala),
 računi in **fotomontaža PREJ/POTEM** iz uradnih Roksalovih gradiv.
 
-> **Stanje:** rekonstrukcija zaključena in presežena · izdaja **v1.77.1** ·
-> **70 testnih skupin + E2E skozi pravo aplikacijo** · GitHub je kanonični vir
+> **Stanje:** rekonstrukcija zaključena in presežena · izdaja **v1.77.2** ·
+> **71 testnih skupin + E2E skozi pravo aplikacijo** · GitHub je kanonični vir
 > (zadeve + release vrata), GitLab zrcalo, sinhronizacija po SHA (`ops/sync-check.sh`) ·
 > [docs/](docs/) vsebuje poročila za vsako fazo.
 
@@ -657,6 +657,8 @@ ImageMagick, poppler) — podrobno v `tests/ci-local.sh` glavi.
   stanje glasno (tri-stanjsko) opozori `src/instrumentation.ts`.
 
 26. **Celozaslonska kamera po vzorcu najboljših (R570, v1.77.1):** predogled zajema čez CELEN zaslon (`object-cover`, edge-to-edge — obrez po sredini kot v nativnih kamerah; prej 26 % višine zaslona na mobilnem in `max-h-75vh` strop) · kontrole NAD videom na temnem gradientu (scrim) z varnim obročem (`env(safe-area-inset-bottom)`) in izpostavljenim okroglem sprožilcem · `useFitRect` (object-fit matematika: cover-obrez / contain-letterbox) poravna SceneOverlay zaznave in točko ostrenja na pravih mestih tudi ob spremenjenem razmerju (popravlja tudi obstoječi Letterbox zamik v dialogu na širokih zaslonih).
+
+27. **Kamera po vzorcu najboljših, 2. del — čist pogled (R573, v1.77.2):** izbira VODIL (mreža tretjin) se ZAPOMNI v `localStorage` po vzorcu R509 (iPhone Settings > Camera > Grid si zapomni izbiro; privzeto še vedno vklopljena po R455 — poravnava ograje je del naloge) · preklop vodil je IKONSKI gumb z aktivnim stanjem (`aria-pressed`, enak vzorec kot bliskavica) namesto besedilnega · tehnične vrstice (zmogljivosti naprave, tok, spomin) so privzeto SKRITE za razpenjalcem »Podrobnosti naprave« (`aria-expanded`) — raziskava R572 je z VLM potrdila preobremenjenost pogleda; vzorec najboljših: razhroščevalna informacija je dosegljiva, a ne zaseda zajema. Poročilo o raziskavi (kaj mora biti vidno ob odprtju kamere, vzorci iPhone Measure / AR Ruler / CompanyCam): R572.
 
 ## Tehnologija
 

@@ -6,6 +6,12 @@
 // izgubljen preklop na prednjo kamerko. Nastavitve so shranjene LOCALNO, ker so
 // to lastnosti naprave, ne poslovni podatek: gre v `localStorage`, ne v bazo.
 //
+// R573: istemu spominu je dodana še izbira VODIL (mreža tretjin + vodoravnica
+// + središče). Vzorec najboljših kamer: iPhone Settings > Camera > Grid in
+// Samsung Camera > Grid lines si izbiro ZAPOMNITA — monter, ki je črte enkrat
+// izklopil, jih noče videti vsakič znova. Privzeto ostajajo VKLOPLJENA (R455
+// §4 — poravnava ograje ob vodoravnici je del naloge, ne okras).
+//
 // Dve poštenosti, ki ju narekuje §7:
 //   • shranjeno stanje je NIKOLI ukaz napravi. Svetilka se ob ponovnem obisku
 //     SAMODEJNO NE prižge — shrani se samo to, da je monter jo nazadnje imel
@@ -28,9 +34,11 @@ export interface KameraNastavitve {
   smer: SmerKamere
   /** Ali je imel monter svetilko nazadnje prižgano. NE pomeni, da je prižgana. */
   svetilkaNazadnje: boolean
+  /** R573: ali ima monter radi vodila (mreža) v živem predogledu. */
+  vodila: boolean
 }
 
-export const PRIVZETE_NASTAVITVE: KameraNastavitve = { smer: 'environment', svetilkaNazadnje: false }
+export const PRIVZETE_NASTAVITVE: KameraNastavitve = { smer: 'environment', svetilkaNazadnje: false, vodila: true }
 
 /**
  * Brskalnikova shramba ali `null` (SSR, privatni način, zaprt dostop).
@@ -59,14 +67,17 @@ export function preberiNastavitve (s: Shramba | null): KameraNastavitve {
   } catch { surovo = null }
   if (!surovo) return PRIVZETE_NASTAVITVE
   const smer = surovo.smer === 'user' || surovo.smer === 'environment' ? surovo.smer : PRIVZETE_NASTAVITVE.smer
-  return { smer, svetilkaNazadnje: surovo.svetilkaNazadnje === true }
+  // R573: vodila — samo IZRIČEN `false` pomeni izklop; starejši zapisi (brez
+  // polja) in smeti padejo na privzeti VKLOP (R455), nikoli na »ugasnjeno«.
+  const vodila = surovo.vodila === false ? false : PRIVZETE_NASTAVITVE.vodila
+  return { smer, svetilkaNazadnje: surovo.svetilkaNazadnje === true, vodila }
 }
 
 /** Zapiše nastavitve. Vrne `false`, ko pisanje ni mogoče (poln disk / privatni način). */
 export function zapisiNastavitve (s: Shramba | null, n: KameraNastavitve): boolean {
   if (!s) return false
   try {
-    s.setItem(PREFS_KLJUC, JSON.stringify({ smer: n.smer, svetilkaNazadnje: n.svetilkaNazadnje === true }))
+    s.setItem(PREFS_KLJUC, JSON.stringify({ smer: n.smer, svetilkaNazadnje: n.svetilkaNazadnje === true, vodila: n.vodila === true }))
     return true
   } catch { return false }
 }
@@ -79,6 +90,11 @@ export function nastaviSmer (s: Shramba | null, smer: SmerKamere): boolean {
 /** Merge čez obstoječe nastavitve — svetilka: shrani SAMO nameravano stanje. */
 export function nastaviSvetilko (s: Shramba | null, na: boolean): boolean {
   return zapisiNastavitve(s, { ...preberiNastavitve(s), svetilkaNazadnje: na === true })
+}
+
+/** R573: merge čez obstoječe nastavitve — vodila (mreža v predogledu). */
+export function nastaviVodila (s: Shramba | null, na: boolean): boolean {
+  return zapisiNastavitve(s, { ...preberiNastavitve(s), vodila: na === true })
 }
 
 /**
