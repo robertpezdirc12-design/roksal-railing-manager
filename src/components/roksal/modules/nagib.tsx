@@ -9,6 +9,7 @@ import { useMemo, useState } from 'react'
 import { Loader2, Ruler, Save, TrendingUp } from '@/components/roksal/custom-icons'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { AnimatedList, AnimatedListItem } from '@/components/roksal/motion-bits'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useToast } from '@/hooks/use-toast'
@@ -165,9 +166,9 @@ export default function NagibModule () {
             ) : (recent.data?.data ?? []).length === 0 ? (
               <p className="text-sm text-muted-foreground">Ni shranjenih meritev nagiba.</p>
             ) : (
-              <ul className="max-h-96 space-y-1.5 overflow-y-auto pr-1">
+              <AnimatedList className="max-h-96 space-y-1.5 overflow-y-auto pr-1">
                 {(recent.data?.data ?? []).map((m) => (
-                  <li key={m.id} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 rounded-lg border p-2.5 text-sm">
+                  <AnimatedListItem key={m.id} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 rounded-lg border p-2.5 text-sm">
                     <span className="min-w-0">
                       <strong className="text-foreground">{m.slopeDeg != null ? `${fmt2(m.slopeDeg)}°` : '—'}</strong>
                       <span className="ml-2 text-xs text-muted-foreground">{m.note ?? ''}</span>
@@ -175,9 +176,9 @@ export default function NagibModule () {
                     <span className="font-mono text-[11px] text-muted-foreground">
                       {m.lengthCm != null ? `${(m.lengthCm / 100).toFixed(2)} m` : '—'} · {m.author?.name ?? '—'}
                     </span>
-                  </li>
+                  </AnimatedListItem>
                 ))}
-              </ul>
+              </AnimatedList>
             )}
           </CardContent>
         </Card>
