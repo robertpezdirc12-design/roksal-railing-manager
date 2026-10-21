@@ -181,7 +181,7 @@ export default function MeritveModule () {
       {list.loading ? <LoadingRows /> : !list.error && rows.length === 0 ? (
         <EmptyState title="Ni meritev" desc="Spremenite filter ali zajemite prvo meritev na terenu." icon={Ruler} />
       ) : (
-        <div className="max-h-96 space-y-2 overflow-y-auto pr-1" aria-label="Seznam meritev">
+        <div className="max-h-96 space-y-2 overflow-y-auto pr-1" aria-label="Seznam meritev" data-tour="meritve-list">
           {rows.map((m) => (
             <button key={m.id} type="button" className="w-full text-left" onClick={() => setEditRow(m)} aria-label={`Odpri meritev ${m.location ?? m.type}`}>
               <CardHover>
