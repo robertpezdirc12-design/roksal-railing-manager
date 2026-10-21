@@ -11,6 +11,7 @@ import {
 } from '@/components/roksal/custom-icons'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { AnimatedList, AnimatedListItem } from '@/components/roksal/motion-bits'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
@@ -577,14 +578,14 @@ export function WizardDialog ({ onClose, onSaved }: { onClose: () => void; onSav
                     {suggestions.length === 0 && (
                       <p className="text-xs text-muted-foreground">Vsi segmenti so znotraj max razpona — ni predlogov.</p>
                     )}
-                    <ul className="space-y-1 text-xs">
+                    <AnimatedList className="space-y-1 text-xs">
                       {suggestions.map((s, i) => (
-                        <li key={i} className="flex items-center gap-2">
+                        <AnimatedListItem key={i} className="flex items-center gap-2">
                           <span className="inline-block size-1.5 rounded-full bg-primary" aria-hidden />
                           Steber na <strong>{fmtM(s.afterAtCm)}</strong> — {s.reason}
-                        </li>
+                        </AnimatedListItem>
                       ))}
-                    </ul>
+                    </AnimatedList>
                     <Button size="sm" disabled={suggestions.length === 0 || busy || !runId} onClick={() => void applyLayout()}>
                       <Wand2 className="size-4" aria-hidden /> Vstavi predlagane stebre
                     </Button>
