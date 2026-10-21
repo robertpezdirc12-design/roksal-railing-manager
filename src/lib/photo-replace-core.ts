@@ -1405,3 +1405,130 @@ export function izrisiPrimerjavo (
   }
   return opozorila
 }
+
+// ─── Profesionalne izboljšave fotomontaže (R567) ─────────────────────────────
+
+/**
+ * Mehka večslojna senca — realističnejša od enoslojne.
+ * Sestavljena iz 3 slojev z različno mehkobo in prosojnostjo.
+ */
+export function sencaMehka (
+  ctx: CanvasRenderingContext2D,
+  quadPx: [Tocka, Tocka, Tocka, Tocka],
+  moc: number,
+  svetloba: Svetloba
+): void {
+  const dY = Math.max(4, (quadPx[1].y - quadPx[0].y) * 0.08)
+  const dX = -svetloba.smer * dY * 0.6
+
+  // 3 sloji: daljna (mehka), srednja, kontaktna (ostra)
+  const sloji = [
+    { blur: 12, alpha: 0.08 * moc, offsetY: dY * 1.8, offsetX: dX * 1.5 },
+    { blur: 6, alpha: 0.15 * moc, offsetY: dY * 1.2, offsetX: dX * 1.0 },
+    { blur: 2, alpha: 0.35 * moc, offsetY: dY * 0.6, offsetX: dX * 0.5 },
+  ]
+
+  for (const sloj of sloji) {
+    ctx.save()
+    try { ctx.filter = `blur(${sloj.blur}px)` } catch { /* starejši brskalniki */ }
+    ctx.fillStyle = `rgba(10, 12, 16, ${sloj.alpha})`
+    potQuad(ctx,
+      { x: quadPx[0].x + sloj.offsetX * 0.3, y: quadPx[0].y + sloj.offsetY * 0.1 },
+      { x: quadPx[1].x + sloj.offsetX * 0.3, y: quadPx[1].y + sloj.offsetY * 0.1 },
+      { x: quadPx[1].x + sloj.offsetX, y: quadPx[1].y + sloj.offsetY },
+      { x: quadPx[0].x + sloj.offsetX, y: quadPx[0].y + sloj.offsetY }
+    )
+    ctx.fill()
+    ctx.restore()
+  }
+
+  // kontaktna senca ob tleh (temnejša, ozka, brez blur)
+  const gk = ctx.createLinearGradient(0, quadPx[0].y - 2, 0, quadPx[0].y + dY * 0.6)
+  gk.addColorStop(0, 'rgba(10, 12, 16, 0)')
+  gk.addColorStop(0.4, `rgba(10, 12, 16, ${0.45 * moc})`)
+  gk.addColorStop(1, 'rgba(10, 12, 16, 0)')
+  ctx.fillStyle = gk
+  potQuad(ctx,
+    { x: quadPx[0].x - 2, y: quadPx[0].y - 2 },
+    { x: quadPx[1].x + 2, y: quadPx[1].y - 2 },
+    { x: quadPx[1].x + 4, y: quadPx[1].y + dY * 0.6 },
+    { x: quadPx[0].x - 4, y: quadPx[0].y + dY * 0.6 }
+  )
+  ctx.fill()
+}
+
+/**
+ * Vzorčenje barve okolice iz fotografije (piksli okoli quada).
+ * Namesto hex barve iz svetlobe, vzame dejanske barve iz fotografije.
+ */
+export function vzorecBarveOkolice (
+  ctx: CanvasRenderingContext2D,
+  W: number,
+  H: number,
+  quadPx: [Tocka, Tocka, Tocka, Tocka],
+  pasPx: number = 8
+): { r: number; g: number; b: number; svetlost: number } {
+  const vzorci: { r: number; g: number; b: number }[] = []
+  // Vzorči piksle nad in pod quodom
+  const tocke: Tocka[] = []
+  for (let i = 0; i < 4; i++) {
+    const t = quadPx[i]
+    // točke nad quadom
+    tocke.push({ x: Math.max(0, Math.min(W - 1, t.x)), y: Math.max(0, Math.min(H - 1, t.y - pasPx)) })
+    // točke pod quadom
+    tocke.push({ x: Math.max(0, Math.min(W - 1, t.x)), y: Math.max(0, Math.min(H - 1, t.y + pasPx)) })
+  }
+  for (const t of tocke) {
+    try {
+      const d = ctx.getImageData(Math.round(t.x), Math.round(t.y), 1, 1).data
+      if (d[3] > 128) {
+        vzorci.push({ r: d[0], g: d[1], b: d[2] })
+      }
+    } catch { /* CORS ali izven meja */ }
+  }
+  if (vzorci.length === 0) return { r: 128, g: 128, b: 128, svetlost: 0.5 }
+  const avg = vzorci.reduce((a, v) => ({ r: a.r + v.r, g: a.g + v.g, b: a.b + v.b }), { r: 0, g: 0, b: 0 })
+  const n = vzorci.length
+  const r = avg.r / n, g = avg.g / n, b = avg.b / n
+  const svetlost = (r * 0.299 + g * 0.587 + b * 0.114) / 255
+  return { r: Math.round(r), g: Math.round(g), b: Math.round(b), svetlost }
+}
+
+/**
+ * Mehko robno prelivanje — feathering na robovih quada.
+ * Prepreči "izrezan" videz ograje.
+ */
+export function robMehak (
+  ctx: CanvasRenderingContext2D,
+  W: number,
+  H: number,
+  quadPx: [Tocka, Tocka, Tocka, Tocka],
+  moc: number = 0.6
+): void {
+  // Ustvari masko z mehkimi robovi (alpha gradient)
+  const canvas = document.createElement('canvas')
+  canvas.width = W
+  canvas.height = H
+  const mctx = canvas.getContext('2d')
+  if (!mctx) return
+  // Nariši quad z mehkim robom
+  mctx.fillStyle = 'white'
+  potQuad(mctx, quadPx[0], quadPx[1], quadPx[2], quadPx[3])
+  mctx.fill()
+  // Mehki rob: radialni gradient na vsakem vogalu
+  for (const p of quadPx) {
+    const grad = mctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, 8)
+    grad.addColorStop(0, 'rgba(255,255,255,1)')
+    grad.addColorStop(1, 'rgba(255,255,255,0)')
+    mctx.globalCompositeOperation = 'destination-in'
+    mctx.fillStyle = grad
+    mctx.beginPath()
+    mctx.arc(p.x, p.y, 8, 0, Math.PI * 2)
+    mctx.fill()
+  }
+  mctx.globalCompositeOperation = 'source-over'
+  // Uporabi masko kot alpha
+  ctx.globalCompositeOperation = 'destination-in'
+  ctx.drawImage(canvas, 0, 0)
+  ctx.globalCompositeOperation = 'source-over'
+}
