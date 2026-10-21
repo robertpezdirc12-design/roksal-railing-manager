@@ -7,6 +7,7 @@ import { useState } from 'react'
 import { Camera, ImageIcon, MapPin, ShieldAlert, User } from '@/components/roksal/custom-icons'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
+import { AnimatedList, AnimatedListItem } from '@/components/roksal/motion-bits'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { fmtDate, useApi } from '@/lib/api-client'
@@ -75,9 +76,9 @@ export default function GalerijaModule () {
           icon={Camera}
         />
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <AnimatedList className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {photos.map((it) => (
-            <Card key={it.id} className="min-w-0 group overflow-hidden pt-0 transition-shadow hover:shadow-md">
+            <AnimatedListItem key={it.id}><Card className="min-w-0 group overflow-hidden pt-0 transition-shadow hover:shadow-md">
               <button
                 type="button"
                 className="block w-full cursor-zoom-in text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -116,9 +117,9 @@ export default function GalerijaModule () {
                   {it.note ? <p className="line-clamp-2 text-xs italic text-muted-foreground">{it.note}</p> : null}
                 </CardContent>
               </button>
-            </Card>
+            </Card></AnimatedListItem>
           ))}
-        </div>
+        </AnimatedList>
       )}
 
       {/* lightbox */}
