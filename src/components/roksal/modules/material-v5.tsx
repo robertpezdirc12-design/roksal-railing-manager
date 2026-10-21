@@ -10,6 +10,7 @@ import { useState } from 'react'
 import { ClipboardList, Eye, Lock, LockOpen, PackageSearch, ShieldCheck } from '@/components/roksal/custom-icons'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { AnimatedList, AnimatedListItem } from '@/components/roksal/motion-bits'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -81,11 +82,11 @@ export default function KosovniceModule () {
           icon={ClipboardList}
         />
       ) : (
-        <ul className="space-y-2">
+        <AnimatedList className="space-y-2">
           {rows.map((b) => {
             const uncovered = b.lines.filter((l) => l.item.qty < l.qty).length
             return (
-              <li key={b.id}>
+              <AnimatedListItem key={b.id}>
                 <Card className="transition hover:border-roksal-amber/60">
                   <CardContent className="flex flex-wrap items-center gap-x-3 gap-y-1.5 p-4">
                     <span className="font-mono text-xs font-semibold text-roksal-amber">{b.code}</span>
@@ -110,10 +111,10 @@ export default function KosovniceModule () {
                     </div>
                   </CardContent>
                 </Card>
-              </li>
+            </AnimatedListItem>
             )
           })}
-        </ul>
+        </AnimatedList>
       )}
 
       <Dialog open={!!selected} onOpenChange={(o) => { if (!o) setSelected(null) }}>
