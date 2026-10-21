@@ -59,7 +59,7 @@ export async function GET (req: NextRequest) {
     })
     if (customers.length) groups.push({
       kind: 'stranka', label: 'Stranke',
-      hits: customers.map((c) => ({ id: c.id, label: c.name, sub: c.city ?? '—', section: 'prodaja', tab: 'stranke', kind: 'stranka' })),
+      hits: customers.map((c) => ({ id: c.id, label: c.name, sub: c.city ?? '—', section: 'skladisce', tab: 'stranke', kind: 'stranka' })),
     })
   }
 
@@ -73,7 +73,7 @@ export async function GET (req: NextRequest) {
     })
     if (quotes.length) groups.push({
       kind: 'ponudba', label: 'Ponudbe',
-      hits: quotes.map((x) => ({ id: x.id, label: x.code, sub: `${x.customer?.name ?? '—'} · ${(x.total ?? 0).toNumber().toLocaleString('sl-SI', { style: 'currency', currency: 'EUR' })}`, section: 'prodaja', tab: 'ponudbe', kind: 'ponudba' })),
+      hits: quotes.map((x) => ({ id: x.id, label: x.code, sub: `${x.customer?.name ?? '—'} · ${(x.total ?? 0).toNumber().toLocaleString('sl-SI', { style: 'currency', currency: 'EUR' })}`, section: 'skladisce', tab: 'ponudbe', kind: 'ponudba' })),
     })
   }
 
@@ -84,7 +84,7 @@ export async function GET (req: NextRequest) {
     })
     if (invoices.length) groups.push({
       kind: 'racun', label: 'Računi',
-      hits: invoices.map((x) => ({ id: x.id, label: x.code, sub: `${x.project?.customer?.name ?? '—'} · ${(x.total ?? 0).toNumber().toLocaleString('sl-SI', { style: 'currency', currency: 'EUR' })}`, section: 'finance', tab: 'racuni', kind: 'racun' })),
+      hits: invoices.map((x) => ({ id: x.id, label: x.code, sub: `${x.project?.customer?.name ?? '—'} · ${(x.total ?? 0).toNumber().toLocaleString('sl-SI', { style: 'currency', currency: 'EUR' })}`, section: 'skladisce', tab: 'racuni', kind: 'racun' })),
     })
   }
 
@@ -143,12 +143,12 @@ export async function GET (req: NextRequest) {
       ...claims.map((c) => ({
         id: c.id, label: `${c.code} — ${c.title}`,
         sub: `reklamacija · ${c.customer.name} · ${c.status}`,
-        section: 'servis', tab: 'servis', kind: 'reklamacija',
+        section: 'skladisce', tab: 'servis', kind: 'reklamacija',
       })),
       ...cases.map((c) => ({
         id: c.id, label: `${c.code} — ${c.title}`,
         sub: `servis · ${c.project.code} · ${c.status}`,
-        section: 'servis', tab: 'servis', kind: 'servis',
+        section: 'skladisce', tab: 'servis', kind: 'servis',
       })),
     ]
     if (hits.length) groups.push({ kind: 'servis', label: 'Reklamacije / Servis', hits })
@@ -175,7 +175,7 @@ export async function GET (req: NextRequest) {
       kind: 'izdelek', label: 'Izdelki',
       hits: products.map((p) => ({
         id: p.id, label: p.name, sub: `${p.sku} · ${p.family.name} · ${p.salePrice} €/${p.unit}`,
-        section: 'katalog', tab: 'katalog', kind: 'izdelek',
+        section: 'skladisce', tab: 'katalog', kind: 'izdelek',
       })),
     })
   }
@@ -187,7 +187,7 @@ export async function GET (req: NextRequest) {
     })
     if (users.length) groups.push({
       kind: 'uporabnik', label: 'Uporabniki',
-      hits: users.map((u) => ({ id: u.id, label: u.name, sub: `${u.email} · ${u.role}`, section: 'varnost', tab: 'vodja-ekipa', kind: 'uporabnik' })),
+      hits: users.map((u) => ({ id: u.id, label: u.name, sub: `${u.email} · ${u.role}`, section: 'profil', tab: 'vodja-ekipa', kind: 'uporabnik' })),
     })
   }
 

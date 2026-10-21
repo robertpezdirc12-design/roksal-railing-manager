@@ -28,23 +28,12 @@ export interface SectionDef {
 export const SECTIONS: SectionDef[] = [
   {
     id: 'danes',
-    label: 'Danes',
+    label: 'Domov',
     tabs: [
       { id: 'danes', label: 'Danes', gate: 'nalog.read', desc: 'Operativni vhod — terenski tok dneva' },
-      // R458 (issue #13): VODENI POSTOPEK — deterministični playbooki vodijo
-      // monterja skozi celoten postopek (SCRIPT → GUIDE → CAPTURE → VALIDATE →
-      // CONFIRM → HANDOFF) brez runtime AI.
       { id: 'playbook', label: 'Vodeni postopek', gate: 'nalog.read', desc: 'Playbook vodena izvedba na terenu (R458)' },
-    ],
-  },
-  {
-    id: 'prodaja',
-    label: 'Prodaja',
-    tabs: [
-      { id: 'crm', label: 'CRM', gate: 'crm.read', desc: 'Vodi in priložnosti' },
-      { id: 'stranke', label: 'Stranke', gate: 'customers.read', desc: 'Seznam strank in kontakti' },
-      { id: 'ponudbe', label: 'Ponudbe', gate: 'quotes.read', desc: 'Ponudbe s pozicijami in podpisi' },
-      { id: 'postsig', label: 'PostSig', gate: 'deal.lock', desc: 'Zaklepanje posla po podpisu' },
+      { id: 'dashboard', label: 'Preglednica', gate: 'projects.read', desc: 'KPI in stanje portfelja (kokpit)' },
+      { id: 'reports', label: 'Poročila', gate: 'projects.read', desc: 'Trendi in analitika po mesecih' },
     ],
   },
   {
@@ -53,31 +42,15 @@ export const SECTIONS: SectionDef[] = [
     tabs: [
       { id: 'projekti', label: 'Projekti', gate: 'projects.read', desc: 'Vsi projekti z statusi' },
       { id: 'meritve', label: 'Meritve', gate: 'measurements.read', desc: 'Merjenje ograj po terenu' },
-      // R460 (issue #15): OGRADNJA — specializirana ograjna izmera z voženim
-      // tekačem (ZAČETEK → STEBER → SEGMENT → KONEC), terenom, produktnim
-      // razporedom stebrov in VERIFIED preveritvami (zunanji merilnik).
       { id: 'ogradnja', label: 'Ogradnja', gate: 'measurements.read', desc: 'Vodena ograjna izmera — tekač (R460)' },
-      // R461 (issue #16): ZAJEM — reality capture QA (pokritost, drift,
-      // referenčna mreža, vodena ruta) nad tekačem; zaključek → AS-MEASURED.
       { id: 'zajem', label: 'Zajem', gate: 'measurements.read', desc: 'Reality capture QA — pokritost/drift/reference (R461)' },
       { id: 'foto', label: 'Foto', gate: 'measurements.write', desc: 'Foto zajem na terenu' },
       { id: 'nagib', label: 'Nagib', gate: 'projects.read', desc: 'Kalkulator nagibov stopnišč' },
-      // R447 (issue #7 §5): KONFIGURATOR — nadomešča stari Kalkulator (hardcoded
-      // poslovne cene — kršitev §15). Tok: produkt → izmera → izračun → paket/BOM/ponudba.
       { id: 'konfigurator', label: 'Konfigurator', gate: 'quotes.create', desc: 'Konfigurator produktov po družinah (R447)' },
       { id: 'viz', label: 'Vizualizacija', gate: 'projects.read', desc: '3D vizualizacije ograj' },
-      // R459 (issue #14): FOTO VIZUALIZACIJA — fotorealistična menjava ograje na
-      // originalni fotografiji (PREJ/POTEM, variante A/B/C, izvoz/PDF).
       { id: 'foto-replace', label: 'Foto vizualizacija', gate: 'projects.read', desc: 'Realistic photo replacement (R459)' },
-      // R461 (issue #16): DIGITALNI DVOJČEK — AS-MEASURED → AS-DESIGNED →
-      // AS-PRODUCED → AS-INSTALLED, geometrijski diff + cross-check virov.
       { id: 'dvojcek', label: 'Digitalni dvojček', gate: 'projects.read', desc: 'Digitalni dvojček projekta — AS-BUILT (R461)' },
-      // R473 (issue #9 §3): MERILNI MODEL — geometrija iz tekača s svetovnimi
-      // koordinatami, verzijo in σ; tloris/profil/3D, izbira segmenta z viri.
       { id: 'model', label: 'Model', gate: 'measurements.read', desc: 'Merilni model — tloris/profil/3D (R473)' },
-      // R479 (issue #9 §7): ENOTNI PREGLEDOVALNIK — model + fotografije + meritve
-      // + pripeti komentarji (pini) na enem mestu; javna delitev z žetonom +
-      // GDPR soglasje za fotografije.
       { id: 'pregled', label: 'Pregled', gate: 'measurements.read', desc: 'Enotni pregledovalnik — model/foto/pini (R479)' },
       { id: 'ar', label: 'AR', gate: 'projects.read', desc: 'Dopolnjena resničnost na terenu' },
       { id: 'signatura', label: 'Signatura', gate: 'quotes.create', desc: 'Zajem podpisa stranke' },
@@ -87,11 +60,10 @@ export const SECTIONS: SectionDef[] = [
   },
   {
     id: 'operativa',
-    label: 'Operativa',
+    label: 'Teren',
     tabs: [
       { id: 'nalogi', label: 'Nalogi', gate: 'nalog.read', desc: 'Delovni nalogi — osrednji center' },
       { id: 'teren', label: 'Teren', gate: 'projects.write', desc: 'Terenski pregled projektov' },
-      // R445 (issue #7 §9): DOSTAVE — dostave, vozila, ekipe/podizvajalci.
       { id: 'dostave', label: 'Dostave', gate: 'projects.read', desc: 'Dostave, vozila, ekipe (R445)' },
       { id: 'logistika', label: 'Plan', gate: 'production.manage', desc: 'Razpored in termini (montaže)' },
       { id: 'proizvodnja', label: 'Proizvodnja', gate: 'production.read', desc: 'Proizvodni nalogi' },
@@ -101,70 +73,29 @@ export const SECTIONS: SectionDef[] = [
   },
   {
     id: 'skladisce',
-    label: 'Skladišče',
+    label: 'Poslovanje',
     tabs: [
+      { id: 'crm', label: 'CRM', gate: 'crm.read', desc: 'Vodi in priložnosti' },
+      { id: 'stranke', label: 'Stranke', gate: 'customers.read', desc: 'Seznam strank in kontakti' },
+      { id: 'ponudbe', label: 'Ponudbe', gate: 'quotes.read', desc: 'Ponudbe s pozicijami in podpisi' },
+      { id: 'postsig', label: 'PostSig', gate: 'deal.lock', desc: 'Zaklepanje posla po podpisu' },
       { id: 'zaloga', label: 'Zaloga', gate: 'inventory.read', desc: 'Pregled/gibanja/picking + dobavitelji' },
       { id: 'material-v5', label: 'Kosovnice', gate: 'inventory.read', desc: 'BOM kosovnice z eksplicitnimi ID (R442)' },
-      // R452 (issue #7 §16 P3): AVTOMATSKI PREDLOG MATERIALA — povpraševanje
-      // odprtih kosovnic − razpoložljiva zaloga + dopolnitev nizke zaloge.
       { id: 'predlogi', label: 'Predlogi naročila', gate: 'inventory.read', desc: 'Avtomatski predlog materiala iz povpraševanja' },
-    ],
-  },
-  {
-    id: 'katalog',
-    label: 'Katalog',
-    tabs: [
-      // Izdelki | Ceniki sta zavihka znotraj modula; družine (terase, ograje,
-      // fasade, pregrade, napušči, komponente) so hitri filter na Izdelkih.
       { id: 'katalog', label: 'Katalog', gate: 'catalog.read', desc: 'Izdelki po družinah in ceniki' },
-    ],
-  },
-  {
-    id: 'finance',
-    label: 'Finance',
-    tabs: [
-      // Računi + plačila + terjatve so zavihki znotraj modula racuni.
       { id: 'racuni', label: 'Računi', gate: 'invoices.read', desc: 'Računi, plačila in terjatve (R425)' },
-    ],
-  },
-  {
-    id: 'servis',
-    label: 'Servis',
-    tabs: [
-      // Garancije | Reklamacije | Servis so zavihki znotraj modula (R446).
-      // Monter vidi SAMO zavihek Servis (svoji primeri) — modul sama skrije ostala zavihka.
       { id: 'servis', label: 'Servis', gate: 'projects.read', desc: 'Garancije, reklamacije, servis (R446)' },
     ],
   },
   {
-    id: 'porocila',
-    label: 'Poročila',
-    tabs: [
-      { id: 'dashboard', label: 'Preglednica', gate: 'projects.read', desc: 'KPI in stanje portfelja (kokpit)' },
-      // R451 (issue #7 §16 P3): NAPREDNA POROČILA — trendi po mesecih za 4 tipe
-      // (prodaja/servis/zaloga/projekti); sklopi fail-closed po pravicah uporabnika.
-      { id: 'reports', label: 'Napredna poročila', gate: 'projects.read', desc: 'Trendi in analitika po mesecih' },
-    ],
-  },
-  {
-    id: 'varnost',
-    label: 'Varnost',
-    tabs: [
-      { id: 'varnost', label: 'Revizija', gate: 'audit.read', desc: 'Revizijski dnevnik (R428)' },
-      { id: 'vodja-ekipa', label: 'Uporabniki in vloge', gate: 'users.read', desc: 'Uporabniki in vloge' },
-      // R481 (issue #9 §9): INTEGRACIJE — webhook naročnine za partnerje
-      // (integrations.manage = ADMIN/VODJA, vzorec portal.manage).
-      { id: 'integracije', label: 'Integracije', gate: 'integrations.manage', desc: 'Webhook naročnine (R481)' },
-      // R545: CSP POROČILA — pregled kršitev politike (shramba R543); vrata
-      // security.read = ADMIN (diagnostika varnostne politike, ne poslovni podatek).
-      { id: 'csp', label: 'CSP poročila', gate: 'security.read', desc: 'Kršitve Content-Security-Policy (R545)' },
-    ],
-  },
-  {
     id: 'profil',
-    label: 'Profil',
+    label: 'Nastavitve',
     tabs: [
       { id: 'profil', label: 'Profil', gate: null, desc: 'Moj profil, tema, odjava' },
+      { id: 'varnost', label: 'Revizija', gate: 'audit.read', desc: 'Revizijski dnevnik (R428)' },
+      { id: 'vodja-ekipa', label: 'Uporabniki in vloge', gate: 'users.read', desc: 'Uporabniki in vloge' },
+      { id: 'integracije', label: 'Integracije', gate: 'integrations.manage', desc: 'Webhook naročnine (R481)' },
+      { id: 'csp', label: 'CSP poročila', gate: 'security.read', desc: 'Kršitve Content-Security-Policy (R545)' },
     ],
   },
 ]
