@@ -8,6 +8,7 @@ import { CalendarClock, Cog, History, MapPin, PackageCheck, Plus, Search, UserCh
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { AnimatedList, AnimatedListItem } from '@/components/roksal/motion-bits'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -335,9 +336,9 @@ function HistoryDialog ({ detail }: { detail: EquipDetail }) {
       {detail.checkouts.length === 0 ? (
         <EmptyState title="Ni izposoj" desc="To orodje še ni bilo izposojeno." icon={History} />
       ) : (
-        <ul className="max-h-96 space-y-2 overflow-y-auto pr-1">
+        <AnimatedList className="max-h-96 space-y-2 overflow-y-auto pr-1">
           {detail.checkouts.map((c) => (
-            <li key={c.id} className={`rounded-xl border p-3 text-sm ${c.inAt ? '' : 'border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/40'}`}>
+            <AnimatedListItem key={c.id} className={`rounded-xl border p-3 text-sm ${c.inAt ? '' : 'border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/40'}`}>
               <div className="flex items-center justify-between gap-2">
                 <span className="font-medium">{c.user?.name ?? 'Neznan uporabnik'}</span>
                 <span className={`text-xs font-semibold ${c.inAt ? 'text-muted-foreground' : 'text-amber-700 dark:text-amber-300'}`}>
@@ -348,9 +349,9 @@ function HistoryDialog ({ detail }: { detail: EquipDetail }) {
                 {fmtDateTime(c.outAt)} → {c.inAt ? fmtDateTime(c.inAt) : 'še ni vrnjeno'}
               </div>
               {c.note ? <p className="mt-1 text-xs italic text-muted-foreground">{c.note}</p> : null}
-            </li>
+            </AnimatedListItem>
           ))}
-        </ul>
+        </AnimatedList>
       )}
     </>
   )
