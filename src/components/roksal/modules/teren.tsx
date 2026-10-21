@@ -25,7 +25,7 @@ export default function TerenModule () {
       {list.loading ? <LoadingRows /> : projects.length === 0 ? (
         <EmptyState title="Ni projektov na terenu" desc="Ko projekt preide v status „Na terenu“, se prikaže tukaj." icon={HardHat} />
       ) : (
-        <AnimatedList className="grid gap-3 md:grid-cols-2">
+        <AnimatedList className="grid gap-3 md:grid-cols-2" data-tour="teren-list">
           {projects.map((p) => (
             <AnimatedListItem key={p.id}>
             <li>

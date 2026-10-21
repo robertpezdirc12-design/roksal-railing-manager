@@ -68,7 +68,7 @@ export default function ProjektiModule () {
       {list.loading ? <LoadingRows /> : !list.error && rows.length === 0 ? (
         <EmptyState title="Ni projektov" desc="Poskusite spremeniti filter ali iskalni niz." icon={FolderKanban} />
       ) : (
-        <AnimatedList className="grid gap-3 md:grid-cols-2">
+        <AnimatedList className="grid gap-3 md:grid-cols-2" data-tour="projekti-list">
           {rows.map((p) => (
             <AnimatedListItem key={p.id}>
             <li>

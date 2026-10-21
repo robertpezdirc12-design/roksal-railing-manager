@@ -174,7 +174,7 @@ export default function NalogiModule () {
           <EmptyState title="Ni nalogov" desc="Poskusite spremeniti obseg, status ali iskalni niz." icon={ClipboardList} />
         ) : null
       ) : (
-        <AnimatedList className="grid gap-3 md:grid-cols-2">
+        <AnimatedList className="grid gap-3 md:grid-cols-2" data-tour="nalogi-list">
           {rows.map((wo) => (
             <AnimatedListItem key={wo.id}>
             <li>
