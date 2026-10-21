@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/hooks/use-toast'
 import { useAppStore } from '@/lib/store'
 import { cn } from '@/lib/utils'
+import { AnimatedList, AnimatedListItem } from '@/components/roksal/motion-bits'
 import { apiPost, fmtDate, fmtDateTime, useApi } from '@/lib/api-client'
 import { EmptyState, ErrorBox, LoadingRows } from '@/components/roksal/ui-bits'
 import { hasPerm } from '@/lib/permissions-core'
@@ -350,13 +351,13 @@ export function WarrantySection ({ projectId, projectStatus }: { projectId: stri
             </p>
           ) : null}
           {w.visits.length > 0 ? (
-            <ul className="max-h-40 space-y-1 overflow-y-auto">
+            <AnimatedList className="max-h-40 space-y-1 overflow-y-auto">
               {w.visits.map((v) => (
-                <li key={v.id} className="flex items-start justify-between gap-2 text-xs">
+                <AnimatedListItem key={v.id} className="flex items-start justify-between gap-2 text-xs">
                   <span className="min-w-0"><span className="font-mono text-muted-foreground">{fmtDate(v.date)}</span> {v.note}</span>
-                </li>
+                </AnimatedListItem>
               ))}
-            </ul>
+            </AnimatedList>
           ) : <p className="text-xs text-muted-foreground">Ni zabeleženih obiskov.</p>}
           {canWrite ? (
             <div className="flex flex-wrap items-center gap-2 border-t pt-2">
