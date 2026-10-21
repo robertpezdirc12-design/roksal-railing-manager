@@ -203,7 +203,14 @@ export function FazaKalibracija (props: FazaKalibracijaProps) {
             )
           })()}
 
-          <div className="mx-auto inline-block max-w-full rounded-lg border bg-muted/40 p-1">
+          {/* R575: sticky — fotografija se med scrollom dialoga (npr. do kalibracijskega
+              obrazca NIZKO pod sliko) PRILEPI na vrh in NIKOLI ne uide iz vidnega polja;
+              prej je na mobilnem (390×844) po scrollu dol slika padla na 41 % vidna
+              (imgY=-175) in je tap nanjo padel na Radixov overlay — točke se NISO
+              dodale, monterju pa je izgledalo »označevanje ne deluje« (R574 je pokril
+              le vstop v fazo, ne ponovnega izgubljanja). w-fit + mx-auto ohranjata
+              centriranje, bg/blur preprečujeta sij obrazca skozi. */}
+          <div className="sticky top-0 z-10 mx-auto w-fit max-w-full rounded-lg border bg-background/95 p-1 shadow-sm backdrop-blur">
             <div ref={imgBoxRef} className="relative inline-block cursor-crosshair" onClick={onImageClick} role="application" aria-label="Fotografija za kalibracijo — klik dodaja referenčni točki">
               <img src={view.dataUrl} alt="Teren za merjenje" className="block h-auto max-h-[380px] w-auto max-w-full select-none" draggable={false} />
               {view.points.length > 1 ? (

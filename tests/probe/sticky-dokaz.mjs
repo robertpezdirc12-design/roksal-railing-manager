@@ -1,0 +1,47 @@
+// R575: vizualni dokaz sticky slike — screenshot KALIBRACIJA po scrollu dol (mobilni).
+const { chromium, devices } = await import('playwright')
+const { writeFileSync } = await import('node:fs')
+const { tmpdir } = await import('node:os')
+const { join } = await import('node:path')
+
+const BASE = process.argv[2] ?? 'http://localhost:3000'
+const src = await import('node:fs').then(fs => fs.readFileSync('tests/probe/oznacevanje-touch.mjs', 'utf8'))
+const m = src.match(/const TEST_JPG_B64 = '([^']+)'/)
+const imgPath = join(tmpdir(), 'r575-sticky-doc.jpg')
+writeFileSync(imgPath, Buffer.from(m[1], 'base64'))
+
+const browser = await chromium.launch()
+const ctx = await browser.newContext({ ...devices['iPhone 13'], permissions: ['camera'] })
+const page = await ctx.newPage()
+await page.goto(BASE, { waitUntil: 'domcontentloaded' })
+await page.getByRole('textbox', { name: 'E-pošta' }).fill('monter@roksal.si')
+await page.getByRole('textbox', { name: 'Geslo' }).fill('Monter123!')
+await page.getByRole('button', { name: 'Prijava', exact: true }).click()
+await page.waitForTimeout(2800)
+const closeGuides = async () => { let n = 0; while (await page.locator('[data-slot="sheet-content"]').count() && n < 5) { await page.keyboard.press('Escape'); await page.waitForTimeout(500); n++ } }
+await closeGuides()
+await page.getByRole('navigation', { name: 'Navigacija sekcij' }).getByRole('button', { name: /Projekti/ }).click()
+await page.waitForTimeout(800); await closeGuides()
+await page.getByRole('tab', { name: 'Meritve', exact: true }).click()
+await page.waitForTimeout(1200); await closeGuides()
+await page.getByRole('button', { name: 'Meritve s kamero' }).click()
+await page.waitForTimeout(1000)
+await page.locator('input[type=file]').first().setInputFiles(imgPath)
+await page.waitForTimeout(2600)
+await page.locator('div[role=application][aria-label*="Fotografija za kalibracijo"]').waitFor({ state: 'visible', timeout: 15000 })
+await page.waitForTimeout(800)
+// 2 točki
+const kalib = page.locator('div[role=application][aria-label*="Fotografija za kalibracijo"]')
+await kalib.tap({ position: { x: 120, y: 90 } }); await page.waitForTimeout(600)
+await kalib.tap({ position: { x: 240, y: 200 } }); await page.waitForTimeout(600)
+// scroll dol do obrazca
+await page.evaluate(() => { document.querySelector('[aria-label="Metoda kalibracije"]')?.scrollIntoView({ block: 'center' }) })
+await page.waitForTimeout(900)
+await page.screenshot({ path: '/tmp/r575-sticky-after-scroll.png' })
+const st = await page.evaluate(() => {
+  const k = document.querySelector('div[role=application][aria-label*="Fotografija za kalibracijo"]')
+  const st = getComputedStyle(k.parentElement)
+  return JSON.stringify({ position: st.position, top: st.top, zIndex: st.zIndex, bg: st.backgroundColor.slice(0, 40) })
+})
+console.log('[r575-sticky]', 'wrapper computed:', st)
+await browser.close()

@@ -353,7 +353,11 @@ export function FazaMeritev (props: FazaMeritevProps) {
             </div>
           ) : null}
 
-          <div className="mx-auto inline-block max-w-full rounded-lg border bg-muted/40 p-1">
+          {/* R575: sticky — enak popravek kot v fazi KALIBRACIJA: slika se med
+              scrollom dialoga (tabela točk/obrazec so NIZKO pod sliko) prilepi na
+              vrh in ne uide iz vidnega polja; prej je na mobilnem po scrollu dol
+              tap nanjo padel na overlay in točke se niso dodale. */}
+          <div className="sticky top-0 z-10 mx-auto w-fit max-w-full rounded-lg border bg-background/95 p-1 shadow-sm backdrop-blur">
             <div
               ref={imgBoxRef}
               className="relative inline-block cursor-crosshair" onClick={onImageClick}
