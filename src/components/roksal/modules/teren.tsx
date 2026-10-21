@@ -18,7 +18,7 @@ export default function TerenModule () {
   const projects = [...(list.data?.data ?? []), ...(active.data?.data ?? [])]
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5" data-tour="teren-module">
       <PageHeader title="Teren" desc="Projekti na terenu in v pripravi — fokus izvajalcem." />
 
       <ErrorBox error={list.error} />

@@ -467,14 +467,14 @@ export default function FotoReplaceModule () {
 
           {/* navigacija */}
           <div className="mt-5 flex items-center justify-between gap-2">
-            <Button type="button" variant="outline" className="h-11" onClick={() => setStep((s) => Math.max(0, s - 1))} disabled={step === 0}>
+            <Button type="button" variant="outline" className="h-11" onClick={() => { haptic("light"); setStep((s) => Math.max(0, s - 1)) } disabled={step === 0}>
               <ArrowLeft className="size-4" aria-hidden /> Nazaj
             </Button>
             <p className="hidden text-xs text-muted-foreground sm:block">{project ? `${project.code} — ${project.title}` : ''}</p>
             {step < STEPS.length - 1 ? (
               <Button
                 type="button" className="h-11"
-                onClick={() => { if (korakOk(step).ok) setStep((s) => s + 1) }}
+                onClick={() => { if (korakOk(step).ok) { haptic("light"); setStep((s) => s + 1) } }}
                 disabled={!korakOk(step).ok}
                 title={korakOk(step).reason}
               >
