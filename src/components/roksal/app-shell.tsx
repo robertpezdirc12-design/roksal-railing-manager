@@ -220,7 +220,7 @@ export function AppShell () {
             <Button
               variant="ghost" onClick={() => setSearchOpen(true)}
               className="h-9 gap-2 rounded-full px-3 text-muted-foreground"
-              aria-label="Globalno iskanje (Ctrl+K)"
+              aria-label="Globalno iskanje (Ctrl+K)" data-tour="search"
             >
               <Search className="size-4" aria-hidden />
               <span className="hidden text-xs sm:inline">Iskanje</span>
@@ -337,7 +337,7 @@ export function AppShell () {
       {/* telo */}
       <div className="mx-auto flex w-full max-w-7xl flex-1 gap-6 px-3 pb-24 pt-4 sm:px-4 md:pb-8">
         {/* stranska vrstica — desktop */}
-        <nav aria-label="Glavna navigacija" className="hidden w-60 shrink-0 md:block">
+        <nav aria-label="Glavna navigacija" className="hidden w-60 shrink-0 md:block" data-tour="nav">
           <div className="sticky top-20 max-h-[calc(100vh-9.375rem)] space-y-4 overflow-y-auto pr-1">
             {SECTIONS.map((sec) => {
               const tabs = sec.tabs.filter((t) => tabVisible(user.perms, t))
@@ -379,7 +379,7 @@ export function AppShell () {
         </nav>
 
         {/* vsebina */}
-        <main className="min-w-0 flex-1" aria-live="polite">
+        <main className="min-w-0 flex-1" aria-live="polite" data-tour="module">
           {/* tabletke zavihkov znotraj sekcije */}
           {currentSection.tabs.filter((t) => tabVisible(user.perms, t)).length > 1 ? (
             <div className="mb-4 flex gap-1.5 overflow-x-auto pb-1" role="tablist" aria-label={`Zavihki — ${currentSection.label}`}>

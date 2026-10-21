@@ -80,3 +80,47 @@ export function StaggerItem ({ children }: { children: ReactNode }) {
 }
 
 export { motion, AnimatePresence }
+
+// Card hover animation — profesionalen hover efekt
+export function CardHover ({ children, className }: { children: ReactNode; className?: string }) {
+  return (
+    <motion.div
+      whileHover={{ y: -2, boxShadow: '0 8px 24px rgba(0,0,0,0.08)' }}
+      transition={{ duration: 0.2, ease: 'easeOut' }}
+      className={className}
+    >
+      {children}
+    </motion.div>
+  )
+}
+
+// List animation — staggered entrance for list items
+export function AnimatedList ({ children, className }: { children: ReactNode; className?: string }) {
+  return (
+    <motion.div
+      initial="hidden"
+      animate="visible"
+      variants={{
+        hidden: {},
+        visible: { transition: { staggerChildren: 0.04 } },
+      }}
+      className={className}
+    >
+      {children}
+    </motion.div>
+  )
+}
+
+export function AnimatedListItem ({ children, className }: { children: ReactNode; className?: string }) {
+  return (
+    <motion.div
+      variants={{
+        hidden: { opacity: 0, x: -8 },
+        visible: { opacity: 1, x: 0, transition: { duration: 0.2 } },
+      }}
+      className={className}
+    >
+      {children}
+    </motion.div>
+  )
+}
