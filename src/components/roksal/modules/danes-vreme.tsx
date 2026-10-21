@@ -30,8 +30,8 @@ export function WeatherCard ({ day, isToday }: { day: WeatherDay; isToday: boole
   const dt = new Date(day.date)
   const dayName = isToday ? 'danes' : DAY_NAMES[dt.getDay()]
   return (
-    <Card className={cn(isToday && 'border-roksal-amber/60')}>
-      <CardContent className="space-y-1.5 p-3">
+    <Card className={cn('h-full', isToday && 'border-roksal-amber/60')}>
+      <CardContent className="flex h-full flex-col space-y-1.5 p-3">
         <div className="flex items-center justify-between gap-1">
           <span className="text-xs font-bold uppercase tracking-wide text-muted-foreground">{dayName}</span>
           <Icon className="size-4 text-muted-foreground" aria-hidden />
@@ -51,7 +51,7 @@ export function WeatherCard ({ day, isToday }: { day: WeatherDay; isToday: boole
             {day.windMax} km/h
           </div>
         </div>
-        <p className={cn('text-[11px] font-semibold leading-tight', sl.cls)}>{sl.text}</p>
+        <p className={cn('mt-auto text-[11px] font-semibold leading-tight break-words', sl.cls)}>{sl.text}</p>
         <p className="sr-only">
           {dayName}: {day.label}, {day.tmin} do {day.tmax} stopinj,
           {day.precip > 0 ? ` padavine ${day.precip.toFixed(1)} milimetrov` : ' brez padavin'},
