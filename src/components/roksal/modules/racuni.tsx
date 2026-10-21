@@ -9,6 +9,7 @@ import { useMemo, useState } from 'react'
 import { Banknote, CalendarClock, FileCode2, FilePlus2, HandCoins, Loader2, Pencil, Receipt, Search, Trash2, Wallet } from '@/components/roksal/custom-icons'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { AnimatedList, AnimatedListItem } from '@/components/roksal/motion-bits'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -180,9 +181,9 @@ export default function RacuniModule () {
           ) : (
             <Card>
               <CardContent className="max-h-96 overflow-y-auto p-0">
-                <ul className="divide-y">
+                <AnimatedList className="divide-y">
                   {(payments.data?.data ?? []).map((p) => (
-                    <li key={p.id} className="flex items-center justify-between gap-2 p-3 text-sm">
+                    <AnimatedListItem key={p.id} className="flex items-center justify-between gap-2 p-3 text-sm">
                       <div className="min-w-0">
                         <div className="truncate font-medium">{p.invoice.code} · {p.invoice.project?.customer?.name ?? '—'}</div>
                         <div className="text-xs text-muted-foreground">
@@ -191,9 +192,9 @@ export default function RacuniModule () {
                         </div>
                       </div>
                       <span className="shrink-0 font-semibold text-emerald-600 tabular-nums dark:text-emerald-400">+{fmtEUR(p.amount)}</span>
-                    </li>
+                    </AnimatedListItem>
                   ))}
-                </ul>
+                </AnimatedList>
               </CardContent>
             </Card>
           )}
