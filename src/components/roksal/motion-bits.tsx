@@ -95,7 +95,7 @@ export function CardHover ({ children, className }: { children: ReactNode; class
 }
 
 // List animation — staggered entrance for list items
-export function AnimatedList ({ children, className }: { children: ReactNode; className?: string }) {
+export function AnimatedList ({ children, className, style }: { children: ReactNode; className?: string; style?: React.CSSProperties }) {
   return (
     <motion.div
       initial="hidden"
@@ -105,6 +105,7 @@ export function AnimatedList ({ children, className }: { children: ReactNode; cl
         visible: { transition: { staggerChildren: 0.04 } },
       }}
       className={className}
+      style={style}
     >
       {children}
     </motion.div>

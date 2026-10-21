@@ -12,6 +12,7 @@ import { Copy, ExternalLink, Eye, History, Link2, Loader2, Plus, Users } from '@
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { AnimatedList, AnimatedListItem } from '@/components/roksal/motion-bits'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -165,9 +166,9 @@ export function VizLinksPanel ({ projectId, projectCode }: { projectId: string; 
             {links.loading ? <LoadingRows rows={1} /> : !links.error && linkRows.length === 0 ? (
               <p className="rounded-lg border border-dashed p-3 text-xs text-muted-foreground">Ta projekt še nima javne povezave vizualizatorja.</p>
             ) : !links.error ? (
-              <ul className="max-h-96 space-y-1.5 overflow-y-auto pr-1" style={{ scrollbarWidth: 'thin' }}>
+              <AnimatedList className="max-h-96 space-y-1.5 overflow-y-auto pr-1" style={{ scrollbarWidth: 'thin' }}>
                 {linkRows.map((l) => (
-                  <li key={l.id} className="rounded-lg border p-2">
+                  <AnimatedListItem key={l.id} className="rounded-lg border p-2">
                     <div className="flex flex-wrap items-center gap-2">
                       <code className="min-w-0 truncate font-mono text-[11px] text-muted-foreground">…{l.token.slice(-10)}</code>
                       {l.active ? (
@@ -197,9 +198,9 @@ export function VizLinksPanel ({ projectId, projectCode }: { projectId: string; 
                         </Button>
                       ) : null}
                     </div>
-                  </li>
+                  </AnimatedListItem>
                 ))}
-              </ul>
+              </AnimatedList>
             ) : null}
             <p className="text-[11px] leading-relaxed text-muted-foreground">
               Javna stran pokaže variante A/B/C (PREJ/POTEM) in sprejme izbor stranke — brez internih opomb in cen.
