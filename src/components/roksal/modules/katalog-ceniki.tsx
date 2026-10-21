@@ -39,7 +39,7 @@ export function PriceListsTab () {
   const rows = lists.data?.data ?? []
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" data-tour="katalog-module">
       {canManage ? (
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="max-w-xl text-xs text-muted-foreground">

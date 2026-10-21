@@ -304,7 +304,7 @@ export default function FotoReplaceModule () {
   // ═══ RENDER ═══
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" data-tour="foto-replace-module">
       <PageHeader
         title="Foto vizualizacija"
         desc="Fotorealistična menjava obstoječe ograje na originalni fotografiji (R459)"

@@ -92,7 +92,7 @@ export default function CrmModule () {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" data-tour="crm-module">
       <PageHeader
         title="CRM"
         desc="Vodi in priložnosti — pipeline prodaje"
