@@ -4,8 +4,8 @@ Poslovno-operativni sistem za Roksal — od prvega voda do zaključene montaže 
 fasad in teras: CRM, ponudbe s podpisom, proizvodnja, teren (tudi brez signala),
 računi in **fotomontaža PREJ/POTEM** iz uradnih Roksalovih gradiv.
 
-> **Stanje:** rekonstrukcija zaključena in presežena · izdaja **v1.77.2** ·
-> **71 testnih skupin + E2E skozi pravo aplikacijo** · GitHub je kanonični vir
+> **Stanje:** rekonstrukcija zaključena in presežena · izdaja **v1.77.3** ·
+> **72 testnih skupin + E2E skozi pravo aplikacijo** · GitHub je kanonični vir
 > (zadeve + release vrata), GitLab zrcalo, sinhronizacija po SHA (`ops/sync-check.sh`) ·
 > [docs/](docs/) vsebuje poročila za vsako fazo.
 
@@ -659,6 +659,8 @@ ImageMagick, poppler) — podrobno v `tests/ci-local.sh` glavi.
 26. **Celozaslonska kamera po vzorcu najboljših (R570, v1.77.1):** predogled zajema čez CELEN zaslon (`object-cover`, edge-to-edge — obrez po sredini kot v nativnih kamerah; prej 26 % višine zaslona na mobilnem in `max-h-75vh` strop) · kontrole NAD videom na temnem gradientu (scrim) z varnim obročem (`env(safe-area-inset-bottom)`) in izpostavljenim okroglem sprožilcem · `useFitRect` (object-fit matematika: cover-obrez / contain-letterbox) poravna SceneOverlay zaznave in točko ostrenja na pravih mestih tudi ob spremenjenem razmerju (popravlja tudi obstoječi Letterbox zamik v dialogu na širokih zaslonih).
 
 27. **Kamera po vzorcu najboljših, 2. del — čist pogled (R573, v1.77.2):** izbira VODIL (mreža tretjin) se ZAPOMNI v `localStorage` po vzorcu R509 (iPhone Settings > Camera > Grid si zapomni izbiro; privzeto še vedno vklopljena po R455 — poravnava ograje je del naloge) · preklop vodil je IKONSKI gumb z aktivnim stanjem (`aria-pressed`, enak vzorec kot bliskavica) namesto besedilnega · tehnične vrstice (zmogljivosti naprave, tok, spomin) so privzeto SKRITE za razpenjalcem »Podrobnosti naprave« (`aria-expanded`) — raziskava R572 je z VLM potrdila preobremenjenost pogleda; vzorec najboljših: razhroščevalna informacija je dosegljiva, a ne zaseda zajema. Poročilo o raziskavi (kaj mora biti vidno ob odprtju kamere, vzorci iPhone Measure / AR Ruler / CompanyCam): R572.
+
+28. **Označevanje na tablici/mobilnem (R574, v1.77.3):** živa reprodukcija s pravimi dotiki (Playwright touchscreen, Galaxy Tab S9/iPad) je odkrila, zakaj je monter na tablici poročal »označevanje ne deluje«: fotografija za označevanje je bila vidna le ~polovično (dialog max-h-85vh jo je rezal po sredini slike), tap rahlo pod robom dialoga pa je ujel Radixovo prekrivalo in CEL zajem zaprl — točke so izginile. Popravki: (1) ob vstopu v fazo KALIBRACIJA/MERITEV oz. preklopu pogleda se fotografija zavrti v vidno polje (`scrollIntoView` center — monter vidi, kaj označuje), (2) zunanji tap NE uniči zajema z že zajetim delom (`onInteractOutside` zavrnjen, dokler obstaja fotografija; Esc in Prekliči/Zapri ostajajo — namerna pot; brez fotografije zunanji tap še vedno zapre), (3) vodeni uvod (SmartGuide) se ne odpre čez že odprto modalno plast (kamera, nalog — prej je lahko uvod z modulnim prekrivalom blokiral čarovnik v 400 ms teku). Tehnika dotika sama je bila potrjena z pravimi `touchscreen.tap` dogodki (točke se dodajajo/vbrišejo v obeh fazah).
 
 ## Tehnologija
 

@@ -89,10 +89,18 @@ export function SmartGuide () {
   // s firstUse vnosa plošča ENKRAT samodejno odpre (z odlogom, da se modul
   // najprej izriše); preskok se zapomni. setState v asinhronem povratku —
   // brez kaskadnih renderjev v telesu efekta.
+  // R574: ČE je v trenutku odprtja že odprta KATERAKOLI modalna plast
+  // (kamera meritev, nalog, listek »Več sekcij« …), se uvod NE odpre čez
+  // njo — njen modal s prekrivalom bi blokiral zajem/označevanje pod sabo
+  // (živa reprodukcija: preklop na Meritve + hitri klik »Meritve s kamero«
+  // v <400 ms je odprl uvod NAD čarovnikom). Zavihek se NE označi kot
+  // viden — uvod pride pošteno ob naslednjem obisku modula.
   useEffect(() => {
     if (!entry || !entry.firstUse || !isMonter || prefs.skipFirstUse) return
     const t = setTimeout(() => {
       if (readSeenTabs().includes(entry.tabId)) return
+      if (typeof document !== 'undefined'
+        && document.querySelector('[data-slot="dialog-content"], [data-slot="sheet-content"], [role="dialog"]')) return
       setFirstUseShown(entry.tabId)
       setOpen(true)
     }, 400)

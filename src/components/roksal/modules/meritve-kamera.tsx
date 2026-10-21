@@ -208,6 +208,29 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
     void getCachedNalogi<CachedWoRow>().then((c) => { if (c) setCachedOrders(c.list) }).catch(() => {})
   }, [open])
 
+  // ── R574: označevanje na tablici/mobilnem ── živa reprodukcija (Playwright
+  // touchscreen, Galaxy Tab S9 640×1024): fotografija za označevanje se je
+  // izrisala pri 73 % višine zaslona in jo je pogovorno okno (max-h-85vh) REZALO
+  // PO SREDINI SLIKE — vidna le ~polovica; tap spodaj od dialoga je ujel
+  // prekrivalo Radixa in CEL ZAJEM se je zaprl (točke so izginile) → monterjev
+  // vtis »označevanje ne deluje«. Dva popravka po vzorcu najboljših:
+  // (1) ob vstopu v fazo označevanja (KALIBRACIJA/MERITEV) oz. preklopu pogleda
+  //     se fotografija ZAVRTI V VIDNO POLJE dialoga (scrollIntoView center) —
+  //     monter VIDI, kaj označuje (iPhone Measure odpre skico vedno v celoti);
+  // (2) tap/potrkaj IZVEN dialoga NE zapre več zajema, ko že obstaja delo
+  //     (fotografija/točke) — prekliče se izrecno (Prekliči/Zapri/Esc), kot
+  //     vsak urejevalnik z nedokoncanim delom. Brez fotografije (faza 1) outside
+  //     zapiranje ostane (ničesar ni za izgubiti).
+  useEffect(() => {
+    if (!open || (phase !== 2 && phase !== 3)) return
+    const prizgi = (): void => { imgBoxRef.current?.scrollIntoView({ block: 'center', behavior: 'auto' }) }
+    prizgi()
+    // dataUrl slika se naloži asinhrono — višina škatle zraste šele po onload;
+    // ponovni zavit varen (idempotenten, brez animacije).
+    const t = window.setTimeout(prizgi, 350)
+    return () => { window.clearTimeout(t) }
+  }, [open, phase, activeView])
+
   // ── R508 (issue #7 §6): statusna vrstica KORAK-NA-KORAK ────────────────────
   // Monter mora SRED meritve vedeti, kje je njegova fotografija in mera —
   // v telefonu, v vrsti, na strežniku ali v napaki. Stanje se izračuna iz
@@ -813,7 +836,16 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) onClose() }}>
-      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-4xl">
+      {/* R574: tap IZVEN dialoga NE uniči zajema z že zajetim delom — živa
+          reprodukcija na tablici: tap 5 px pod robom dialoga (izgleda kot del
+          fotografije) je zaprl celotnega čarovnika in pobrisal točke.
+          preventDefault na onInteractOutside blokira zunanji tap/fokus;
+          Esc in gumba Prekliči/Zapri ostajata (namerna pot). Brez fotografije
+          (faza 1) zunanji tap še vedno zapre — ničesar ni za izgubiti. */}
+      <DialogContent
+        className="max-h-[85vh] overflow-y-auto sm:max-w-4xl"
+        onInteractOutside={(e) => { if (views.length > 0) e.preventDefault() }}
+      >
       <DialogHeader>
         <DialogTitle className="flex items-center gap-2">
           <Camera className="size-5 text-roksal-amber" aria-hidden /> Meritve s kamero
@@ -870,7 +902,7 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
           calibCm={calibCm} setCalibCm={setCalibCm} calibMethod={calibMethod} setCalibMethod={setCalibMethod}
           refObject={refObject} setRefObject={setRefObject} planeW={planeW} setPlaneW={setPlaneW}
           planeH={planeH} setPlaneH={setPlaneH} snapshot={snapshot} setViews={setViews} calc={calc}
-          px={px} applyYRef={applyYRef} setPhase={setPhase} onClose={onClose}
+          px={px} applyYRef={applyYRef} setPhase={setPhase} onClose={onClose} imgBoxRef={imgBoxRef}
         />
       ) : null}
 

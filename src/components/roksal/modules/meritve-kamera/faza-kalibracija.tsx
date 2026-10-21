@@ -6,7 +6,7 @@
 // R537-a: dobesedna selitev iz meritve-kamera.tsx — stanje je skupno (vstop)
 // in pride prek propsov.
 
-import type { Dispatch, MouseEvent, SetStateAction } from 'react'
+import type { Dispatch, MouseEvent, RefObject, SetStateAction } from 'react'
 import { Crosshair, Loader2, Lock, LockOpen, Ruler, Sparkles, Trash2, Undo2, WifiOff } from '@/components/roksal/custom-icons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -59,6 +59,9 @@ export interface FazaKalibracijaProps {
   applyYRef: (pxY: number | null, cmY: number | null) => void
   setPhase: Dispatch<SetStateAction<1 | 2 | 3 | 4 | 5>>
   onClose: () => void
+  /** R574: škatla fotografije za označevanje — lastnik (meritve-kamera) ob
+   *  vstopu v fazo zavrti fotografijo v vidno polje dialoga (tablica/mobilni). */
+  imgBoxRef: RefObject<HTMLDivElement | null>
 }
 
 export function FazaKalibracija (props: FazaKalibracijaProps) {
@@ -66,7 +69,7 @@ export function FazaKalibracija (props: FazaKalibracijaProps) {
     view, busy, orientacija, uploadPhoto, detect, detecting, vlmEnabled, resetAll, online, maxTilt, views, mode,
     buildOptions, onImageClick, calibA, setCalibA, calibCm, setCalibCm, calibMethod, setCalibMethod,
     refObject, setRefObject, planeW, setPlaneW, planeH, setPlaneH, snapshot, setViews, calc, px,
-    applyYRef, setPhase, onClose,
+    applyYRef, setPhase, onClose, imgBoxRef,
   } = props
   const { toast } = useToast()
 
@@ -201,7 +204,7 @@ export function FazaKalibracija (props: FazaKalibracijaProps) {
           })()}
 
           <div className="mx-auto inline-block max-w-full rounded-lg border bg-muted/40 p-1">
-            <div className="relative inline-block cursor-crosshair" onClick={onImageClick} role="application" aria-label="Fotografija za kalibracijo — klik dodaja referenčni točki">
+            <div ref={imgBoxRef} className="relative inline-block cursor-crosshair" onClick={onImageClick} role="application" aria-label="Fotografija za kalibracijo — klik dodaja referenčni točki">
               <img src={view.dataUrl} alt="Teren za merjenje" className="block h-auto max-h-[380px] w-auto max-w-full select-none" draggable={false} />
               {view.points.length > 1 ? (
                 <svg viewBox="0 0 1 1" preserveAspectRatio="none" className="pointer-events-none absolute inset-0 size-full" aria-hidden>
