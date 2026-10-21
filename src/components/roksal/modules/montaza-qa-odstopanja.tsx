@@ -6,6 +6,7 @@
 
 import { Check, Plus } from '@/components/roksal/custom-icons'
 import { Button } from '@/components/ui/button'
+import { AnimatedList, AnimatedListItem } from '@/components/roksal/motion-bits'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -47,12 +48,12 @@ export function DeviationCard ({ d, canWrite, busy, users, canPickUsers, onResi,
       </div>
 
       {d.actions.length > 0 ? (
-        <ul className="mt-2 space-y-1">
+        <AnimatedList className="mt-2 space-y-1">
           {d.actions.map((a) => {
             const idx = ACTION_FLOW.indexOf(a.status)
             const next = idx >= 0 && idx < ACTION_FLOW.length - 1 ? ACTION_FLOW[idx + 1] : null
             return (
-              <li key={a.id} className="flex items-start justify-between gap-2 rounded bg-background/80 px-2 py-1.5">
+              <AnimatedListItem key={a.id} className="flex items-start justify-between gap-2 rounded bg-background/80 px-2 py-1.5">
                 <span className="min-w-0">
                   <span className="block break-words text-[11px] leading-snug">{a.description}</span>
                   <span className="text-[10px] text-muted-foreground">
@@ -67,10 +68,10 @@ export function DeviationCard ({ d, canWrite, busy, users, canPickUsers, onResi,
                     </Button>
                   ) : null}
                 </span>
-              </li>
+              </AnimatedListItem>
             )
           })}
-        </ul>
+        </AnimatedList>
       ) : null}
 
       {canWrite ? (
