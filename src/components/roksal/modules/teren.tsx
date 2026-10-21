@@ -4,6 +4,7 @@
 
 import { HardHat, MapPin } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
+import { AnimatedList, AnimatedListItem } from '@/components/roksal/motion-bits'
 import { fmtDate, useApi } from '@/lib/api-client'
 import { EmptyState, ErrorBox, LoadingRows, PageHeader, StatusBadge } from '@/components/roksal/ui-bits'
 
@@ -24,9 +25,10 @@ export default function TerenModule () {
       {list.loading ? <LoadingRows /> : projects.length === 0 ? (
         <EmptyState title="Ni projektov na terenu" desc="Ko projekt preide v status „Na terenu“, se prikaže tukaj." icon={HardHat} />
       ) : (
-        <ul className="grid gap-3 md:grid-cols-2">
+        <AnimatedList className="grid gap-3 md:grid-cols-2">
           {projects.map((p) => (
-            <li key={p.id}>
+            <AnimatedListItem key={p.id}>
+            <li>
               <Card>
                 <CardContent className="p-4">
                   <div className="flex items-center justify-between gap-2">
@@ -41,8 +43,9 @@ export default function TerenModule () {
                 </CardContent>
               </Card>
             </li>
+            </AnimatedListItem>
           ))}
-        </ul>
+        </AnimatedList>
       )}
 
       <section aria-label="Odprti nalogi">
