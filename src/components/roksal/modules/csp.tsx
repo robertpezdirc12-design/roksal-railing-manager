@@ -19,6 +19,7 @@
 import { useState } from 'react'
 import { Activity, AlertTriangle, Ban, FileWarning, RefreshCw, ShieldCheck, Trash2 } from '@/components/roksal/custom-icons'
 import { Badge } from '@/components/ui/badge'
+import { AnimatedList, AnimatedListItem } from '@/components/roksal/motion-bits'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -201,14 +202,14 @@ export default function CspModule () {
               </CardHeader>
               <CardContent>
                 {s && s.topDocuments.length > 0 ? (
-                  <ul className="max-h-40 space-y-1 overflow-y-auto text-sm">
+                  <AnimatedList className="max-h-40 space-y-1 overflow-y-auto text-sm">
                     {s.topDocuments.map((d) => (
-                      <li key={d.documentUri} className="flex items-center justify-between gap-2">
+                      <AnimatedListItem key={d.documentUri} className="flex items-center justify-between gap-2">
                         <span className="min-w-0 flex-1 truncate font-mono text-xs" title={d.documentUri}>{d.documentUri}</span>
                         <Badge variant="outline" className="shrink-0">{d.count}×</Badge>
-                      </li>
+                      </AnimatedListItem>
                     ))}
-                  </ul>
+                  </AnimatedList>
                 ) : (
                   <p className="text-sm text-muted-foreground">Ni kršitev — politika je čista.</p>
                 )}
