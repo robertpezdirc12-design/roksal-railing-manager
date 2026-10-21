@@ -19,6 +19,7 @@ import {
 } from '@/components/roksal/custom-icons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { AnimatedList, AnimatedListItem } from '@/components/roksal/motion-bits'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
@@ -196,13 +197,13 @@ export default function IntegracijeModule () {
           icon={Webhook}
         />
       ) : !subs.error ? (
-        <ul className="space-y-2">
+        <AnimatedList className="space-y-2">
           {rows.map((sub) => (
-            <li key={sub.id}>
+            <AnimatedListItem key={sub.id}>
               <SubscriptionCard sub={sub} onChanged={() => void subs.reload()} />
-            </li>
+            </AnimatedListItem>
           ))}
-        </ul>
+        </AnimatedList>
       ) : null}
 
       <p className="text-[11px] leading-relaxed text-muted-foreground">
