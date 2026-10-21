@@ -7,6 +7,7 @@ import { useMemo, useState } from 'react'
 import { FileText, FolderKanban, Mail, MapPin, Pencil, Phone, Plus, Search, Users } from '@/components/roksal/custom-icons'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { AnimatedList, AnimatedListItem } from '@/components/roksal/motion-bits'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -82,9 +83,9 @@ export default function StrankeModule () {
       {list.loading ? <LoadingRows /> : !list.error && rows.length === 0 ? (
         <EmptyState title="Ni strank" desc="Poskusite spremeniti iskalni niz ali dodajte novo stranko." icon={Users} />
       ) : (
-        <ul className="grid gap-3 md:grid-cols-2">
+        <AnimatedList className="grid gap-3 md:grid-cols-2">
           {rows.map((c) => (
-            <li key={c.id}>
+            <AnimatedListItem key={c.id}>
               <button type="button" className="w-full text-left" onClick={() => setSelected(c.id)} aria-label={`Odpri stranko ${c.name}`}>
                 <Card className="transition hover:border-roksal-amber/60 hover:shadow-sm">
                   <CardContent className="p-4">
@@ -107,9 +108,9 @@ export default function StrankeModule () {
                   </CardContent>
                 </Card>
               </button>
-            </li>
+            </AnimatedListItem>
           ))}
-        </ul>
+        </AnimatedList>
       )}
 
       {/* podrobnost stranke */}
