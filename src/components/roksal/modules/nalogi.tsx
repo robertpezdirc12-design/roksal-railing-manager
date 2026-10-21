@@ -26,6 +26,7 @@ import { useToast } from '@/hooks/use-toast'
 import { useAppStore } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import { apiPost, fmtDate, fmtDateTime, useApi } from '@/lib/api-client'
+import { haptic } from '@/lib/haptics'
 import { EmptyState, ErrorBox, LoadingRows, PageHeader, StatusBadge } from '@/components/roksal/ui-bits'
 import { hasPerm } from '@/lib/permissions-core'
 import { cacheNalogi, getCachedNalogi, useOnline } from '@/lib/offline'
@@ -178,7 +179,7 @@ export default function NalogiModule () {
           {rows.map((wo) => (
             <AnimatedListItem key={wo.id}>
             <li>
-              <button type="button" className="w-full text-left" onClick={() => { setSelected(wo.id); setSelectedRow(wo) }} aria-label={`Odpri nalog ${wo.code}`}>
+              <button type="button" className="w-full text-left" onClick={() => { haptic("light"); setSelected(wo.id); setSelectedRow(wo) }} aria-label={`Odpri nalog ${wo.code}`}>
                 <Card className="transition hover:border-roksal-amber/60 hover:shadow-sm">
                   <CardContent className="p-4">
                     <div className="flex items-center justify-between gap-2">

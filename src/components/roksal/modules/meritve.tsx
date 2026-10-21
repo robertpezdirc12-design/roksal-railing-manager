@@ -18,6 +18,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useToast } from '@/hooks/use-toast'
+import { haptic } from '@/lib/haptics'
 import { useAppStore } from '@/lib/store'
 import { cn } from '@/lib/utils'
 import { apiDelete, apiPatch, apiPost, fmtDate, fmtDateTime, useApi } from '@/lib/api-client'
@@ -183,7 +184,7 @@ export default function MeritveModule () {
       ) : (
         <div className="max-h-96 space-y-2 overflow-y-auto pr-1" aria-label="Seznam meritev" data-tour="meritve-list">
           {rows.map((m) => (
-            <button key={m.id} type="button" className="w-full text-left" onClick={() => setEditRow(m)} aria-label={`Odpri meritev ${m.location ?? m.type}`}>
+            <button key={m.id} type="button" className="w-full text-left" onClick={() => { haptic("light"); setEditRow(m) }} aria-label={`Odpri meritev ${m.location ?? m.type}`}>
               <CardHover>
               <Card className="transition hover:border-roksal-amber/60 hover:shadow-sm">
                 <CardContent className="p-4">
@@ -659,7 +660,7 @@ function MeasurementForm ({ mode, open, initial, onClose, onSaved, onRefresh }: 
 
       <DialogFooter>
         <Button variant="outline" onClick={onClose}>Prekliči</Button>
-        <Button onClick={() => void submit()} disabled={busy}>
+        <Button onClick={() => { haptic("success"); void submit() }} disabled={busy}>
           {busy ? <Loader2 className="size-4 animate-spin" aria-hidden /> : <Save className="size-4" aria-hidden />}
           {mode === 'create' ? 'Shrani meritev' : 'Shrani popravek'}
         </Button>

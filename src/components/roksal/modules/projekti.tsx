@@ -18,6 +18,7 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useAppStore } from '@/lib/store'
 import { fmtDate, fmtEUR, useApi } from '@/lib/api-client'
+import { haptic } from '@/lib/haptics'
 import { EmptyState, ErrorBox, LoadingRows, PageHeader, StatusBadge } from '@/components/roksal/ui-bits'
 import { hasPerm } from '@/lib/permissions-core'
 import { STATUSES, type ProjectDetail, type ProjectRow } from './projekti-shared'
@@ -72,7 +73,7 @@ export default function ProjektiModule () {
           {rows.map((p) => (
             <AnimatedListItem key={p.id}>
             <li>
-              <button type="button" className="w-full text-left" onClick={() => setSelected(p.id)} aria-label={`Odpri projekt ${p.code}`}>
+              <button type="button" className="w-full text-left" onClick={() => { haptic("light"); setSelected(p.id) }} aria-label={`Odpri projekt ${p.code}`}>
                 <Card className="transition hover:border-roksal-amber/60 hover:shadow-sm">
                   <CardContent className="p-4">
                     <div className="flex items-center justify-between gap-2">
