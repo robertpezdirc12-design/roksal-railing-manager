@@ -6,6 +6,7 @@
 import { useMemo } from 'react'
 import { CalendarClock, Factory, HardHat, Inbox, Users } from '@/components/roksal/custom-icons'
 import { Card, CardContent } from '@/components/ui/card'
+import { AnimatedList, AnimatedListItem } from '@/components/roksal/motion-bits'
 import { Badge } from '@/components/ui/badge'
 import { fmtDateTime, useApi } from '@/lib/api-client'
 import { EmptyState, ErrorBox, LoadingRows, PageHeader, StatusBadge } from '@/components/roksal/ui-bits'
@@ -156,9 +157,9 @@ export default function LogistikaModule () {
                 </span>
                 <span className="text-xs text-muted-foreground">{col.cards.length}</span>
               </div>
-              <ul className="flex-1 space-y-2 p-2">
+              <AnimatedList className="flex-1 space-y-2 p-2">
                 {col.cards.map((c) => (
-                  <li key={c.key}>
+                  <AnimatedListItem key={c.key}>
                     <Card className={cn('border-border/70 py-0 shadow-none', c.overdue && 'border-red-300 dark:border-red-800')}>
                       <CardContent className="space-y-1 p-3">
                         <div className="flex items-center justify-between gap-2">
@@ -187,9 +188,9 @@ export default function LogistikaModule () {
                         <div className="pt-0.5"><StatusBadge status={c.status} /></div>
                       </CardContent>
                     </Card>
-                  </li>
+                  </AnimatedListItem>
                 ))}
-              </ul>
+              </AnimatedList>
             </section>
           ))}
         </div>
