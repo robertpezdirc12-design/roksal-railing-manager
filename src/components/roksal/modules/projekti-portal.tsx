@@ -6,6 +6,7 @@
 import { useState } from 'react'
 import { Copy, ExternalLink, Eye, Link2, MapPin, Plus, ShieldCheck } from '@/components/roksal/custom-icons'
 import { Badge } from '@/components/ui/badge'
+import { AnimatedList, AnimatedListItem } from '@/components/roksal/motion-bits'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useToast } from '@/hooks/use-toast'
@@ -93,9 +94,9 @@ export function PortalSection ({ projectId, projectCode }: { projectId: string; 
               {canWrite ? 'Ustvarite povezavo in jo pošljite stranki (e-pošta/SMS).' : 'Upravljanje zahteva pravico projects.write.'}
             </p>
           ) : (
-            <ul className="space-y-1.5">
+            <AnimatedList className="space-y-1.5">
               {rows.map((l) => (
-                <li key={l.id} className="rounded-lg border p-2">
+                <AnimatedListItem key={l.id} className="rounded-lg border p-2">
                   <div className="flex flex-wrap items-center gap-2">
                     <code className="min-w-0 truncate font-mono text-[11px] text-muted-foreground">…{l.token.slice(-10)}</code>
                     {l.active ? (
@@ -125,9 +126,9 @@ export function PortalSection ({ projectId, projectCode }: { projectId: string; 
                       </Button>
                     ) : null}
                   </div>
-                </li>
+                </AnimatedListItem>
               ))}
-            </ul>
+            </AnimatedList>
           )}
         </div>
       ) : null}
