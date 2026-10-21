@@ -29,6 +29,7 @@ import { Label } from '@/components/ui/label'
 import { EmptyState, ErrorBox, LoadingRows, PageHeader } from '@/components/roksal/ui-bits'
 import { useToast } from '@/hooks/use-toast'
 import { haptic } from '@/lib/haptics'
+import { useSwipe } from '@/lib/use-swipe'
 import { useAppStore } from '@/lib/store'
 import { apiGet, apiPatch, apiPost, fmtDate } from '@/lib/api-client'
 import { hasPerm } from '@/lib/permissions-core'
@@ -85,6 +86,11 @@ export default function FotoReplaceModule () {
   const [active, setActive] = useState<VariantLabel>('A')
   const [slots, setSlots] = useState<Record<VariantLabel, SlotState>>({ A: prazenSlot(), B: prazenSlot(), C: prazenSlot() })
   const slot = slots[active]
+  const variantOrder: VariantLabel[] = ["A", "B", "C"]
+  const swipe = useSwipe({
+    onSwipeLeft: () => { const idx = variantOrder.indexOf(active); if (idx < variantOrder.length - 1) preklopiVarianto(variantOrder[idx + 1]) },
+    onSwipeRight: () => { const idx = variantOrder.indexOf(active); if (idx > 0) preklopiVarianto(variantOrder[idx - 1]) },
+  })
   const updateSlot = useCallback((fn: (s: SlotState) => SlotState): void => {
     setSlots((prev) => ({ ...prev, [active]: fn(prev[active]) }))
   }, [active])
@@ -417,7 +423,7 @@ export default function FotoReplaceModule () {
                 </div>
               </div>
               {photo ? (
-                <figure className="space-y-1.5">
+                <figure className="space-y-1.5" onTouchStart={swipe.onTouchStart} onTouchEnd={swipe.onTouchEnd}>
                   <img src={photo} alt="Originalna fotografija objekta" className="max-h-72 w-full rounded-lg border object-contain" />
                   <figcaption className="text-xs text-muted-foreground">Vir: {photoName || 'naložena fotografija'}</figcaption>
                 </figure>
