@@ -6,6 +6,7 @@ import { useMemo, useState } from 'react'
 import { ArrowRight, ChevronsRight, FolderPlus, Mail, Phone, Plus, Target, TrendingUp, UserRound, XCircle } from '@/components/roksal/custom-icons'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { AnimatedList, AnimatedListItem } from '@/components/roksal/motion-bits'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -120,13 +121,13 @@ export default function CrmModule () {
             ) : (
               <Card>
                 <CardContent className="max-h-96 overflow-y-auto p-0">
-                  <ul className="divide-y">
+                  <AnimatedList className="divide-y">
                     {leads.map((l) => {
                       const idx = LEAD_FLOW.indexOf(l.status)
                       const next = idx >= 0 && idx < LEAD_FLOW.length - 1 ? LEAD_FLOW[idx + 1] : null
                       const terminal = LEAD_TERMINAL.includes(l.status)
                       return (
-                        <li key={l.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
+                        <AnimatedListItem key={l.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
                           <div className="min-w-0 flex-1">
                             <div className="flex flex-wrap items-center gap-2">
                               <span className="font-semibold">{l.name}</span>
@@ -165,10 +166,10 @@ export default function CrmModule () {
                               </Button>
                             </div>
                           ) : null}
-                        </li>
+                        </AnimatedListItem>
                       )
                     })}
-                  </ul>
+                  </AnimatedList>
                 </CardContent>
               </Card>
             )}
