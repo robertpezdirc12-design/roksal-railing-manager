@@ -96,7 +96,7 @@ export async function connectAndRead(
     const characteristic = await service.getCharacteristic(charUUID)
 
     const handler = (event: Event) => {
-      const target = event.target as BluetoothRemoteGATTCharacteristic
+      const target = event.target as unknown as BluetoothRemoteGATTCharacteristic
       const value = target.value
       if (!value) return
 
