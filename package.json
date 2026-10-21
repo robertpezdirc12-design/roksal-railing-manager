@@ -20,7 +20,9 @@
     "db:seed": "node prisma/seed-guard.cjs && node prisma/seed.cjs && node prisma/seed-r437.cjs && node prisma/seed-r442.cjs && node prisma/seed-r445.cjs && node prisma/seed-r446.cjs && node prisma/seed-r447.cjs && node prisma/seed-r449.cjs && node prisma/seed-r475.cjs && node prisma/seed-r493.cjs && node prisma/seed-r494.cjs && node prisma/seed-r495.cjs && node prisma/seed-r523.cjs && node prisma/seed-r524.cjs",
     "db:seed:test": "node prisma/seed-guard.cjs && node prisma/seed-test.cjs",
     "db:reset": "node prisma/seed-guard.cjs --reset && prisma migrate reset",
-    "db:mark-production": "node prisma/mark-production.cjs"
+    "db:mark-production": "node prisma/mark-production.cjs",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@prisma/client": "^6.11.1",
@@ -85,7 +87,8 @@
     "eslint-config-next": "^16.1.1",
     "tailwindcss": "^4",
     "tw-animate-css": "^1.3.5",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^3.0.0"
   },
   "trustedDependencies": [
     "@prisma/client",
