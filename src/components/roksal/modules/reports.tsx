@@ -14,6 +14,7 @@ import {
   AlertTriangle, Banknote, Boxes, CalendarCheck2, FolderKanban, Receipt, TrendingUp, Wrench,
 } from '@/components/roksal/custom-icons'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { AnimatedList, AnimatedListItem } from '@/components/roksal/motion-bits'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { fmtEUR, useApi } from '@/lib/api-client'
 import { EmptyState, ErrorBox, LoadingRows, PageHeader, StatCard, StatusBadge } from '@/components/roksal/ui-bits'
@@ -385,9 +386,9 @@ function ServisView ({ d }: { d: ServisData }) {
               {d.claimsByDecision.length === 0 ? (
                 <p className="text-sm text-muted-foreground">V obdobju ni novih reklamacij.</p>
               ) : (
-                <ul className="max-h-72 space-y-2 overflow-y-auto pr-1">
+                <AnimatedList className="max-h-72 space-y-2 overflow-y-auto pr-1">
                   {d.claimsByDecision.map((c) => (
-                    <li key={c.decision ?? 'brez'} className="flex items-center justify-between gap-2">
+                    <AnimatedListItem key={c.decision ?? 'brez'} className="flex items-center justify-between gap-2">
                       <span className={cn(
                         'rounded-full px-3 py-1 text-xs font-medium',
                         c.decision === 'UTEMELJENA'
@@ -401,9 +402,9 @@ function ServisView ({ d }: { d: ServisData }) {
                         {odlocitevLabel(c.decision)}
                       </span>
                       <span className="font-bold tabular-nums">{c.count}</span>
-                    </li>
+                    </AnimatedListItem>
                   ))}
-                </ul>
+                </AnimatedList>
               )}
             </CardContent>
           </Card>
