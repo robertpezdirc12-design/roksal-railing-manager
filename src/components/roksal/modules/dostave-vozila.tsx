@@ -8,6 +8,7 @@ import { CarFront, Plus } from '@/components/roksal/custom-icons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { AnimatedList, AnimatedListItem } from '@/components/roksal/motion-bits'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -41,9 +42,9 @@ export function VozilaTab () {
       {vehicles.loading ? <LoadingRows /> : !vehicles.error && rows.length === 0 ? (
         <EmptyState title="Ni vozil" desc="Dodajte prvo dostavno vozilo (registrska, ime, nosilnost)." icon={CarFront} />
       ) : (
-        <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <AnimatedList className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {rows.map((v) => (
-            <li key={v.id}>
+            <AnimatedListItem key={v.id}>
               <Card className="h-full transition hover:border-roksal-amber/60">
                 <CardContent className="space-y-1.5 p-4">
                   <div className="flex items-center justify-between gap-2">
@@ -57,9 +58,9 @@ export function VozilaTab () {
                   <div className="text-xs text-muted-foreground">{v._count.deliveries} dostav</div>
                 </CardContent>
               </Card>
-            </li>
+            </AnimatedListItem>
           ))}
-        </ul>
+        </AnimatedList>
       )}
 
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
