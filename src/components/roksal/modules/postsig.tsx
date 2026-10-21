@@ -11,6 +11,7 @@ import { useMemo, useState } from 'react'
 import { CheckCircle2, CircleDashed, Factory, FileSignature, FilePlus2, Lock, LockOpen, PenLine, Receipt, XCircle } from '@/components/roksal/custom-icons'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { AnimatedList, AnimatedListItem } from '@/components/roksal/motion-bits'
 import { useToast } from '@/hooks/use-toast'
 import { useAppStore } from '@/lib/store'
 import { apiPost, fmtDate, fmtEUR, useApi } from '@/lib/api-client'
@@ -254,14 +255,14 @@ export default function PostsigModule () {
                         <div className="mb-1 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-muted-foreground">
                           <Factory className="size-3.5" aria-hidden />Proizvodnja
                         </div>
-                        <ul className="space-y-1">
+                        <AnimatedList className="space-y-1">
                           {prods.map((p) => (
-                            <li key={p.id} className="flex items-center justify-between gap-2">
+                            <AnimatedListItem key={p.id} className="flex items-center justify-between gap-2">
                               <span className="truncate font-mono text-xs font-semibold text-roksal-amber">{p.code}</span>
                               <StatusBadge status={p.status} />
-                            </li>
+                            </AnimatedListItem>
                           ))}
-                        </ul>
+                        </AnimatedList>
                       </div>
                     ) : (
                       <div className="rounded-lg border border-dashed p-2.5 text-xs text-muted-foreground">
