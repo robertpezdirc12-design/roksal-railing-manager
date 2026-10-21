@@ -8,6 +8,7 @@ import { useState } from 'react'
 import { Ban, Check, CheckCircle2, Compass, Laptop, Loader2, NotebookPen, Play, ShieldAlert, SkipForward } from '@/components/roksal/custom-icons'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { AnimatedList, AnimatedListItem } from '@/components/roksal/motion-bits'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
@@ -213,9 +214,9 @@ export function TrenutniKorak ({ stanje, korak, busy, napravaTier, onAkcija }: {
           {korak.checklist ? (
             <div className="space-y-1.5">
               <Label>Kontrolni seznam (vse točke so obvezne)</Label>
-              <ul className="space-y-1">
+              <AnimatedList className="space-y-1">
                 {korak.checklist.map((t) => (
-                  <li key={t}>
+                  <AnimatedListItem key={t}>
                     <label className="flex min-h-11 cursor-pointer items-center gap-3 rounded-lg border px-3 transition-colors hover:bg-secondary">
                       <Checkbox
                         checked={!!tocke[t]}
@@ -223,9 +224,9 @@ export function TrenutniKorak ({ stanje, korak, busy, napravaTier, onAkcija }: {
                       />
                       <span className="text-sm">{t}</span>
                     </label>
-                  </li>
+                  </AnimatedListItem>
                 ))}
-              </ul>
+              </AnimatedList>
             </div>
           ) : null}
 
