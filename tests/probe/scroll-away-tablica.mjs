@@ -19,7 +19,7 @@ writeFileSync(imgPath, Buffer.from(m[1], 'base64'))
 
 async function main () {
   const browser = await chromium.launch()
-  const ctx = await browser.newContext({ ...devices['Galaxy Tab S9'], permissions: ['camera'] })
+  const ctx = await browser.newContext({ ...devices['iPhone 13'], permissions: ['camera'] })
   const page = await ctx.newPage()
   const errors = []
   page.on('pageerror', (e) => errors.push(e.message))
