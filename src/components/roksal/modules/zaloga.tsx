@@ -8,6 +8,7 @@ import { useMemo, useState } from 'react'
 import { AlertTriangle, ArrowDownLeft, ArrowUpRight, Boxes, ClipboardCheck, ClipboardList, History, Layers, PackagePlus, PackageSearch, Plus, Search, Undo2 } from '@/components/roksal/custom-icons'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { AnimatedList, AnimatedListItem } from '@/components/roksal/motion-bits'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
@@ -363,11 +364,11 @@ function PickingTab () {
       {picking.loading ? <LoadingRows /> : !picking.error && rows.length === 0 ? (
         <EmptyState title="Ni picking list" desc="Ustvarite jo iz rezervirane kosovnice." icon={ClipboardList} />
       ) : (
-        <ul className="space-y-2">
+        <AnimatedList className="space-y-2">
           {rows.map((p) => {
             const done = p.lines.filter((l) => l.qtyPicked >= l.qtyNeeded).length
             return (
-              <li key={p.id}>
+              <AnimatedListItem key={p.id}>
                 <Card className="transition hover:border-roksal-amber/60">
                   <CardContent className="flex flex-wrap items-center gap-x-3 gap-y-1.5 p-4">
                     <span className="font-mono text-xs font-semibold text-roksal-amber">{p.code}</span>
@@ -386,10 +387,10 @@ function PickingTab () {
                     </Button>
                   </CardContent>
                 </Card>
-              </li>
+            </AnimatedListItem>
             )
           })}
-        </ul>
+        </AnimatedList>
       )}
 
       <Dialog open={!!selected} onOpenChange={(o) => { if (!o) setSelected(null) }}>
