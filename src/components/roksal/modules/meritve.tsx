@@ -9,6 +9,7 @@ import { Camera, Check, Copy, History, Link2, Loader2, MapPin, Plus, Ruler, Save
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { CardHover } from '@/components/roksal/motion-bits'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -183,6 +184,7 @@ export default function MeritveModule () {
         <div className="max-h-96 space-y-2 overflow-y-auto pr-1" aria-label="Seznam meritev">
           {rows.map((m) => (
             <button key={m.id} type="button" className="w-full text-left" onClick={() => setEditRow(m)} aria-label={`Odpri meritev ${m.location ?? m.type}`}>
+              <CardHover>
               <Card className="transition hover:border-roksal-amber/60 hover:shadow-sm">
                 <CardContent className="p-4">
                   <div className="flex flex-wrap items-start justify-between gap-2">
@@ -221,6 +223,7 @@ export default function MeritveModule () {
                   {m.note ? <p className="mt-1.5 line-clamp-2 text-xs text-muted-foreground">{m.note}</p> : null}
                 </CardContent>
               </Card>
+              </CardHover>
             </button>
           ))}
         </div>
