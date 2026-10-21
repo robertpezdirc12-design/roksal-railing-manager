@@ -5,7 +5,7 @@
 // iz playbook.tsx).
 
 import { useState } from 'react'
-import { Ban, Check, CheckCircle2, Compass, Laptop, Loader2, NotebookPen, Play, ShieldAlert, SkipForward } from 'lucide-react'
+import { Ban, Check, CheckCircle2, Compass, Laptop, Loader2, NotebookPen, Play, ShieldAlert, SkipForward } from '@/components/roksal/custom-icons'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'

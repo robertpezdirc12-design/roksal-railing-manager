@@ -4,7 +4,7 @@
 // — R548 izvleček iz katalog.tsx (razbitje po vzorcu R546/R547; BREZ spremembe obnašanja).
 
 import { useMemo, useState } from 'react'
-import { Calculator, ListTree, Plus, Ruler, Search, Shapes, Tag } from 'lucide-react'
+import { Calculator, ListTree, Plus, Ruler, Search, Shapes, Tag } from '@/components/roksal/custom-icons'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'

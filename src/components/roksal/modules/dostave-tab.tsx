@@ -5,7 +5,7 @@
 // iz dostave.tsx).
 
 import { useState } from 'react'
-import { CalendarClock, CarFront, ClipboardList, HardHat, MapPin, Plus, Truck, User } from 'lucide-react'
+import { CalendarClock, CarFront, ClipboardList, HardHat, MapPin, Plus, Truck, User } from '@/components/roksal/custom-icons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'

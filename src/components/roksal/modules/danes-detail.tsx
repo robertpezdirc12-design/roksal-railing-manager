@@ -9,7 +9,7 @@ import { useEffect, useState } from 'react'
 import {
   ArrowRight, Camera, CheckCheck, CheckCircle2, ChevronRight, Circle, HardHat,
   Loader2, Ruler, Workflow,
-} from 'lucide-react'
+} from '@/components/roksal/custom-icons'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Progress } from '@/components/ui/progress'

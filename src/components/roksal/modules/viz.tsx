@@ -14,7 +14,7 @@
 // jedro živi v viz-risanje.tsx, skupni tipi v viz-shared.ts.
 
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
-import { Box, Copy, Download, FilePlus2, FolderOpen, Loader2, Orbit, Ruler, Save, Sigma, Trash2 } from 'lucide-react'
+import { Box, Copy, Download, FilePlus2, FolderOpen, Loader2, Orbit, Ruler, Save, Sigma, Trash2 } from '@/components/roksal/custom-icons'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'

@@ -7,7 +7,7 @@
 // voljo, se vrsta TAKOJ poskusi sinhronizirati (syncNow).
 
 import { useState } from 'react'
-import { CheckCheck, Loader2, MessageSquare, Play, Ruler, TriangleAlert, WifiOff } from 'lucide-react'
+import { CheckCheck, Loader2, MessageSquare, Play, Ruler, TriangleAlert, WifiOff } from '@/components/roksal/custom-icons'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'

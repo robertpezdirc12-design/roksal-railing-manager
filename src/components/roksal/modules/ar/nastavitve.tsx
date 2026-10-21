@@ -7,7 +7,7 @@
 
 import type { Dispatch, SetStateAction } from 'react'
 
-import { Download, ImageIcon, Loader2, Lock, LockOpen, Save, ScanLine, Sparkles } from 'lucide-react'
+import { Download, ImageIcon, Loader2, Lock, LockOpen, Save, ScanLine, Sparkles } from '@/components/roksal/custom-icons'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'

@@ -6,7 +6,7 @@
 //   PRIHOD = NAPROGRAMIRAN · PRED ZAČETKOM = V_TEKU · ZAJEM = V_ZAJEMU ·
 //   KONTROLA = V_PREVERI (montaža implicitno za nami) · PREDAJA = ZAKLJUCEN.
 
-import { Camera, CheckCheck, CheckCircle2, Play } from 'lucide-react'
+import { Camera, CheckCheck, CheckCircle2, Play } from '@/components/roksal/custom-icons'
 
 export interface WorkOrderRow {
   id: string; code: string; title: string; status: string

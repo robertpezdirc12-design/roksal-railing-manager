@@ -8,7 +8,7 @@
 // (acceptPredloge/rejectPredloge) so krajevni (živijo le v tej fazi).
 
 import type { Dispatch, MouseEvent, PointerEvent as ReactPointerEvent, RefObject, SetStateAction } from 'react'
-import { Camera, Check, Crosshair, Eraser, Loader2, Lock, LockOpen, Paperclip, Redo2, Ruler, Sparkles, SquarePlus, Trash2, Undo2 } from 'lucide-react'
+import { Camera, Check, Crosshair, Eraser, Loader2, Lock, LockOpen, Paperclip, Redo2, Ruler, Sparkles, SquarePlus, Trash2, Undo2 } from '@/components/roksal/custom-icons'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'

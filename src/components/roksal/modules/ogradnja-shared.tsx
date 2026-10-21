@@ -7,7 +7,7 @@
 // (Edini shared z JSX med tremi razbitji R547: QualityDot/ReviewRow/ValidationList
 // so drobni gradniki z več potrošniki — pripadajo skupnemu viru.)
 
-import { BadgeCheck, Radar, TriangleAlert } from 'lucide-react'
+import { BadgeCheck, Radar, TriangleAlert } from '@/components/roksal/custom-icons'
 import { cn } from '@/lib/utils'
 import type { ProductRules, RunCalibration, RunNode, SegmentStatus, TerrainPoint } from '@/lib/fence-run-engine'
 

@@ -8,7 +8,7 @@ import { useState } from 'react'
 import {
   BadgeCheck, Ban, CalendarClock, CheckCircle2, FileWarning, HardHat,
   LifeBuoy, Plus, ShieldCheck, User, Wrench,
-} from 'lucide-react'
+} from '@/components/roksal/custom-icons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'

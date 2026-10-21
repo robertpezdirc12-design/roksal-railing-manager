@@ -3,7 +3,7 @@
 // ModuleView — razdelilnik zavihkov → moduli (leno nalaganje + vrata po nav-registry)
 
 import { Component, ComponentType, ReactNode, Suspense, lazy } from 'react'
-import { RefreshCw, ShieldAlert, TriangleAlert } from 'lucide-react'
+import { RefreshCw, ShieldAlert, TriangleAlert } from '@/components/roksal/custom-icons'
 import { useAppStore } from '@/lib/store'
 import { tabById, tabVisible } from '@/lib/nav-registry'
 import { LoadingRows } from '@/components/roksal/ui-bits'

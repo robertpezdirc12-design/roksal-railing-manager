@@ -7,7 +7,7 @@
 // komponenta koraka, ki vse potrebuje prek propsov.
 
 import { useCallback, useEffect, useMemo } from 'react'
-import { ArrowLeft, RotateCcw, Trash2 } from 'lucide-react'
+import { ArrowLeft, RotateCcw, Trash2 } from '@/components/roksal/custom-icons'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'

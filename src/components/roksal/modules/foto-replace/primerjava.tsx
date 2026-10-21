@@ -9,7 +9,7 @@
 // dobesedno enaka — preostala dva klica živita v izvoz.ts).
 
 import { useCallback, useEffect } from 'react'
-import { Check, Download, Eye, FileImage, FolderKanban, Layers, Loader2, Save, Trash2, Wand2 } from 'lucide-react'
+import { Check, Download, Eye, FileImage, FolderKanban, Layers, Loader2, Save, Trash2, Wand2 } from '@/components/roksal/custom-icons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { EmptyState, ErrorBox, LoadingRows, StatusBadge } from '@/components/roksal/ui-bits'

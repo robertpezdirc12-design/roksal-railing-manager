@@ -9,7 +9,7 @@ import {
   Boxes, Camera, CheckCircle2, Circle, FlagTriangleRight, Loader2, MapPin,
   Pause, Play, Plus, RadioTower, RefreshCw, Ruler, Satellite, Trash2,
   TriangleAlert, Waypoints,
-} from 'lucide-react'
+} from '@/components/roksal/custom-icons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'

@@ -14,7 +14,7 @@
 // Tu ostanejo: stanje, tok, prefill (foto-viz), izračun in shranjevanje.
 
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Calculator, CheckCircle2, FolderKanban, Image as ImageIcon, Loader2, Package, Palette, RotateCcw, Ruler, Save } from 'lucide-react'
+import { Calculator, CheckCircle2, FolderKanban, Image as ImageIcon, Loader2, Package, Palette, RotateCcw, Ruler, Save } from '@/components/roksal/custom-icons'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardFooter } from '@/components/ui/card'
 import { useToast } from '@/hooks/use-toast'

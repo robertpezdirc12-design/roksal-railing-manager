@@ -6,7 +6,7 @@
 // Seznam zadnjih foto dokazov zahteva measurements.read, shranjevanje measurements.write.
 
 import { useRef, useState } from 'react'
-import { Camera, ImageIcon, Loader2, RefreshCcw, Save, Trash2, Upload } from 'lucide-react'
+import { Camera, ImageIcon, Loader2, RefreshCcw, Save, Trash2, Upload } from '@/components/roksal/custom-icons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'

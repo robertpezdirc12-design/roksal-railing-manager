@@ -22,7 +22,7 @@ import {
   povprecjePospeskov, veljavnostPospeska, vrednostZaVnos, type Pospesek,
 } from '@/lib/nagib-core'
 
-import { Move3d, Smartphone } from 'lucide-react'
+import { Move3d, Smartphone } from '@/components/roksal/custom-icons'
 
 type Faza = 'nic' | 'zbira' | 'ziv'
 

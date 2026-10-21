@@ -4,7 +4,7 @@
 // kartica pod AR predogledom (R537-b: dobesedna selitev iz ar.tsx).
 // Zaprtje (setAnalysis(null)) ostane v vstopu prek propa.
 
-import { Lightbulb, X } from 'lucide-react'
+import { Lightbulb, X } from '@/components/roksal/custom-icons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'

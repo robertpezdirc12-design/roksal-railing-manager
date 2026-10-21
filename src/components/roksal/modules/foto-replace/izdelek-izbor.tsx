@@ -8,7 +8,7 @@
 // propsov).
 
 import { useEffect, useMemo, useState } from 'react'
-import { Pencil } from 'lucide-react'
+import { Pencil } from '@/components/roksal/custom-icons'
 import { EmptyState } from '@/components/roksal/ui-bits'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'

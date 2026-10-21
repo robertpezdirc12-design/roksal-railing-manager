@@ -6,7 +6,7 @@
 
 import { useState } from 'react'
 
-import { Loader2, Plus } from 'lucide-react'
+import { Loader2, Plus } from '@/components/roksal/custom-icons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'

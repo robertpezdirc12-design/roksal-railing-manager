@@ -3,7 +3,7 @@
 // gradnike vodenega postopka (izvlečeno bajtno-identično iz playbook.tsx,
 // recept R546–R548).
 
-import { Camera, CheckCircle2, ClipboardCheck, GitBranch, MapPin, NotebookPen, Ruler } from 'lucide-react'
+import { Camera, CheckCircle2, ClipboardCheck, GitBranch, MapPin, NotebookPen, Ruler } from '@/components/roksal/custom-icons'
 import type { NapravaTier } from '@/lib/playbook-core'
 
 // ─── tipi (odgovori API) ─────────────────────────────────────────────────────

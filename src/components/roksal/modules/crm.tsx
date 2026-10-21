@@ -3,7 +3,7 @@
 // CRM — vodi in priložnosti s pipelineom (vrata crm.read; spremembe = crm.write)
 
 import { useMemo, useState } from 'react'
-import { ArrowRight, ChevronsRight, FolderPlus, Mail, Phone, Plus, Target, TrendingUp, UserRound, XCircle } from 'lucide-react'
+import { ArrowRight, ChevronsRight, FolderPlus, Mail, Phone, Plus, Target, TrendingUp, UserRound, XCircle } from '@/components/roksal/custom-icons'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'

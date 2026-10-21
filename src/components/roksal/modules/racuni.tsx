@@ -6,7 +6,7 @@
 // R437: urejanje/brisanje posameznega plačila prek /api/payments/[id] (payments.manage).
 
 import { useMemo, useState } from 'react'
-import { Banknote, CalendarClock, FileCode2, FilePlus2, HandCoins, Loader2, Pencil, Receipt, Search, Trash2, Wallet } from 'lucide-react'
+import { Banknote, CalendarClock, FileCode2, FilePlus2, HandCoins, Loader2, Pencil, Receipt, Search, Trash2, Wallet } from '@/components/roksal/custom-icons'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'

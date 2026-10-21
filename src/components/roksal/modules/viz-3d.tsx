@@ -11,7 +11,7 @@
 // (src/lib/product-core.ts, calcKonfigCena) prek POST /api/price-lists/calculate.
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { RotateCw } from 'lucide-react'
+import { RotateCw } from '@/components/roksal/custom-icons'
 import { Button } from '@/components/ui/button'
 import { Slider } from '@/components/ui/slider'
 import { cn } from '@/lib/utils'

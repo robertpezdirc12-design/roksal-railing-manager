@@ -14,7 +14,7 @@
 //    samo po zaprtju plošče.
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { BookOpen, CircleHelp, Gauge, Languages, Pause, Play, RotateCcw, Volume2, VolumeX, X } from 'lucide-react'
+import { BookOpen, CircleHelp, Gauge, Languages, Pause, Play, RotateCcw, Volume2, VolumeX, X } from '@/components/roksal/custom-icons'
 import { useAppStore } from '@/lib/store'
 import { guideByTab, type GuideLang } from '@/lib/smart-guide-registry'
 import { GuideSketch } from './guide-sketches'

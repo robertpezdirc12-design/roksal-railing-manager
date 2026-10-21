@@ -5,7 +5,7 @@
 // object URL → <iframe>; gumba Prenesi / Odpri v zavihku; revociranje ob menjavi.
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Download, ExternalLink, Eye, FileText, Loader2 } from 'lucide-react'
+import { Download, ExternalLink, Eye, FileText, Loader2 } from '@/components/roksal/custom-icons'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'

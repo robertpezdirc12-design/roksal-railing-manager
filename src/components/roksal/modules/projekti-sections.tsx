@@ -5,7 +5,7 @@
 // R546: izvlečeno iz projekti.tsx BREZ spremembe obnašanja; skupni tipi v projekti-shared.ts.
 
 import { useState } from 'react'
-import { Box, CalendarCheck, ClipboardList, History, ShieldCheck } from 'lucide-react'
+import { Box, CalendarCheck, ClipboardList, History, ShieldCheck } from '@/components/roksal/custom-icons'
 import { Button } from '@/components/ui/button'
 import { DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'

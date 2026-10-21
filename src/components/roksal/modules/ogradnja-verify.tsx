@@ -4,7 +4,7 @@
 // ogradnja.tsx (razbitje po vzorcu R546; BREZ spremembe obnašanja).
 
 import { useState } from 'react'
-import { BadgeCheck, Loader2, RefreshCw, Ruler } from 'lucide-react'
+import { BadgeCheck, Loader2, RefreshCw, Ruler } from '@/components/roksal/custom-icons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'

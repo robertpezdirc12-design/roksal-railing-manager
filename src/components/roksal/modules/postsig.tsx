@@ -8,7 +8,7 @@
 // R437: gumb "Odkleni" (deal.lock) → POST /api/deal-lock { quoteId, locked: false }.
 
 import { useMemo, useState } from 'react'
-import { CheckCircle2, CircleDashed, Factory, FileSignature, FilePlus2, Lock, LockOpen, PenLine, Receipt, XCircle } from 'lucide-react'
+import { CheckCircle2, CircleDashed, Factory, FileSignature, FilePlus2, Lock, LockOpen, PenLine, Receipt, XCircle } from '@/components/roksal/custom-icons'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { useToast } from '@/hooks/use-toast'

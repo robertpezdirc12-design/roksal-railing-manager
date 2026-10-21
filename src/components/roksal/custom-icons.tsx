@@ -1,8 +1,8 @@
+'use client'
+
 import * as React from 'react'
 // custom-icons — Roksal custom SVG ikone (namesto generičnih Lucide)
 // Uporaba: <RoksalIcon name="camera" className="size-5" />
-
-'use client'
 
 import { cn } from '@/lib/utils'
 
@@ -102,3 +102,6 @@ export function RoksalIcon ({ name, className }: { name: RoksalIconName; classNa
 }
 
 export { icons as roksalIcons }
+
+// Re-export all Lucide icons — custom SVGs take precedence where defined above.
+export { Activity, AlertTriangle, Aperture, ArrowDownLeft, ArrowDownToLine, ArrowLeft, ArrowLeftRight, ArrowRight, ArrowUpRight, BadgeCheck, BadgeJapaneseYen, Ban, Banknote, Bell, BellRing, BookOpen, Box, Boxes, Calculator, CalendarCheck, CalendarCheck2, CalendarClock, CalendarDays, Camera, CameraOff, CarFront, Check, CheckCheck, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronsRight, Circle, CircleDashed, CircleHelp, ClipboardCheck, ClipboardList, Clock, Clock3, Cloud, CloudOff, CloudRain, CloudSnow, CloudUpload, Cloudy, Cog, Compass, Copy, Cpu, Crosshair, DatabaseBackup, Download, Eraser, ExternalLink, Eye, Factory, Fence, FileCode, FileCode2, FileDown, FileImage, FileJson, FilePlus2, FileSignature, FileSpreadsheet, FileStack, FileText, FileWarning, Film, FlagTriangleRight, Flashlight, FlashlightOff, FolderKanban, FolderOpen, FolderPlus, Gauge, GitBranch, GitCompareArrows, Grid3x3, Hammer, HandCoins, HardHat, HelpCircle, History, Image, ImageIcon, Inbox, Info, KeyRound, Languages, Laptop, Layers, LifeBuoy, Lightbulb, Link2, ListChecks, ListRestart, ListTree, Loader2, Lock, LockKeyhole, LockOpen, LogIn, LogOut, Mail, Map, MapPin, Maximize2, MessageSquare, MessageSquareWarning, Minimize2, Minus, MinusCircle, Moon, MoreHorizontal, Mountain, MousePointerClick, Move, Move3d, MoveHorizontal, NotebookPen, Orbit, Package, PackageCheck, PackagePlus, PackageSearch, PackageX, Palette, Paperclip, Pause, PenLine, Pencil, Percent, Phone, Play, Plus, Radar, RadioTower, Receipt, Redo2, RefreshCcw, RefreshCw, Rocket, RotateCcw, RotateCw, Ruler, Satellite, Save, Scale, ScanLine, ScanSearch, ScrollText, Search, Send, Settings2, Shapes, ShieldAlert, ShieldCheck, ShieldQuestion, ShoppingCart, Sigma, SkipForward, Smartphone, Sparkles, SquarePlus, SquareStack, Star, Sun, SwitchCamera, Tag, Target, Thermometer, Timer, Trash2, TrendingUp, TriangleAlert, Truck, Umbrella, Undo2, Unlink, Upload, User, UserCheck, UserPlus, UserRound, Users, Video, Volume2, VolumeX, Wallet, Wand2, Warehouse, Waypoints, Webhook, WifiOff, Wind, Workflow, Wrench, X, XCircle, ZoomIn } from "lucide-react"

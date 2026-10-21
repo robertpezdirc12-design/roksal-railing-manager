@@ -5,7 +5,7 @@
 // R437: javna deljena povezava meritve (POST/DELETE /api/measurements/[id]/share → /api/public/measure)
 
 import { useMemo, useState } from 'react'
-import { Camera, Check, Copy, History, Link2, Loader2, MapPin, Plus, Ruler, Save, Search, ShieldAlert, TrendingUp, Unlink } from 'lucide-react'
+import { Camera, Check, Copy, History, Link2, Loader2, MapPin, Plus, Ruler, Save, Search, ShieldAlert, TrendingUp, Unlink } from '@/components/roksal/custom-icons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'

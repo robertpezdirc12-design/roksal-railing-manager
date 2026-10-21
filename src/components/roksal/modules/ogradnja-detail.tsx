@@ -3,7 +3,7 @@
 // OGRADNJA — detail dialog (odprt seznam/pregled tekača) — R547 izvleček iz
 // ogradnja.tsx (razbitje po vzorcu R546; BREZ spremembe obnašanja).
 
-import { Fence, Mountain } from 'lucide-react'
+import { Fence, Mountain } from '@/components/roksal/custom-icons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'

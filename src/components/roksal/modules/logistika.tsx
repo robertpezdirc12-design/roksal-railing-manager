@@ -4,7 +4,7 @@
 // bere /api/nalog?scope=all in /api/production)
 
 import { useMemo } from 'react'
-import { CalendarClock, Factory, HardHat, Inbox, Users } from 'lucide-react'
+import { CalendarClock, Factory, HardHat, Inbox, Users } from '@/components/roksal/custom-icons'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { fmtDateTime, useApi } from '@/lib/api-client'

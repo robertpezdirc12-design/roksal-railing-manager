@@ -4,7 +4,7 @@
 // FOTO meritve na projektih ZAKLJUCEN/ARHIV; filter po projektu; lightbox s podatki.
 
 import { useState } from 'react'
-import { Camera, ImageIcon, MapPin, ShieldAlert, User } from 'lucide-react'
+import { Camera, ImageIcon, MapPin, ShieldAlert, User } from '@/components/roksal/custom-icons'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'

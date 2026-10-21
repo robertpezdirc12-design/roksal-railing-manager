@@ -7,7 +7,7 @@
 // propsov; verifyServer/runEngine sta krajevni (živijo le v tej fazi).
 
 import type { Dispatch, SetStateAction } from 'react'
-import { Check, Loader2, Sparkles, Undo2 } from 'lucide-react'
+import { Check, Loader2, Sparkles, Undo2 } from '@/components/roksal/custom-icons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'

@@ -17,7 +17,7 @@
 // ne napake. Prazna tabela je DOBRO stanje, ne praznina brez pomena.
 
 import { useState } from 'react'
-import { Activity, AlertTriangle, Ban, FileWarning, RefreshCw, ShieldCheck, Trash2 } from 'lucide-react'
+import { Activity, AlertTriangle, Ban, FileWarning, RefreshCw, ShieldCheck, Trash2 } from '@/components/roksal/custom-icons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'

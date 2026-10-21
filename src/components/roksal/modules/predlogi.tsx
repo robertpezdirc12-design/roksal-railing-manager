@@ -11,7 +11,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   ClipboardList, PackageCheck, ShoppingCart, Trash2, Truck,
-} from 'lucide-react'
+} from '@/components/roksal/custom-icons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'

@@ -7,7 +7,7 @@
 // Vrata: inventory.read (pogled) / inventory.write (status, rezervacija, picking).
 
 import { useState } from 'react'
-import { ClipboardList, Eye, Lock, LockOpen, PackageSearch, ShieldCheck } from 'lucide-react'
+import { ClipboardList, Eye, Lock, LockOpen, PackageSearch, ShieldCheck } from '@/components/roksal/custom-icons'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'

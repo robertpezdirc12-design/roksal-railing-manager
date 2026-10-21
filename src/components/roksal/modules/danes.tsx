@@ -13,7 +13,7 @@
 import { useState } from 'react'
 import {
   CalendarCheck, CheckCheck, ChevronDown, ChevronRight, MapPin,
-} from 'lucide-react'
+} from '@/components/roksal/custom-icons'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { useAppStore } from '@/lib/store'

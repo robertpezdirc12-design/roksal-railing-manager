@@ -11,7 +11,7 @@
 // carovnik/verify/detail) živijo v sosednjih datotekah.
 
 import { useState } from 'react'
-import { Fence, Pencil, Plus, Trash2 } from 'lucide-react'
+import { Fence, Pencil, Plus, Trash2 } from '@/components/roksal/custom-icons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'

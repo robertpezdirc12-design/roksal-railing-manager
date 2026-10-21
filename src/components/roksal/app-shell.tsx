@@ -10,7 +10,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTheme } from 'next-themes'
-import { Bell, Cloud, CloudOff, LogOut, Moon, MoreHorizontal, RefreshCw, Search, Sun, Ruler, X } from 'lucide-react'
+import { Bell, Cloud, CloudOff, LogOut, Moon, MoreHorizontal, RefreshCw, Search, Sun, Ruler, X } from '@/components/roksal/custom-icons'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'

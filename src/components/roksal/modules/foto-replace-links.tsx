@@ -8,7 +8,7 @@
 // Seznami so omejeni na max-h-96 + overflow (pravila UI).
 
 import { useState } from 'react'
-import { Copy, ExternalLink, Eye, History, Link2, Loader2, Plus, Users } from 'lucide-react'
+import { Copy, ExternalLink, Eye, History, Link2, Loader2, Plus, Users } from '@/components/roksal/custom-icons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'

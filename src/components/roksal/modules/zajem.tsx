@@ -11,7 +11,7 @@
 // (shared/new/geo/qa/replay/detail) živijo v sosednjih datotekah.
 
 import { useEffect, useState } from 'react'
-import { Camera, Plus, TriangleAlert, Waypoints } from 'lucide-react'
+import { Camera, Plus, TriangleAlert, Waypoints } from '@/components/roksal/custom-icons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'

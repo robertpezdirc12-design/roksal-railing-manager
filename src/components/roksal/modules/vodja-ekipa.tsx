@@ -3,7 +3,7 @@
 // VODJA / EKIPA — uporabniki in vloge (vrata users.read; spremembe users.write)
 
 import { useState } from 'react'
-import { Users } from 'lucide-react'
+import { Users } from '@/components/roksal/custom-icons'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'

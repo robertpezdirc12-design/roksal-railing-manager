@@ -5,7 +5,7 @@
 // iz R547). Uporabljajo ga nalogi.tsx, nalogi-detail.tsx, nalogi-offline.tsx in
 // nalogi-create.tsx. Izvlečeno iz nalogi.tsx BREZ spremembe obnašanja.
 
-import { Camera, CheckCheck, CheckCircle2, MessageSquare, Play, UserPlus } from 'lucide-react'
+import { Camera, CheckCheck, CheckCircle2, MessageSquare, Play, UserPlus } from '@/components/roksal/custom-icons'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 

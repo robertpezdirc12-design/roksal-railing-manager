@@ -3,7 +3,7 @@
 // servis-garancije.tsx, servis-reklamacije.tsx in servis-primeri.tsx.
 // Izvlečeno iz servis.tsx BREZ spremembe obnašanja (razbitje po vzorcu R546).
 
-import { Mail, MessageSquareWarning, Phone, User } from 'lucide-react'
+import { Mail, MessageSquareWarning, Phone, User } from '@/components/roksal/custom-icons'
 import { hasPerm } from '@/lib/permissions-core'
 
 // ─── tipi (odgovori API-jev) ──────────────────────────────────────────────────

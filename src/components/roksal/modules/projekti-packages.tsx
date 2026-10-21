@@ -6,7 +6,7 @@
 // Pogled kosovnice (PackageBomDialog) ostaja v projekti.tsx (vezan na r511 sidra).
 
 import { useMemo, useState } from 'react'
-import { ClipboardList, Layers, Plus, Scale } from 'lucide-react'
+import { ClipboardList, Layers, Plus, Scale } from '@/components/roksal/custom-icons'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'

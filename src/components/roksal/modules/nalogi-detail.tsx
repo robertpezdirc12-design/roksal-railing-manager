@@ -9,7 +9,7 @@ import { useState } from 'react'
 import {
   CalendarClock, Camera, CheckCheck, CheckCircle2, ClipboardCheck, ClipboardList,
   FileText, History, Loader2, MessageSquare, Play, Ruler, Users, WifiOff,
-} from 'lucide-react'
+} from '@/components/roksal/custom-icons'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'

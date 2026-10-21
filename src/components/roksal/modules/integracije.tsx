@@ -16,7 +16,7 @@ import { useState } from 'react'
 import {
   Ban, ChevronDown, ChevronRight, History, KeyRound, Loader2, ListRestart,
   Play, Plus, RotateCcw, Webhook,
-} from 'lucide-react'
+} from '@/components/roksal/custom-icons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'

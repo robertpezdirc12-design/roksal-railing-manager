@@ -9,7 +9,7 @@
 // Tu ostanejo: seznam, podrobnost in pogled/uvoz kosovnice (PackageBomDialog).
 
 import { useMemo, useState } from 'react'
-import { Banknote, FileText, FolderKanban, HardHat, History, MapPin, Plus, Ruler, Search } from 'lucide-react'
+import { Banknote, FileText, FolderKanban, HardHat, History, MapPin, Plus, Ruler, Search } from '@/components/roksal/custom-icons'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { CardHover, AnimatedList, AnimatedListItem } from '@/components/roksal/motion-bits'

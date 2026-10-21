@@ -5,7 +5,7 @@
 // iz playbook.tsx).
 
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, Ban, BookOpen, Loader2, Pencil, Play, Save } from 'lucide-react'
+import { ArrowLeft, Ban, BookOpen, Loader2, Pencil, Play, Save } from '@/components/roksal/custom-icons'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'

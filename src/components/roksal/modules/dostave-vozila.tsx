@@ -4,7 +4,7 @@
 // dostav) + dialog novo vozilo (izvlečeno bajtno-identično iz dostave.tsx).
 
 import { useState } from 'react'
-import { CarFront, Plus } from 'lucide-react'
+import { CarFront, Plus } from '@/components/roksal/custom-icons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'

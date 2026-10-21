@@ -7,7 +7,7 @@
 
 import {
   AlertTriangle, ArrowRight, Banknote, CalendarDays, FolderKanban, HardHat, ListChecks, PackageX, TrendingUp, Warehouse,
-} from 'lucide-react'
+} from '@/components/roksal/custom-icons'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { fmtEUR, useApi } from '@/lib/api-client'

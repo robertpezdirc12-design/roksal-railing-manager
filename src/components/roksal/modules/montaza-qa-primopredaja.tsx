@@ -7,7 +7,7 @@
 // montaza-qa.tsx).
 
 import { useEffect, useRef, useState } from 'react'
-import { CalendarClock, CheckCheck, FileText, Loader2, PenLine, TriangleAlert } from 'lucide-react'
+import { CalendarClock, CheckCheck, FileText, Loader2, PenLine, TriangleAlert } from '@/components/roksal/custom-icons'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'

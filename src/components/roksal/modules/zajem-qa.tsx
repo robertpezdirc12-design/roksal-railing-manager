@@ -4,7 +4,7 @@
 // (razbitje srednjih modulov po vzorcu R546; BREZ spremembe obnašanja).
 
 import { useEffect, useState } from 'react'
-import { Boxes } from 'lucide-react'
+import { Boxes } from '@/components/roksal/custom-icons'
 import { Card, CardContent } from '@/components/ui/card'
 import { apiGet } from '@/lib/api-client'
 import { ErrorBox } from '@/components/roksal/ui-bits'

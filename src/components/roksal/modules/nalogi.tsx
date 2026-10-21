@@ -15,7 +15,7 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   ClipboardList, History, Loader2, MapPin, MessageSquare, Ruler,
   Plus, Search, User, Users, WifiOff,
-} from 'lucide-react'
+} from '@/components/roksal/custom-icons'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { AnimatedList, AnimatedListItem } from '@/components/roksal/motion-bits'

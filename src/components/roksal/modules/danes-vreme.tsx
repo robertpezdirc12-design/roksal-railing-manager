@@ -5,7 +5,7 @@
 
 import {
   CloudRain, CloudSnow, Cloudy, Sun, Thermometer, TriangleAlert, Umbrella, Wind,
-} from 'lucide-react'
+} from '@/components/roksal/custom-icons'
 import { Card, CardContent } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 import { type WeatherDay } from './danes-shared'

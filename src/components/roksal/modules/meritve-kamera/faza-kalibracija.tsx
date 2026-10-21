@@ -7,7 +7,7 @@
 // in pride prek propsov.
 
 import type { Dispatch, MouseEvent, SetStateAction } from 'react'
-import { Crosshair, Loader2, Lock, LockOpen, Ruler, Sparkles, Trash2, Undo2, WifiOff } from 'lucide-react'
+import { Crosshair, Loader2, Lock, LockOpen, Ruler, Sparkles, Trash2, Undo2, WifiOff } from '@/components/roksal/custom-icons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'

@@ -5,7 +5,7 @@
 // R546: izvlečeno iz konfigurator.tsx BREZ spremembe obnašanja.
 
 import { useState } from 'react'
-import { Download, Layers, Loader2, Plus, RotateCcw, Ruler, Trash2 } from 'lucide-react'
+import { Download, Layers, Loader2, Plus, RotateCcw, Ruler, Trash2 } from '@/components/roksal/custom-icons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'

@@ -6,7 +6,7 @@
 // — R548 izvleček iz katalog.tsx (razbitje po vzorcu R546/R547; BREZ spremembe obnašanja).
 
 import { Badge } from '@/components/ui/badge'
-import { ShieldCheck } from 'lucide-react'
+import { ShieldCheck } from '@/components/roksal/custom-icons'
 import { useApi } from '@/lib/api-client'
 import { ErrorBox } from '@/components/roksal/ui-bits'
 

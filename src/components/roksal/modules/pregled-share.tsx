@@ -6,7 +6,7 @@
 // konstante so v pregled-shared.ts, javni tloris v pregled-views.tsx.
 
 import { useState } from 'react'
-import { Copy, Eye, Link2, Lock, Plus, ShieldCheck } from 'lucide-react'
+import { Copy, Eye, Link2, Lock, Plus, ShieldCheck } from '@/components/roksal/custom-icons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'

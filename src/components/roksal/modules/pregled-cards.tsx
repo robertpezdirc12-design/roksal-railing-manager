@@ -5,7 +5,7 @@
 // konstante so v pregled-shared.ts.
 
 import { useEffect, useState } from 'react'
-import { ArrowLeftRight, Camera, CheckCircle2, Film, Info, Loader2, MapPin, MessageSquare, Pause, Play, Plus, Trash2, XCircle } from 'lucide-react'
+import { ArrowLeftRight, Camera, CheckCircle2, Film, Info, Loader2, MapPin, MessageSquare, Pause, Play, Plus, Trash2, XCircle } from '@/components/roksal/custom-icons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'

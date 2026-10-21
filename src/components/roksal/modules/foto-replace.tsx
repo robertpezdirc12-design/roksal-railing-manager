@@ -20,7 +20,7 @@
 // vrstni red hookov, logika semena (R536-c) in vsi izrazi ostajajo identični.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, ArrowRight, Camera, Check, Eye, FolderKanban, ImageIcon, Loader2, Package, Pencil, Sparkles, TriangleAlert, Upload } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Camera, Check, Eye, FolderKanban, ImageIcon, Loader2, Package, Pencil, Sparkles, TriangleAlert, Upload } from '@/components/roksal/custom-icons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'

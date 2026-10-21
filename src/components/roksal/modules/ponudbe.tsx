@@ -6,7 +6,7 @@
 // na osnutku (PATCH discountPct); DDV je že izračunan iz osnove PO popustu.
 
 import { useMemo, useRef, useState } from 'react'
-import { BadgeCheck, FileDown, FileText, Loader2, Lock, Percent, Search, Send, TriangleAlert, Upload, User } from 'lucide-react'
+import { BadgeCheck, FileDown, FileText, Loader2, Lock, Percent, Search, Send, TriangleAlert, Upload, User } from '@/components/roksal/custom-icons'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'

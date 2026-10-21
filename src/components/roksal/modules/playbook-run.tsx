@@ -5,7 +5,7 @@
 // obstoječe module (izvlečeno bajtno-identično iz playbook.tsx).
 
 import { useEffect, useState } from 'react'
-import { ArrowLeft, ArrowRight, Ban, Camera, CheckCircle2, Circle, NotebookPen, Play, Ruler, Smartphone } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Ban, Camera, CheckCircle2, Circle, NotebookPen, Play, Ruler, Smartphone } from '@/components/roksal/custom-icons'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'

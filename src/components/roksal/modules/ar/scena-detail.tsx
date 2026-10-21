@@ -7,7 +7,7 @@
 
 import { useState, type Dispatch, type SetStateAction } from 'react'
 
-import { Loader2, MapPin, Ruler, Save, ScanLine, Shapes, Smartphone } from 'lucide-react'
+import { Loader2, MapPin, Ruler, Save, ScanLine, Shapes, Smartphone } from '@/components/roksal/custom-icons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'

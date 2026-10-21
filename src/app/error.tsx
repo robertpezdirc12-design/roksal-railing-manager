@@ -8,7 +8,7 @@
 // Podrobnosti (stack, digest) gredo v razvijalsko konzolo — NE v uporabniški UI.
 
 import { useEffect } from 'react'
-import { RotateCcw, TriangleAlert } from 'lucide-react'
+import { RotateCcw, TriangleAlert } from '@/components/roksal/custom-icons'
 
 export default function RouteError ({
   error,

@@ -12,7 +12,7 @@
 import { useMemo, useState } from 'react'
 import {
   AlertTriangle, Banknote, Boxes, CalendarCheck2, FolderKanban, Receipt, TrendingUp, Wrench,
-} from 'lucide-react'
+} from '@/components/roksal/custom-icons'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { fmtEUR, useApi } from '@/lib/api-client'

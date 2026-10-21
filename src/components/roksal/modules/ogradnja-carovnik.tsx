@@ -8,7 +8,7 @@ import { useMemo, useState } from 'react'
 import {
   BadgeCheck, ChevronLeft, ChevronRight, Fence, Gauge, Loader2, Mountain,
   Plus, Radar, Ruler, SquareStack, Trash2, Wand2,
-} from 'lucide-react'
+} from '@/components/roksal/custom-icons'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Checkbox } from '@/components/ui/checkbox'

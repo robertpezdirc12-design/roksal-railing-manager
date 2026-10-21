@@ -17,7 +17,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   CalendarClock, Check, Clock3, ImageIcon, Loader2, Lock, MoveHorizontal,
   Ruler, Send, ShieldCheck,
-} from 'lucide-react'
+} from '@/components/roksal/custom-icons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'

@@ -24,7 +24,7 @@
 // mere in osi SKRITE), MERE (samo osi in čipi mer z metodo — razredi manj
 // vidni). Pogled je SAMO prikaz istih elementov (NE nov podatkovni model).
 
-import { HelpCircle, Layers, MapPin, MoveHorizontal, Ruler, TriangleAlert, User, Waypoints } from 'lucide-react'
+import { HelpCircle, Layers, MapPin, MoveHorizontal, Ruler, TriangleAlert, User, Waypoints } from '@/components/roksal/custom-icons'
 import type { DimAxis, SceneClass, SceneElement, SceneStatus } from '@/lib/scene-understanding-core'
 import { consolidateMeasures, MEASURE_METHOD_TEXT, nextStepGuidance, pickLabels, proposeAxes } from '@/lib/scene-understanding-core'
 

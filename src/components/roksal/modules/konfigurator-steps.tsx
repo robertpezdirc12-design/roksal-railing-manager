@@ -5,7 +5,7 @@
 // merilni korak (3) živi v konfigurator-meritve.tsx, stanje in tok ostajajo v konfigurator.tsx.
 // Vsi skupni tipi/pomočniki so v konfigurator-shared.ts (en vir resnice).
 
-import { Calculator, CheckCircle2, ClipboardList, FolderKanban, Layers, Loader2, Package, Plus, Save, Scale, TriangleAlert } from 'lucide-react'
+import { Calculator, CheckCircle2, ClipboardList, FolderKanban, Layers, Loader2, Package, Plus, Save, Scale, TriangleAlert } from '@/components/roksal/custom-icons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'

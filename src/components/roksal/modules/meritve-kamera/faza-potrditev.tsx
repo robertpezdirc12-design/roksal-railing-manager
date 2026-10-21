@@ -8,7 +8,7 @@
 // propsov; zapisiDokSlike/confirm/saveOffline so krajevni (živijo le tu).
 
 import type { Dispatch, RefObject, SetStateAction } from 'react'
-import { Check, CloudUpload, Loader2, Undo2 } from 'lucide-react'
+import { Check, CloudUpload, Loader2, Undo2 } from '@/components/roksal/custom-icons'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'

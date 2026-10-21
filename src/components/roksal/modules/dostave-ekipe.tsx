@@ -5,7 +5,7 @@
 // iz dostave.tsx).
 
 import { useState } from 'react'
-import { Mail, Pencil, Phone, Plus, Star, User, Users } from 'lucide-react'
+import { Mail, Pencil, Phone, Plus, Star, User, Users } from '@/components/roksal/custom-icons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'

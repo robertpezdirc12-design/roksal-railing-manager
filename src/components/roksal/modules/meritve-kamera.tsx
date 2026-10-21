@@ -47,7 +47,7 @@
 // propsov (nobenih sprememb obnašanja — koda je seljena dobesedno).
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Camera, FileCode, FileJson, FileSpreadsheet } from 'lucide-react'
+import { Camera, FileCode, FileJson, FileSpreadsheet } from '@/components/roksal/custom-icons'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useToast } from '@/hooks/use-toast'

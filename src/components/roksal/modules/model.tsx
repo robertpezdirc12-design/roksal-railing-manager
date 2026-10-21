@@ -10,7 +10,7 @@ import { useMemo, useState } from 'react'
 import {
   ArrowLeftRight, Box, Compass, FileDown, Fence, Info, Layers, Loader2, Map as MapIcon,
   Mountain, RotateCcw, Ruler, ScanLine, ShieldQuestion,
-} from 'lucide-react'
+} from '@/components/roksal/custom-icons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'

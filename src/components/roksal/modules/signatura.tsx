@@ -6,7 +6,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { PointerEvent as ReactPointerEvent } from 'react'
-import { Eraser, Lock, LockKeyhole, PenLine, ShieldCheck } from 'lucide-react'
+import { Eraser, Lock, LockKeyhole, PenLine, ShieldCheck } from '@/components/roksal/custom-icons'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'

@@ -8,7 +8,7 @@
 // ostajata v Zaloga → Kosovnice).
 
 import { useMemo, useState } from 'react'
-import { AlertTriangle, ArrowRight, BadgeCheck, ClipboardCheck, Factory, Layers, Package, Plus } from 'lucide-react'
+import { AlertTriangle, ArrowRight, BadgeCheck, ClipboardCheck, Factory, Layers, Package, Plus } from '@/components/roksal/custom-icons'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'

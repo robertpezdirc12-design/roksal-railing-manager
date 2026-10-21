@@ -4,7 +4,7 @@
 // Vrata: branje customers.read, pisanje customers.write (gumbi skriti brez pravice).
 
 import { useMemo, useState } from 'react'
-import { FileText, FolderKanban, Mail, MapPin, Pencil, Phone, Plus, Search, Users } from 'lucide-react'
+import { FileText, FolderKanban, Mail, MapPin, Pencil, Phone, Plus, Search, Users } from '@/components/roksal/custom-icons'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'

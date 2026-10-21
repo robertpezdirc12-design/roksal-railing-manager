@@ -13,7 +13,7 @@
 // pregled-shared.ts. Tu ostanejo: izbire, stanje, tok in panel segmenta.
 
 import { useMemo, useState } from 'react'
-import { Box, Camera, Compass, Fence, FileWarning, Layers, Loader2, Map as MapIcon, MapPin, MessageSquare, Mountain, RotateCcw, Ruler, ScanLine } from 'lucide-react'
+import { Box, Camera, Compass, Fence, FileWarning, Layers, Loader2, Map as MapIcon, MapPin, MessageSquare, Mountain, RotateCcw, Ruler, ScanLine } from '@/components/roksal/custom-icons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'

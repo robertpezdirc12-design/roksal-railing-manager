@@ -9,7 +9,7 @@
 
 import { useRef, useState, useSyncExternalStore } from 'react'
 import type { Dispatch, RefObject, SetStateAction } from 'react'
-import { Aperture, Camera, Cpu, Flashlight, FlashlightOff, Grid3x3, Image as ImageIcon, Maximize2, Minimize2, Moon, Ruler, Sun, SwitchCamera, ZoomIn } from 'lucide-react'
+import { Aperture, Camera, Cpu, Flashlight, FlashlightOff, Grid3x3, Image as ImageIcon, Maximize2, Minimize2, Moon, Ruler, Sun, SwitchCamera, ZoomIn } from '@/components/roksal/custom-icons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'

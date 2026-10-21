@@ -8,7 +8,7 @@
 
 import { useCallback, useState } from 'react'
 
-import { Download, History, Loader2, Plus, Trash2 } from 'lucide-react'
+import { Download, History, Loader2, Plus, Trash2 } from '@/components/roksal/custom-icons'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { EmptyState, ErrorBox, LoadingRows } from '@/components/roksal/ui-bits'

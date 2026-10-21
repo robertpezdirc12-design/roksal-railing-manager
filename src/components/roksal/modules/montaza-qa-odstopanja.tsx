@@ -4,7 +4,7 @@
 // s tokom ODPRTO → V_OBRAVNAVI → ODRAVLJENO → PREVERJENO) + obrazec korektivnega
 // ukrepa (izvlečeno bajtno-identično iz montaza-qa.tsx).
 
-import { Check, Plus } from 'lucide-react'
+import { Check, Plus } from '@/components/roksal/custom-icons'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'

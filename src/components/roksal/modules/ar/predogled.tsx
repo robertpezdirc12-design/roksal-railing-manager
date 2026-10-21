@@ -7,7 +7,7 @@
 
 import { useState, type Dispatch, type PointerEvent as ReactPointerEvent, type RefObject, type SetStateAction } from 'react'
 
-import { Camera, CameraOff, ChevronDown, ChevronRight, Lightbulb, Loader2, Lock, Move, Plus, Video, Waypoints } from 'lucide-react'
+import { Camera, CameraOff, ChevronDown, ChevronRight, Lightbulb, Loader2, Lock, Move, Plus, Video, Waypoints } from '@/components/roksal/custom-icons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'

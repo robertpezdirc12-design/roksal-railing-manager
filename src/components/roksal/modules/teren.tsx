@@ -2,7 +2,7 @@
 
 // TEREN — terenski pregled projektov (vrata projects.write — teren)
 
-import { HardHat, MapPin } from 'lucide-react'
+import { HardHat, MapPin } from '@/components/roksal/custom-icons'
 import { Card, CardContent } from '@/components/ui/card'
 import { AnimatedList, AnimatedListItem } from '@/components/roksal/motion-bits'
 import { fmtDate, useApi } from '@/lib/api-client'

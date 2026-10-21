@@ -15,7 +15,7 @@
 //        servis-garancije/reklamacije/primeri + servis-shared.
 
 import { useState } from 'react'
-import { FileWarning, ShieldCheck, Wrench } from 'lucide-react'
+import { FileWarning, ShieldCheck, Wrench } from '@/components/roksal/custom-icons'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useAppStore } from '@/lib/store'
 import { PageHeader } from '@/components/roksal/ui-bits'

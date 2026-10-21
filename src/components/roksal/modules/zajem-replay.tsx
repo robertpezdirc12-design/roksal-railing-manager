@@ -5,7 +5,7 @@
 // Predvajanje zajema po korakih (revizija/izobraževanje). Read-only.
 
 import { useEffect, useState } from 'react'
-import { ChevronLeft, ChevronRight, Film, Pause, Play } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Film, Pause, Play } from '@/components/roksal/custom-icons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'

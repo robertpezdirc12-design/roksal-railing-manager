@@ -6,7 +6,7 @@
 // PDF izvoz je ločen modul (documents.generate).
 
 import { useMemo, useState } from 'react'
-import { Banknote, FileSignature, FileText, Receipt, Search } from 'lucide-react'
+import { Banknote, FileSignature, FileText, Receipt, Search } from '@/components/roksal/custom-icons'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'

@@ -4,7 +4,7 @@
 // iz zajem.tsx (razbitje srednjih modulov po vzorcu R546; BREZ spremembe obnašanja).
 
 import { useEffect, useState } from 'react'
-import { Compass, Plus, RefreshCw } from 'lucide-react'
+import { Compass, Plus, RefreshCw } from '@/components/roksal/custom-icons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'

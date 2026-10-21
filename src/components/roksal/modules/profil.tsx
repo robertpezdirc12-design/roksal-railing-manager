@@ -4,7 +4,7 @@
 // R438 (issue #5): razdelek Obveščanje — nastavitve kanalov po tipu dogodka.
 
 import { useEffect, useState } from 'react'
-import { BellRing, KeyRound, LogOut, ShieldCheck } from 'lucide-react'
+import { BellRing, KeyRound, LogOut, ShieldCheck } from '@/components/roksal/custom-icons'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'

@@ -4,7 +4,7 @@
 // — R547 izvleček iz servis.tsx (razbitje po vzorcu R546; BREZ spremembe obnašanja).
 
 import { useMemo, useState } from 'react'
-import { CalendarClock, Plus, ShieldCheck } from 'lucide-react'
+import { CalendarClock, Plus, ShieldCheck } from '@/components/roksal/custom-icons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'

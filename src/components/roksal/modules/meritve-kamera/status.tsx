@@ -5,7 +5,7 @@
 // stanje prejmejo prek propsov (lastnik je vstopna komponenta).
 
 import type { Dispatch, SetStateAction } from 'react'
-import { Redo2, Trash2 } from 'lucide-react'
+import { Redo2, Trash2 } from '@/components/roksal/custom-icons'
 import { Button } from '@/components/ui/button'
 import { useAppStore } from '@/lib/store'
 import { clearDraft, sejaKljuc, type MeasureDraft } from '@/lib/measure-draft'

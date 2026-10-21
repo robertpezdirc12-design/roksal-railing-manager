@@ -7,7 +7,7 @@
 // (projekti-packages.tsx) jo renderira ob kliku na kosovnico.
 
 import { useMemo, useRef, useState } from 'react'
-import { FileDown, Layers, Loader2, Search, Upload } from 'lucide-react'
+import { FileDown, Layers, Loader2, Search, Upload } from '@/components/roksal/custom-icons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'

@@ -5,7 +5,7 @@
 // (route-map izvirnika: /setup) — ustvari prvega ADMIN-a in prijavi.
 
 import { FormEvent, useEffect, useState } from 'react'
-import { Rocket } from 'lucide-react'
+import { Rocket } from '@/components/roksal/custom-icons'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'

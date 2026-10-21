@@ -4,7 +4,7 @@
 // Vrata equipment.read; administrativne akcije (novo/servis/pokvarjeno) dodatno ADMIN/VODJA.
 
 import { useMemo, useState } from 'react'
-import { CalendarClock, Cog, History, MapPin, PackageCheck, Plus, Search, UserCheck, Wrench, XCircle } from 'lucide-react'
+import { CalendarClock, Cog, History, MapPin, PackageCheck, Plus, Search, UserCheck, Wrench, XCircle } from '@/components/roksal/custom-icons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'

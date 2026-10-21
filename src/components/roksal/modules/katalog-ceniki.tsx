@@ -5,7 +5,7 @@
 // (razbitje po vzorcu R546/R547; BREZ spremembe obnašanja).
 
 import { useRef, useState } from 'react'
-import { Layers, Pencil, Upload } from 'lucide-react'
+import { Layers, Pencil, Upload } from '@/components/roksal/custom-icons'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'

@@ -5,7 +5,7 @@
 // odstopanja in korektivni ukrepi (izvlečeno bajtno-identično iz montaza-qa.tsx).
 
 import { useEffect, useState } from 'react'
-import { Check, ChevronDown, ClipboardCheck, Loader2, Minus, Plus, ShieldAlert, Undo2, X } from 'lucide-react'
+import { Check, ChevronDown, ClipboardCheck, Loader2, Minus, Plus, ShieldAlert, Undo2, X } from '@/components/roksal/custom-icons'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'

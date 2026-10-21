@@ -10,7 +10,7 @@
 // katalog-{shared,izdelki,ceniki,gradiva}.
 
 import { useState } from 'react'
-import { BadgeJapaneseYen, Shapes } from 'lucide-react'
+import { BadgeJapaneseYen, Shapes } from '@/components/roksal/custom-icons'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { PageHeader } from '@/components/roksal/ui-bits'
 import { ProductsTab } from './katalog-izdelki'

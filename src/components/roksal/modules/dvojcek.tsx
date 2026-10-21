@@ -9,7 +9,7 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   Boxes, ClipboardCheck, Clock, FileStack, GitCompareArrows, Hammer, Loader2,
   MousePointerClick, Plus, Ruler, ScanLine, ShieldCheck, TriangleAlert,
-} from 'lucide-react'
+} from '@/components/roksal/custom-icons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'

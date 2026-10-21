@@ -4,7 +4,7 @@
 // gradnik vodenega postopka (izvlečeno bajtno-identično iz playbook.tsx).
 
 import { useEffect, useState } from 'react'
-import { ChevronRight, Loader2, Play, Settings2, Workflow } from 'lucide-react'
+import { ChevronRight, Loader2, Play, Settings2, Workflow } from '@/components/roksal/custom-icons'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'

@@ -4,7 +4,7 @@
 // R546: izvlečeno iz projekti.tsx BREZ spremembe obnašanja.
 
 import { useState } from 'react'
-import { Copy, ExternalLink, Eye, Link2, MapPin, Plus, ShieldCheck } from 'lucide-react'
+import { Copy, ExternalLink, Eye, Link2, MapPin, Plus, ShieldCheck } from '@/components/roksal/custom-icons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'

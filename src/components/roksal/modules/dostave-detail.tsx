@@ -5,7 +5,7 @@
 // bajtno-identično iz dostave.tsx).
 
 import { useState } from 'react'
-import { CarFront, CheckCircle2, ClipboardList, HardHat, Package, Pencil, Truck, User, XCircle } from 'lucide-react'
+import { CarFront, CheckCircle2, ClipboardList, HardHat, Package, Pencil, Truck, User, XCircle } from '@/components/roksal/custom-icons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'

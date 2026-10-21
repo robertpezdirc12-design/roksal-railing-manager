@@ -6,7 +6,7 @@
 // R441 (issue #3): Varnostne kopije — stanje zadnje šifrirane kopije + off-site + RTO/RPO.
 
 import { useState } from 'react'
-import { BadgeCheck, BellRing, CloudUpload, DatabaseBackup, KeyRound, LogIn, Play, RefreshCw, ScrollText, ShieldCheck, Timer, Trash2, Wrench } from 'lucide-react'
+import { BadgeCheck, BellRing, CloudUpload, DatabaseBackup, KeyRound, LogIn, Play, RefreshCw, ScrollText, ShieldCheck, Timer, Trash2, Wrench } from '@/components/roksal/custom-icons'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'

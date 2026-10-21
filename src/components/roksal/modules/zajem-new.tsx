@@ -5,7 +5,7 @@
 // ProjectOption/RunOption živita tu (uporablja ju samo ta dialog).
 
 import { useMemo, useState } from 'react'
-import { Camera, Loader2 } from 'lucide-react'
+import { Camera, Loader2 } from '@/components/roksal/custom-icons'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'

@@ -5,7 +5,7 @@
 // Vrata: inventory.read (pogled); sprejem = procurement.receive; popravek/rezervacija = inventory.write.
 
 import { useMemo, useState } from 'react'
-import { AlertTriangle, ArrowDownLeft, ArrowUpRight, Boxes, ClipboardCheck, ClipboardList, History, Layers, PackagePlus, PackageSearch, Plus, Search, Undo2 } from 'lucide-react'
+import { AlertTriangle, ArrowDownLeft, ArrowUpRight, Boxes, ClipboardCheck, ClipboardList, History, Layers, PackagePlus, PackageSearch, Plus, Search, Undo2 } from '@/components/roksal/custom-icons'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
