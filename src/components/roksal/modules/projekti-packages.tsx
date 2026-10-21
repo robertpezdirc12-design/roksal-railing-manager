@@ -8,6 +8,7 @@
 import { useMemo, useState } from 'react'
 import { ClipboardList, Layers, Plus, Scale } from '@/components/roksal/custom-icons'
 import { Button } from '@/components/ui/button'
+import { AnimatedList, AnimatedListItem } from '@/components/roksal/motion-bits'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -113,9 +114,9 @@ export function PackagesSection ({ projectId, projectCode, measurements }: {
           ))}
 
           {regularRows.length > 0 ? (
-            <ul className="space-y-2">
+            <AnimatedList className="space-y-2">
               {regularRows.map((p) => (
-                <li key={p.id} className="rounded-lg border p-2.5">
+                <AnimatedListItem key={p.id} className="rounded-lg border p-2.5">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-mono text-[11px] text-muted-foreground">{p.code}</span>
                     <StatusBadge status={p.status} />
@@ -151,9 +152,9 @@ export function PackagesSection ({ projectId, projectCode, measurements }: {
                       </Select>
                     </div>
                   ) : null}
-                </li>
+                </AnimatedListItem>
               ))}
-            </ul>
+            </AnimatedList>
           ) : (
             <p className="text-xs text-muted-foreground">
               {canManage ? 'Dodajte paket — npr. TERASA 36,4 m² + OGRAJA 18,6 m za isti projekt.' : 'Pakete ureja pisarna (quotes.create).'}
