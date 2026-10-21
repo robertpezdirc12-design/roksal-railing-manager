@@ -192,7 +192,7 @@ export function AppShell () {
     <div className="flex min-h-screen flex-col bg-background">
       {/* glava */}
       <header className="sticky top-0 z-30 border-b bg-card/80 backdrop-blur supports-[backdrop-filter]:bg-card/60">
-        <div className="mx-auto flex h-14 w-full max-w-7xl items-center justify-between gap-2 px-3 sm:px-4">
+        <div className="mx-auto flex h-14 w-full max-w-7xl items-center justify-between gap-1.5 overflow-hidden px-2 sm:gap-2 sm:px-4">
           <button
             type="button" onClick={() => pickSection('danes')}
             className="rounded-lg px-1 py-1 transition hover:bg-secondary focus-visible:outline-2 focus-visible:outline-ring"
@@ -211,7 +211,7 @@ export function AppShell () {
             ) : null}
           </div>
 
-          <div className="flex items-center gap-1 sm:gap-1.5">
+          <div className="flex items-center gap-0.5 sm:gap-1.5">
             {/* R439 (issue #6): stanje signala + vrsta offline operacij */}
             <OfflineBadge />
 
@@ -363,7 +363,7 @@ export function AppShell () {
                           className={cn(
                             'w-full rounded-lg px-3 py-2 text-left text-sm font-medium transition',
                             tab === t.id
-                              ? 'bg-roksal-ink text-primary-foreground shadow-sm'
+                              ? 'bg-primary text-primary-foreground shadow-sm'
                               : 'text-foreground/80 hover:bg-secondary'
                           )}
                           aria-current={tab === t.id ? 'page' : undefined}
@@ -392,7 +392,7 @@ export function AppShell () {
                   className={cn(
                     'shrink-0 rounded-full border px-3.5 py-1.5 text-xs font-semibold transition',
                     tab === t.id
-                      ? 'border-transparent bg-roksal-ink text-primary-foreground'
+                      ? 'border-transparent bg-primary text-primary-foreground'
                       : 'border-border bg-card text-foreground/70 hover:bg-secondary'
                   )}
                 >

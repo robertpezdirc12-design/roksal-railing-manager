@@ -21,7 +21,7 @@ export const DAY_NAMES = ['ned', 'pon', 'tor', 'sre', 'čet', 'pet', 'sob']
 export function scoreLabel (score: number): { text: string; cls: string } {
   if (score >= 75) return { text: 'primerno za montažo', cls: 'text-emerald-600 dark:text-emerald-400' }
   if (score >= 45) return { text: 'previdno — preveri termin', cls: 'text-amber-600 dark:text-amber-400' }
-  return { text: 'neprimerno za teren', cls: 'text-red-600 dark:text-red-400' }
+  return { text: 'neprimerno za teren', cls: 'text-red-700 dark:text-red-300' }
 }
 
 export function WeatherCard ({ day, isToday }: { day: WeatherDay; isToday: boolean }) {
