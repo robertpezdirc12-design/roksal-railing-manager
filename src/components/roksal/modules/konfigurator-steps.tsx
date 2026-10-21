@@ -9,6 +9,7 @@ import { Calculator, CheckCircle2, ClipboardList, FolderKanban, Layers, Loader2,
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { AnimatedList, AnimatedListItem } from '@/components/roksal/motion-bits'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -124,11 +125,11 @@ export function StepIzdelek ({ families, products, loading, error, familyCode, p
       {loading ? <LoadingRows rows={3} /> : !error && products.length === 0 ? (
         <EmptyState title="Ni izdelkov v tej družini" desc="Izberite drugo družino ali dodajte izdelek v Katalogu." icon={Package} />
       ) : !error ? (
-        <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2" aria-label="Izdelki">
+        <AnimatedList className="grid grid-cols-1 gap-2 sm:grid-cols-2" aria-label="Izdelki">
           {products.map((p) => {
             const isSel = p.id === productId
             return (
-              <li key={p.id}>
+              <AnimatedListItem key={p.id}>
                 <button
                   type="button"
                   onClick={() => onProduct(p.id)}
@@ -153,10 +154,10 @@ export function StepIzdelek ({ families, products, loading, error, familyCode, p
                       : <span className="rounded bg-red-100 px-1.5 py-0.5 text-red-800 dark:bg-red-950 dark:text-red-300">brez BOM predloge</span>}
                   </span>
                 </button>
-              </li>
+              </AnimatedListItem>
             )
           })}
-        </ul>
+        </AnimatedList>
       ) : null}
 
       {selected && selected.variants.length > 0 ? (
