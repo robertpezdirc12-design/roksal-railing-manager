@@ -11,6 +11,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import ZAI from 'z-ai-web-dev-sdk'
 import { jsonError, requirePermission } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
+import { zaiKonfiguriran, ZAI_MANJKA_SPOROCILO } from '@/lib/zai-config'
 
 const VLM_TIMEOUT_MS = 60_000
 
@@ -90,6 +91,10 @@ export async function POST (req: NextRequest) {
   const auth = await requirePermission(req, 'measurements.write')
   if (auth instanceof NextResponse) return auth
   const { user } = auth
+
+  if (!zaiKonfiguriran()) {
+    return jsonError(503, "VLM analiza ni na voljo.", ZAI_MANJKA_SPOROCILO)
+  }
 
   const body = await req.json().catch(() => null)
   const photo = typeof body?.photo === 'string' ? body.photo : ''

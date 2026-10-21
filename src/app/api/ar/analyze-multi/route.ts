@@ -9,6 +9,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import ZAI from 'z-ai-web-dev-sdk'
 import { jsonError, requirePermission } from '@/lib/auth'
+import { zaiKonfiguriran, ZAI_MANJKA_SPOROCILO } from '@/lib/zai-config'
 
 const VLM_TIMEOUT_MS = 90_000
 /** največje število fotografij v prečki (HOVER uporablja 8). */
@@ -94,6 +95,10 @@ export async function POST (req: NextRequest) {
   if (auth instanceof NextResponse) return auth
   const { user } = auth
   void user
+
+  if (!zaiKonfiguriran()) {
+    return jsonError(503, "VLM analiza ni na voljo.", ZAI_MANJKA_SPOROCILO)
+  }
 
   const body = await req.json().catch(() => null)
   const photos = body?.photos
