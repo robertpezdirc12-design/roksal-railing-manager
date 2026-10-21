@@ -7,6 +7,7 @@
 import { useEffect, useState } from 'react'
 import { Check, ChevronDown, ClipboardCheck, Loader2, Minus, Plus, ShieldAlert, Undo2, X } from '@/components/roksal/custom-icons'
 import { Button } from '@/components/ui/button'
+import { AnimatedList, AnimatedListItem } from '@/components/roksal/motion-bits'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -202,11 +203,11 @@ export function MontazaQaSection ({ woId, canWrite, fotoOptions, onTransitioned 
       ) : (
         <>
           <Progress value={pct} className="mb-3 h-2" aria-label={`Napredek kontrole kakovosti ${pct} %`} />
-          <ul className="space-y-1.5">
+          <AnimatedList className="space-y-1.5">
             {checks.map((c) => {
               const open = expanded === c.id
               return (
-                <li key={c.id} className="rounded-lg border">
+                <AnimatedListItem key={c.id} className="rounded-lg border">
                   <button
                     type="button"
                     className="flex w-full items-start gap-2 p-2.5 text-left"
@@ -318,10 +319,10 @@ export function MontazaQaSection ({ woId, canWrite, fotoOptions, onTransitioned 
                       ) : null}
                     </div>
                   ) : null}
-                </li>
+                </AnimatedListItem>
               )
             })}
-          </ul>
+          </AnimatedList>
 
           {manualDeviations.length > 0 ? (
             <div className="mt-3 space-y-2">
