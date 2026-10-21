@@ -23,10 +23,12 @@ import { napisNastavitev, type KameraNastavitve } from '@/lib/camera-prefs'
 import type { OrientationCheck } from '@/lib/exif-orientation'
 import { MEASURE_MODES, MODE_RULES, recommendMethod, type DeviceCaps, type MeasureMode } from '@/lib/measure-engine'
 import SceneOverlay from '@/components/roksal/scene-overlay'
+import { nextStepGuidance } from '@/lib/scene-understanding-core'
 import type { SceneUnderstandingState } from '@/hooks/use-scene-understanding'
 import { oceniSvetlobo, parsePhoto } from './kakovost'
 import { MAX_IMG_W, type CachedWoRow, type PhotoRow, type ProjectOption, type WorkOrderOption } from './tipi'
 import { Vodila } from './vodila'
+import { useFitRect } from './use-fit-rect'
 
 export interface FazaZajemProps {
   mode: MeasureMode
@@ -124,6 +126,18 @@ export function FazaZajem (props: FazaZajemProps) {
     }
   }
 
+  // ── R570: celozaslonski zajem po vzorcu najboljših (nativne kamere:
+  // iOS/Google Camera; spletne kamere Instagrama/Snapchata) ──
+  // Predogled čez CELEN zaslon (object-cover, edge-to-edge — obrez po
+  // sredini kot v nativnih kamerah), kontrole NAD videom na temnem gradientu
+  // (scrim) z varnim obročem (safe-area). fitRect pove, kje se kader
+  // dejansko prikaže znotraj elementa (obrez pri cover / letterbox pri
+  // contain) — SceneOverlay in točka ostrenja se preslikata nanj, da
+  // zaznave stojijo na realnih mestih tudi ob spremenjenem razmerju.
+  const videoObmocjeRef = useRef<HTMLDivElement>(null)
+  const fitRect = useFitRect(videoRef, videoObmocjeRef, fsAktiven ? 'cover' : 'contain')
+  const vodnik = sceneState.elements.length > 0 ? nextStepGuidance(sceneState.elements, sceneState.quality ?? undefined) : null
+
   // ── R553: pinč-zoom (MDN Pinch zoom gestures — kazalci, ne dotiki) ──
   const pinchRef = useRef<{ kazalci: Map<number, { x: number; y: number }>; zacetek: { dist: number; zoom: number } | null }>({ kazalci: new Map(), zacetek: null })
   const pinchZadnjiRef = useRef(0)
@@ -194,8 +208,88 @@ export function FazaZajem (props: FazaZajemProps) {
     const y = Math.min(1, Math.max(0, (e.clientY - rect.top) / rect.height))
     setFokusTocka({ x, y })
     window.setTimeout(() => setFokusTocka(null), 700)
-    void ostrenjeNaTocki({ x, y })
+    // R570: točka OSTRENJA v koordinatah KADRA, ne elementa — pri cover
+    // element obreže kader, pri contain z Letterboxom kader sede v element.
+    // Prikazni obroč ostaja na točki tapa; kamera dobi točko v okviru videa.
+    let kx = x
+    let ky = y
+    const fr = fitRect
+    if (fr && fr.w > 0 && fr.h > 0) {
+      kx = Math.min(1, Math.max(0, (x * rect.width - fr.x) / fr.w))
+      ky = Math.min(1, Math.max(0, (y * rect.height - fr.y) / fr.h))
+    }
+    void ostrenjeNaTocki({ x: kx, y: ky })
   }
+
+  // ── R570: kontrolne vrstice — EN skupen vir za oba načina: v dialogu ležijo
+  //  pod videom (sedanje mesto), v celozaslonskem pa NA videu na temnem
+  //  gradientu (scrim) z varnim obročem — vzorec nativnih kamer. ──
+  const zoomVrstica = zmoKamere?.zoom.stanje === 'PODPRTO' ? (
+    <div className="flex items-center gap-2 px-2 pt-1">
+      <ZoomIn className="size-4 shrink-0 text-white/80" aria-hidden />
+      <input
+        type="range"
+        className="h-1.5 flex-1 accent-white"
+        min={zmoKamere.zoom.min}
+        max={zmoKamere.zoom.max}
+        step={zmoKamere.zoom.step}
+        value={zoomVrednost ?? zmoKamere.zoom.min}
+        onChange={(e) => { void nastaviZoomVrednost(Number(e.target.value)) }}
+        aria-label="Približanje kamere"
+      />
+      <span className="w-10 shrink-0 text-right text-[11px] font-medium tabular-nums text-white/80">
+        {((zoomVrednost ?? zmoKamere.zoom.min) / zmoKamere.zoom.min).toFixed(1)}×
+      </span>
+    </div>
+  ) : null
+  const objektivVrstica = naprave.length >= 2 ? (
+    <div className="flex items-center gap-2 px-2 pt-1">
+      <Aperture className="size-4 shrink-0 text-white/80" aria-hidden />
+      <Select value={trenutnaNaprava ?? ''} onValueChange={(id) => { if (id) void preklopiNapravo(id) }}>
+        <SelectTrigger aria-label="Izbira kamere" className="h-8 flex-1 border-white/25 bg-black/40 text-xs text-white">
+          <SelectValue placeholder="Kamera" />
+        </SelectTrigger>
+        <SelectContent className="max-h-48">
+          {naprave.map((n) => <SelectItem key={n.deviceId} value={n.deviceId}>{n.label}</SelectItem>)}
+        </SelectContent>
+      </Select>
+    </div>
+  ) : null
+  const gumbiVrstica = (
+    <div className="flex flex-wrap gap-2 p-2">
+      <Button className={fsAktiven ? 'h-11 flex-1 rounded-full text-base' : 'flex-1'} onClick={capture}><Camera className="size-4" aria-hidden /> Zajemi</Button>
+      {/* R508 (issue #7 §4A): bliskavica in preklop kamer — gumb je viden
+          SAMO, če naprava zmožnost POTRDI; sicer je napis pošten
+          (»ni podprto / ni dokaza«), ne pa lažno aktiven gumb. */}
+      {zmoKamere?.torch === 'PODPRTO' ? (
+        <Button variant={torchNa ? 'default' : 'outline'} onClick={() => void preklopiTorch()} aria-pressed={torchNa}>
+          {torchNa ? <FlashlightOff className="size-4" aria-hidden /> : <Flashlight className="size-4" aria-hidden />}
+          Bliskavica {torchNa ? 'izklop' : 'vklop'}
+        </Button>
+      ) : null}
+      {zmoKamere?.preklop === 'PODPRTO' ? (
+        <Button variant="outline" onClick={() => void preklopiSmer()}>
+          <SwitchCamera className="size-4" aria-hidden /> Preklopi kamero
+        </Button>
+      ) : null}
+      <Button variant="outline" onClick={() => setGuides((g) => !g)} aria-pressed={guides}>
+        <Grid3x3 className="size-4" aria-hidden /> Vodila {guides ? 'vklop' : 'izklop'}
+      </Button>
+      <Button variant="outline" onClick={stopCamera}>Prekliči</Button>
+    </div>
+  )
+  const infoVrstice = (
+    <>
+      {zmoKamere ? (
+        <p className={fsAktiven ? 'px-2 pb-1 text-[11px] text-white/70' : 'px-2 pb-2 text-[11px] text-muted-foreground'}>
+          Naprava: {napisZmogljivosti(zmoKamere)}{resToka ? ` · tok ${resToka}` : ''}
+        </p>
+      ) : null}
+      {/* R509 (issue #7 §9): opomba o spominu — svetilke iz spomina ne
+          prižgemo sami; monter jo mora prižgati. */}
+      <p className={fsAktiven ? 'px-2 pb-1 text-[11px] text-white/70' : 'px-2 pb-2 text-[11px] text-muted-foreground'}>{napisNastavitev(nastavitve, torchNa)}</p>
+    </>
+  )
 
   return (
         <div className="space-y-4">
@@ -248,8 +342,10 @@ export function FazaZajem (props: FazaZajemProps) {
           </div>
 
           {camActive ? (
-            <div ref={predogledRef} className={`space-y-2 overflow-hidden rounded-lg border bg-black ${fsAktiven ? 'rounded-none border-0' : ''}`}>
-              <div className="relative">
+            <div ref={predogledRef} className={fsAktiven ? 'relative h-full overflow-hidden bg-black' : 'space-y-2 overflow-hidden rounded-lg border bg-black'}>
+              {/* R570: v celozaslonskem načinu video območje prekrije CELEN
+                  element (absolute inset-0) — kontrole plavajo nad njim. */}
+              <div ref={videoObmocjeRef} className={fsAktiven ? 'absolute inset-0' : 'relative'}>
                 {/* R550: predogled sprednje kamere je ZRCALJEN (standard nativnih
                     aplikacij — tako monter vidi sebe, kot v ogledalu); zajem
                     ostaja ne-zrcaljen (capture riše surov okvir), zato so točke
@@ -263,7 +359,7 @@ export function FazaZajem (props: FazaZajemProps) {
                   onPointerMove={premikKazalca}
                   onPointerUp={odpustiKazalec}
                   onPointerCancel={odpustiKazalec}
-                  className={`touch-none w-full object-contain ${fsAktiven ? 'max-h-[75vh]' : 'max-h-[360px]'} ${smerKamere === 'user' ? '-scale-x-100' : ''} ${zmoKamere?.fokus === 'PODPRTO' ? 'cursor-crosshair' : ''}`}
+                  className={`${fsAktiven ? 'touch-none absolute inset-0 size-full object-cover' : 'touch-none w-full object-contain max-h-[360px]'} ${smerKamere === 'user' ? '-scale-x-100' : ''} ${zmoKamere?.fokus === 'PODPRTO' ? 'cursor-crosshair' : ''}`}
                   aria-label="Predogled kamere" />
                 {/* R550: shutter blisk — 180 ms bela zavesa; potrditev zajema. */}
                 {blisk ? <div className="pointer-events-none absolute inset-0 z-20 bg-white/90" aria-hidden /> : null}
@@ -304,82 +400,52 @@ export function FazaZajem (props: FazaZajemProps) {
                 ) : null}
                 {/* R467 (issue #8 F1): žive zaznave prizora (tla, ovire, struktura) —
                     čist pogled, 2–4 oznake, tap za podatek; nikoli ne blokira zajema */}
+                {/* R570: SceneOverlay na PRISLONJENEM pravokotniku prikazane
+                    vsebine (fitRect) — zaznave stojijo na realnih mestih
+                    tudi pri obrezu (cover) ali Letterboxu (contain). */}
                 {sceneState.elements.length > 0 ? (
-                  <SceneOverlay
-                    elements={sceneState.elements}
-                    quality={sceneState.quality}
-                  />
+                  fitRect ? (
+                    <div
+                      className="absolute"
+                      style={{ left: fitRect.x, top: fitRect.y, width: fitRect.w, height: fitRect.h }}
+                    >
+                      <SceneOverlay elements={sceneState.elements} quality={sceneState.quality} guidance={!fsAktiven} />
+                    </div>
+                  ) : (
+                    <SceneOverlay elements={sceneState.elements} quality={sceneState.quality} guidance={!fsAktiven} />
+                  )
                 ) : null}
                 {/* R455: vodila za vodenje zajema (§4) — mreža + vodoravnica + središče */}
                 {guides ? <Vodila /> : null}
               </div>
-              {/* R550: drsnik približanja — VIDEN SAMO, kadar je razpon potrjen
-                  (getCapabilities().zoom); vrednost je prikaz kot mnogokratnik
-                  najmanjšega približanja (enako nativnim aplikacijam kamere). */}
-              {zmoKamere?.zoom.stanje === 'PODPRTO' ? (
-                <div className="flex items-center gap-2 px-2 pt-1">
-                  <ZoomIn className="size-4 shrink-0 text-white/80" aria-hidden />
-                  <input
-                    type="range"
-                    className="h-1.5 flex-1 accent-white"
-                    min={zmoKamere.zoom.min}
-                    max={zmoKamere.zoom.max}
-                    step={zmoKamere.zoom.step}
-                    value={zoomVrednost ?? zmoKamere.zoom.min}
-                    onChange={(e) => { void nastaviZoomVrednost(Number(e.target.value)) }}
-                    aria-label="Približanje kamere"
-                  />
-                  <span className="w-10 shrink-0 text-right text-[11px] font-medium tabular-nums text-white/80">
-                    {((zoomVrednost ?? zmoKamere.zoom.min) / zmoKamere.zoom.min).toFixed(1)}×
-                  </span>
+              {/* R570: kontrole — v celozaslonskem načinu NAD videom na temnem
+                  gradientu z varnim obročem (safe-area) in vodnikom na vrhu
+                  plošče; v dialogu pod videom (kot doslej). */}
+              {fsAktiven ? (
+                <div className="absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black/90 via-black/55 to-transparent px-2 pt-10 pb-[calc(env(safe-area-inset-bottom,0px)+0.5rem)]">
+                  {vodnik ? (
+                    <p className="mb-1 rounded-md bg-zinc-900/75 px-2.5 py-1.5 text-center text-[11px] leading-snug text-white" role="status">{vodnik}</p>
+                  ) : null}
+                  {zoomVrstica}
+                  {objektivVrstica}
+                  {gumbiVrstica}
+                  {infoVrstice}
                 </div>
-              ) : null}
-              {/* R553: izbirnik OBJEKTIVA — viden SAMO, kadar brskalnik razkrije
-                  vsaj dve OZNAČENI kameri (multi-lens: glavna/ultraširoka/tele).
-                  Izbira po deviceId preklopi tok na določen objektiv; oznaka
-                  trenutne izbire pride IZ TOKA (getSettings), ne iz domneve. */}
-              {naprave.length >= 2 ? (
-                <div className="flex items-center gap-2 px-2 pt-1">
-                  <Aperture className="size-4 shrink-0 text-white/80" aria-hidden />
-                  <Select value={trenutnaNaprava ?? ''} onValueChange={(id) => { if (id) void preklopiNapravo(id) }}>
-                    <SelectTrigger aria-label="Izbira kamere" className="h-8 flex-1 border-white/25 bg-black/40 text-xs text-white">
-                      <SelectValue placeholder="Kamera" />
-                    </SelectTrigger>
-                    <SelectContent className="max-h-48">
-                      {naprave.map((n) => <SelectItem key={n.deviceId} value={n.deviceId}>{n.label}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-              ) : null}
-              <div className="flex flex-wrap gap-2 p-2">
-                <Button className="flex-1" onClick={capture}><Camera className="size-4" aria-hidden /> Zajemi</Button>
-                {/* R508 (issue #7 §4A): bliskavica in preklop kamer — gumb je viden
-                    SAMO, če naprava zmožnost POTRDI; sicer je napis pošten
-                    (»ni podprto / ni dokaza«), ne pa lažno aktiven gumb. */}
-                {zmoKamere?.torch === 'PODPRTO' ? (
-                  <Button variant={torchNa ? 'default' : 'outline'} onClick={() => void preklopiTorch()} aria-pressed={torchNa}>
-                    {torchNa ? <FlashlightOff className="size-4" aria-hidden /> : <Flashlight className="size-4" aria-hidden />}
-                    Bliskavica {torchNa ? 'izklop' : 'vklop'}
-                  </Button>
-                ) : null}
-                {zmoKamere?.preklop === 'PODPRTO' ? (
-                  <Button variant="outline" onClick={() => void preklopiSmer()}>
-                    <SwitchCamera className="size-4" aria-hidden /> Preklopi kamero
-                  </Button>
-                ) : null}
-                <Button variant="outline" onClick={() => setGuides((g) => !g)} aria-pressed={guides}>
-                  <Grid3x3 className="size-4" aria-hidden /> Vodila {guides ? 'vklop' : 'izklop'}
-                </Button>
-                <Button variant="outline" onClick={stopCamera}>Prekliči</Button>
-              </div>
-              {zmoKamere ? (
-                <p className="px-2 pb-2 text-[11px] text-muted-foreground">
-                  Naprava: {napisZmogljivosti(zmoKamere)}{resToka ? ` · tok ${resToka}` : ''}
-                </p>
-              ) : null}
-              {/* R509 (issue #7 §9): opomba o spominu — svetilke iz spomina ne
-                  prižgemo sami; monter jo mora prižgati. */}
-              <p className="px-2 pb-2 text-[11px] text-muted-foreground">{napisNastavitev(nastavitve, torchNa)}</p>
+              ) : (
+                <>
+                  {/* R550: drsnik približanja — VIDEN SAMO, kadar je razpon potrjen
+                      (getCapabilities().zoom); vrednost je prikaz kot mnogokratnik
+                      najmanjšega približanja (enako nativnim aplikacijam kamere). */}
+                  {zoomVrstica}
+                  {/* R553: izbirnik OBJEKTIVA — viden SAMO, kadar brskalnik razkrije
+                      vsaj dve OZNAČENI kameri (multi-lens: glavna/ultraširoka/tele).
+                      Izbira po deviceId preklopi tok na določen objektiv; oznaka
+                      trenutne izbire pride IZ TOKA (getSettings), ne iz domneve. */}
+                  {objektivVrstica}
+                  {gumbiVrstica}
+                  {infoVrstice}
+                </>
+              )}
             </div>
           ) : null}
 

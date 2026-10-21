@@ -4,8 +4,8 @@ Poslovno-operativni sistem za Roksal — od prvega voda do zaključene montaže 
 fasad in teras: CRM, ponudbe s podpisom, proizvodnja, teren (tudi brez signala),
 računi in **fotomontaža PREJ/POTEM** iz uradnih Roksalovih gradiv.
 
-> **Stanje:** rekonstrukcija zaključena in presežena · izdaja **v1.77.0** ·
-> **69 testnih skupin + E2E skozi pravo aplikacijo** · GitHub je kanonični vir
+> **Stanje:** rekonstrukcija zaključena in presežena · izdaja **v1.77.1** ·
+> **70 testnih skupin + E2E skozi pravo aplikacijo** · GitHub je kanonični vir
 > (zadeve + release vrata), GitLab zrcalo, sinhronizacija po SHA (`ops/sync-check.sh`) ·
 > [docs/](docs/) vsebuje poročila za vsako fazo.
 
@@ -655,6 +655,8 @@ ImageMagick, poppler) — podrobno v `tests/ci-local.sh` glavi.
   `DEMO_PROD_KEY` (točna besedna zveza, `config/ENV-VARS.md`) demo prijava
   v produkciji ostane ZAPRTA, kot da je izklopljena; ob zagonu strežnika
   stanje glasno (tri-stanjsko) opozori `src/instrumentation.ts`.
+
+26. **Celozaslonska kamera po vzorcu najboljših (R570, v1.77.1):** predogled zajema čez CELEN zaslon (`object-cover`, edge-to-edge — obrez po sredini kot v nativnih kamerah; prej 26 % višine zaslona na mobilnem in `max-h-75vh` strop) · kontrole NAD videom na temnem gradientu (scrim) z varnim obročem (`env(safe-area-inset-bottom)`) in izpostavljenim okroglem sprožilcem · `useFitRect` (object-fit matematika: cover-obrez / contain-letterbox) poravna SceneOverlay zaznave in točko ostrenja na pravih mestih tudi ob spremenjenem razmerju (popravlja tudi obstoječi Letterbox zamik v dialogu na širokih zaslonih).
 
 ## Tehnologija
 

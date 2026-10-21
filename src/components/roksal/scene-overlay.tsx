@@ -47,6 +47,10 @@ export interface SceneOverlayProps {
   pinnedIds?: ReadonlySet<string>
   /** R485 (issue #8 §9): pogled overlayja (privzeto ZIVO = sedanje obnašanje). */
   view?: SceneOverlayView
+  /** R570: naj se izriše notranja vrstica »naslednji korak« (privzeto DA)?
+   *  V celozaslonskem zajemu (faza-zajem) jo nosilec izriše NAD gumbi,
+   *  da ne zaide pod ploščo kontrol — tam se poda false. */
+  guidance?: boolean
 }
 
 const CLS_LABEL: Record<SceneClass, string> = {
@@ -154,10 +158,10 @@ function AxisLine ({ a, color, selected }: { a: DimAxis; color: string; selected
   )
 }
 
-export default function SceneOverlay ({ elements, quality, selectedId, onSelect, maxLabels = 4, pinnedIds, view = 'ZIVO' }: SceneOverlayProps) {
+export default function SceneOverlay ({ elements, quality, selectedId, onSelect, maxLabels = 4, pinnedIds, view = 'ZIVO', guidance = true }: SceneOverlayProps) {
   const shown = pickLabels(elements, maxLabels, pinnedIds)
   if (shown.length === 0) return null
-  const guidance = nextStepGuidance(elements, quality ?? undefined)
+  const guidanceText = nextStepGuidance(elements, quality ?? undefined)
   // R485 (§9): pogled — PREPOZNANO skrije mere/osi (samo semantika), MERE
   // pokaže osi VSEH prikazanih elementov (pogled mer); ŽIVO = osi izbranega
   // (R470). Elementi so ISTI — spreminja se samo prikaz.
@@ -337,13 +341,14 @@ export default function SceneOverlay ({ elements, quality, selectedId, onSelect,
           )
         })}
       </div>
-      {/* naslednji korak za monterja (issue §8) — ena vrstica, spodaj */}
-      {guidance ? (
+      {/* naslednji korak za monterja (issue §8) — ena vrstica, spodaj;
+          R570: v celozaslonskem načinu jo izriše nosilec nad gumbi (guidance=false) */}
+      {guidance && guidanceText ? (
         <p
           className="pointer-events-none absolute inset-x-2 bottom-2 rounded-md bg-zinc-900/75 px-2.5 py-1.5 text-center text-[11px] leading-snug text-white shadow"
           role="status"
         >
-          {guidance}
+          {guidanceText}
         </p>
       ) : null}
     </>
