@@ -9,6 +9,7 @@ import { useMemo, useRef, useState } from 'react'
 import { BadgeCheck, FileDown, FileText, Loader2, Lock, Percent, Search, Send, TriangleAlert, Upload, User } from '@/components/roksal/custom-icons'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { AnimatedList, AnimatedListItem } from '@/components/roksal/motion-bits'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -134,9 +135,9 @@ export default function PonudbeModule () {
       {list.loading ? <LoadingRows /> : !list.error && rows.length === 0 ? (
         <EmptyState title="Ni ponudb" desc="Poskusite spremeniti filter ali ustvarite osnutek v modulu Konfigurator." icon={FileText} />
       ) : (
-        <ul className="grid gap-3 md:grid-cols-2">
+        <AnimatedList className="grid gap-3 md:grid-cols-2">
           {rows.map((qq) => (
-            <li key={qq.id}>
+            <AnimatedListItem key={qq.id}>
               <button type="button" className="w-full text-left" onClick={() => setSelected(qq.id)} aria-label={`Odpri ponudbo ${qq.code}`}>
                 <Card className="transition hover:border-roksal-amber/60 hover:shadow-sm">
                   <CardContent className="p-4">
@@ -182,9 +183,9 @@ export default function PonudbeModule () {
                   </CardContent>
                 </Card>
               </button>
-            </li>
+            </AnimatedListItem>
           ))}
-        </ul>
+        </AnimatedList>
       )}
 
       {/* podrobnost */}
