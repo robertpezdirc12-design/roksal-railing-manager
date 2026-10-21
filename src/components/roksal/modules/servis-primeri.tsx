@@ -12,6 +12,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { AnimatedList, AnimatedListItem } from '@/components/roksal/motion-bits'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -71,9 +72,9 @@ export function ServisTab () {
           icon={Wrench}
         />
       ) : (
-        <ul className="space-y-2">
+        <AnimatedList className="space-y-2">
           {rows.map((c) => (
-            <li key={c.id}>
+            <AnimatedListItem key={c.id}>
               <Card className="transition hover:border-roksal-amber/60">
                 <CardContent className="space-y-1.5 p-4">
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -101,9 +102,9 @@ export function ServisTab () {
                   </Button>
                 </CardContent>
               </Card>
-            </li>
+            </AnimatedListItem>
           ))}
-        </ul>
+        </AnimatedList>
       )}
 
       <Dialog open={!!selected} onOpenChange={(o) => { if (!o) setSelected(null) }}>
