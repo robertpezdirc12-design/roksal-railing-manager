@@ -9,6 +9,7 @@ import { Mail, Pencil, Phone, Plus, Star, User, Users } from '@/components/roksa
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { AnimatedList, AnimatedListItem } from '@/components/roksal/motion-bits'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
@@ -67,9 +68,9 @@ export function EkipeTab () {
       {crews.loading ? <LoadingRows /> : !crews.error && rows.length === 0 ? (
         <EmptyState title="Ni ekip" desc="Dodajte interno ekipo ali podizvajalca z regijo, tipi del in oceno kakovosti." icon={Users} />
       ) : (
-        <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <AnimatedList className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {rows.map((c) => (
-            <li key={c.id}>
+            <AnimatedListItem key={c.id}>
               <Card className="flex h-full flex-col transition hover:border-roksal-amber/60">
                 <CardContent className="flex flex-1 flex-col gap-2 p-4">
                   <div className="flex items-start justify-between gap-2">
@@ -106,9 +107,9 @@ export function EkipeTab () {
                   <div className="mt-auto pt-1 text-xs text-muted-foreground">{c._count.workOrders} nalogov</div>
                 </CardContent>
               </Card>
-            </li>
+            </AnimatedListItem>
           ))}
-        </ul>
+        </AnimatedList>
       )}
 
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
