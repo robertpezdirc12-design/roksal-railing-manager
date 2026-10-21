@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { fmtEUR, useApi } from '@/lib/api-client'
 import { ErrorBox, LoadingRows, PageHeader, StatCard, StatusBadge } from '@/components/roksal/ui-bits'
+import { CardHover, AnimatedList, AnimatedListItem } from '@/components/roksal/motion-bits'
 import { useAppStore } from '@/lib/store'
 import { fmtDate } from '@/lib/api-client'
 import { cn } from '@/lib/utils'
@@ -93,9 +94,10 @@ export default function DashboardModule () {
               ) : (nextActions.data?.data ?? []).length === 0 ? (
                 <p className="text-sm text-muted-foreground">Ni aktivnih projektov z odprtim korakom.</p>
               ) : (
-                <ul className="max-h-96 space-y-2 overflow-y-auto pr-1">
+                <AnimatedList className="max-h-96 space-y-2 overflow-y-auto pr-1">
                   {(nextActions.data?.data ?? []).map((r) => (
-                    <li key={r.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-2.5">
+                    <AnimatedListItem key={r.id}>
+                    <li className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-2.5">
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
                           <span className="font-mono text-xs font-semibold text-roksal-amber">{r.code}</span>
@@ -111,8 +113,9 @@ export default function DashboardModule () {
                         </Button>
                       ) : null}
                     </li>
+                    </AnimatedListItem>
                   ))}
-                </ul>
+                </AnimatedList>
               )}
             </CardContent>
           </Card>
