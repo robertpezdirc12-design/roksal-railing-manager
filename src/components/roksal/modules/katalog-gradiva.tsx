@@ -6,6 +6,7 @@
 // — R548 izvleček iz katalog.tsx (razbitje po vzorcu R546/R547; BREZ spremembe obnašanja).
 
 import { Badge } from '@/components/ui/badge'
+import { AnimatedList, AnimatedListItem } from '@/components/roksal/motion-bits'
 import { ShieldCheck } from '@/components/roksal/custom-icons'
 import { useApi } from '@/lib/api-client'
 import { ErrorBox } from '@/components/roksal/ui-bits'
@@ -129,12 +130,12 @@ export function ProductAssetsSection ({ productId }: { productId: string }) {
         )
       })}
 
-      <ul className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4">
+      <AnimatedList className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4">
         {otherRows.map((a) => {
           const st = STATUS_BADGE[a.status] ?? STATUS_BADGE.NEEDS_REVIEW
           const src = a.filePath ? a.filePath.replace(/^public/, '') : a.cdnUrl ?? a.sourceUrl ?? ''
           return (
-            <li key={a.id} className="overflow-hidden rounded-lg border bg-card">
+            <AnimatedListItem key={a.id} className="overflow-hidden rounded-lg border bg-card">
               {a.status === 'MISSING' ? (
                 <div className="flex h-28 items-center justify-center bg-muted/60 p-2 text-center text-[11px] text-muted-foreground" role="img" aria-label="Datoteka gradiva ni bila prenesena">
                   Gradivo obstaja na roksal.com — datoteka ni prenesena. Izvorni URL in alt so zabeleženi.
@@ -167,10 +168,10 @@ export function ProductAssetsSection ({ productId }: { productId: string }) {
                   <a href={a.sourceUrl} target="_blank" rel="noreferrer" className="block truncate text-[10px] text-roksal-amber hover:underline" title={a.sourceUrl}>izvirnik (roksal.com)</a>
                 ) : null}
               </div>
-            </li>
+            </AnimatedListItem>
           )
         })}
-      </ul>
+      </AnimatedList>
       {rows.some((a) => a.status === 'MISSING') ? (
         <p className="rounded-lg border border-amber-300 bg-amber-50 p-2 text-[11px] text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
           Manjkajo uradne barvne lestvice (datoteke). Imena odtenkov so zapisana v slikah na roksal.com in jih bo mogoče dokončno potrditi z datotekami od Roksala — v aplikaciji niso izmišljena.
