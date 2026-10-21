@@ -50,6 +50,7 @@ export function AppShell () {
   const { user, section, tab, setSection, setTab, clearAuth } = useAppStore()
   useOnboarding([
     { element: "nav", title: "Navigacija", text: "Tukaj izbirate med 5 glavnimi sekcijami." },
+    { element: "search", title: "Iskanje", text: "Globalno iskanje (Ctrl+K) za hitro navigacijo." },
     { element: "main", title: "Moduli", text: "Tukaj se izrisuje izbrani modul." },
   ])
   const { theme, setTheme } = useTheme()
