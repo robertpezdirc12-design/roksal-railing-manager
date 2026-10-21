@@ -7,6 +7,7 @@ import { RefreshCw, ShieldAlert, TriangleAlert } from 'lucide-react'
 import { useAppStore } from '@/lib/store'
 import { tabById, tabVisible } from '@/lib/nav-registry'
 import { LoadingRows } from '@/components/roksal/ui-bits'
+import { FadeIn } from '@/components/roksal/motion-bits'
 import type { TabProps } from '@/components/roksal/modules/types'
 
 // mapa zavihek → modul (vsak modul je svoja datoteka v ./modules/)
@@ -86,7 +87,9 @@ export function ModuleView ({ tabId }: { tabId: string }) {
   return (
     <ModuleErrorBoundary key={tab.id} tabId={tab.id}>
       <Suspense fallback={<LoadingRows rows={5} />}>
-        <Mod />
+        <FadeIn>
+          <Mod />
+        </FadeIn>
       </Suspense>
     </ModuleErrorBoundary>
   )

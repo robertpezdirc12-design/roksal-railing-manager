@@ -37,6 +37,7 @@ import {
 } from '@/lib/offline'
 import { RoksalLogo } from '@/components/roksal/logo'
 import { ModuleView } from '@/components/roksal/module-view'
+import { useOnboarding } from '@/components/roksal/onboarding'
 // R490 (issue #11): SMART GUIDE — kontekstna pomoč SL/HR + glas (Web Speech API)
 import { SmartGuide } from '@/components/roksal/smart-guide'
 
@@ -47,6 +48,10 @@ interface SearchGroup { kind: string; label: string; hits: SearchHit[] }
 
 export function AppShell () {
   const { user, section, tab, setSection, setTab, clearAuth } = useAppStore()
+  useOnboarding([
+    { element: "nav", title: "Navigacija", text: "Tukaj izbirate med 5 glavnimi sekcijami." },
+    { element: "main", title: "Moduli", text: "Tukaj se izrisuje izbrani modul." },
+  ])
   const { theme, setTheme } = useTheme()
   const { toast } = useToast()
   const notif = useApi<{ data: NotificationRow[]; unread: number }>('/api/notifications')
