@@ -6,6 +6,7 @@ import { useState } from 'react'
 import { Users } from '@/components/roksal/custom-icons'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { AnimatedList, AnimatedListItem } from '@/components/roksal/motion-bits'
 import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -48,9 +49,9 @@ export default function VodjaEkipaModule () {
       {list.loading ? <LoadingRows /> : !list.error && (list.data?.data ?? []).length === 0 ? (
         <EmptyState title="Ni uporabnikov" icon={Users} />
       ) : (
-        <ul className="space-y-3">
+        <AnimatedList className="space-y-3">
           {(list.data?.data ?? []).map((u) => (
-            <li key={u.id}>
+            <AnimatedListItem key={u.id}>
               <Card>
                 <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
                   <div className="min-w-0">
@@ -86,9 +87,9 @@ export default function VodjaEkipaModule () {
                   ) : null}
                 </CardContent>
               </Card>
-            </li>
+            </AnimatedListItem>
           ))}
-        </ul>
+        </AnimatedList>
       )}
 
       {canWrite ? (
