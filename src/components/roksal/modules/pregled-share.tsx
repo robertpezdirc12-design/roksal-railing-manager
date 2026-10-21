@@ -10,6 +10,7 @@ import { Copy, Eye, Link2, Lock, Plus, ShieldCheck } from '@/components/roksal/c
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { AnimatedList, AnimatedListItem } from '@/components/roksal/motion-bits'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -170,9 +171,9 @@ export function ShareCard ({
             {links.loading ? <LoadingRows rows={1} /> : !links.error && rows.length === 0 ? (
               <p className="text-xs text-muted-foreground">Ni še javnih povezav tega tekača.</p>
             ) : !links.error ? (
-              <ul className="space-y-1.5">
+              <AnimatedList className="space-y-1.5">
                 {rows.map((l) => (
-                  <li key={l.id} className="rounded-lg border p-2">
+                  <AnimatedListItem key={l.id} className="rounded-lg border p-2">
                     <div className="flex flex-wrap items-center gap-2">
                       <code className="min-w-0 truncate font-mono text-[11px] text-muted-foreground">…{l.token.slice(-10)}</code>
                       {l.active ? (
@@ -202,9 +203,9 @@ export function ShareCard ({
                         </Button>
                       ) : null}
                     </div>
-                  </li>
+                  </AnimatedListItem>
                 ))}
-              </ul>
+              </AnimatedList>
             ) : null}
             <p className="text-[11px] text-muted-foreground">
               Javni pogled: model, pripombe (brez internih opomb) in fotografije samo ob veljavnem soglasju. Žeton je omejen, preklicljiv, s tempomatom.
