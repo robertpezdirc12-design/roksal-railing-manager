@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { AnimatedList, AnimatedListItem } from '@/components/roksal/motion-bits'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -173,9 +174,10 @@ export default function NalogiModule () {
           <EmptyState title="Ni nalogov" desc="Poskusite spremeniti obseg, status ali iskalni niz." icon={ClipboardList} />
         ) : null
       ) : (
-        <ul className="grid gap-3 md:grid-cols-2">
+        <AnimatedList className="grid gap-3 md:grid-cols-2">
           {rows.map((wo) => (
-            <li key={wo.id}>
+            <AnimatedListItem key={wo.id}>
+            <li>
               <button type="button" className="w-full text-left" onClick={() => { setSelected(wo.id); setSelectedRow(wo) }} aria-label={`Odpri nalog ${wo.code}`}>
                 <Card className="transition hover:border-roksal-amber/60 hover:shadow-sm">
                   <CardContent className="p-4">
@@ -208,8 +210,9 @@ export default function NalogiModule () {
                 </Card>
               </button>
             </li>
+            </AnimatedListItem>
           ))}
-        </ul>
+        </AnimatedList>
       )}
 
       {/* globalna zgodovina dogodkov — R434 (/api/nalog/zgodovina) */}
