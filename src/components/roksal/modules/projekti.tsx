@@ -12,6 +12,7 @@ import { useMemo, useState } from 'react'
 import { Banknote, FileText, FolderKanban, HardHat, History, MapPin, Plus, Ruler, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { CardHover, AnimatedList, AnimatedListItem } from '@/components/roksal/motion-bits'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -67,9 +68,10 @@ export default function ProjektiModule () {
       {list.loading ? <LoadingRows /> : !list.error && rows.length === 0 ? (
         <EmptyState title="Ni projektov" desc="Poskusite spremeniti filter ali iskalni niz." icon={FolderKanban} />
       ) : (
-        <ul className="grid gap-3 md:grid-cols-2">
+        <AnimatedList className="grid gap-3 md:grid-cols-2">
           {rows.map((p) => (
-            <li key={p.id}>
+            <AnimatedListItem key={p.id}>
+            <li>
               <button type="button" className="w-full text-left" onClick={() => setSelected(p.id)} aria-label={`Odpri projekt ${p.code}`}>
                 <Card className="transition hover:border-roksal-amber/60 hover:shadow-sm">
                   <CardContent className="p-4">
@@ -91,8 +93,9 @@ export default function ProjektiModule () {
                 </Card>
               </button>
             </li>
+            </AnimatedListItem>
           ))}
-        </ul>
+        </AnimatedList>
       )}
 
       {/* podrobnost */}
