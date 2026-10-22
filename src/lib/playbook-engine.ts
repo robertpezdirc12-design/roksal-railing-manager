@@ -40,13 +40,14 @@ export interface RunState {
 
 export async function ensurePlaybookSeed (): Promise<void> {
   for (const def of VGRADNJENI_PLAYBOOKI) {
-    const obstojec = await db.playbookDef.findUnique({
+    // R579: upsert (atomarno), ne findUnique→create — ob prvem dostopu sta
+    // vzporedno priletela /api/playbook/runs IN /api/playbook/defs, oba sta
+    // starih definicij naredila, oba create — drugi je padel s P2002 in
+    // monter dobil 500. `update: {}` obstoječe definicije pusti pri miru
+    // (idempotentno po key+version, zagoni se sklicujejo nanje).
+    await db.playbookDef.upsert({
       where: { key_version: { key: def.key, version: def.version } },
-      select: { id: true },
-    })
-    if (obstojec) continue
-    await db.playbookDef.create({
-      data: {
+      create: {
         key: def.key,
         name: def.naziv,
         version: def.version,
@@ -54,6 +55,7 @@ export async function ensurePlaybookSeed (): Promise<void> {
         // R542: definicija je jsonb objekt (serializiraj vrača objekt)
         definition: serializiraj(def) as unknown as Prisma.InputJsonValue,
       },
+      update: {},
     })
   }
 }
