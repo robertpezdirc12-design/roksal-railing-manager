@@ -95,9 +95,11 @@ export function CardHover ({ children, className }: { children: ReactNode; class
 }
 
 // List animation — staggered entrance for list items
+// a11y: ul/li → motion.div izgubi semantiko seznama — role=list/listitem jo vrne (bralniki zaslona)
 export function AnimatedList ({ children, className, style }: { children: ReactNode; className?: string; style?: React.CSSProperties }) {
   return (
     <motion.div
+      role="list"
       initial="hidden"
       animate="visible"
       variants={{
@@ -115,6 +117,7 @@ export function AnimatedList ({ children, className, style }: { children: ReactN
 export function AnimatedListItem ({ children, className }: { children: ReactNode; className?: string }) {
   return (
     <motion.div
+      role="listitem"
       variants={{
         hidden: { opacity: 0, x: -8 },
         visible: { opacity: 1, x: 0, transition: { duration: 0.2 } },
