@@ -8,6 +8,7 @@ import {
 } from '@/lib/auth'
 import { writeAudit } from '@/lib/audit'
 import { parseBody } from '@/lib/validate'
+import { jeJavnoSeedGeslo, javnaGeslaDovoljena } from '@/lib/seed-passwords'
 
 // /api/auth/login — prijava (route-map izvirnika)
 // R496: zavora brute-force na IP (zdaj porazdeljena — baza, R536).
@@ -40,6 +41,23 @@ export async function POST (req: NextRequest) {
   if (!parsed.ok) return parsed.response
   const email = parsed.data.email.trim().toLowerCase() // baza hrani male črke (kot prej)
   const { password } = parsed.data
+
+  // R578: geslo iz JAVNEGA demo seeda (prisma/seed.cjs) v produkciji ne sme
+  // delovati. Brez tega je bil admin dostop javen ne glede na DEMO_ACCESS —
+  // vsak, ki prebere repo, se je prijavil z Admin123!.
+  // Zavrnitev je PRED branjem baze in NE šteje kot neuspešen poskus, zato
+  // napadalec ne more zakleniti računa s ponavljanjem javnega gesla.
+  if (
+    process.env.NODE_ENV === 'production' &&
+    jeJavnoSeedGeslo(email, password) &&
+    !javnaGeslaDovoljena(process.env)
+  ) {
+    return jsonError(
+      403,
+      'Geslo ni dovoljeno v produkciji.',
+      'To geslo je iz javnega demo seeda in je v produkciji onemogočeno. Nastavite novo geslo.'
+    )
+  }
 
   const user = await db.user.findUnique({ where: { email } })
   if (!user || !user.active) {
