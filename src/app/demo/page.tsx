@@ -84,7 +84,7 @@ export default function DemoPage () {
           <h3 className="mb-4 text-lg font-semibold text-roksal-ink dark:text-foreground">Demo računi (brezplačno)</h3>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {accounts.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Demo računi niso na voljo. Preverite DEMO_ACCESS=on.</p>
+              <p className="text-sm text-muted-foreground">Demo računi trenutno niso na voljo. Za predstavitev nas kontaktirajte.</p>
             ) : (
               accounts.map((u) => (
                 <Button
