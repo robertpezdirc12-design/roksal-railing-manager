@@ -47,6 +47,11 @@ export function useKamera ({ toast }: { toast: ToastFn }) {
   const [trenutnaNaprava, setTrenutnaNaprava] = useState<string | null>(null)
   // R553: glajena (EWMA α=0,5) svetlost živega predogleda; `null` = brez vzorca.
   const [svetloba, setSvetloba] = useState<number | null>(null)
+  // R579: generacija toka — naraste ob vsakem uspešnem zagonu. Učinek priklopa
+  // (spodaj) se sproži na [camActive, tokGeneracija], s čimer je priklop
+  // zagotovljen po vsakem zagonu — tudi če bi se camActive v eni Reactovi
+  // seriji sprememb ohranil `true` (bliskovit preklop brez prehoda false→true).
+  const [tokGeneracija, setTokGeneracija] = useState(0)
 
   // priprava kamere
   /**
@@ -110,7 +115,17 @@ export function useKamera ({ toast }: { toast: ToastFn }) {
       setCamActive(true)
       // R509: uspešen zagon si zapomni smer (zapisi v brskalnik, ne v bazo).
       if (nastaviSmer(shramba(), smer)) setNastavitve((p) => ({ ...p, smer }))
-      requestAnimationFrame(() => { if (videoRef.current) videoRef.current.srcObject = stream })
+      setTokGeneracija((g) => g + 1)
+      // R579: priklop TAKOJ, če <video> že stoji (npr. ponovni zagon med
+      // aktivnostjo); sicer ga oprani učinek po commitu (spodaj). Prejšnji rAF
+      // je ob hladnem prvem zagonu lahko izpel PRED Reactovim izrisom pogojnega
+      // <video> (ref še null) → priklop tiho izpuščen → črn predogled do
+      // ponovnega odprtja. play() po vzorcu AR modula (iOS avtopredvajanje).
+      const v = videoRef.current
+      if (v && v.srcObject !== stream) {
+        v.srcObject = stream
+        void v.play().catch(() => { /* autoPlay+muted → zavrnitev ni usodna */ })
+      }
       await zajemiZmogljivosti(stream)
       return true
     } catch (e) {
@@ -131,6 +146,9 @@ export function useKamera ({ toast }: { toast: ToastFn }) {
   }, [toast, smerKamere, zajemiZmogljivosti])
 
   const stopCamera = useCallback(() => {
+    // R579: odklop toka tudi na elementu (vzorec AR modula) — brez tega zadnji
+    // okvir obvisi; ob odklopu komponente je ref React že ničel (varovalka).
+    if (videoRef.current) videoRef.current.srcObject = null
     streamRef.current?.getTracks().forEach((t) => t.stop())
     streamRef.current = null
     setCamActive(false)
@@ -234,6 +252,23 @@ export function useKamera ({ toast }: { toast: ToastFn }) {
       toast({ title: 'Ostrenje', description: izid.sporocilo, variant: 'destructive' })
     }
   }, [toast])
+
+  /**
+   * R579: priklop toka na <video> PO commitu — pokriva zagon, ob katerem
+   * element še ni bil izrisan (prvi zagon: rAF je lahko izpel pred izrisom,
+   * ref null, priklop izpuščen → črno), in bliskovit preklop (camActive brez
+   * prehoda false→true). Učinek teče ZA Reactovim izrisom, ref je zapolnjen;
+   * idempotenca (srcObject !== stream) preprečuje dvojni priklop.
+   */
+  useEffect(() => {
+    if (!camActive) return
+    const v = videoRef.current
+    const stream = streamRef.current
+    if (v && stream && v.srcObject !== stream) {
+      v.srcObject = stream
+      void v.play().catch(() => { /* autoPlay+muted → zavrnitev ni usodna */ })
+    }
+  }, [camActive, tokGeneracija])
 
   useEffect(() => () => stopCamera(), [stopCamera])
 
