@@ -368,9 +368,9 @@ export function ReplayCard ({
     <Card>
       <CardContent className="space-y-2 text-sm">
         <div className="flex items-center gap-1.5 font-medium"><Film className="size-4 text-muted-foreground" aria-hidden /> Ponovitev zajema</div>
-        <ul className="space-y-1.5">
+        <AnimatedList className="space-y-1.5">
           {replay.map((r) => (
-            <li key={r.id} className="flex flex-wrap items-center gap-2 rounded-lg border p-2">
+            <AnimatedListItem key={r.id} className="flex flex-wrap items-center gap-2 rounded-lg border p-2">
               <div className="min-w-0 flex-1">
                 <p className="truncate text-xs font-medium">{r.name}</p>
                 <p className="text-[11px] text-muted-foreground">{r.status} · {r.photoCount} posnetkov</p>
@@ -378,9 +378,9 @@ export function ReplayCard ({
               <Button size="sm" variant="outline" className="h-7 gap-1 px-2 text-xs" onClick={() => onOpen(r.id)}>
                 <Play className="size-3.5" aria-hidden /> Predvajaj
               </Button>
-            </li>
+            </AnimatedListItem>
           ))}
-        </ul>
+        </AnimatedList>
         <p className="text-[11px] text-muted-foreground">Predvajanje po korakih — obstoječi replay motor (R465), samo za ogled in izobraževanje.</p>
       </CardContent>
     </Card>

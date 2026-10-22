@@ -177,29 +177,29 @@ function CustomerDetailDialog ({ detail, canWrite, onEdit }: { detail: CustomerD
       <section aria-label="Projekti stranke">
         <h3 className="mb-1.5 text-xs font-bold uppercase tracking-widest text-muted-foreground">Projekti</h3>
         {detail.projects.length === 0 ? <p className="text-sm text-muted-foreground">Ni projektov.</p> : (
-          <ul className="max-h-72 space-y-1 overflow-y-auto pr-1">
+          <AnimatedList className="max-h-72 space-y-1 overflow-y-auto pr-1">
             {detail.projects.map((p) => (
-              <li key={p.id} className="flex items-center justify-between gap-2 rounded-lg border p-2 text-sm">
+              <AnimatedListItem key={p.id} className="flex items-center justify-between gap-2 rounded-lg border p-2 text-sm">
                 <span className="min-w-0 truncate"><span className="font-mono text-xs text-muted-foreground">{p.code}</span> {p.title}</span>
                 <StatusBadge status={p.status} />
-              </li>
+              </AnimatedListItem>
             ))}
-          </ul>
+          </AnimatedList>
         )}
       </section>
 
       <section aria-label="Ponudbe stranke">
         <h3 className="mb-1.5 text-xs font-bold uppercase tracking-widest text-muted-foreground">Ponudbe</h3>
         {detail.quotes.length === 0 ? <p className="text-sm text-muted-foreground">Ni ponudb.</p> : (
-          <ul className="max-h-72 space-y-1 overflow-y-auto pr-1">
+          <AnimatedList className="max-h-72 space-y-1 overflow-y-auto pr-1">
             {detail.quotes.map((qq) => (
-              <li key={qq.id} className="flex items-center justify-between gap-2 rounded-lg border p-2 text-sm">
+              <AnimatedListItem key={qq.id} className="flex items-center justify-between gap-2 rounded-lg border p-2 text-sm">
                 <span className="font-mono text-xs">{qq.code}</span>
                 <StatusBadge status={qq.status} />
                 <span className="font-semibold">{fmtEUR(qq.total)}</span>
-              </li>
+              </AnimatedListItem>
             ))}
-          </ul>
+          </AnimatedList>
         )}
       </section>
 

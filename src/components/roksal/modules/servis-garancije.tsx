@@ -171,16 +171,16 @@ function WarrantyDetailDialog ({ id, office, onClose, onDone }: {
             {w.visits.length === 0 ? (
               <p className="text-sm text-muted-foreground">Še ni obiskov.</p>
             ) : (
-              <ul className="max-h-72 space-y-1.5 overflow-y-auto pr-1">
+              <AnimatedList className="max-h-72 space-y-1.5 overflow-y-auto pr-1">
                 {w.visits.map((v) => (
-                  <li key={v.id} className="rounded-lg border p-2.5 text-sm">
+                  <AnimatedListItem key={v.id} className="rounded-lg border p-2.5 text-sm">
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                       <CalendarClock className="size-3" aria-hidden /> {fmtDateTime(v.date)}
                     </div>
                     <div className="mt-0.5">{v.note}</div>
-                  </li>
+                  </AnimatedListItem>
                 ))}
-              </ul>
+              </AnimatedList>
             )}
           </div>
 

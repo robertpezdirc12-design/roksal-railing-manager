@@ -20,6 +20,7 @@ import { EmptyState, ErrorBox, LoadingRows, PageHeader } from '@/components/roks
 import { READS_ALL_PROJECTS, hasPerm } from '@/lib/permissions-core'
 import { notificationEventLabel } from '@/lib/notify-events'
 import { asJsonObject } from '@/lib/json'
+import { AnimatedList, AnimatedListItem } from '@/components/roksal/motion-bits'
 
 interface AuditRow {
   id: string; action: string; entity: string; entityId: string | null; projectId: string | null
@@ -106,9 +107,9 @@ export default function VarnostModule () {
             {sessions.loading ? <LoadingRows rows={2} /> : sessions.error ? <ErrorBox error={sessions.error} /> : (sessions.data?.data ?? []).length === 0 ? (
               <EmptyState title="Ni aktivnih sej" desc="Nihče ni prijavljen." icon={LogIn} />
             ) : (
-              <ul className="max-h-72 space-y-1.5 overflow-y-auto pr-1">
+              <AnimatedList className="max-h-72 space-y-1.5 overflow-y-auto pr-1">
                 {(sessions.data?.data ?? []).map((s) => (
-                  <li key={s.id} className="flex items-center justify-between gap-2 rounded-lg border p-2">
+                  <AnimatedListItem key={s.id} className="flex items-center justify-between gap-2 rounded-lg border p-2">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="truncate text-sm font-medium">{s.user?.name ?? '—'}</span>
@@ -123,9 +124,9 @@ export default function VarnostModule () {
                     >
                       <Trash2 className="size-4" aria-hidden />
                     </Button>
-                  </li>
+                  </AnimatedListItem>
                 ))}
-              </ul>
+              </AnimatedList>
             )}
           </CardContent>
         </Card>
@@ -167,9 +168,9 @@ export default function VarnostModule () {
       {entries.loading ? <LoadingRows rows={5} /> : !entries.error && (entries.data?.data ?? []).length === 0 ? (
         <EmptyState title="Ni vnosov" desc={scope === 'projekt' && !projectId ? 'Najprej izberi projekt.' : 'Dnevnik je prazen.'} icon={ScrollText} />
       ) : (
-        <ul className="space-y-2">
+        <AnimatedList className="space-y-2">
           {(entries.data?.data ?? []).map((a) => (
-            <li key={a.id}>
+            <AnimatedListItem key={a.id}>
               <Card>
                 <CardContent className="flex flex-wrap items-center justify-between gap-2 p-3">
                   <div className="min-w-0">
@@ -189,9 +190,9 @@ export default function VarnostModule () {
                   </div>
                 </CardContent>
               </Card>
-            </li>
+            </AnimatedListItem>
           ))}
-        </ul>
+        </AnimatedList>
       )}
     </div>
   )
@@ -236,9 +237,9 @@ function MaintenanceCard () {
       </CardHeader>
       <CardContent>
         {jobs.loading ? <LoadingRows rows={2} /> : jobs.error ? <ErrorBox error={jobs.error} /> : (
-          <ul className="space-y-1.5">
+          <AnimatedList className="space-y-1.5">
             {(jobs.data?.data.definitions ?? []).map((d) => (
-              <li key={d.job} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-2">
+              <AnimatedListItem key={d.job} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-2">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="text-sm font-medium">{d.label}</span>
@@ -264,9 +265,9 @@ function MaintenanceCard () {
                 >
                   <Play className="size-3.5" aria-hidden /> {running === d.job ? 'Teče…' : 'Zaženi'}
                 </Button>
-              </li>
+              </AnimatedListItem>
             ))}
-          </ul>
+          </AnimatedList>
         )}
       </CardContent>
     </Card>

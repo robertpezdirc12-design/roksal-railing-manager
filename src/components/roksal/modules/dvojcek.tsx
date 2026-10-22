@@ -25,6 +25,7 @@ import { EmptyState, ErrorBox, LoadingRows, PageHeader } from '@/components/roks
 import { hasPerm } from '@/lib/permissions-core'
 import { TWIN_KINDS } from '@/lib/capture-qa-engine'
 import { DEVIATION_STATUSES, ELEMENT_STATES, LOOP_STATUSES, REG_QUALITY } from '@/lib/reality-r2p-engine'
+import { AnimatedList, AnimatedListItem } from '@/components/roksal/motion-bits'
 
 // ─── Tipi ───────────────────────────────────────────────────────────────────
 
@@ -192,9 +193,9 @@ export default function DvojcekModule () {
                   </div>
                   {od.criticalGate.manjka.length > 0 && (
                     <>
-                      <ul className="list-inside list-disc space-y-0.5 text-xs text-muted-foreground">
-                        {od.criticalGate.manjka.map((m, i) => <li key={i}>{m.message}</li>)}
-                      </ul>
+                      <AnimatedList className="list-inside list-disc space-y-0.5 text-xs text-muted-foreground">
+                        {od.criticalGate.manjka.map((m, i) => <AnimatedListItem key={i}>{m.message}</AnimatedListItem>)}
+                      </AnimatedList>
                       <p className="text-xs font-medium text-amber-800">[ODPRAVI MANJKAJOČE PODATKE] — Ogradnja: verify segmentov z LASER/mičnik + kalibracija + podlaga.</p>
                     </>
                   )}
@@ -285,9 +286,9 @@ export default function DvojcekModule () {
                       ))}
                     </div>
                     {od.consistency.warnings.length > 0 && (
-                      <ul className="space-y-1 rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">
-                        {od.consistency.warnings.map((w, i) => <li key={i} className="flex gap-1.5"><TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />{w}</li>)}
-                      </ul>
+                      <AnimatedList className="space-y-1 rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">
+                        {od.consistency.warnings.map((w, i) => <AnimatedListItem key={i} className="flex gap-1.5"><TriangleAlert className="mt-0.5 h-3.5 w-3.5 shrink-0" />{w}</AnimatedListItem>)}
+                      </AnimatedList>
                     )}
                     {od.consistency.consistent && (
                       <p className="text-xs text-emerald-700">Vsi viri so skladni.</p>
@@ -491,9 +492,9 @@ function ElementDialog ({ projectId, elementKey, onClose }: {
             {prov.zgodovina.length > 0 && (
               <div>
                 <p className="mb-1 text-xs font-medium text-muted-foreground">Zgodovina sprememb:</p>
-                <ul className="space-y-0.5 text-xs text-muted-foreground">
-                  {prov.zgodovina.slice(-5).map((z, i) => <li key={i}>{new Date(z.at).toLocaleDateString('sl-SI')} — {z.opis}</li>)}
-                </ul>
+                <AnimatedList className="space-y-0.5 text-xs text-muted-foreground">
+                  {prov.zgodovina.slice(-5).map((z, i) => <AnimatedListItem key={i}>{new Date(z.at).toLocaleDateString('sl-SI')} — {z.opis}</AnimatedListItem>)}
+                </AnimatedList>
               </div>
             )}
           </div>

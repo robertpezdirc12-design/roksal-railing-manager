@@ -426,15 +426,15 @@ function QuoteDetailDialog ({ detail, canCreate, canApprove, busy, onStatus, onD
       {detail.invoices.length > 0 ? (
         <section aria-label="Izdani računi">
           <h3 className="mb-1.5 text-xs font-bold uppercase tracking-widest text-muted-foreground">Izdani računi</h3>
-          <ul className="space-y-1">
+          <AnimatedList className="space-y-1">
             {detail.invoices.map((iv) => (
-              <li key={iv.id} className="flex items-center justify-between gap-2 rounded-lg border p-2 text-sm">
+              <AnimatedListItem key={iv.id} className="flex items-center justify-between gap-2 rounded-lg border p-2 text-sm">
                 <span className="font-mono text-xs">{iv.code}</span>
                 <StatusBadge status={iv.status} />
                 <span className="font-semibold">{fmtEUR(iv.total)}</span>
-              </li>
+              </AnimatedListItem>
             ))}
-          </ul>
+          </AnimatedList>
         </section>
       ) : null}
 
@@ -545,9 +545,9 @@ function ImportQuoteDialog ({ open, onOpenChange, onImported }: {
                 {' '}· DDV {fmtEUR(result.totals.vat)} · <span className="font-bold">SKUPAJ {fmtEUR(result.totals.total)}</span>
               </p>
               {(result.warnings ?? []).length > 0 ? (
-                <ul className="space-y-0.5 text-amber-700 dark:text-amber-400">
-                  {(result.warnings ?? []).map((w, i) => <li key={i}>⚠ {w}</li>)}
-                </ul>
+                <AnimatedList className="space-y-0.5 text-amber-700 dark:text-amber-400">
+                  {(result.warnings ?? []).map((w, i) => <AnimatedListItem key={i}>⚠ {w}</AnimatedListItem>)}
+                </AnimatedList>
               ) : null}
             </div>
           ) : (

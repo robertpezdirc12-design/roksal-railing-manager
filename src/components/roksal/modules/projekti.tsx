@@ -76,7 +76,6 @@ export default function ProjektiModule () {
         <AnimatedList className="grid gap-3 md:grid-cols-2" data-tour="projekti-list">
           {rows.map((p) => (
             <AnimatedListItem key={p.id}>
-            <li>
               <button type="button" className="w-full text-left" onClick={() => { haptic("light"); setSelected(p.id) }} onTouchStart={longPress.onTouchStart} onTouchEnd={longPress.onTouchEnd} onTouchMove={longPress.onTouchMove} onMouseDown={longPress.onMouseDown} onMouseUp={longPress.onMouseUp} onMouseLeave={longPress.onMouseLeave} aria-label={`Odpri projekt ${p.code}`}>
                 <Card className="transition hover:border-roksal-amber/60 hover:shadow-sm">
                   <CardContent className="p-4">
@@ -97,7 +96,6 @@ export default function ProjektiModule () {
                   </CardContent>
                 </Card>
               </button>
-            </li>
             </AnimatedListItem>
           ))}
         </AnimatedList>
@@ -162,60 +160,60 @@ function ProjectDetailDialog ({ detail, onNavigate }: { detail: ProjectDetail; o
         <section aria-label="Ponudbe">
           <h3 className="mb-1.5 text-xs font-bold uppercase tracking-widest text-muted-foreground">Ponudbe</h3>
           {detail.quotes.length === 0 ? <p className="text-sm text-muted-foreground">Ni ponudb.</p> : (
-            <ul className="space-y-1">
+            <AnimatedList className="space-y-1">
               {detail.quotes.map((qq) => (
-                <li key={qq.id} className="flex items-center justify-between gap-2 rounded-lg border p-2 text-sm">
+                <AnimatedListItem key={qq.id} className="flex items-center justify-between gap-2 rounded-lg border p-2 text-sm">
                   <span className="font-mono text-xs">{qq.code}</span>
                   <StatusBadge status={qq.status} />
                   <span className="font-semibold">{fmtEUR(qq.total)}</span>
-                </li>
+                </AnimatedListItem>
               ))}
-            </ul>
+            </AnimatedList>
           )}
         </section>
 
         <section aria-label="Računi">
           <h3 className="mb-1.5 text-xs font-bold uppercase tracking-widest text-muted-foreground">Računi</h3>
           {detail.invoices.length === 0 ? <p className="text-sm text-muted-foreground">Ni računov.</p> : (
-            <ul className="space-y-1">
+            <AnimatedList className="space-y-1">
               {detail.invoices.map((iv) => (
-                <li key={iv.id} className="flex items-center justify-between gap-2 rounded-lg border p-2 text-sm">
+                <AnimatedListItem key={iv.id} className="flex items-center justify-between gap-2 rounded-lg border p-2 text-sm">
                   <span className="inline-flex items-center gap-2 font-mono text-xs"><Banknote className="size-3.5" aria-hidden />{iv.code}</span>
                   <StatusBadge status={iv.status} />
                   <span className="font-semibold">{fmtEUR(iv.total)} <span className="text-xs font-normal text-muted-foreground">(plačano {fmtEUR(iv.paid)})</span></span>
-                </li>
+                </AnimatedListItem>
               ))}
-            </ul>
+            </AnimatedList>
           )}
         </section>
 
         <section aria-label="Nalogi">
           <h3 className="mb-1.5 text-xs font-bold uppercase tracking-widest text-muted-foreground">Nalogi</h3>
           {detail.workOrders.length === 0 ? <p className="text-sm text-muted-foreground">Ni nalogov.</p> : (
-            <ul className="space-y-1">
+            <AnimatedList className="space-y-1">
               {detail.workOrders.map((w) => (
-                <li key={w.id} className="flex items-center justify-between gap-2 rounded-lg border p-2 text-sm">
+                <AnimatedListItem key={w.id} className="flex items-center justify-between gap-2 rounded-lg border p-2 text-sm">
                   <span className="min-w-0 truncate"><span className="font-mono text-xs">{w.code}</span> {w.title}</span>
                   <StatusBadge status={w.status} />
-                </li>
+                </AnimatedListItem>
               ))}
-            </ul>
+            </AnimatedList>
           )}
         </section>
 
         <section aria-label="Meritve">
           <h3 className="mb-1.5 text-xs font-bold uppercase tracking-widest text-muted-foreground">Meritve</h3>
           {detail.measurements.length === 0 ? <p className="text-sm text-muted-foreground">Ni meritev.</p> : (
-            <ul className="space-y-1">
+            <AnimatedList className="space-y-1">
               {detail.measurements.map((m) => (
-                <li key={m.id} className="flex items-center justify-between gap-2 rounded-lg border p-2 text-sm">
+                <AnimatedListItem key={m.id} className="flex items-center justify-between gap-2 rounded-lg border p-2 text-sm">
                   <span className="min-w-0 truncate">{m.location ?? m.type}</span>
                   <span className="shrink-0 font-mono text-xs text-muted-foreground">
                     {m.lengthCm ? `${(m.lengthCm / 100).toFixed(2)} m` : '—'} · {fmtDate(m.createdAt)}
                   </span>
-                </li>
+                </AnimatedListItem>
               ))}
-            </ul>
+            </AnimatedList>
           )}
         </section>
 

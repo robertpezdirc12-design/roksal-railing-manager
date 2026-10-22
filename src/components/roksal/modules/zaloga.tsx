@@ -212,9 +212,9 @@ function PregledTab () {
         ) : (
           <Card>
             <CardContent className="max-h-96 overflow-y-auto p-0">
-              <ul className="divide-y">
+              <AnimatedList className="divide-y">
                 {(lots.data?.data ?? []).map((lot) => (
-                  <li key={lot.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 text-sm">
+                  <AnimatedListItem key={lot.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 text-sm">
                     <div className="min-w-0">
                       <span className="font-medium">{lot.item?.name ?? lot.id}</span>
                       {lot.item ? <span className="ml-2 font-mono text-xs text-muted-foreground">{lot.item.sku}</span> : null}
@@ -225,9 +225,9 @@ function PregledTab () {
                       <span>{lot.supplier?.name ?? 'Brez dobavitelja'}</span>
                       <span>{fmtDateTime(lot.deliveredAt)}</span>
                     </div>
-                  </li>
+                  </AnimatedListItem>
                 ))}
-              </ul>
+              </AnimatedList>
             </CardContent>
           </Card>
         )}

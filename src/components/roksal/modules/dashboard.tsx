@@ -145,9 +145,9 @@ export default function DashboardModule () {
                     {fin.marginsTop.length === 0 ? (
                       <p className="text-sm text-muted-foreground">Ni kalkuliranih paketov — generirajte kosovnice pri paketih projektov.</p>
                     ) : (
-                      <ul className="space-y-2">
+                      <AnimatedList className="space-y-2">
                         {fin.marginsTop.map((m) => (
-                          <li key={m.projectId} className="flex items-center justify-between gap-3">
+                          <AnimatedListItem key={m.projectId} className="flex items-center justify-between gap-3">
                             <div className="min-w-0">
                               <div className="truncate text-sm font-medium">{m.code} — {m.title}</div>
                               <div className="text-xs text-muted-foreground">prodaja {fmtEUR(m.totalSale)}</div>
@@ -158,9 +158,9 @@ export default function DashboardModule () {
                               </div>
                               <div className="text-xs text-muted-foreground">{m.marginPct.toFixed(1)} %</div>
                             </div>
-                          </li>
+                          </AnimatedListItem>
                         ))}
-                      </ul>
+                      </AnimatedList>
                     )}
                   </CardContent>
                 </Card>
@@ -179,18 +179,18 @@ export default function DashboardModule () {
                       ) : (
                         <>
                           <p className="mb-2 text-sm font-semibold text-red-600 dark:text-red-400">{ops.overdue.count} nalogov z pretečenim terminom</p>
-                          <ul className="max-h-48 space-y-1.5 overflow-y-auto pr-1">
+                          <AnimatedList className="max-h-48 space-y-1.5 overflow-y-auto pr-1">
                             {ops.overdue.list.map((w) => (
-                              <li key={w.id} className="flex items-center justify-between gap-2 text-sm">
+                              <AnimatedListItem key={w.id} className="flex items-center justify-between gap-2 text-sm">
                                 <div className="min-w-0">
                                   <span className="font-mono text-xs font-semibold text-roksal-amber">{w.code}</span>
                                   <span className="ml-2 truncate">{w.title}</span>
                                   <span className="block text-xs text-muted-foreground">{w.assignee ?? 'nedodeljen'}</span>
                                 </div>
                                 <span className="shrink-0 text-xs font-semibold text-red-600 dark:text-red-400">{fmtDate(w.scheduledFor)}</span>
-                              </li>
+                              </AnimatedListItem>
                             ))}
-                          </ul>
+                          </AnimatedList>
                         </>
                       )}
                     </CardContent>
@@ -277,16 +277,16 @@ export default function DashboardModule () {
               {data.data.lowStock.length === 0 ? (
                 <p className="text-sm text-muted-foreground">Vsa zaloga je nad mejo naročila.</p>
               ) : (
-                <ul className="max-h-72 space-y-1.5 overflow-y-auto pr-1">
+                <AnimatedList className="max-h-72 space-y-1.5 overflow-y-auto pr-1">
                   {data.data.lowStock.map((i) => (
-                    <li key={i.id} className="flex items-center justify-between gap-2 text-sm">
+                    <AnimatedListItem key={i.id} className="flex items-center justify-between gap-2 text-sm">
                       <span className="flex min-w-0 items-center gap-2">
                         <PackageX className="size-4 shrink-0 text-muted-foreground" aria-hidden /> <span className="truncate">{i.name}</span>
                       </span>
                       <span className="shrink-0 font-mono text-red-600 dark:text-red-400">{i.qty} / {i.reorderAt} {i.unit}</span>
-                    </li>
+                    </AnimatedListItem>
                   ))}
-                </ul>
+                </AnimatedList>
               )}
             </CardContent>
           </Card>

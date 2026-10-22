@@ -296,21 +296,21 @@ export function PublicPreviewDialog ({ token, code }: { token: string; code: str
           {d.pins.length > 0 ? (
             <div className="space-y-1.5">
               <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Pripombe (javno)</div>
-              <ul className="space-y-1.5">
+              <AnimatedList className="space-y-1.5">
                 {d.pins.map((p) => {
                   const tone = PIN_TONE[p.status] ?? PIN_TONE.ZAPRT
                   return (
-                    <li key={p.id} className="rounded-lg border p-2 text-sm">
+                    <AnimatedListItem key={p.id} className="rounded-lg border p-2 text-sm">
                       <div className="flex flex-wrap items-center gap-1.5">
                         <Badge variant="secondary" className={tone.cls}>{tone.label}</Badge>
                         <code className="rounded bg-muted px-1 py-0.5 font-mono text-[10px] text-muted-foreground">{p.targetKey}</code>
                         <span className="ml-auto text-[10px] text-muted-foreground">{p.authorName ?? '—'}</span>
                       </div>
                       <p className="mt-1">{p.note}</p>
-                    </li>
+                    </AnimatedListItem>
                   )
                 })}
-              </ul>
+              </AnimatedList>
             </div>
           ) : (
             <p className="text-xs text-muted-foreground">Brez pripomb.</p>

@@ -3,7 +3,7 @@
 
 'use client'
 
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence, type HTMLMotionProps } from 'framer-motion'
 import type { ReactNode } from 'react'
 
 export const fadeIn = {
@@ -114,7 +114,7 @@ export function AnimatedList ({ children, className, style }: { children: ReactN
   )
 }
 
-export function AnimatedListItem ({ children, className }: { children: ReactNode; className?: string }) {
+export function AnimatedListItem ({ children, className, ...rest }: { children: ReactNode; className?: string } & Omit<HTMLMotionProps<'div'>, 'children' | 'className'>) {
   return (
     <motion.div
       role="listitem"
@@ -123,6 +123,7 @@ export function AnimatedListItem ({ children, className }: { children: ReactNode
         visible: { opacity: 1, x: 0, transition: { duration: 0.2 } },
       }}
       className={className}
+      {...rest}
     >
       {children}
     </motion.div>

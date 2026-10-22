@@ -178,7 +178,6 @@ export default function NalogiModule () {
         <AnimatedList className="grid gap-3 md:grid-cols-2" data-tour="nalogi-list">
           {rows.map((wo) => (
             <AnimatedListItem key={wo.id}>
-            <li>
               <button type="button" className="w-full text-left" onClick={() => { haptic("light"); setSelected(wo.id); setSelectedRow(wo) }} aria-label={`Odpri nalog ${wo.code}`}>
                 <Card className="transition hover:border-roksal-amber/60 hover:shadow-sm">
                   <CardContent className="p-4">
@@ -210,7 +209,6 @@ export default function NalogiModule () {
                   </CardContent>
                 </Card>
               </button>
-            </li>
             </AnimatedListItem>
           ))}
         </AnimatedList>
@@ -228,12 +226,12 @@ export default function NalogiModule () {
           ) : !history.error ? (
             <Card>
               <CardContent className="max-h-96 overflow-y-auto p-0">
-                <ul className="divide-y">
+                <AnimatedList className="divide-y">
                   {(history.data?.data ?? []).map((ev) => {
                     const meta = EVENT_META[ev.type] ?? { label: ev.type, icon: MessageSquare, cls: 'bg-secondary text-secondary-foreground' }
                     const Icon = meta.icon
                     return (
-                      <li key={ev.id} className="flex items-start gap-3 p-3">
+                      <AnimatedListItem key={ev.id} className="flex items-start gap-3 p-3">
                         <span className={cn('mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full', meta.cls)}>
                           <Icon className="size-3.5" aria-hidden />
                         </span>
@@ -249,10 +247,10 @@ export default function NalogiModule () {
                             {ev.workOrder.project ? `${ev.workOrder.project.code} · ${ev.workOrder.project.customer?.name ?? '—'}` : 'Brez projekta'}
                           </div>
                         </div>
-                      </li>
+                      </AnimatedListItem>
                     )
                   })}
-                </ul>
+                </AnimatedList>
               </CardContent>
             </Card>
           ) : null}

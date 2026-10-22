@@ -207,15 +207,15 @@ function PortalPreviewDialog ({ token, code }: { token: string | null; code: str
           {d.photos.length > 0 ? (
             <section aria-label="Fotografije del">
               <h5 className="mb-2 text-xs font-bold uppercase tracking-widest text-muted-foreground">Zaključena dela</h5>
-              <ul className="grid grid-cols-2 gap-2">
+              <AnimatedList className="grid grid-cols-2 gap-2">
                 {d.photos.map((p, i) => (
-                  <li key={`${p.at}-${i}`} className="overflow-hidden rounded-lg border">
+                  <AnimatedListItem key={`${p.at}-${i}`} className="overflow-hidden rounded-lg border">
                     {/* stranki namenjena demonstracijska slika zaključenega dela (SVG) */}
                     <img src={p.photo} alt={p.location} className="aspect-video w-full object-cover" />
                     <p className="truncate px-2 py-1 text-[11px] text-muted-foreground">{p.location}</p>
-                  </li>
+                  </AnimatedListItem>
                 ))}
-              </ul>
+              </AnimatedList>
             </section>
           ) : null}
 

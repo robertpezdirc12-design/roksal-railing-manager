@@ -22,6 +22,7 @@ import { apiPatch, apiPost, fmtDate, fmtDateTime, useApi } from '@/lib/api-clien
 import { EmptyState, ErrorBox, LoadingRows, PageHeader, StatusBadge } from '@/components/roksal/ui-bits'
 import { hasPerm } from '@/lib/permissions-core'
 import { cn } from '@/lib/utils'
+import { AnimatedList, AnimatedListItem } from '@/components/roksal/motion-bits'
 
 interface ProductionRow {
   id: string; code: string; title: string; status: string; dueAt: string | null; note: string | null
@@ -141,13 +142,13 @@ export default function ProizvodnjaModule () {
       ) : (
         <Card>
           <CardContent className="max-h-[32rem] overflow-y-auto p-0">
-            <ul className="divide-y">
+            <AnimatedList className="divide-y">
               {rows.map((o) => {
                 const overdue = o.dueAt ? new Date(o.dueAt).getTime() < Date.now() && o.status !== 'ODPOSLAN' : false
                 const idx = FLOW.indexOf(o.status as (typeof FLOW)[number])
                 const hasNext = idx >= 0 && idx < FLOW.length - 1
                 return (
-                  <li key={o.id} className="flex cursor-pointer flex-wrap items-center gap-3 px-4 py-3 transition hover:bg-secondary/40" onClick={() => setQcFor(o)}>
+                  <AnimatedListItem key={o.id} className="flex cursor-pointer flex-wrap items-center gap-3 px-4 py-3 transition hover:bg-secondary/40" onClick={() => setQcFor(o)}>
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="font-mono text-xs font-semibold text-roksal-amber">{o.code}</span>
@@ -170,10 +171,10 @@ export default function ProizvodnjaModule () {
                         <ArrowRight className="size-3.5" aria-hidden /> {NEXT_LABEL[o.status]}
                       </Button>
                     ) : null}
-                  </li>
+                  </AnimatedListItem>
                 )
               })}
-            </ul>
+            </AnimatedList>
           </CardContent>
         </Card>
       )}
@@ -215,9 +216,9 @@ export default function ProizvodnjaModule () {
                 <EmptyState title="Ni kontrol" desc="Dodajte prvo kontrolno točko (npr. vertikalnost, zvari, premaz)." icon={ClipboardCheck} />
               ) : !qc.error ? (
                 <div className="max-h-72 overflow-y-auto rounded-xl border">
-                  <ul className="divide-y">
+                  <AnimatedList className="divide-y">
                     {qcRows.map((c) => (
-                      <li key={c.id} className="flex items-start justify-between gap-3 p-3">
+                      <AnimatedListItem key={c.id} className="flex items-start justify-between gap-3 p-3">
                         <div className="min-w-0">
                           <div className="text-sm font-medium leading-snug">{c.item}</div>
                           <div className="mt-0.5 text-xs text-muted-foreground">
@@ -226,9 +227,9 @@ export default function ProizvodnjaModule () {
                           </div>
                         </div>
                         <Badge className={QC_CLS[c.result] ?? ''}>{QC_LABEL[c.result] ?? c.result}</Badge>
-                      </li>
+                      </AnimatedListItem>
                     ))}
-                  </ul>
+                  </AnimatedList>
                 </div>
               ) : null}
 
@@ -451,12 +452,12 @@ function PrefabSection ({ order, canManage }: { order: ProductionRow; canManage:
           <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted" role="progressbar" aria-valuenow={progress?.pct ?? 0} aria-valuemin={0} aria-valuemax={100} aria-label="Napredek prefab proizvodnje">
             <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${progress?.pct ?? 0}%` }} />
           </div>
-          <ul className="mt-2 max-h-64 divide-y overflow-y-auto rounded-lg border bg-background/60">
+          <AnimatedList className="mt-2 max-h-64 divide-y overflow-y-auto rounded-lg border bg-background/60">
             {rows.map((el) => {
               const idx = ELEMENT_FLOW.indexOf(el.status as (typeof ELEMENT_FLOW)[number])
               const hasNext = idx >= 0 && idx < ELEMENT_FLOW.length - 1
               return (
-                <li key={el.id} className="flex flex-wrap items-center gap-2.5 px-3 py-2">
+                <AnimatedListItem key={el.id} className="flex flex-wrap items-center gap-2.5 px-3 py-2">
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-mono text-xs font-semibold text-muted-foreground">{el.key}</span>
@@ -476,10 +477,10 @@ function PrefabSection ({ order, canManage }: { order: ProductionRow; canManage:
                       <ArrowRight className="size-3" aria-hidden /> {ELEMENT_NEXT_LABEL[el.status]}
                     </Button>
                   ) : null}
-                </li>
+                </AnimatedListItem>
               )
             })}
-          </ul>
+          </AnimatedList>
           <p className="mt-2 text-[11px] leading-snug text-muted-foreground">
             Lističi so posnetek mer AS-PRODUCED dvojčka — vir resnice ostaja verzionirani snapshot (Dvojček). Material rezervirate prek kosovnic v Zaloga.
           </p>
@@ -516,9 +517,9 @@ function MaterialPrepSection ({ projectId, projectCode }: { projectId: string | 
       ) : !boms.error && rows.length === 0 ? (
         <p className="mt-1 text-sm text-muted-foreground">Projekt še nima generiranih kosovnic (paketih projektov manjka BOM).</p>
       ) : !boms.error ? (
-        <ul className="mt-2 max-h-56 space-y-1.5 overflow-y-auto pr-1">
+        <AnimatedList className="mt-2 max-h-56 space-y-1.5 overflow-y-auto pr-1">
           {rows.map((b) => (
-            <li key={b.id} className="flex items-center justify-between gap-3 rounded-lg bg-background/60 px-3 py-2">
+            <AnimatedListItem key={b.id} className="flex items-center justify-between gap-3 rounded-lg bg-background/60 px-3 py-2">
               <div className="min-w-0">
                 <div className="truncate text-sm font-medium">
                   <span className="font-mono text-xs text-muted-foreground">{b.code}</span> · {b.product.name}
@@ -528,9 +529,9 @@ function MaterialPrepSection ({ projectId, projectCode }: { projectId: string | 
                 </div>
               </div>
               <StatusBadge status={b.status} />
-            </li>
+            </AnimatedListItem>
           ))}
-        </ul>
+        </AnimatedList>
       ) : null}
       {rows.length > 0 ? (
         <p className="mt-2 text-[11px] leading-snug text-muted-foreground">

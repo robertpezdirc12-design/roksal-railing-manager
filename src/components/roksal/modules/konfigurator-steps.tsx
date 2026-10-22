@@ -230,9 +230,9 @@ export function StepOpcije ({ product, variantId, onVariant, optionalComps, requ
               Ta izdelek nima neobveznih komponent — kosovnica bo vsebovala {requiredCount} obveznih.
             </p>
           ) : (
-            <ul className="space-y-1.5" aria-label="Neobvezne komponente">
+            <AnimatedList className="space-y-1.5" aria-label="Neobvezne komponente">
               {optionalComps.map((c) => (
-                <li key={c.id}>
+                <AnimatedListItem key={c.id}>
                   <label className="flex min-h-11 items-center gap-3 rounded-lg border p-2.5">
                     <Checkbox
                       checked={includeOptional}
@@ -247,9 +247,9 @@ export function StepOpcije ({ product, variantId, onVariant, optionalComps, requ
                       </span>
                     </span>
                   </label>
-                </li>
+                </AnimatedListItem>
               ))}
-            </ul>
+            </AnimatedList>
           )}
           <p className="text-xs text-muted-foreground">
             Predloga ne razlikuje posamičnih neobveznih komponent — vključijo/izključijo se skupaj
@@ -309,11 +309,11 @@ export function StepIzracun ({ plan, busy, error, onRecalc, familyLabel }: {
       {(plan.warnings ?? []).length > 0 ? (
         <div className="space-y-1.5 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200" role="alert">
           <p className="flex items-center gap-1.5 font-semibold"><TriangleAlert className="size-4" aria-hidden /> Opozorila segmentnega izračuna</p>
-          <ul className="list-inside list-disc space-y-0.5 text-xs">
+          <AnimatedList className="list-inside list-disc space-y-0.5 text-xs">
             {(plan.warnings ?? []).map((w, i) => (
-              <li key={`${w.code}-${i}`}>{w.message}</li>
+              <AnimatedListItem key={`${w.code}-${i}`}>{w.message}</AnimatedListItem>
             ))}
-          </ul>
+          </AnimatedList>
         </div>
       ) : null}
 
@@ -339,9 +339,9 @@ export function StepIzracun ({ plan, busy, error, onRecalc, familyLabel }: {
             ? <>Kosovnica po segmentih — {plan.segmentsApplied} {plan.segmentsApplied === 1 ? 'odsek' : plan.segmentsApplied < 5 ? 'odseki' : 'odsekov'}</>
             : <>Kosovnica (predloga × {plan.qty} {plan.unit})</>}
         </h3>
-        <ul className="space-y-1.5">
+        <AnimatedList className="space-y-1.5">
           {plan.lines.map((l, i) => (
-            <li key={`${l.itemId}-${l.segmentKey ?? 'x'}-${i}`} className="rounded-lg border p-2.5">
+            <AnimatedListItem key={`${l.itemId}-${l.segmentKey ?? 'x'}-${i}`} className="rounded-lg border p-2.5">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="font-mono text-xs text-muted-foreground">{l.sku}</span>
                 <span className="min-w-0 flex-1 truncate text-sm font-medium" title={l.name}>{l.name}</span>
@@ -362,9 +362,9 @@ export function StepIzracun ({ plan, busy, error, onRecalc, familyLabel }: {
                 {l.wastePct != null && l.wastePct > 0 ? <span className="rounded bg-secondary px-1.5 py-0.5" title={l.sourceRule ?? ''}>+ {l.wastePct} % odpad</span> : null}
                 {l.note ? <span className="italic">{l.note}</span> : null}
               </div>
-            </li>
+            </AnimatedListItem>
           ))}
-        </ul>
+        </AnimatedList>
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-2">

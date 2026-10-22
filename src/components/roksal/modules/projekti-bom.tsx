@@ -17,6 +17,7 @@ import { useAppStore } from '@/lib/store'
 import { fmtEUR, useApi } from '@/lib/api-client'
 import { ErrorBox, LoadingRows, StatusBadge } from '@/components/roksal/ui-bits'
 import { type PackageCalc, type PackageRow } from './projekti-shared'
+import { AnimatedList, AnimatedListItem } from '@/components/roksal/motion-bits'
 
 export function PackageBomDialog ({ pkg }: { pkg: PackageRow | null }) {
   const token = useAppStore((s) => s.token)
@@ -341,9 +342,9 @@ function ImportBomDialog ({ pkg, open, onOpenChange, onImported }: {
           {rowErrors != null && rowErrors.length > 0 ? (
             <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-900 dark:border-red-900 dark:bg-red-950 dark:text-red-200" role="alert">
               <p className="mb-1 font-bold">Napake v vrsticah ({rowErrors.length}):</p>
-              <ul className="max-h-32 space-y-0.5 overflow-y-auto">
-                {rowErrors.map((e, i) => <li key={i}>Vrsta {e.row} · {e.field}: {e.problem}</li>)}
-              </ul>
+              <AnimatedList className="max-h-32 space-y-0.5 overflow-y-auto">
+                {rowErrors.map((e, i) => <AnimatedListItem key={i}>Vrsta {e.row} · {e.field}: {e.problem}</AnimatedListItem>)}
+              </AnimatedList>
             </div>
           ) : null}
 
@@ -356,19 +357,19 @@ function ImportBomDialog ({ pkg, open, onOpenChange, onImported }: {
                   : `${diffRows.length} razlik: ${diffRows.filter((e) => e.kind === 'DODANO').length} dodanih, ${diffRows.filter((e) => e.kind === 'ODSTRANJENO').length} odstranjenih, ${diffRows.filter((e) => e.kind === 'SPREMENJENA_KOLICINA').length} spremenjenih količin.`}
               </p>
               {diffRows.length > 0 ? (
-                <ul className="max-h-40 space-y-0.5 overflow-y-auto font-mono">
+                <AnimatedList className="max-h-40 space-y-0.5 overflow-y-auto font-mono">
                   {diffRows.slice(0, 50).map((e, i) => (
-                    <li key={i}>
+                    <AnimatedListItem key={i}>
                       {e.kind === 'DODANO' ? '+' : e.kind === 'ODSTRANJENO' ? '−' : '±'} {e.sku}{e.segmentKey != null ? ` · ${e.segmentKey}` : ''}
                       {e.kind === 'SPREMENJENA_KOLICINA' ? `: ${e.fromQty} → ${e.toQty}` : e.kind === 'DODANO' ? `: ${e.toQty}` : `: ${e.fromQty}`}
-                    </li>
+                    </AnimatedListItem>
                   ))}
-                </ul>
+                </AnimatedList>
               ) : null}
               {(result.warnings ?? []).length > 0 ? (
-                <ul className="space-y-0.5 text-amber-700 dark:text-amber-400">
-                  {(result.warnings ?? []).map((w, i) => <li key={i}>⚠ {w}</li>)}
-                </ul>
+                <AnimatedList className="space-y-0.5 text-amber-700 dark:text-amber-400">
+                  {(result.warnings ?? []).map((w, i) => <AnimatedListItem key={i}>⚠ {w}</AnimatedListItem>)}
+                </AnimatedList>
               ) : null}
             </div>
           ) : null}

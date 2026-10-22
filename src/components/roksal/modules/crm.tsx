@@ -191,12 +191,12 @@ export default function CrmModule () {
                         <StatusBadge status={stage} />
                         <span className="text-xs text-muted-foreground">{cards.length} · {fmtEUR(sum)}</span>
                       </div>
-                      <ul className="flex-1 space-y-2 p-2">
+                      <AnimatedList className="flex-1 space-y-2 p-2">
                         {cards.map((o) => {
                           const idx = STAGES.indexOf(o.stage)
                           const next = idx < STAGES.length - 2 ? STAGES[idx + 1] : null // ZMAGOVALNA je predzadnja
                           return (
-                            <li key={o.id}>
+                            <AnimatedListItem key={o.id}>
                               <Card className="border-border/70 shadow-none">
                                 <CardContent className="space-y-1.5 p-3">
                                   <div className="text-sm font-semibold leading-snug">{o.title}</div>
@@ -228,10 +228,10 @@ export default function CrmModule () {
                                   ) : null}
                                 </CardContent>
                               </Card>
-                            </li>
+                            </AnimatedListItem>
                           )
                         })}
-                      </ul>
+                      </AnimatedList>
                     </div>
                   )
                 })}

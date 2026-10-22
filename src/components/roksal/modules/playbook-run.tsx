@@ -17,6 +17,7 @@ import { jeVVerigi, NAPRAVA_TEHNIKA, type NapravaTier } from '@/lib/playbook-cor
 import type { RunState } from '@/lib/playbook-engine'
 import { KATEGORIJA_BARVA, KATEGORIJA_IKONA, preveriNapravo } from './playbook-shared'
 import { TrenutniKorak } from './playbook-korak'
+import { AnimatedList, AnimatedListItem } from '@/components/roksal/motion-bits'
 
 // ═══ RUNNER — en zaslon = en glavni cilj (§3/§12) ═════════════════════════
 
@@ -142,13 +143,13 @@ export function RunView ({ runId, onNazaj }: { runId: string; onNazaj: () => voi
           <h2 className="mb-2 text-sm font-bold uppercase tracking-widest text-muted-foreground">
             Koraki ({stanje.napredek.koncanih}/{stanje.napredek.skupaj})
           </h2>
-          <ul className="space-y-1.5">
+          <AnimatedList className="space-y-1.5">
             {veriga.map((s) => {
               const st = stanje.koraki.find((k) => k.stepId === s.id)
               const jeTrenutni = trenutni?.id === s.id
               const Ikona = KATEGORIJA_IKONA[s.kategorija] ?? NotebookPen
               return (
-                <li
+                <AnimatedListItem
                   key={s.id}
                   className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm ${
                     jeTrenutni ? 'bg-secondary font-medium' : ''
@@ -174,10 +175,10 @@ export function RunView ({ runId, onNazaj }: { runId: string; onNazaj: () => voi
                   ) : st?.attempts && st.attempts > 1 ? (
                     <span className="ml-auto text-[11px] text-muted-foreground">{st.attempts}× poskus</span>
                   ) : null}
-                </li>
+                </AnimatedListItem>
               )
             })}
-          </ul>
+          </AnimatedList>
         </CardContent>
       </Card>
 

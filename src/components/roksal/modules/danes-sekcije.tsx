@@ -21,6 +21,7 @@ import { ErrorBox, LoadingRows } from '@/components/roksal/ui-bits'
 import {
   type ChecklistRow, type StockRow, type UsageRow, type WorkOrderDetailRow,
 } from './danes-shared'
+import { AnimatedList, AnimatedListItem } from '@/components/roksal/motion-bits'
 
 // ─── kontrolni seznam ────────────────────────────────────────────────────────
 
@@ -86,9 +87,9 @@ export function ChecklistSection ({ woId, rows, loading, error, done, canWrite, 
       {loading ? <LoadingRows rows={2} /> : !error && total === 0 ? (
         <p className="text-sm text-muted-foreground">Ni točk — dodaj prvo (npr. »Preverjena vodovodna instalacija«).</p>
       ) : !error ? (
-        <ul className="max-h-72 space-y-1 overflow-y-auto pr-1">
+        <AnimatedList className="max-h-72 space-y-1 overflow-y-auto pr-1">
           {rows.map((row) => (
-            <li key={row.id}>
+            <AnimatedListItem key={row.id}>
               <button
                 type="button"
                 role="checkbox"
@@ -127,9 +128,9 @@ export function ChecklistSection ({ woId, rows, loading, error, done, canWrite, 
                   <span className="shrink-0 text-[10px] text-muted-foreground">{row.doneBy.name}</span>
                 ) : null}
               </button>
-            </li>
+            </AnimatedListItem>
           ))}
-        </ul>
+        </AnimatedList>
       ) : null}
 
       {canWrite ? (
@@ -210,9 +211,9 @@ export function MaterialSection ({ woId, rows, loading, error, canUse, onReload 
       {loading ? <LoadingRows rows={2} /> : !error && rows.length === 0 ? (
         <p className="text-sm text-muted-foreground">Na tem nalogu še ni porabe materiala.</p>
       ) : !error ? (
-        <ul className="max-h-64 space-y-1.5 overflow-y-auto pr-1">
+        <AnimatedList className="max-h-64 space-y-1.5 overflow-y-auto pr-1">
           {rows.map((r) => (
-            <li key={r.id} className="flex min-h-11 items-center justify-between gap-3 rounded-lg bg-secondary/40 px-3 py-1.5">
+            <AnimatedListItem key={r.id} className="flex min-h-11 items-center justify-between gap-3 rounded-lg bg-secondary/40 px-3 py-1.5">
               <div className="min-w-0">
                 <div className="truncate text-sm font-medium">
                   <span className="font-mono text-xs text-muted-foreground">{r.item.sku}</span> · {r.item.name}
@@ -223,9 +224,9 @@ export function MaterialSection ({ woId, rows, loading, error, canUse, onReload 
                 </div>
               </div>
               <span className="shrink-0 font-mono text-sm font-bold text-foreground">−{r.qty} {r.item.unit}</span>
-            </li>
+            </AnimatedListItem>
           ))}
-        </ul>
+        </AnimatedList>
       ) : null}
 
       {canUse ? (
@@ -326,14 +327,14 @@ export function TroubleSection ({ woId, troubles, canWrite, onReload }: {
       </div>
 
       {troubles.length > 0 ? (
-        <ul className="max-h-56 space-y-1.5 overflow-y-auto pr-1">
+        <AnimatedList className="max-h-56 space-y-1.5 overflow-y-auto pr-1">
           {troubles.map((t) => (
-            <li key={t.id} className="min-h-11 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 dark:bg-amber-500/15">
+            <AnimatedListItem key={t.id} className="min-h-11 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 dark:bg-amber-500/15">
               <p className="text-sm font-medium leading-snug text-foreground">{t.note}</p>
               <p className="text-[11px] text-muted-foreground">{fmtDateTime(t.createdAt)} · {t.user?.name ?? '—'}</p>
-            </li>
+            </AnimatedListItem>
           ))}
-        </ul>
+        </AnimatedList>
       ) : (
         <p className="text-sm text-muted-foreground">Brez zabeleženih težav.</p>
       )}

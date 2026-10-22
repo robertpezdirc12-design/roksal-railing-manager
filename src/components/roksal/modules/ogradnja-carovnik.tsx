@@ -633,9 +633,9 @@ export function WizardDialog ({ onClose, onSaved }: { onClose: () => void; onSav
                     <span className="text-xs text-muted-foreground">({detail.analysis.quality.score}/100)</span>
                   </div>
                   {detail.analysis.quality.reasons.length > 0 && (
-                    <ul className="mt-1.5 list-inside list-disc text-xs text-muted-foreground">
-                      {detail.analysis.quality.reasons.map((r, i) => <li key={i}>{r}</li>)}
-                    </ul>
+                    <AnimatedList className="mt-1.5 list-inside list-disc text-xs text-muted-foreground">
+                      {detail.analysis.quality.reasons.map((r, i) => <AnimatedListItem key={i}>{r}</AnimatedListItem>)}
+                    </AnimatedList>
                   )}
                 </div>
                 <ValidationList validation={detail.analysis.validation} />

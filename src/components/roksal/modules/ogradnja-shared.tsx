@@ -10,6 +10,7 @@
 import { BadgeCheck, Radar, TriangleAlert } from '@/components/roksal/custom-icons'
 import { cn } from '@/lib/utils'
 import type { ProductRules, RunCalibration, RunNode, SegmentStatus, TerrainPoint } from '@/lib/fence-run-engine'
+import { AnimatedList, AnimatedListItem } from '@/components/roksal/motion-bits'
 
 // ─── Tipi ───────────────────────────────────────────────────────────────────
 
@@ -103,9 +104,9 @@ export function ValidationList ({ validation }: { validation: { code: string; se
     return <p className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400"><BadgeCheck className="size-4" aria-hidden /> Brez opozoril — geometrija je konsistentna.</p>
   }
   return (
-    <ul className="space-y-1">
+    <AnimatedList className="space-y-1">
       {validation.map((v, i) => (
-        <li
+        <AnimatedListItem
           key={i}
           className={cn(
             'flex items-start gap-2 rounded-lg px-3 py-2 text-xs',
@@ -116,8 +117,8 @@ export function ValidationList ({ validation }: { validation: { code: string; se
         >
           {v.severity === 'NAPAKA' ? <TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden /> : <Radar className="mt-0.5 size-3.5 shrink-0" aria-hidden />}
           <span>{v.message}</span>
-        </li>
+        </AnimatedListItem>
       ))}
-    </ul>
+    </AnimatedList>
   )
 }

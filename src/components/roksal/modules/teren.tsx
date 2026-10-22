@@ -28,7 +28,6 @@ export default function TerenModule () {
         <AnimatedList className="grid gap-3 md:grid-cols-2" data-tour="teren-list">
           {projects.map((p) => (
             <AnimatedListItem key={p.id}>
-            <li>
               <Card>
                 <CardContent className="p-4">
                   <div className="flex items-center justify-between gap-2">
@@ -42,7 +41,6 @@ export default function TerenModule () {
                   </div>
                 </CardContent>
               </Card>
-            </li>
             </AnimatedListItem>
           ))}
         </AnimatedList>
@@ -53,9 +51,9 @@ export default function TerenModule () {
         {wo.loading ? <LoadingRows rows={3} /> : (wo.data?.data ?? []).length === 0 ? (
           <p className="text-sm text-muted-foreground">Ni odprtih nalogov.</p>
         ) : (
-          <ul className="space-y-2">
+          <AnimatedList className="space-y-2">
             {(wo.data?.data ?? []).map((w) => (
-              <li key={w.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border p-3">
+              <AnimatedListItem key={w.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border p-3">
                 <div className="min-w-0">
                   <span className="font-mono text-xs font-semibold text-roksal-amber">{w.code}</span>
                   <span className="ml-2 text-sm font-medium">{w.title}</span>
@@ -65,9 +63,9 @@ export default function TerenModule () {
                   {w.scheduledFor ? <span>{fmtDate(w.scheduledFor)}</span> : null}
                   {w.assignee ? <span>{w.assignee.name}</span> : null}
                 </div>
-              </li>
+              </AnimatedListItem>
             ))}
-          </ul>
+          </AnimatedList>
         )}
       </section>
     </div>

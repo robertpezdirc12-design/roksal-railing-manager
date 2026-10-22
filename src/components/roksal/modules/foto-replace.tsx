@@ -43,6 +43,7 @@ import { IzdelekIzbor, useGradivo } from './foto-replace/izdelek-izbor'
 import { PotemPrimerjava, useDrawPotem, usePrimerjava } from './foto-replace/primerjava'
 import { izvoziFormat, izvoziPdfDokument, renderJpegDataUrl, naloziDatoteko as naloziDatotekoAkcija, uporabiProjektno as uporabiProjektnoAkcija } from './foto-replace/izvoz'
 import { VARIANT_LABELS, type DokazVeriga, type MaskaVrsta, type OdpriZapis, type ParsedRenderParams, type SlotState, type VariantLabel } from './foto-replace/tipi'
+import { AnimatedList, AnimatedListItem } from '@/components/roksal/motion-bits'
 
 // ─── Koraki ──────────────────────────────────────────────────────────────────
 
@@ -359,9 +360,9 @@ export default function FotoReplaceModule () {
                 {(projects.data?.data ?? []).length === 0 ? (
                   <EmptyState title="Ni projektov" desc="Ustvarite projekt v zavihku Projekti." icon={FolderKanban} />
                 ) : (
-                  <ul className="max-h-96 space-y-2 overflow-y-auto pr-1" style={{ scrollbarWidth: 'thin' }}>
+                  <AnimatedList className="max-h-96 space-y-2 overflow-y-auto pr-1" style={{ scrollbarWidth: 'thin' }}>
                     {(projects.data?.data ?? []).map((p) => (
-                      <li key={p.id}>
+                      <AnimatedListItem key={p.id}>
                         <button
                           type="button"
                           onClick={() => izberiProjekt(p.id)}
@@ -378,9 +379,9 @@ export default function FotoReplaceModule () {
                           </span>
                           {projectId === p.id ? <Badge>Izbrano</Badge> : null}
                         </button>
-                      </li>
+                      </AnimatedListItem>
                     ))}
-                  </ul>
+                  </AnimatedList>
                 )}
               </div>
             )
@@ -407,9 +408,9 @@ export default function FotoReplaceModule () {
                   {measurements.loading ? <LoadingRows rows={2} /> : fotoMeasurements.length === 0 ? (
                     <p className="text-xs text-muted-foreground">Ta projekt še nima foto-dokazov.</p>
                   ) : (
-                    <ul className="max-h-40 space-y-1.5 overflow-y-auto pr-1" style={{ scrollbarWidth: 'thin' }}>
+                    <AnimatedList className="max-h-40 space-y-1.5 overflow-y-auto pr-1" style={{ scrollbarWidth: 'thin' }}>
                       {fotoMeasurements.map(({ m }) => (
-                        <li key={m.id}>
+                        <AnimatedListItem key={m.id}>
                           <Button
                             type="button" variant="outline" size="sm" className="h-10 w-full justify-start"
                             disabled={busy} onClick={() => { void uporabiProjektno(m.id) }}
@@ -417,9 +418,9 @@ export default function FotoReplaceModule () {
                             <Camera className="size-4 shrink-0" aria-hidden />
                             <span className="truncate">{m.location || 'foto-dokaz'} · {fmtDate(m.createdAt)}</span>
                           </Button>
-                        </li>
+                        </AnimatedListItem>
                       ))}
-                    </ul>
+                    </AnimatedList>
                   )}
                 </div>
               </div>
@@ -462,14 +463,14 @@ export default function FotoReplaceModule () {
 
           {/* opozorila kakovosti (§1) */}
           {vsaOpozorila.length > 0 && step >= 2 ? (
-            <ul className="mt-4 space-y-1.5" aria-label="Opozorila kakovosti vizualizacije">
+            <AnimatedList className="mt-4 space-y-1.5" aria-label="Opozorila kakovosti vizualizacije">
               {vsaOpozorila.map((w) => (
-                <li key={w.koda} className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-2.5 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+                <AnimatedListItem key={w.koda} className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-2.5 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
                   <TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />
                   <span>{w.sporocilo}</span>
-                </li>
+                </AnimatedListItem>
               ))}
-            </ul>
+            </AnimatedList>
           ) : null}
 
           {/* navigacija */}

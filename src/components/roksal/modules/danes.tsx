@@ -23,6 +23,7 @@ import { EmptyState, ErrorBox, LoadingRows, PageHeader, StatusBadge } from '@/co
 import { type WeatherDay, type WorkOrderRow } from './danes-shared'
 import { WorkOrderDetail } from './danes-detail'
 import { WeatherCard } from './danes-vreme'
+import { AnimatedList, AnimatedListItem } from '@/components/roksal/motion-bits'
 
 export default function DanesModule () {
   const user = useAppStore((s) => s.user)
@@ -101,16 +102,18 @@ export default function DanesModule () {
         {today.loading ? <LoadingRows /> : !today.error && todayList.length === 0 ? (
           <EmptyState title="Danes ni nalog" desc="Koledar je prazen — uživaj v mirnem dnevu." icon={CalendarCheck} />
         ) : (
-          <ul className="space-y-3">
+          <AnimatedList className="space-y-3">
             {todayList.map((wo) => (
-              <WorkOrderCard
-                key={wo.id} wo={wo}
-                expanded={expanded === wo.id}
-                onToggle={() => setExpanded(expanded === wo.id ? null : wo.id)}
-                onTransitioned={refreshLists}
-              />
+              <AnimatedListItem key={wo.id}>
+                <WorkOrderCard
+                  wo={wo}
+                  expanded={expanded === wo.id}
+                  onToggle={() => setExpanded(expanded === wo.id ? null : wo.id)}
+                  onTransitioned={refreshLists}
+                />
+              </AnimatedListItem>
             ))}
-          </ul>
+          </AnimatedList>
         )}
       </section>
 
@@ -118,16 +121,18 @@ export default function DanesModule () {
       {openList.length > 0 ? (
         <section aria-label="Nalogi v teku">
           <h2 className="mb-2 text-sm font-bold uppercase tracking-widest text-muted-foreground">V teku (odprti)</h2>
-          <ul className="space-y-3">
+          <AnimatedList className="space-y-3">
             {openList.map((wo) => (
-              <WorkOrderCard
-                key={wo.id} wo={wo}
-                expanded={expanded === wo.id}
-                onToggle={() => setExpanded(expanded === wo.id ? null : wo.id)}
-                onTransitioned={refreshLists}
-              />
+              <AnimatedListItem key={wo.id}>
+                <WorkOrderCard
+                  wo={wo}
+                  expanded={expanded === wo.id}
+                  onToggle={() => setExpanded(expanded === wo.id ? null : wo.id)}
+                  onTransitioned={refreshLists}
+                />
+              </AnimatedListItem>
             ))}
-          </ul>
+          </AnimatedList>
         </section>
       ) : null}
 
@@ -137,16 +142,18 @@ export default function DanesModule () {
           <h2 className="mb-2 flex items-center gap-2 text-sm font-bold uppercase tracking-widest text-muted-foreground">
             <CheckCheck className="size-4 text-roksal-green" aria-hidden /> Zaključeno danes — predaja
           </h2>
-          <ul className="space-y-3">
+          <AnimatedList className="space-y-3">
             {doneToday.map((wo) => (
-              <WorkOrderCard
-                key={wo.id} wo={wo}
-                expanded={expanded === wo.id}
-                onToggle={() => setExpanded(expanded === wo.id ? null : wo.id)}
-                onTransitioned={refreshLists}
-              />
+              <AnimatedListItem key={wo.id}>
+                <WorkOrderCard
+                  wo={wo}
+                  expanded={expanded === wo.id}
+                  onToggle={() => setExpanded(expanded === wo.id ? null : wo.id)}
+                  onTransitioned={refreshLists}
+                />
+              </AnimatedListItem>
             ))}
-          </ul>
+          </AnimatedList>
         </section>
       ) : null}
     </div>

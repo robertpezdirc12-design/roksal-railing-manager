@@ -379,18 +379,18 @@ function CaseDetailDialog ({ id, onClose, onDone }: { id: string | null; onClose
           {c.visits.length === 0 ? (
             <p className="text-sm text-muted-foreground">Še ni obiskov.</p>
           ) : (
-            <ul className="max-h-72 space-y-1.5 overflow-y-auto pr-1">
+            <AnimatedList className="max-h-72 space-y-1.5 overflow-y-auto pr-1">
               {c.visits.map((v) => (
-                <li key={v.id} className="rounded-lg border p-2.5 text-sm">
+                <AnimatedListItem key={v.id} className="rounded-lg border p-2.5 text-sm">
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
                     <span className="inline-flex items-center gap-1"><CalendarClock className="size-3" aria-hidden /> {fmtDateTime(v.date)}</span>
                     <span className="inline-flex items-center gap-1"><HardHat className="size-3" aria-hidden /> {v.user.name}</span>
                     {v.hours ? <span>{v.hours} h</span> : null}
                   </div>
                   <div className="mt-0.5 whitespace-pre-line">{v.note}</div>
-                </li>
+                </AnimatedListItem>
               ))}
-            </ul>
+            </AnimatedList>
           )}
 
           {canVisit ? (

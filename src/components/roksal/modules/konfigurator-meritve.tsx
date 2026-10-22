@@ -15,6 +15,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { useToast } from '@/hooks/use-toast'
 import { apiGet } from '@/lib/api-client'
 import { NACINI_PRITRDITVE, PODLAGE_TERASA, parseNum, pos, round2, runSegmentsFromParams, type Odb, type Seg2, type SegM } from './konfigurator-shared'
+import { AnimatedList, AnimatedListItem } from '@/components/roksal/motion-bits'
 
 // ─── 3. MERITVE (družinski vhodni obrazec, issue #7 §4) ───────────────────────
 
@@ -125,9 +126,9 @@ export function StepMeritve (p: {
               <Plus className="size-4" aria-hidden /> Dodaj segment
             </Button>
           </div>
-          <ul className="space-y-2">
+          <AnimatedList className="space-y-2">
             {p.segs2.map((g, i) => (
-              <li key={g.id} className="space-y-2 rounded-lg border p-2.5">
+              <AnimatedListItem key={g.id} className="space-y-2 rounded-lg border p-2.5">
                 <span className="text-xs font-medium text-muted-foreground">{segLabel} {i + 1}</span>
                 <div className="grid grid-cols-2 gap-2">
                   <div className="space-y-1">
@@ -162,9 +163,9 @@ export function StepMeritve (p: {
                     <Trash2 className="size-4" aria-hidden />
                   </Button>
                 </div>
-              </li>
+              </AnimatedListItem>
             ))}
-          </ul>
+          </AnimatedList>
         </div>
       ) : null}
 
@@ -183,9 +184,9 @@ export function StepMeritve (p: {
           {p.odbitki.length === 0 ? (
             <p className="rounded-lg border border-dashed p-2.5 text-xs text-muted-foreground">Ni odbitkov — bruto površina se uporabi kot neto.</p>
           ) : (
-            <ul className="space-y-2">
+            <AnimatedList className="space-y-2">
               {p.odbitki.map((o, i) => (
-                <li key={o.id} className="space-y-2 rounded-lg border p-2.5">
+                <AnimatedListItem key={o.id} className="space-y-2 rounded-lg border p-2.5">
                   <span className="text-xs font-medium text-muted-foreground">Odbitek {i + 1}</span>
                   <div className="space-y-1">
                     <Label htmlFor={`odb-${o.id}-opis`} className="sr-only">Opis odbitka {i + 1}</Label>
@@ -211,9 +212,9 @@ export function StepMeritve (p: {
                       <Trash2 className="size-4" aria-hidden />
                     </Button>
                   </div>
-                </li>
+                </AnimatedListItem>
               ))}
-            </ul>
+            </AnimatedList>
           )}
         </div>
       ) : null}
@@ -290,9 +291,9 @@ export function StepMeritve (p: {
               </Button>
             </div>
           </div>
-          <ul className="space-y-2">
+          <AnimatedList className="space-y-2">
             {p.segsM.map((g, i) => (
-              <li key={g.id} className="space-y-2 rounded-lg border p-2.5">
+              <AnimatedListItem key={g.id} className="space-y-2 rounded-lg border p-2.5">
                 <span className="text-xs font-medium text-muted-foreground">{segLabel} {i + 1}</span>
                 <div className="grid grid-cols-2 gap-2">
                   <div className="space-y-1">
@@ -327,9 +328,9 @@ export function StepMeritve (p: {
                     <Trash2 className="size-4" aria-hidden />
                   </Button>
                 </div>
-              </li>
+              </AnimatedListItem>
             ))}
-          </ul>
+          </AnimatedList>
 
           <div className="grid gap-3 sm:grid-cols-3">
             <div className="space-y-2">
