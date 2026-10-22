@@ -45,7 +45,14 @@ export function demoVrata (env: {
   DEMO_PROD_KEY?: string | undefined
   NODE_ENV?: string | undefined
 }): DemoVrata {
-  if (env.DEMO_ACCESS === "off") return { odprt: false, stanje: "izklopljeno" };
-  if (env.NODE_ENV !== "production") return { odprt: true, stanje: "razvoj-odprto" };
-  return { odprt: true, stanje: "produkcija-odprto" };
+  // 1. vrata: stikalo mora biti IZRECNO 'on'. Kaj drugega (tudi neobstoječe
+  // ali ponesreči prilepljeno) NE odpre ničesar — fail-closed.
+  if (env.DEMO_ACCESS !== 'on') return { odprt: false, stanje: 'izklopljeno' }
+  // 2. vrata: izven produkcije (razvoj/PAS) zadošča stikalo.
+  if (env.NODE_ENV !== 'production') return { odprt: true, stanje: 'razvoj-odprto' }
+  // 3. vrata: v produkciji je treba še DRUGO vrata — dobesedna fraza. Brez nje
+  // je demo prijava zaprta tudi ob DEMO_ACCESS=on (R551).
+  if (env.DEMO_PROD_KEY === DEMO_PROD_KEY_FRAZA) return { odprt: true, stanje: 'produkcija-odprto' }
+  // 4. produkcija + vse drugo: zaprto.
+  return { odprt: false, stanje: 'produkcija-blokirano' }
 }
