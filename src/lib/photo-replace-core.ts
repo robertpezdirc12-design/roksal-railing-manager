@@ -867,6 +867,73 @@ function potQuad (ctx: CanvasRenderingContext2D, a: Tocka, b: Tocka, c: Tocka, d
   ctx.closePath()
 }
 
+// ─── R576: mehki rob (brez "nalepke") ────────────────────────────────────────
+// Pomožni platni se obnavljajo, ne alocirajo na vsak premik drsnika.
+const _pomoznaPlatna: Record<string, HTMLCanvasElement> = {}
+
+function pomoznoPlatno (kljuc: string, w: number, h: number): HTMLCanvasElement | null {
+  if (typeof document === 'undefined') return null
+  let c = _pomoznaPlatna[kljuc]
+  if (!c) {
+    c = document.createElement('canvas')
+    _pomoznaPlatna[kljuc] = c
+  }
+  if (c.width !== w) c.width = w
+  if (c.height !== h) c.height = h
+  return c
+}
+
+/**
+ * Zlij nov izris v fotografijo z mehkim robom.
+ *
+ * `prej` je izrez platna PRED risanjem ograje (vsebuje že odstranjeno staro
+ * ograjo in senco). Postopek: nov izris se omeji na mehko masko quada in
+ * položi nazaj čez fotografijo. Zunanjost ostane nedotaknjena, rob pa preide
+ * v fotografijo namesto da bi se končal kot ostri rez.
+ */
+function zlijZMehkimRobom (
+  ctx: CanvasRenderingContext2D,
+  prej: HTMLCanvasElement,
+  izrez: { x: number; y: number; w: number; h: number },
+  quadPx: [Tocka, Tocka, Tocka, Tocka],
+  mehkoba: number
+): void {
+  const { x, y, w, h } = izrez
+  if (w < 4 || h < 4) return
+
+  const nova = pomoznoPlatno('nova', w, h)
+  const maska = pomoznoPlatno('maska', w, h)
+  if (!nova || !maska) return
+  const nctx = nova.getContext('2d')
+  const mctx = maska.getContext('2d')
+  if (!nctx || !mctx) return
+
+  nctx.setTransform(1, 0, 0, 1, 0, 0)
+  nctx.clearRect(0, 0, w, h)
+  nctx.drawImage(ctx.canvas, x, y, w, h, 0, 0, w, h)
+
+  mctx.setTransform(1, 0, 0, 1, 0, 0)
+  mctx.clearRect(0, 0, w, h)
+  mctx.fillStyle = '#fff'
+  try { mctx.filter = `blur(${mehkoba.toFixed(2)}px)` } catch { /* starejši brskalniki */ }
+  mctx.beginPath()
+  mctx.moveTo(quadPx[0].x - x, quadPx[0].y - y)
+  for (const t of [quadPx[1], quadPx[2], quadPx[3]]) mctx.lineTo(t.x - x, t.y - y)
+  mctx.closePath()
+  mctx.fill()
+  try { mctx.filter = 'none' } catch { /* brez */ }
+
+  nctx.globalCompositeOperation = 'destination-in'
+  nctx.drawImage(maska, 0, 0)
+  nctx.globalCompositeOperation = 'source-over'
+
+  ctx.save()
+  ctx.globalAlpha = 1
+  ctx.drawImage(prej, x, y)
+  ctx.drawImage(nova, x, y)
+  ctx.restore()
+}
+
 /**
  * OSNOVNI IZRIS POTEM na že narisano fotografijo (ctx vsebuje ORIGINAL).
  * Vrne opozorila kakovosti izrisa. Deterministično (seme).
@@ -968,38 +1035,82 @@ export function izrisiOgrajo (
     }
   }
 
-  // ── 2. SENCA (kontakt s tlemi + vržeča senca v smeri svetlobe) ─────────────
+  // ── 2. SENCA (geometrijska: višina ograje × smer svetlobe) ─────────────────
+  // R576: dolžina sence izhaja iz DEJANSKE višine ograje (cfg.heightCm) in
+  // merila slike, ne iz fiksnega deleža višine fotografije. Sonce ~45° pomeni
+  // senco, dolgo približno toliko kot je ograja visoka; perspektiva tla jo
+  // skrajša (faktor 0,42). Prej sta 105 cm in 220 cm ograja vrgli ENAKO senco.
   if (!jePovrsina) {
-  const sencaMoc = opcije.senca ?? 0.35 + (1 - svetloba.svetlost) * 0.35
-  const dY = Math.max(3, H * 0.012) // odmik vržene sence
-  const dX = -svetloba.smer * dY * 0.8 // leva svetloba → senca desno
-  ctx.save()
-  ctx.fillStyle = `rgba(20, 22, 26, ${0.28 * sencaMoc})`
-  // vržeča senca celotne ograje (poševni dvojnina za glavnimi stebri)
-  potQuad(
-    ctx,
-    { x: quadPx[0].x + dX * 0.4, y: quadPx[0].y },
-    { x: quadPx[1].x + dX * 0.4, y: quadPx[1].y },
-    { x: quadPx[1].x + dX, y: quadPx[1].y + dY },
-    { x: quadPx[0].x + dX, y: quadPx[0].y + dY }
-  )
-  ctx.fill()
-  // kontaktna senca ob tleh (temnejša, ozka)
-  const gk = ctx.createLinearGradient(0, quadPx[0].y - dY * 1.4, 0, quadPx[0].y + dY * 0.8)
-  gk.addColorStop(0, `rgba(15, 16, 20, 0)`)
-  gk.addColorStop(0.55, `rgba(15, 16, 20, ${0.4 * sencaMoc})`)
-  gk.addColorStop(1, `rgba(15, 16, 20, 0)`)
-  ctx.fillStyle = gk
-  potQuad(
-    ctx,
-    { x: quadPx[0].x - 4, y: quadPx[0].y - dY * 1.4 },
-    { x: quadPx[1].x + 4, y: quadPx[1].y - dY * 1.4 },
-    { x: quadPx[1].x + 6, y: quadPx[1].y + dY * 0.8 },
-    { x: quadPx[0].x - 6, y: quadPx[0].y + dY * 0.8 }
-  )
-  ctx.fill()
-  ctx.restore()
+    const sencaMoc = opcije.senca ?? 0.35 + (1 - svetloba.svetlost) * 0.35
+    const pxNaCmVisina = razdalja(quadPx[0], quadPx[3]) / Math.max(1, cfg.heightCm)
+    const dolzinaCm = cfg.heightCm * 0.9
+    const dY = Math.max(4, dolzinaCm * pxNaCmVisina * 0.42)
+    const dX = -svetloba.smer * dolzinaCm * pxNaCmVisina * 0.26
+    ctx.save()
+    // Trije sloji: daljna mehka, srednja, kontaktna ostra — ena sama plast
+    // izgleda kot siv pravokotnik, tri plasti dajo mehčanje z razdaljo.
+    const slojiSence = [
+      { blur: Math.max(6, dY * 0.22), alfa: 0.10 * sencaMoc, k: 1 },
+      { blur: Math.max(3, dY * 0.10), alfa: 0.16 * sencaMoc, k: 0.72 },
+      { blur: Math.max(1, dY * 0.03), alfa: 0.30 * sencaMoc, k: 0.45 },
+    ]
+    for (const s of slojiSence) {
+      try { ctx.filter = `blur(${s.blur.toFixed(1)}px)` } catch { /* starejši brskalniki */ }
+      ctx.fillStyle = `rgba(12, 14, 18, ${s.alfa.toFixed(3)})`
+      // Silhueta: spodnji rob ostane na tleh, zgornji se potegne za dolžino sence.
+      potQuad(
+        ctx,
+        quadPx[0],
+        quadPx[1],
+        { x: quadPx[2].x + dX * s.k, y: quadPx[2].y + dY * s.k },
+        { x: quadPx[3].x + dX * s.k, y: quadPx[3].y + dY * s.k }
+      )
+      ctx.fill()
+    }
+    try { ctx.filter = 'none' } catch { /* brez */ }
+    // kontaktna senca ob tleh (temnejša, ozka) — veže ograjo na podlago
+    const gk = ctx.createLinearGradient(0, quadPx[0].y - dY * 0.25, 0, quadPx[0].y + dY * 0.18)
+    gk.addColorStop(0, 'rgba(10, 12, 16, 0)')
+    gk.addColorStop(0.55, `rgba(10, 12, 16, ${(0.42 * sencaMoc).toFixed(3)})`)
+    gk.addColorStop(1, 'rgba(10, 12, 16, 0)')
+    ctx.fillStyle = gk
+    potQuad(
+      ctx,
+      quadPx[0],
+      quadPx[1],
+      { x: quadPx[1].x, y: quadPx[1].y + dY * 0.02 },
+      { x: quadPx[0].x, y: quadPx[0].y + dY * 0.02 }
+    )
+    ctx.fill()
+    ctx.restore()
   } // konec if (!jePovrsina)
+
+  // R576: izrez platna za mehki rob — zajame fotografijo po odstranitvi stare
+  // ograje IN narisano senco. Ograja se nariše čez, na koncu pa se rob zmehča.
+  const hq = Math.max(4, Math.max(quadPx[0].y, quadPx[1].y) - Math.min(quadPx[2].y, quadPx[3].y))
+  const mehkobaRob = Math.max(1.5, Math.min(5, W * 0.0022))
+  const qx0 = Math.min(quadPx[0].x, quadPx[1].x, quadPx[2].x, quadPx[3].x)
+  const qx1 = Math.max(quadPx[0].x, quadPx[1].x, quadPx[2].x, quadPx[3].x)
+  const qy0 = Math.min(quadPx[0].y, quadPx[1].y, quadPx[2].y, quadPx[3].y)
+  const qy1 = Math.max(quadPx[0].y, quadPx[1].y, quadPx[2].y, quadPx[3].y)
+  const robX = Math.max(8, hq * 0.35 + mehkobaRob * 3)
+  const izrez = {
+    x: Math.max(0, Math.floor(qx0 - robX)),
+    y: Math.max(0, Math.floor(qy0 - hq * 0.15 - mehkobaRob * 3)),
+    w: 0,
+    h: 0,
+  }
+  izrez.w = Math.max(0, Math.min(W - izrez.x, Math.ceil(qx1 + robX) - izrez.x))
+  izrez.h = Math.max(0, Math.min(H - izrez.y, Math.ceil(qy1 + hq * 0.55 + mehkobaRob * 3) - izrez.y))
+  const prejIzris = pomoznoPlatno('prej', izrez.w, izrez.h)
+  if (prejIzris) {
+    const pctx = prejIzris.getContext('2d')
+    if (pctx) {
+      pctx.setTransform(1, 0, 0, 1, 0, 0)
+      pctx.clearRect(0, 0, izrez.w, izrez.h)
+      pctx.drawImage(ctx.canvas, izrez.x, izrez.y, izrez.w, izrez.h, 0, 0, izrez.w, izrez.h)
+    }
+  }
 
   // ── materialni odtenki (svetloba prizora prilagodi barvo) ──────────────────
   const exposure = 0.82 + svetloba.svetlost * 0.36 // temen prizor → temnejša ograja
@@ -1312,6 +1423,9 @@ export function izrisiOgrajo (
   ctx.restore()
 
   ctx.restore() // globalAlpha
+
+  // ── 7a. MEHKI ROB: nov izris se zlije v fotografijo (brez "nalepke") ───────
+  if (prejIzris) zlijZMehkimRobom(ctx, prejIzris, izrez, quadPx, mehkobaRob)
 
   // ── 7b. PREDNJI PLAN (§1: nova ograja NE prekrije robov balkona, rastlin, sten)
   // Nariše se ZADNJI iz slikovnih plasti in samo iz originalnih pikslov,

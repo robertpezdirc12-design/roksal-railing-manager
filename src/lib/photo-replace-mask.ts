@@ -287,25 +287,29 @@ export function obnoviOzadje (
     }
   }
 
-  let ring = 1
-  for (;;) {
-    // kandidati = pokriti, še nezaključeni, z vsaj enim rešenim sosedom
-    const kandidati: number[] = []
-    for (let y = 0; y < H; y++) {
-      for (let x = 0; x < W; x++) {
-        const i = y * W + x
-        if (pokrit[i] === 0 || razresen[i] === 1) continue
-        for (const s of SOSEDI) {
-          const nx = x + s.dx; const ny = y + s.dy
-          if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue
-          if (razresen[ny * W + nx] === 1) { kandidati.push(i); break }
-        }
-      }
+  // R576: BFS frontier — prej je vsak ring skeniral CELO sliko (O(W·H·ringov)),
+  // zdaj se vsak piksel obdela natanko enkrat. Vrednosti še vedno nastanejo
+  // IZKLJUČNO iz sosedov prejšnjih ringov (snapshot), zato je rezultat enak,
+  // le čas izrisa pade z več sekund na desetinke.
+  const vFrontier = new Uint8Array(n)
+  let frontier: number[] = []
+  for (let i = 0; i < n; i++) {
+    if (pokrit[i] === 0 || razresen[i] === 1) continue
+    const x = i % W; const y = (i - x) / W
+    for (const s of SOSEDI) {
+      const nx = x + s.dx; const ny = y + s.dy
+      if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue
+      if (razresen[ny * W + nx] === 1) { frontier.push(i); break }
     }
-    if (kandidati.length === 0) break
-
+  }
+  let naslednji: number[] = []
+  let ring = 1
+  while (frontier.length > 0 && ring <= mejnaGlobina * 4 + 2) {
+    // determinizem: enak vrstni red kot prej (naraščajoč indeks)
+    frontier.sort((a, b) => a - b)
     // vrednosti samo iz sosedov prejšnjih ringov (snapshot)
-    const zapis = kandidati.map((i) => {
+    const zapis: { i: number; r: number; g: number; b: number }[] = []
+    for (const i of frontier) {
       const x = i % W; const y = (i - x) / W
       let sr = 0; let sg = 0; let sb = 0; let ws = 0
       for (const s of SOSEDI) {
@@ -318,8 +322,8 @@ export function obnoviOzadje (
         sb += piksli[j * 4 + 2] * s.w
         ws += s.w
       }
-      return { i, r: sr / ws, g: sg / ws, b: sb / ws }
-    })
+      if (ws > 0) zapis.push({ i, r: sr / ws, g: sg / ws, b: sb / ws })
+    }
     for (const z of zapis) {
       piksli[z.i * 4] = z.r
       piksli[z.i * 4 + 1] = z.g
@@ -328,8 +332,25 @@ export function obnoviOzadje (
       razresen[z.i] = 1
       globina[z.i] = ring
     }
+    // nov frontier = nezaključeni pokriti sosedje pravkar razrešenih
+    naslednji.length = 0
+    for (const z of zapis) {
+      const x = z.i % W; const y = (z.i - x) / W
+      for (const s of SOSEDI) {
+        const nx = x + s.dx; const ny = y + s.dy
+        if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue
+        const j = ny * W + nx
+        if (pokrit[j] === 0 || razresen[j] === 1 || vFrontier[j] === 1) continue
+        vFrontier[j] = 1
+        naslednji.push(j)
+      }
+    }
+    for (const j of naslednji) vFrontier[j] = 0
+    const zamenjava = frontier
+    frontier = naslednji
+    naslednji = zamenjava
+    naslednji.length = 0
     ring++
-    if (ring > mejnaGlobina * 4 + 2) break // zaščita pred neskončno zanko
   }
 
   // ── poročilo o nedokončanosti ──
