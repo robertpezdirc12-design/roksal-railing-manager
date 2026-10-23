@@ -58,10 +58,15 @@ const eslintConfig = [...nextCoreWebVitals, ...nextTypescript, {
     "no-useless-escape": "off",
   },
 }, {
-  ignores: ["node_modules/**", ".next/**", "out/**", "build/**", "next-env.d.ts", "examples/**", "skills/**", "assets/**", "prisma/*.cjs", "tmp/**", ".pgdata/**", ".zscripts/**", "download/**", "upload/**"]
+  ignores: ["node_modules/**", ".next/**", "out/**", "build/**", "next-env.d.ts", "examples/**", "skills/**", "assets/**", "prisma/*.cjs", "scripts/*.cjs", "tmp/**", ".pgdata/**", ".zscripts/**", "download/**", "upload/**"]
   // R437: assets/_next/static/chunks so MINIFICIRANI build artefakti rešeni iz izvirnika
   // (recovery snapshot) — niso izvorna koda in ESLint jih ne sme preverjati (no-this-alias napake v minifikaciji).
   // prisma/*.cjs: seed skripte uporabljajo CommonJS require (Prisma Client za Node brez bundlerja).
+  // R580: scripts/*.cjs — enak vzrok kot prisma/*.cjs. eslint-config-next 'files'
+  // vzorec ne zajema .cjs → plugin react-hooks NI registriran za te datoteke,
+  // naš objekt pravil (brez files) pa velja za vse → eslint . sesuje s
+  // "could not find plugin react-hooks" (prvi .cjs v scripts/: catalog-export.cjs
+  // iz 4d941ea). Prej so bili .cjs samo v prisma/ (že ignorirani).
 }];
 
 export default eslintConfig;
