@@ -4,6 +4,7 @@
 // kartica pod AR predogledom (R537-b: dobesedna selitev iz ar.tsx).
 // Zaprtje (setAnalysis(null)) ostane v vstopu prek propa.
 
+import { AnimatedList, AnimatedListItem } from '@/components/roksal/motion-bits'
 import { Lightbulb, X } from '@/components/roksal/custom-icons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -28,9 +29,9 @@ export function AnalizaPanel ({ analysis, setAnalysis }: {
         </div>
         {analysis.scene ? <p className="text-sm font-medium">{analysis.scene}</p> : null}
         {analysis.placement.length > 0 ? (
-          <ul className="space-y-2">
+          <AnimatedList className="space-y-2">
             {analysis.placement.map((p, i) => (
-              <li key={i} className="rounded-lg border bg-secondary/40 p-3 text-sm">
+              <AnimatedListItem key={i} className="rounded-lg border bg-secondary/40 p-3 text-sm">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-semibold">{p.label}</span>
                   {p.estLenCm != null ? (
@@ -41,9 +42,9 @@ export function AnalizaPanel ({ analysis, setAnalysis }: {
                 </div>
                 <p className="mt-1 text-muted-foreground">{p.where}</p>
                 {p.note ? <p className="mt-1 text-xs italic text-muted-foreground">{p.note}</p> : null}
-              </li>
+              </AnimatedListItem>
             ))}
-          </ul>
+          </AnimatedList>
         ) : null}
         {analysis.obstacles.length > 0 ? (
           <div>

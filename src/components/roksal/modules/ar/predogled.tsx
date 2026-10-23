@@ -8,6 +8,7 @@
 import { useState, type Dispatch, type PointerEvent as ReactPointerEvent, type RefObject, type SetStateAction } from 'react'
 
 import { Camera, CameraOff, ChevronDown, ChevronRight, Lightbulb, Loader2, Lock, Move, Plus, Video, Waypoints } from '@/components/roksal/custom-icons'
+import { AnimatedList, AnimatedListItem } from '@/components/roksal/motion-bits'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
@@ -291,13 +292,13 @@ export function PredogledPogledi ({
               ) : null}
             </div>
           ) : (
-            <ul className="max-h-96 divide-y overflow-y-auto pr-1" aria-label="Seznam zaznanih elementov prizora">
+            <AnimatedList className="max-h-96 divide-y overflow-y-auto pr-1" aria-label="Seznam zaznanih elementov prizora">
               {sceneDisplayed.map((el) => (
-                <li key={el.id}>
+                <AnimatedListItem key={el.id}>
                   <SceneElementRow el={el} selected={sceneSelectedId === el.id} onSelect={selectSceneElement} />
-                </li>
+                </AnimatedListItem>
               ))}
-            </ul>
+            </AnimatedList>
           )}
         </div>
       ) : null}

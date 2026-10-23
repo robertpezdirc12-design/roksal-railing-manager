@@ -27,6 +27,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Camera, CheckCircle2, Loader2, MinusCircle, ScanSearch, TriangleAlert, Upload, X, XCircle } from '@/components/roksal/custom-icons'
+import { AnimatedList, AnimatedListItem } from '@/components/roksal/motion-bits'
 import { useToast } from '@/hooks/use-toast'
 import { apiPost } from '@/lib/api-client'
 import type { GradbeniMaterial, InspectMaterial, InspectOgraja, InspectPrizor, MaterialVijaka, ObjektKategorija, OsaMere, PrizorTip, TipVijaka, TipVogala, VrstaTal } from './tipi'
@@ -325,8 +326,8 @@ export function PrepoznavaPanel ({ zajemiKader }: {
                   <MeterVrstica kaj="dolžina" cm={rezultat.ocenaDolzineCm} />
                 </div>
 
-                <ul className="space-y-1.5">
-                  <li className="rounded-lg border bg-secondary/40 p-2.5">
+                <AnimatedList className="space-y-1.5">
+                  <AnimatedListItem className="rounded-lg border bg-secondary/40 p-2.5">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Ročnik</span>
                       <span className="font-semibold">{MATERIALI[rezultat.rocnik.material]}</span>
@@ -334,16 +335,16 @@ export function PrepoznavaPanel ({ zajemiKader }: {
                       {rezultat.rocnik.barva ? <span className="text-xs text-muted-foreground">barva: {rezultat.rocnik.barva}</span> : null}
                     </div>
                     {rezultat.rocnik.opis ? <p className="mt-1 text-sm text-muted-foreground">{rezultat.rocnik.opis}</p> : null}
-                  </li>
-                  <li className="rounded-lg border bg-secondary/40 p-2.5">
+                  </AnimatedListItem>
+                  <AnimatedListItem className="rounded-lg border bg-secondary/40 p-2.5">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Polnilo</span>
                       <span className="font-semibold">{POLNILA[rezultat.polnilo.vrsta]}</span>
                       <ZaupanjeBadge v={rezultat.polnilo.zaupanje} />
                     </div>
                     {rezultat.polnilo.opis ? <p className="mt-1 text-sm text-muted-foreground">{rezultat.polnilo.opis}</p> : null}
-                  </li>
-                  <li className="rounded-lg border bg-secondary/40 p-2.5">
+                  </AnimatedListItem>
+                  <AnimatedListItem className="rounded-lg border bg-secondary/40 p-2.5">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Stebri</span>
                       <span className="font-semibold">{MATERIALI[rezultat.stebri.material]}</span>
@@ -353,8 +354,8 @@ export function PrepoznavaPanel ({ zajemiKader }: {
                       <ZaupanjeBadge v={rezultat.stebri.zaupanje} />
                     </div>
                     {rezultat.stebri.opis ? <p className="mt-1 text-sm text-muted-foreground">{rezultat.stebri.opis}</p> : null}
-                  </li>
-                  <li className="rounded-lg border bg-secondary/40 p-2.5">
+                  </AnimatedListItem>
+                  <AnimatedListItem className="rounded-lg border bg-secondary/40 p-2.5">
                     <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Okovje</p>
                     <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1">
                       <OkovjeVrstica label="Kljuka" v={rezultat.okovje.kljuka} />
@@ -362,8 +363,8 @@ export function PrepoznavaPanel ({ zajemiKader }: {
                       <OkovjeVrstica label="Ključavnica" v={rezultat.okovje.kljucavnica} />
                     </div>
                     {rezultat.okovje.opis ? <p className="mt-1 text-sm text-muted-foreground">{rezultat.okovje.opis}</p> : null}
-                  </li>
-                </ul>
+                  </AnimatedListItem>
+                </AnimatedList>
 
                 {rezultat.stanjeOpis ? (
                   <p className="text-sm"><span className="font-semibold">Stanje:</span> {rezultat.stanjeOpis}</p>
@@ -381,9 +382,9 @@ export function PrepoznavaPanel ({ zajemiKader }: {
             {/* ── R560: splošno gradbeno prepoznavanje (NEODVISNO od jeOgraja) ── */}
             <div className="space-y-1.5">
               <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Gradbišče — splošno prepoznavanje</h3>
-              <ul className="space-y-1.5">
+              <AnimatedList className="space-y-1.5">
                 {rezultat.materiali.length > 0 ? (
-                  <li className="rounded-lg border bg-secondary/40 p-2.5">
+                  <AnimatedListItem className="rounded-lg border bg-secondary/40 p-2.5">
                     <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Materiali</p>
                     <ul className="mt-1 space-y-1">
                       {rezultat.materiali.map((m, i) => (
@@ -395,10 +396,10 @@ export function PrepoznavaPanel ({ zajemiKader }: {
                         </li>
                       ))}
                     </ul>
-                  </li>
+                  </AnimatedListItem>
                 ) : null}
                 {rezultat.vijaki.vidni === true ? (
-                  <li className="rounded-lg border bg-secondary/40 p-2.5">
+                  <AnimatedListItem className="rounded-lg border bg-secondary/40 p-2.5">
                     <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Vijaki</p>
                     <div className="mt-1 flex flex-wrap items-center gap-2 text-sm">
                       <span className="font-semibold">{VIJAK_TIP[rezultat.vijaki.tip]}</span>
@@ -409,10 +410,10 @@ export function PrepoznavaPanel ({ zajemiKader }: {
                       <ZaupanjeBadge v={rezultat.vijaki.zaupanje} />
                     </div>
                     {rezultat.vijaki.kje ? <p className="mt-1 text-xs text-muted-foreground">kje: {rezultat.vijaki.kje}</p> : null}
-                  </li>
+                  </AnimatedListItem>
                 ) : null}
                 {rezultat.tla.vrsta !== 'NEZNANO' || rezultat.tla.ploscicaDolzinaCm != null ? (
-                  <li className="rounded-lg border bg-secondary/40 p-2.5">
+                  <AnimatedListItem className="rounded-lg border bg-secondary/40 p-2.5">
                     <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Tla</p>
                     <div className="mt-1 flex flex-wrap items-center gap-2 text-sm">
                       <span className="font-semibold">{TLA[rezultat.tla.vrsta]}</span>
@@ -422,10 +423,10 @@ export function PrepoznavaPanel ({ zajemiKader }: {
                       ) : null}
                     </div>
                     {rezultat.tla.opis ? <p className="mt-1 text-sm text-muted-foreground">{rezultat.tla.opis}</p> : null}
-                  </li>
+                  </AnimatedListItem>
                 ) : null}
                 {rezultat.vogali.steviloOcena != null ? (
-                  <li className="rounded-lg border bg-secondary/40 p-2.5">
+                  <AnimatedListItem className="rounded-lg border bg-secondary/40 p-2.5">
                     <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Vogali</p>
                     <div className="mt-1 flex flex-wrap items-center gap-2 text-sm">
                       <span className="font-semibold">{VOGALI[rezultat.vogali.tipGlavni]}</span>
@@ -434,10 +435,10 @@ export function PrepoznavaPanel ({ zajemiKader }: {
                       <ZaupanjeBadge v={rezultat.vogali.zaupanje} />
                     </div>
                     {rezultat.vogali.opis ? <p className="mt-1 text-sm text-muted-foreground">{rezultat.vogali.opis}</p> : null}
-                  </li>
+                  </AnimatedListItem>
                 ) : null}
                 {rezultat.mere.length > 0 ? (
-                  <li className="rounded-lg border bg-secondary/40 p-2.5">
+                  <AnimatedListItem className="rounded-lg border bg-secondary/40 p-2.5">
                     <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Mere (ocena iz referenc)</p>
                     <ul className="mt-1 space-y-1 text-sm">
                       {rezultat.mere.map((m, i) => (
@@ -454,19 +455,19 @@ export function PrepoznavaPanel ({ zajemiKader }: {
                         </li>
                       ))}
                     </ul>
-                  </li>
+                  </AnimatedListItem>
                 ) : null}
                 {rezultat.materiali.length === 0 && rezultat.vijaki.vidni !== true && rezultat.tla.vrsta === 'NEZNANO' && rezultat.tla.ploscicaDolzinaCm == null && rezultat.vogali.steviloOcena == null && rezultat.mere.length === 0 ? (
-                  <li className="text-sm text-muted-foreground">Splošnih gradbenih elementov (materiali, vijaki, tla, vogali, mere) na tej sliki ni bilo mogoče prepoznati.</li>
+                  <AnimatedListItem className="text-sm text-muted-foreground">Splošnih gradbenih elementov (materiali, vijaki, tla, vogali, mere) na tej sliki ni bilo mogoče prepoznati.</AnimatedListItem>
                 ) : null}
-              </ul>
+              </AnimatedList>
             </div>
             {/* ── R561: VSE na fotografiji — odprta inventura (NEODVISNO od jeOgraja) ── */}
             <div className="space-y-1.5">
               <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Vse na fotografiji — odprta inventura</h3>
-              <ul className="space-y-1.5">
+              <AnimatedList className="space-y-1.5">
                 {rezultat.prizor.tip !== 'NEZNANO' || rezultat.prizor.opis || rezultat.prizor.svetloba ? (
-                  <li className="rounded-lg border bg-secondary/40 p-2.5">
+                  <AnimatedListItem className="rounded-lg border bg-secondary/40 p-2.5">
                     <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Prizor</p>
                     <div className="mt-1 flex flex-wrap items-center gap-2 text-sm">
                       <span className="font-semibold">{PRIZOR[rezultat.prizor.tip]}</span>
@@ -488,10 +489,10 @@ export function PrepoznavaPanel ({ zajemiKader }: {
                       </p>
                     ) : null}
                     {rezultat.prizor.opis ? <p className="mt-1 text-sm text-muted-foreground">{rezultat.prizor.opis}</p> : null}
-                  </li>
+                  </AnimatedListItem>
                 ) : null}
                 {rezultat.objekti.length > 0 ? (
-                  <li className="rounded-lg border bg-secondary/40 p-2.5">
+                  <AnimatedListItem className="rounded-lg border bg-secondary/40 p-2.5">
                     <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                       Predmeti ({rezultat.objekti.length}) — vse, kar je videti
                     </p>
@@ -509,22 +510,22 @@ export function PrepoznavaPanel ({ zajemiKader }: {
                         </li>
                       ))}
                     </ul>
-                  </li>
+                  </AnimatedListItem>
                 ) : null}
                 {rezultat.varnost.length > 0 ? (
-                  <li className="rounded-lg border border-amber-300 bg-amber-50 p-2.5 dark:border-amber-900 dark:bg-amber-950/30">
+                  <AnimatedListItem className="rounded-lg border border-amber-300 bg-amber-50 p-2.5 dark:border-amber-900 dark:bg-amber-950/30">
                     <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">
                       <TriangleAlert className="size-3.5" aria-hidden /> Varnostna opažanja za monterja
                     </p>
                     <ul className="mt-1 list-inside list-disc space-y-0.5 text-sm">
                       {rezultat.varnost.map((v, i) => <li key={i}>{v}</li>)}
                     </ul>
-                  </li>
+                  </AnimatedListItem>
                 ) : null}
                 {rezultat.prizor.tip === 'NEZNANO' && !rezultat.prizor.opis && rezultat.objekti.length === 0 && rezultat.varnost.length === 0 ? (
-                  <li className="text-sm text-muted-foreground">Odprtega seznama predmetov na tej sliki ni bilo mogoče prepoznati.</li>
+                  <AnimatedListItem className="text-sm text-muted-foreground">Odprtega seznama predmetov na tej sliki ni bilo mogoče prepoznati.</AnimatedListItem>
                 ) : null}
-              </ul>
+              </AnimatedList>
             </div>
             <p className="text-xs text-muted-foreground">
               Prepoznavanje je pomoč pri odločitvi — material, okovje in mere vedno potrdite na terenu (dotik, vizualni pregled, merilni trak).

@@ -9,6 +9,7 @@
 
 import { useRef, useState } from 'react'
 
+import { AnimatedList, AnimatedListItem } from '@/components/roksal/motion-bits'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -136,18 +137,18 @@ export function PreckaPanel (): React.ReactElement {
               <span className="text-xs text-muted-foreground" role="status">{photos.length}/{MAX}</span>
             </div>
             {photos.length > 0 ? (
-              <ul className="space-y-1">
+              <AnimatedList className="space-y-1">
                 {photos.map((p, i) => (
-                  <li key={i} className="flex items-center justify-between gap-2 rounded border bg-secondary/40 px-2 py-1 text-xs">
+                  <AnimatedListItem key={i} className="flex items-center justify-between gap-2 rounded border bg-secondary/40 px-2 py-1 text-xs">
                     <span className="truncate">
                       <span className="font-semibold">Foto {i + 1}:</span> {imena[i] ?? 'slika'}
                     </span>
                     <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" aria-label={`Odstrani fotografijo ${i + 1}`} onClick={() => { odstrani(i) }}>
                       <X className="size-3" aria-hidden /> Odstrani
                     </Button>
-                  </li>
+                  </AnimatedListItem>
                 ))}
-              </ul>
+              </AnimatedList>
             ) : null}
             <div className="space-y-0.5">
               <Input
@@ -167,9 +168,9 @@ export function PreckaPanel (): React.ReactElement {
           <div className="space-y-3">
             {rezultat.scene ? <p className="text-sm font-medium">{rezultat.scene}</p> : null}
             {rezultat.dims.length > 0 ? (
-              <ul className="space-y-1.5">
+              <AnimatedList className="space-y-1.5">
                 {rezultat.dims.map((d, i) => (
-                  <li key={i} className="rounded-lg border bg-secondary/40 p-2.5 text-sm">
+                  <AnimatedListItem key={i} className="rounded-lg border bg-secondary/40 p-2.5 text-sm">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-semibold">Foto {d.foto}</span>
                       <span className="text-muted-foreground">{d.kaj}</span>
@@ -179,9 +180,9 @@ export function PreckaPanel (): React.ReactElement {
                         </Badge>
                       ) : <span className="text-xs text-muted-foreground">ocena ni mogoča</span>}
                     </div>
-                  </li>
+                  </AnimatedListItem>
                 ))}
-              </ul>
+              </AnimatedList>
             ) : null}
             {rezultat.warnings.length > 0 ? (
               <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 dark:border-amber-900 dark:bg-amber-950/30">

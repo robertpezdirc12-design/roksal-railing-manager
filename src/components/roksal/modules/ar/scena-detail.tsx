@@ -8,6 +8,7 @@
 import { useState, type Dispatch, type SetStateAction } from 'react'
 
 import { Loader2, MapPin, Ruler, Save, ScanLine, Shapes, Smartphone } from '@/components/roksal/custom-icons'
+import { AnimatedList, AnimatedListItem } from '@/components/roksal/motion-bits'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -522,9 +523,9 @@ export function ScenaDetail ({
           {selectedMeasures.length > 0 ? (
             <div className="mt-2">
               <p className="text-[11px] font-medium">Zabeležene mere</p>
-              <ul className="mt-1 space-y-1">
+              <AnimatedList className="mt-1 space-y-1">
                 {selectedMeasures.map((m) => (
-                  <li key={m.label} className={`rounded border px-2 py-1 ${m.conflict ? 'border-destructive/50 bg-destructive/5' : 'bg-secondary/30'}`}>
+                  <AnimatedListItem key={m.label} className={`rounded border px-2 py-1 ${m.conflict ? 'border-destructive/50 bg-destructive/5' : 'bg-secondary/30'}`}>
                     <div className="flex flex-wrap items-center justify-between gap-1">
                       <span className="font-medium">{m.label}</span>
                       <span className="font-semibold">{m.valueCm.toFixed(1).replace('.', ',')} cm</span>
@@ -539,9 +540,9 @@ export function ScenaDetail ({
                         Konflikt: mere istega naziva odstopajo — preverite na objektu.
                       </p>
                     ) : null}
-                  </li>
+                  </AnimatedListItem>
                 ))}
-              </ul>
+              </AnimatedList>
             </div>
           ) : null}
         </div>

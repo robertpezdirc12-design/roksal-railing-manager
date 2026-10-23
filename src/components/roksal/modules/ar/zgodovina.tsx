@@ -9,6 +9,7 @@
 import { useCallback, useState } from 'react'
 
 import { Download, History, Loader2, Plus, Trash2 } from '@/components/roksal/custom-icons'
+import { AnimatedList, AnimatedListItem } from '@/components/roksal/motion-bits'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { EmptyState, ErrorBox, LoadingRows } from '@/components/roksal/ui-bits'
@@ -207,15 +208,15 @@ export function Zgodovina ({ canWrite, snapshots }: {
                       {row.note && row.note !== (row.scene ?? '') ? <p className="text-muted-foreground">{row.note}</p> : null}
                       {detail.analysis ? (
                         <>
-                          <ul className="space-y-1.5">
+                          <AnimatedList className="space-y-1.5">
                             {detail.analysis.placement.map((p, i) => (
-                              <li key={i} className="rounded-md border bg-secondary/40 p-2">
+                              <AnimatedListItem key={i} className="rounded-md border bg-secondary/40 p-2">
                                 <span className="font-semibold">{p.label}</span>
                                 {p.estLenCm != null ? <span className="ml-2 text-xs text-roksal-amber-text">≈ {(p.estLenCm / 100).toFixed(1).replace('.', ',')} m</span> : null}
                                 <p className="text-xs text-muted-foreground">{p.where}</p>
-                              </li>
+                              </AnimatedListItem>
                             ))}
-                          </ul>
+                          </AnimatedList>
                           {detail.analysis.obstacles.length > 0 ? (
                             <p className="text-xs text-muted-foreground"><span className="font-semibold">Ovire:</span> {detail.analysis.obstacles.join(' · ')}</p>
                           ) : null}
@@ -241,11 +242,11 @@ export function Zgodovina ({ canWrite, snapshots }: {
                               Posnetek ne vsebuje zaznav — zajet je bil, preden je razumevanje prizora našlo elemente.
                             </p>
                           ) : (
-                            <ul className="max-h-72 divide-y overflow-y-auto pr-1" aria-label="Zaznave prizora na posnetku">
+                            <AnimatedList className="max-h-72 divide-y overflow-y-auto pr-1" aria-label="Zaznave prizora na posnetku">
                               {detail.elements.map((el) => (
-                                <li key={el.id}><SceneElementRow el={el} /></li>
+                                <AnimatedListItem key={el.id}><SceneElementRow el={el} /></AnimatedListItem>
                               ))}
-                            </ul>
+                            </AnimatedList>
                           )}
                           {canWrite ? (
                             <div className="border-t p-3">
