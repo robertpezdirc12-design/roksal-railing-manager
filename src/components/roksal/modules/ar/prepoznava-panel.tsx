@@ -134,7 +134,7 @@ function ZaupanjeBadge ({ v }: { v: number }): React.ReactElement {
     return <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">prepoznano · {pct} %</Badge>
   }
   if (v >= 0.4) {
-    return <Badge className="border-roksal-amber/40 bg-amber-50 text-roksal-amber dark:bg-amber-950/30 dark:text-amber-400">verjetno · {pct} %</Badge>
+    return <Badge className="border-roksal-amber/40 bg-amber-50 text-roksal-amber-text dark:bg-amber-950/30 dark:text-amber-400">verjetno · {pct} %</Badge>
   }
   return <Badge variant="secondary">nejasno · {pct} %</Badge>
 }
@@ -348,7 +348,7 @@ export function PrepoznavaPanel ({ zajemiKader }: {
                       <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Stebri</span>
                       <span className="font-semibold">{MATERIALI[rezultat.stebri.material]}</span>
                       {rezultat.stebri.steviloOcena != null ? (
-                        <Badge variant="outline" className="border-roksal-amber/40 text-roksal-amber">≈ {rezultat.stebri.steviloOcena}</Badge>
+                        <Badge variant="outline" className="border-roksal-amber/40 text-roksal-amber-text">≈ {rezultat.stebri.steviloOcena}</Badge>
                       ) : null}
                       <ZaupanjeBadge v={rezultat.stebri.zaupanje} />
                     </div>
@@ -404,7 +404,7 @@ export function PrepoznavaPanel ({ zajemiKader }: {
                       <span className="font-semibold">{VIJAK_TIP[rezultat.vijaki.tip]}</span>
                       <span className="text-muted-foreground">· {VIJAK_MATERIAL[rezultat.vijaki.material]}</span>
                       {rezultat.vijaki.steviloOcena != null ? (
-                        <Badge variant="outline" className="border-roksal-amber/40 text-roksal-amber">≈ {rezultat.vijaki.steviloOcena}</Badge>
+                        <Badge variant="outline" className="border-roksal-amber/40 text-roksal-amber-text">≈ {rezultat.vijaki.steviloOcena}</Badge>
                       ) : null}
                       <ZaupanjeBadge v={rezultat.vijaki.zaupanje} />
                     </div>
@@ -430,7 +430,7 @@ export function PrepoznavaPanel ({ zajemiKader }: {
                     <div className="mt-1 flex flex-wrap items-center gap-2 text-sm">
                       <span className="font-semibold">{VOGALI[rezultat.vogali.tipGlavni]}</span>
                       {rezultat.vogali.kot != null ? <Badge variant="outline">{rezultat.vogali.kot}°</Badge> : null}
-                      <Badge variant="outline" className="border-roksal-amber/40 text-roksal-amber">≈ {rezultat.vogali.steviloOcena}</Badge>
+                      <Badge variant="outline" className="border-roksal-amber/40 text-roksal-amber-text">≈ {rezultat.vogali.steviloOcena}</Badge>
                       <ZaupanjeBadge v={rezultat.vogali.zaupanje} />
                     </div>
                     {rezultat.vogali.opis ? <p className="mt-1 text-sm text-muted-foreground">{rezultat.vogali.opis}</p> : null}
@@ -501,7 +501,7 @@ export function PrepoznavaPanel ({ zajemiKader }: {
                           <span className="font-semibold">{o.ime}</span>
                           <Badge variant="outline" className="text-[10px]">{KATEGORIJE[o.kategorija]}</Badge>
                           {o.steviloOcena != null ? (
-                            <Badge variant="outline" className="border-roksal-amber/40 text-roksal-amber">× {o.steviloOcena}</Badge>
+                            <Badge variant="outline" className="border-roksal-amber/40 text-roksal-amber-text">× {o.steviloOcena}</Badge>
                           ) : null}
                           <ZaupanjeBadge v={o.zaupanje} />
                           {o.kje ? <span className="text-xs text-muted-foreground">· {o.kje}</span> : null}

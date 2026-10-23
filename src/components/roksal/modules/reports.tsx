@@ -397,7 +397,7 @@ function ServisView ({ d }: { d: ServisData }) {
                             ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
                             : c.decision === 'NEUTEMELJENA'
                               ? 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300'
-                              : 'border bg-muted text-muted-foreground'
+                              : 'border bg-secondary text-secondary-foreground'
                       )}>
                         {odlocitevLabel(c.decision)}
                       </span>

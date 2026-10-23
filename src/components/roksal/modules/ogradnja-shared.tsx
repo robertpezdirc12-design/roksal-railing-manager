@@ -66,7 +66,7 @@ export interface ProductOption {
 export const PHASES = ['Osnova', 'Tekač', 'Stebri', 'Preveri', 'Potrdi'] as const
 
 export const STATUS_BADGES: Record<string, { label: string; cls: string }> = {
-  OSNUTEK: { label: 'Osnutek', cls: 'bg-muted text-muted-foreground' },
+  OSNUTEK: { label: 'Osnutek', cls: 'bg-secondary text-secondary-foreground' },
   PREGLED: { label: 'Pregled', cls: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300' },
   POTRJEN: { label: 'Potrjen', cls: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' },
   ARHIV: { label: 'Arhiv', cls: 'bg-secondary text-secondary-foreground' },
@@ -112,7 +112,7 @@ export function ValidationList ({ validation }: { validation: { code: string; se
             'flex items-start gap-2 rounded-lg px-3 py-2 text-xs',
             v.severity === 'NAPAKA' ? 'bg-destructive/10 text-destructive'
               : v.severity === 'OPOZORILO' ? 'bg-amber-500/10 text-amber-700 dark:text-amber-400'
-                : 'bg-muted text-muted-foreground'
+                : 'bg-secondary text-secondary-foreground'
           )}
         >
           {v.severity === 'NAPAKA' ? <TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden /> : <Radar className="mt-0.5 size-3.5 shrink-0" aria-hidden />}

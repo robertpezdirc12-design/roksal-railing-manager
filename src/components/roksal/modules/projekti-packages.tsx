@@ -129,7 +129,7 @@ export function PackagesSection ({ projectId, projectCode, measurements }: {
                     {p.measurement ? <span>· izmera #{p.measurement.id.slice(-6)}</span> : null}
                     {p.bom ? (
                       <button
-                        className="inline-flex items-center gap-1 font-medium text-roksal-amber hover:underline"
+                        className="inline-flex items-center gap-1 font-medium text-roksal-amber-text hover:underline"
                         onClick={() => setBomView(p)}
                       >
                         <ClipboardList className="size-3" aria-hidden /> {p.bom.code} ({p.bom.lines.length})
@@ -282,7 +282,7 @@ function CompareTierCard ({ pkg, refSale, canManage, busy, onGenerateBom, onStat
       {pkg.bom ? (
         <button
           type="button"
-          className="inline-flex items-center gap-1 text-[11px] font-medium text-roksal-amber hover:underline"
+          className="inline-flex items-center gap-1 text-[11px] font-medium text-roksal-amber-text hover:underline"
           onClick={() => onBomView(pkg)}
         >
           <ClipboardList className="size-3" aria-hidden /> {pkg.bom.code} ({pkg.bom.lines.length})

@@ -189,7 +189,7 @@ export default function PostsigModule () {
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <Lock className="size-4 shrink-0 text-roksal-amber" aria-hidden />
-                        <span className="font-mono text-sm font-bold text-roksal-amber">{qq.code}</span>
+                        <span className="font-mono text-sm font-bold text-roksal-amber-text">{qq.code}</span>
                         <StatusBadge status={qq.status} />
                       </div>
                       <p className="mt-1 truncate font-semibold text-foreground">{qq.customer?.name ?? 'Brez stranke'}</p>
@@ -239,7 +239,7 @@ export default function PostsigModule () {
                           <Receipt className="size-3.5" aria-hidden />Račun
                         </div>
                         <div className="flex items-center justify-between gap-2">
-                          <span className="font-mono text-xs font-semibold text-roksal-amber">{invoice.code}</span>
+                          <span className="font-mono text-xs font-semibold text-roksal-amber-text">{invoice.code}</span>
                           <StatusBadge status={invoice.status} />
                         </div>
                         <p className="mt-0.5 text-xs text-muted-foreground">plačano {fmtEUR(invoice.paid)} / {fmtEUR(invoice.total)}</p>
@@ -258,7 +258,7 @@ export default function PostsigModule () {
                         <AnimatedList className="space-y-1">
                           {prods.map((p) => (
                             <AnimatedListItem key={p.id} className="flex items-center justify-between gap-2">
-                              <span className="truncate font-mono text-xs font-semibold text-roksal-amber">{p.code}</span>
+                              <span className="truncate font-mono text-xs font-semibold text-roksal-amber-text">{p.code}</span>
                               <StatusBadge status={p.status} />
                             </AnimatedListItem>
                           ))}

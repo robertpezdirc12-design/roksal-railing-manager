@@ -128,7 +128,7 @@ export function ShareCard ({
     ? <Badge className="border-transparent bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">soglasje veljavno</Badge>
     : consent.status === 'POTEKLO'
       ? <Badge className="border-transparent bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">soglasje poteklo</Badge>
-      : <Badge className="border-transparent bg-muted text-muted-foreground">soglasje manjka</Badge>
+      : <Badge className="border-transparent bg-secondary text-secondary-foreground">soglasje manjka</Badge>
 
   return (
     <Card>

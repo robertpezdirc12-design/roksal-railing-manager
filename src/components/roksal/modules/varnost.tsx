@@ -175,7 +175,7 @@ export default function VarnostModule () {
                 <CardContent className="flex flex-wrap items-center justify-between gap-2 p-3">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="rounded-md bg-secondary px-1.5 py-0.5 font-mono text-[11px] font-semibold text-roksal-amber">
+                      <span className="rounded-md bg-secondary px-1.5 py-0.5 font-mono text-[11px] font-semibold text-roksal-amber-text">
                         {ACTION_LABELS[a.action] ?? a.action}
                       </span>
                       <span className="text-xs text-muted-foreground">{a.user?.name ?? 'sistem'}</span>
@@ -438,7 +438,7 @@ function DeliveryStatusBadge ({ status }: { status: string }) {
 
 function ChannelBadge ({ channel }: { channel: string }) {
   if (channel === 'IN_APP') return <Badge variant="outline" className="font-mono text-[10px]">IN_APP</Badge>
-  if (channel === 'EMAIL') return <Badge variant="outline" className="font-mono text-[10px] text-roksal-amber">EMAIL</Badge>
+  if (channel === 'EMAIL') return <Badge variant="outline" className="font-mono text-[10px] text-roksal-amber-text">EMAIL</Badge>
   return <Badge variant="outline" className="font-mono text-[10px] text-muted-foreground">{channel}</Badge>
 }
 

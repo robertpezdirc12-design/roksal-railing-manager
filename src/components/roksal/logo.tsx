@@ -20,7 +20,7 @@ export function RoksalLogo ({ compact = false }: { compact?: boolean }) {
       <RoksalMark className="size-8 shrink-0 text-roksal-ink" />
       <div className="leading-tight">
         <div className="font-bold tracking-tight text-roksal-ink dark:text-foreground">Roksal</div>
-        {!compact ? <div className="text-[11px] font-medium uppercase tracking-widest text-roksal-amber">Railing Manager</div> : null}
+        {!compact ? <div className="text-[11px] font-medium uppercase tracking-widest text-roksal-amber-text">Railing Manager</div> : null}
       </div>
     </div>
   )

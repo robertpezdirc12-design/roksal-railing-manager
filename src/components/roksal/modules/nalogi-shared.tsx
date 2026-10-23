@@ -76,10 +76,10 @@ export const MEASUREMENT_TYPES: Record<string, { label: string; cls: string }> =
   BALUSTRADA: { label: 'Balustrada', cls: 'bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300' },
   NAGIB: { label: 'Nagib', cls: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300' },
   FOTO: { label: 'Foto', cls: 'bg-violet-100 text-violet-800 dark:bg-violet-950 dark:text-violet-300' },
-  OSTANEO: { label: 'Ostaneo', cls: 'bg-muted text-muted-foreground' },
+  OSTANEO: { label: 'Ostaneo', cls: 'bg-secondary text-secondary-foreground' },
 }
 
 export function MeasurementTypeBadge ({ type }: { type: string }) {
-  const t = MEASUREMENT_TYPES[type] ?? { label: type, cls: 'bg-muted text-muted-foreground' }
+  const t = MEASUREMENT_TYPES[type] ?? { label: type, cls: 'bg-secondary text-secondary-foreground' }
   return <Badge variant="secondary" className={cn('border-transparent font-medium', t.cls)}>{t.label}</Badge>
 }

@@ -31,7 +31,7 @@ export default function TerenModule () {
               <Card>
                 <CardContent className="p-4">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="font-mono text-xs font-semibold text-roksal-amber">{p.code}</span>
+                    <span className="font-mono text-xs font-semibold text-roksal-amber-text">{p.code}</span>
                     <StatusBadge status={p.status} />
                   </div>
                   <div className="mt-1.5 font-semibold leading-snug">{p.title}</div>
@@ -55,7 +55,7 @@ export default function TerenModule () {
             {(wo.data?.data ?? []).map((w) => (
               <AnimatedListItem key={w.id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl border p-3">
                 <div className="min-w-0">
-                  <span className="font-mono text-xs font-semibold text-roksal-amber">{w.code}</span>
+                  <span className="font-mono text-xs font-semibold text-roksal-amber-text">{w.code}</span>
                   <span className="ml-2 text-sm font-medium">{w.title}</span>
                 </div>
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">

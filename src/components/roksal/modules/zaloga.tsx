@@ -169,7 +169,7 @@ function PregledTab () {
                     const low = it.available <= it.reorderAt
                     return (
                       <TableRow key={it.id} className={low ? 'bg-red-50 dark:bg-red-950/40' : undefined}>
-                        <TableCell className="pl-4 font-mono text-xs font-semibold text-roksal-amber">{it.sku}</TableCell>
+                        <TableCell className="pl-4 font-mono text-xs font-semibold text-roksal-amber-text">{it.sku}</TableCell>
                         <TableCell className="font-medium">
                           {it.name}
                           {low ? <span className="ml-2 inline-flex items-center gap-1 text-xs font-semibold text-red-600 dark:text-red-400"><AlertTriangle className="size-3" aria-hidden />pod mejo</span> : null}
@@ -371,7 +371,7 @@ function PickingTab () {
               <AnimatedListItem key={p.id}>
                 <Card className="transition hover:border-roksal-amber/60">
                   <CardContent className="flex flex-wrap items-center gap-x-3 gap-y-1.5 p-4">
-                    <span className="font-mono text-xs font-semibold text-roksal-amber">{p.code}</span>
+                    <span className="font-mono text-xs font-semibold text-roksal-amber-text">{p.code}</span>
                     <StatusBadge status={p.status} />
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-sm font-semibold">

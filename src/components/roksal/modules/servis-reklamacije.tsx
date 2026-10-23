@@ -74,7 +74,7 @@ export function ReklamacijeTab () {
               <Card className="transition hover:border-roksal-amber/60">
                 <CardContent className="space-y-1.5 p-4">
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                    <span className="font-mono text-xs font-semibold text-roksal-amber">{c.code}</span>
+                    <span className="font-mono text-xs font-semibold text-roksal-amber-text">{c.code}</span>
                     <StatusBadge status={c.status} />
                     {c.serviceCase ? (
                       <Badge variant="outline" className="gap-1 font-mono text-xs">
@@ -184,7 +184,7 @@ function ClaimDetailDialog ({ id, office, onClose, onDone }: {
     <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl">
       <DialogHeader>
         <DialogTitle className="flex flex-wrap items-center gap-2">
-          <span className="font-mono text-roksal-amber">{c.code}</span>
+          <span className="font-mono text-roksal-amber-text">{c.code}</span>
           <StatusBadge status={c.status} />
         </DialogTitle>
         <DialogDescription>

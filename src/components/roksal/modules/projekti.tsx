@@ -80,7 +80,7 @@ export default function ProjektiModule () {
                 <Card className="transition hover:border-roksal-amber/60 hover:shadow-sm">
                   <CardContent className="p-4">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="font-mono text-xs font-semibold text-roksal-amber">{p.code}</span>
+                      <span className="font-mono text-xs font-semibold text-roksal-amber-text">{p.code}</span>
                       <StatusBadge status={p.status} />
                     </div>
                     <div className="mt-1.5 font-semibold leading-snug">{p.title}</div>
@@ -135,7 +135,7 @@ function ProjectDetailDialog ({ detail, onNavigate }: { detail: ProjectDetail; o
     <>
       <DialogHeader>
         <div className="flex items-center gap-2">
-          <span className="font-mono text-xs font-semibold text-roksal-amber">{detail.code}</span>
+          <span className="font-mono text-xs font-semibold text-roksal-amber-text">{detail.code}</span>
           <StatusBadge status={detail.status} />
           <Button
             variant="outline" size="sm" className="ml-auto h-7 gap-1.5 px-2 text-xs"

@@ -145,7 +145,7 @@ export function PredogledViewport ({
       {mode === 'off' ? (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-secondary/60 p-6 text-center">
           <Camera className="size-10 text-muted-foreground/60" aria-hidden />
-          <p className="max-w-sm text-sm text-muted-foreground">
+          <p className="max-w-sm text-sm text-foreground/70">
             Vklopite kamero za predogled ograje na realni lokaciji — ali uporabite demo ozadje, če kamere ni.
           </p>
           <div className="flex flex-wrap justify-center gap-2">
@@ -338,23 +338,23 @@ export function PredogledNavodila (): React.ReactElement {
         <CollapsibleContent>
           <ol id="ar-nezadostni-podatki" className="space-y-1.5 border-t px-3 py-2.5">
             <li className="flex items-start gap-1.5 text-xs leading-snug">
-              <span aria-hidden className="mt-0.5 shrink-0 font-bold text-roksal-amber">1.</span>
+              <span aria-hidden className="mt-0.5 shrink-0 font-bold text-roksal-amber-text">1.</span>
               <span><strong>Posnemite dodatni pogled z drugega kota</strong> — zakriti rob ali konec se pogosto pokaže že z malo drugačnega stališča.</span>
             </li>
             <li className="flex items-start gap-1.5 text-xs leading-snug">
-              <span aria-hidden className="mt-0.5 shrink-0 font-bold text-roksal-amber">2.</span>
+              <span aria-hidden className="mt-0.5 shrink-0 font-bold text-roksal-amber-text">2.</span>
               <span><strong>Določite referenčno mero</strong> — znana dolžina v kadru (miknik, plošča, stopnica) omogoči izpeljavo centimetrov.</span>
             </li>
             <li className="flex items-start gap-1.5 text-xs leading-snug">
-              <span aria-hidden className="mt-0.5 shrink-0 font-bold text-roksal-amber">3.</span>
+              <span aria-hidden className="mt-0.5 shrink-0 font-bold text-roksal-amber-text">3.</span>
               <span><strong>Manjkajoči rob ali točko označite ročno</strong> — popravek razreda ali vrste se shrani kot označen podatek, izvirna zaznava ostane.</span>
             </li>
             <li className="flex items-start gap-1.5 text-xs leading-snug">
-              <span aria-hidden className="mt-0.5 shrink-0 font-bold text-roksal-amber">4.</span>
+              <span aria-hidden className="mt-0.5 shrink-0 font-bold text-roksal-amber-text">4.</span>
               <span><strong>Pri naklonu uporabite nivelir ali referenčno metodo</strong> — brez globinskih podatkov je naklon samo ocena (ročni vnos šteje kot izmera).</span>
             </li>
             <li className="flex items-start gap-1.5 text-xs leading-snug">
-              <span aria-hidden className="mt-0.5 shrink-0 font-bold text-roksal-amber">5.</span>
+              <span aria-hidden className="mt-0.5 shrink-0 font-bold text-roksal-amber-text">5.</span>
               <span><strong>Kritična mera brez dokaza NE gre v kosovnico</strong> — izmerite ročno ali iz tekača; prepoznava je samo predlog.</span>
             </li>
           </ol>

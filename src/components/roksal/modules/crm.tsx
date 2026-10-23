@@ -154,7 +154,7 @@ export default function CrmModule () {
                                 </Button>
                               ) : null}
                               <Button
-                                size="sm" variant="outline" className="border-roksal-amber/50 text-roksal-amber hover:bg-amber-50 hover:text-roksal-amber dark:hover:bg-amber-950/30"
+                                size="sm" variant="outline" className="border-roksal-amber/50 text-roksal-amber-text hover:bg-amber-50 hover:text-amber-800 dark:hover:bg-amber-950/30 dark:hover:text-roksal-amber"
                                 onClick={() => void convertLead(l.id, l.name)} aria-label={`Pretvori vod ${l.name} v projekt`}
                               >
                                 <FolderPlus className="size-3.5" aria-hidden /> V projekt

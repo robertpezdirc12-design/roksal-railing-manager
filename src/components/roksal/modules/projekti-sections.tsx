@@ -345,7 +345,7 @@ export function WarrantySection ({ projectId, projectStatus }: { projectId: stri
           </div>
           {w.note ? <p className="text-xs text-muted-foreground">{w.note}</p> : null}
           {w.nextVisit ? (
-            <p className="inline-flex items-center gap-1.5 text-xs font-medium text-roksal-amber">
+            <p className="inline-flex items-center gap-1.5 text-xs font-medium text-roksal-amber-text">
               <CalendarCheck className="size-3.5" aria-hidden /> Naslednji obisk: {fmtDate(w.nextVisit.date)}
               {w.nextVisit.note ? ` — ${w.nextVisit.note}` : ''}
             </p>

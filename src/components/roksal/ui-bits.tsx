@@ -53,9 +53,9 @@ const STATUS_MAP: Record<string, { label: string; cls: string }> = {
   AKTIVNI: { label: 'Aktivni', cls: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' },
   TEREN: { label: 'Na terenu', cls: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300' },
   ZAKLJUCEN: { label: 'Zaključen', cls: 'bg-secondary text-secondary-foreground' },
-  ARHIV: { label: 'Arhiv', cls: 'bg-muted text-muted-foreground' },
+  ARHIV: { label: 'Arhiv', cls: 'bg-secondary text-secondary-foreground' },
   // ponudbe
-  OSNUTEK: { label: 'Osnutek', cls: 'bg-muted text-muted-foreground' },
+  OSNUTEK: { label: 'Osnutek', cls: 'bg-secondary text-secondary-foreground' },
   POSLAN: { label: 'Poslan', cls: 'bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300' },
   SPREJET: { label: 'Sprejet', cls: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' },
   ZAVRNJEN: { label: 'Zavrnjen', cls: 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300' },
@@ -64,7 +64,7 @@ const STATUS_MAP: Record<string, { label: string; cls: string }> = {
   IZDAN: { label: 'Izdan', cls: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300' },
   DELNO_PLACAN: { label: 'Delno plačan', cls: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300' },
   PLACAN: { label: 'Plačan', cls: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' },
-  ZAPRT: { label: 'Zaprt', cls: 'bg-muted text-muted-foreground' },
+  ZAPRT: { label: 'Zaprt', cls: 'bg-secondary text-secondary-foreground' },
   // nalogi (terenski tok)
   NAPROGRAMIRAN: { label: 'Naprogramiran', cls: 'bg-secondary text-secondary-foreground' },
   V_TEKU: { label: 'V teku', cls: 'bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300' },
@@ -91,7 +91,7 @@ const STATUS_MAP: Record<string, { label: string; cls: string }> = {
   ZMAGOVALNA: { label: 'Zmagovitna', cls: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' },
   IZGUBLJENA: { label: 'Izgubljena', cls: 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300' },
   // projektni paketi (R442 — poslovni tok paketov)
-  POVPRAŠEVANJE: { label: 'Povpraševanje', cls: 'bg-muted text-muted-foreground' },
+  POVPRAŠEVANJE: { label: 'Povpraševanje', cls: 'bg-secondary text-secondary-foreground' },
   IZMERA: { label: 'Izmera', cls: 'bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300' },
   KONFIGURACIJA: { label: 'Konfiguracija', cls: 'bg-violet-100 text-violet-800 dark:bg-violet-950 dark:text-violet-300' },
   POTRJENO: { label: 'Potrjeno', cls: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' },
@@ -116,7 +116,7 @@ const STATUS_MAP: Record<string, { label: string; cls: string }> = {
   NI_ZACETO: { label: 'Ni začeto', cls: 'bg-secondary text-secondary-foreground' },
   V_REDU: { label: 'V redu', cls: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' },
   NAPAKA: { label: 'Napaka', cls: 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300' },
-  NI_RELEVANTNO: { label: 'Ni relevantno', cls: 'bg-muted text-muted-foreground' },
+  NI_RELEVANTNO: { label: 'Ni relevantno', cls: 'bg-secondary text-secondary-foreground' },
   CAKA_PREVERJANJE: { label: 'Čaka na preverjanje', cls: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300' },
   ODPRTO: { label: 'Odprto', cls: 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300' },
   ODRAVLJENO: { label: 'Odravljeno', cls: 'bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300' },
@@ -126,7 +126,7 @@ const STATUS_MAP: Record<string, { label: string; cls: string }> = {
 }
 
 export function StatusBadge ({ status }: { status: string }) {
-  const s = STATUS_MAP[status] ?? { label: status, cls: 'bg-muted text-muted-foreground' }
+  const s = STATUS_MAP[status] ?? { label: status, cls: 'bg-secondary text-secondary-foreground' }
   return <Badge variant="secondary" className={cn('border-transparent font-medium', s.cls)}>{s.label}</Badge>
 }
 

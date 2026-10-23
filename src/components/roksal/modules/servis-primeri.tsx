@@ -78,7 +78,7 @@ export function ServisTab () {
               <Card className="transition hover:border-roksal-amber/60">
                 <CardContent className="space-y-1.5 p-4">
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                    <span className="font-mono text-xs font-semibold text-roksal-amber">{c.code}</span>
+                    <span className="font-mono text-xs font-semibold text-roksal-amber-text">{c.code}</span>
                     <StatusBadge status={c.status} />
                     {c.decision ? (
                       <Badge variant="secondary" className={`border-transparent font-medium ${ODLOCITEV_CLS[c.decision] ?? ''}`}>
@@ -211,7 +211,7 @@ function CaseDetailDialog ({ id, onClose, onDone }: { id: string | null; onClose
     <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
       <DialogHeader>
         <DialogTitle className="flex flex-wrap items-center gap-2">
-          <span className="font-mono text-roksal-amber">{c.code}</span>
+          <span className="font-mono text-roksal-amber-text">{c.code}</span>
           <StatusBadge status={c.status} />
         </DialogTitle>
         <DialogDescription>
@@ -230,7 +230,7 @@ function CaseDetailDialog ({ id, onClose, onDone }: { id: string | null; onClose
             <li key={k.l} className="flex flex-1 items-center gap-1">
               <span className={`flex h-7 min-w-7 items-center justify-center rounded-full border px-2 font-medium ${k.done
                 ? 'border-transparent bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
-                : 'bg-muted text-muted-foreground'}`}>
+                : 'bg-secondary text-secondary-foreground'}`}>
                 {k.done ? <CheckCircle2 className="size-3.5" aria-hidden /> : <span aria-hidden>{i + 1}</span>}
                 <span className="sr-only">{k.done ? 'opravljeno: ' : 'korak: '}</span>
               </span>

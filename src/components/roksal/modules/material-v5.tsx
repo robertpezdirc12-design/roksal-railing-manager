@@ -89,7 +89,7 @@ export default function KosovniceModule () {
               <AnimatedListItem key={b.id}>
                 <Card className="transition hover:border-roksal-amber/60">
                   <CardContent className="flex flex-wrap items-center gap-x-3 gap-y-1.5 p-4">
-                    <span className="font-mono text-xs font-semibold text-roksal-amber">{b.code}</span>
+                    <span className="font-mono text-xs font-semibold text-roksal-amber-text">{b.code}</span>
                     <StatusBadge status={b.status} />
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-sm font-semibold">{b.product.name}{b.variant ? ` · ${b.variant.name}` : ''}</div>
@@ -256,7 +256,7 @@ function BomDetailDialog ({ bom, loading, canWrite, onChanged }: {
                         {l.reservedGlobal > 0 ? (
                           <>
                             {l.reservedGlobal}
-                            {l.reserved > 0 ? <span className="block text-[11px] text-roksal-amber">ta BOM: {l.reserved}</span> : null}
+                            {l.reserved > 0 ? <span className="block text-[11px] text-roksal-amber-text">ta BOM: {l.reserved}</span> : null}
                           </>
                         ) : '0'}
                       </TableCell>

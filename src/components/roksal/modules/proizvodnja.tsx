@@ -56,7 +56,7 @@ const QC_LABEL: Record<string, string> = { OK: 'Ustrezno', NOK: 'Neustrezno', NA
 const QC_CLS: Record<string, string> = {
   OK: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300',
   NOK: 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300',
-  NA: 'bg-muted text-muted-foreground',
+  NA: 'bg-secondary text-secondary-foreground',
   V_TEKU: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300',
 }
 const QC_RESULTS = ['OK', 'NOK', 'NA', 'V_TEKU'] as const
@@ -151,7 +151,7 @@ export default function ProizvodnjaModule () {
                   <AnimatedListItem key={o.id} className="flex cursor-pointer flex-wrap items-center gap-3 px-4 py-3 transition hover:bg-secondary/40" onClick={() => setQcFor(o)}>
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-mono text-xs font-semibold text-roksal-amber">{o.code}</span>
+                        <span className="font-mono text-xs font-semibold text-roksal-amber-text">{o.code}</span>
                         <StatusBadge status={o.status} />
                         <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
                           <ClipboardCheck className="size-3" aria-hidden /> QC
@@ -193,7 +193,7 @@ export default function ProizvodnjaModule () {
             <>
               <DialogHeader>
                 <div className="flex items-center gap-2">
-                  <span className="font-mono text-xs font-semibold text-roksal-amber">{qcFor.code}</span>
+                  <span className="font-mono text-xs font-semibold text-roksal-amber-text">{qcFor.code}</span>
                   <StatusBadge status={qcFor.status} />
                 </div>
                 <DialogTitle>Kontrola kakovosti — {qcFor.code}</DialogTitle>

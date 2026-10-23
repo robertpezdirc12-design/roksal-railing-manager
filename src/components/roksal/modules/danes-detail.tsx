@@ -360,8 +360,8 @@ export function Stepper7 ({ phase, code }: { phase: number; code: string }) {
               <div
                 className={cn(
                   'flex min-h-11 items-center gap-1.5 rounded-lg px-2.5 text-[11px] font-semibold uppercase tracking-wide',
-                  done && 'bg-roksal-green/15 text-roksal-green',
-                  current && 'bg-roksal-amber/20 text-roksal-amber ring-1 ring-roksal-amber/50',
+                  done && 'bg-roksal-green/15 text-emerald-700 dark:text-roksal-green',
+                  current && 'bg-roksal-amber/20 text-roksal-amber-text ring-1 ring-roksal-amber/50',
                   !done && !current && 'bg-secondary/60 text-muted-foreground',
                 )}
                 title={`${f.label} — ${done ? 'opravljeno' : current ? 'trenutna faza' : 'pred nami'}`}

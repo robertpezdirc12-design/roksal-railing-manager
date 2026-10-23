@@ -100,7 +100,7 @@ export default function DashboardModule () {
                     <li className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-2.5">
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <span className="font-mono text-xs font-semibold text-roksal-amber">{r.code}</span>
+                          <span className="font-mono text-xs font-semibold text-roksal-amber-text">{r.code}</span>
                           <StatusBadge status={r.status} />
                           <span className="text-xs text-muted-foreground">{r.done}/{r.total}</span>
                         </div>
@@ -183,7 +183,7 @@ export default function DashboardModule () {
                             {ops.overdue.list.map((w) => (
                               <AnimatedListItem key={w.id} className="flex items-center justify-between gap-2 text-sm">
                                 <div className="min-w-0">
-                                  <span className="font-mono text-xs font-semibold text-roksal-amber">{w.code}</span>
+                                  <span className="font-mono text-xs font-semibold text-roksal-amber-text">{w.code}</span>
                                   <span className="ml-2 truncate">{w.title}</span>
                                   <span className="block text-xs text-muted-foreground">{w.assignee ?? 'nedodeljen'}</span>
                                 </div>

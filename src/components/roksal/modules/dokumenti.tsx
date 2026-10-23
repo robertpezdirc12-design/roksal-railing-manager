@@ -147,7 +147,7 @@ export default function DokumentiModule () {
               {rows.map((d) => (
                 <TableRow key={`${d.kind}-${d.id}`} className="cursor-pointer" onClick={() => setSelected(d)}>
                   <TableCell className="pl-3"><KindBadge kind={d.kind} /></TableCell>
-                  <TableCell className="font-mono text-xs font-semibold text-roksal-amber">{d.code}</TableCell>
+                  <TableCell className="font-mono text-xs font-semibold text-roksal-amber-text">{d.code}</TableCell>
                   <TableCell className="max-w-40 truncate">{d.customerName ?? '—'}</TableCell>
                   <TableCell><StatusBadge status={d.status} /></TableCell>
                   <TableCell className="text-right tabular-nums">
@@ -219,7 +219,7 @@ function QuoteDetailCard ({ detail }: { detail: QuoteDetail }) {
       <DialogHeader>
         <div className="flex items-center gap-2">
           <KindBadge kind="PONUDBA" />
-          <span className="font-mono text-xs font-semibold text-roksal-amber">{detail.code}</span>
+          <span className="font-mono text-xs font-semibold text-roksal-amber-text">{detail.code}</span>
           <StatusBadge status={detail.status} />
         </div>
         <DialogTitle>Ponudba {detail.code}</DialogTitle>
@@ -284,7 +284,7 @@ function QuoteDetailCard ({ detail }: { detail: QuoteDetail }) {
           <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Izdani računi</h3>
           {detail.invoices.map((iv) => (
             <div key={iv.id} className="flex items-center justify-between rounded-lg bg-secondary/60 px-3 py-2 text-sm">
-              <span className="font-mono text-xs font-semibold text-roksal-amber">{iv.code}</span>
+              <span className="font-mono text-xs font-semibold text-roksal-amber-text">{iv.code}</span>
               <StatusBadge status={iv.status} />
               <span className="tabular-nums">{fmtEUR(iv.total)}</span>
             </div>
@@ -302,7 +302,7 @@ function InvoiceDetailCard ({ detail }: { detail: InvoiceDetail }) {
       <DialogHeader>
         <div className="flex items-center gap-2">
           <KindBadge kind="RACUN" />
-          <span className="font-mono text-xs font-semibold text-roksal-amber">{detail.code}</span>
+          <span className="font-mono text-xs font-semibold text-roksal-amber-text">{detail.code}</span>
           <StatusBadge status={detail.status} />
         </div>
         <DialogTitle>Račun {detail.code}</DialogTitle>

@@ -142,7 +142,7 @@ export default function PonudbeModule () {
                 <Card className="transition hover:border-roksal-amber/60 hover:shadow-sm">
                   <CardContent className="p-4">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="font-mono text-xs font-semibold text-roksal-amber">{qq.code}</span>
+                      <span className="font-mono text-xs font-semibold text-roksal-amber-text">{qq.code}</span>
                       <div className="flex items-center gap-1.5">
                         {qq.staleAt ? (
                           <span
@@ -316,7 +316,7 @@ function QuoteDetailDialog ({ detail, canCreate, canApprove, busy, onStatus, onD
     <>
       <DialogHeader>
         <div className="flex items-center gap-2">
-          <span className="font-mono text-xs font-semibold text-roksal-amber">{detail.code}</span>
+          <span className="font-mono text-xs font-semibold text-roksal-amber-text">{detail.code}</span>
           <StatusBadge status={detail.status} />
           {detail.priceCheck && detail.priceCheck !== 'APPROVED' ? (
             <span

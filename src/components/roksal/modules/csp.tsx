@@ -154,20 +154,20 @@ export default function CspModule () {
                 <div className="min-w-0 space-y-1 text-sm">
                   {resp.data.mode === 'enforce' ? (
                     <>
-                      <p className="font-medium text-roksal-green">Politika že teče v načinu ENFORCE.</p>
+                      <p className="font-medium text-emerald-700 dark:text-roksal-green">Politika že teče v načinu ENFORCE.</p>
                       <p className="text-muted-foreground">Kršitve se blokirajo in hkrati poročajo — pripravljenost za preklop ni več vprašanje.</p>
                     </>
                   ) : resp.data.readyToEnforce ? (
                     <>
-                      <p className="font-medium text-roksal-green">Pripravljenost po podatkih: 0 kršitev v zadnjih 7 dneh — preklop v Enforce je varen.</p>
+                      <p className="font-medium text-emerald-700 dark:text-roksal-green">Pripravljenost po podatkih: 0 kršitev v zadnjih 7 dneh — preklop v Enforce je varen.</p>
                       <p className="text-muted-foreground">
                         Opazovalno obdobje (Report-Only) je čisto. Preklop je lastnikova odločitev ob namestitvi: v produkciji nastavi{' '}
-                        <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">CSP_MODE=enforce</code> (glej config/ENV-VARS.md).
+                        <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs text-secondary-foreground">CSP_MODE=enforce</code> (glej config/ENV-VARS.md).
                       </p>
                     </>
                   ) : (
                     <>
-                      <p className="font-medium text-roksal-amber">Preklop še ni varen: {resp.data.summary.last7d} kršitev v zadnjih 7 dneh.</p>
+                      <p className="font-medium text-roksal-amber-text">Preklop še ni varen: {resp.data.summary.last7d} kršitev v zadnjih 7 dneh.</p>
                       <p className="text-muted-foreground">Enforce bi te vire blokiral. Pregledaj direktive in strani spodaj, odpravi vzroke, nato počakaj čisto 7-dnevno okno.</p>
                     </>
                   )}

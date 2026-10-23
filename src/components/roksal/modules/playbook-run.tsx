@@ -160,7 +160,7 @@ export function RunView ({ runId, onNazaj }: { runId: string; onNazaj: () => voi
                   ) : st?.status === 'NI_PRIMERNO' || st?.status === 'BLOKIRANO' ? (
                     <Ban className="size-4 shrink-0 text-orange-500" aria-label={st.status === 'NI_PRIMERNO' ? 'Ni primerno' : 'Blokirano'} />
                   ) : jeTrenutni ? (
-                    <Play className="size-4 shrink-0 text-roksal-amber" aria-label="Trenutni" />
+                    <Play className="size-4 shrink-0 text-roksal-amber-text" aria-label="Trenutni" />
                   ) : (
                     <Circle className="size-4 shrink-0 text-muted-foreground/40" aria-label="Čaka" />
                   )}

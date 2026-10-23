@@ -65,11 +65,11 @@ const TYPE_BADGES: Record<string, { label: string; cls: string }> = {
   BALUSTRADA: { label: 'Balustrada', cls: 'bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300' },
   NAGIB: { label: 'Nagib', cls: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300' },
   FOTO: { label: 'Foto', cls: 'bg-violet-100 text-violet-800 dark:bg-violet-950 dark:text-violet-300' },
-  OSTANEO: { label: 'Ostalo', cls: 'bg-muted text-muted-foreground' },
+  OSTANEO: { label: 'Ostalo', cls: 'bg-secondary text-secondary-foreground' },
 }
 
 function TypeBadge ({ type }: { type: string }) {
-  const t = TYPE_BADGES[type] ?? { label: type, cls: 'bg-muted text-muted-foreground' }
+  const t = TYPE_BADGES[type] ?? { label: type, cls: 'bg-secondary text-secondary-foreground' }
   return <Badge variant="secondary" className={cn('border-transparent font-medium', t.cls)}>{t.label}</Badge>
 }
 
@@ -78,7 +78,7 @@ function TypeBadge ({ type }: { type: string }) {
 // dokazane/potrdjene so zeleno-sive. Isti besedi kot v tekaču ogradnje in v
 // izvozu (ena lestvica, ne dve).
 const STATUS_TONE: Record<string, string> = {
-  ESTIMATED: 'bg-muted text-muted-foreground',
+  ESTIMATED: 'bg-secondary text-secondary-foreground',
   AUTO_SUGGESTED: 'bg-violet-100 text-violet-800 dark:bg-violet-950 dark:text-violet-300',
   MANUAL: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300',
   CALIBRATED: 'bg-teal-100 text-teal-800 dark:bg-teal-950 dark:text-teal-300',
@@ -94,7 +94,7 @@ function StatusBadge ({ status }: { status?: string | null }) {
     <Badge
       variant="secondary"
       title={MEASUREMENT_STATUS_LABELS[s] ?? status}
-      className={cn('border-transparent px-1.5 py-0 text-[10px] font-medium', STATUS_TONE[s] ?? 'bg-muted text-muted-foreground')}
+      className={cn('border-transparent px-1.5 py-0 text-[10px] font-medium', STATUS_TONE[s] ?? 'bg-secondary text-secondary-foreground')}
     >
       {MEASUREMENT_STATUS_SHORT[s] ?? status}
     </Badge>

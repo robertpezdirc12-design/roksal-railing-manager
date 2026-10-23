@@ -67,7 +67,7 @@ export function DostaveTab () {
               <Card className="transition hover:border-roksal-amber/60">
                 <CardContent className="space-y-1.5 p-4">
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                    <span className="font-mono text-xs font-semibold text-roksal-amber">{d.code}</span>
+                    <span className="font-mono text-xs font-semibold text-roksal-amber-text">{d.code}</span>
                     <StatusBadge status={d.status} />
                     <span className="ml-auto text-xs text-muted-foreground">{d.items.length} vrstic</span>
                   </div>

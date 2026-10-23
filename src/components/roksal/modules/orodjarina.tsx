@@ -58,7 +58,7 @@ const STATUSES = [
   { value: 'POKVARJENO', label: 'Pokvarjeno', cls: 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300' },
 ]
 
-const statusMeta = (s: string) => STATUSES.find((x) => x.value === s) ?? { value: s, label: s, cls: 'bg-muted text-muted-foreground' }
+const statusMeta = (s: string) => STATUSES.find((x) => x.value === s) ?? { value: s, label: s, cls: 'bg-secondary text-secondary-foreground' }
 const catLabel = (c: string) => CATEGORIES.find((x) => x.value === c)?.label ?? c
 
 const DAY = 86400000
@@ -186,7 +186,7 @@ export default function OrodjarinaModule () {
                       <button
                         type="button"
                         onClick={() => setHistoryFor(e)}
-                        className="font-mono text-xs font-bold text-roksal-amber underline-offset-2 hover:underline"
+                        className="font-mono text-xs font-bold text-roksal-amber-text underline-offset-2 hover:underline"
                         aria-label={`Zgodovina izposoj — ${e.code}`}
                       >
                         {e.code}
@@ -328,7 +328,7 @@ function HistoryDialog ({ detail }: { detail: EquipDetail }) {
     <>
       <DialogHeader>
         <div className="flex items-center gap-2">
-          <span className="font-mono text-xs font-bold text-roksal-amber">{detail.code}</span>
+          <span className="font-mono text-xs font-bold text-roksal-amber-text">{detail.code}</span>
           <Badge variant="secondary" className={`border-transparent font-medium ${statusMeta(detail.status).cls}`}>{statusMeta(detail.status).label}</Badge>
         </div>
         <DialogTitle>Zgodovina izposoj — {detail.code}</DialogTitle>

@@ -174,7 +174,7 @@ export function NalogDetail ({ detail, offline = false, canTransition, canResche
     <>
       <DialogHeader>
         <div className="flex items-center gap-2">
-          <span className="font-mono text-xs font-semibold text-roksal-amber">{detail.code}</span>
+          <span className="font-mono text-xs font-semibold text-roksal-amber-text">{detail.code}</span>
           <StatusBadge status={detail.status} />
           {offline ? (
             <Badge variant="secondary" className="border-amber-300 bg-amber-100 text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
@@ -235,7 +235,7 @@ export function NalogDetail ({ detail, offline = false, canTransition, canResche
             { label: 'Teren zaključen', done: detail.status === 'ZAKLJUCEN' },
           ].map((step, i) => (
             <li key={step.label} className={`flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-sm ${step.done ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-900 dark:bg-emerald-950/30' : ''}`}>
-              <span className={`flex size-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${step.done ? 'bg-emerald-500 text-white' : 'bg-muted text-muted-foreground'}`} aria-hidden>
+              <span className={`flex size-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${step.done ? 'bg-emerald-500 text-white' : 'bg-secondary text-secondary-foreground'}`} aria-hidden>
                 {step.done ? '✓' : i + 1}
               </span>
               <span className={step.done ? 'font-medium text-emerald-900 dark:text-emerald-200' : 'text-muted-foreground'}>

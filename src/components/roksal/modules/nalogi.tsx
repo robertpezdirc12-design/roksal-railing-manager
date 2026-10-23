@@ -182,7 +182,7 @@ export default function NalogiModule () {
                 <Card className="transition hover:border-roksal-amber/60 hover:shadow-sm">
                   <CardContent className="p-4">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="font-mono text-xs font-semibold text-roksal-amber">{wo.code}</span>
+                      <span className="font-mono text-xs font-semibold text-roksal-amber-text">{wo.code}</span>
                       <StatusBadge status={wo.status} />
                     </div>
                     <div className="mt-1.5 font-semibold leading-snug">{wo.title}</div>
@@ -237,7 +237,7 @@ export default function NalogiModule () {
                         </span>
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm">
-                            <span className="font-mono text-xs font-semibold text-roksal-amber">{ev.workOrder.code}</span>
+                            <span className="font-mono text-xs font-semibold text-roksal-amber-text">{ev.workOrder.code}</span>
                             <span className="font-medium">{meta.label}</span>
                           </div>
                           <div className="mt-0.5 text-xs text-muted-foreground">

@@ -225,7 +225,7 @@ export function AppShell () {
             >
               <Search className="size-4" aria-hidden />
               <span className="hidden text-xs sm:inline">Iskanje</span>
-              <kbd className="ml-1 hidden rounded border bg-secondary px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground lg:inline">Ctrl K</kbd>
+              <kbd className="ml-1 hidden rounded border bg-secondary px-1.5 py-0.5 text-[10px] font-semibold text-secondary-foreground lg:inline">Ctrl K</kbd>
             </Button>
 
             <Popover onOpenChange={openNotifications}>
@@ -337,9 +337,12 @@ export function AppShell () {
 
       {/* telo */}
       <div className="mx-auto flex w-full max-w-7xl flex-1 gap-6 px-3 pb-24 pt-4 sm:px-4 md:pb-8">
-        {/* stranska vrstica — desktop */}
+        {/* stranska vrstica — desktop — R581: temna blagovna znamka (navy plošča +
+            jantarna tabletka aktivnega zavihka), fiksne barve v obeh temah.
+            Geometrija (w-60, sticky top-20, max-h) NESPREMEMNJENA — lepljiva
+            noga in sonda prelivov ostajata veljavna. */}
         <nav aria-label="Glavna navigacija" className="hidden w-60 shrink-0 md:block" data-tour="nav">
-          <div className="sticky top-20 max-h-[calc(100vh-9.375rem)] space-y-4 overflow-y-auto pr-1">
+          <div className="rail-scroll sticky top-20 max-h-[calc(100vh-9.375rem)] space-y-4 overflow-y-auto rounded-2xl bg-roksal-rail p-3 shadow-lg ring-1 ring-white/10">
             {SECTIONS.map((sec) => {
               const tabs = sec.tabs.filter((t) => tabVisible(user.perms, t))
               if (tabs.length === 0) return null
@@ -348,8 +351,8 @@ export function AppShell () {
                   <button
                     type="button" onClick={() => pickSection(sec.id)}
                     className={cn(
-                      'mb-1 w-full rounded-lg px-2 py-1.5 text-left text-[11px] font-bold uppercase tracking-widest transition',
-                      section === sec.id ? 'text-roksal-amber' : 'text-muted-foreground hover:text-foreground'
+                      'mb-1 w-full rounded-lg px-2 py-1.5 text-left text-[11px] font-bold uppercase tracking-widest transition focus-visible:outline-2 focus-visible:outline-ring',
+                      section === sec.id ? 'text-roksal-amber' : 'text-slate-400 hover:text-slate-200'
                     )}
                     aria-current={section === sec.id ? 'true' : undefined}
                   >
@@ -361,10 +364,10 @@ export function AppShell () {
                         <button
                           type="button" onClick={() => { setSection(sec.id); setTab(t.id); pushTabState(t.id) }}
                           className={cn(
-                            'w-full rounded-lg px-3 py-2 text-left text-sm font-medium transition',
+                            'w-full rounded-lg px-3 py-2 text-left text-sm font-medium transition focus-visible:outline-2 focus-visible:outline-ring',
                             tab === t.id
-                              ? 'bg-primary text-primary-foreground shadow-sm'
-                              : 'text-foreground/80 hover:bg-secondary'
+                              ? 'bg-roksal-amber font-semibold text-roksal-amber-ink shadow'
+                              : 'text-slate-300 hover:bg-white/10 hover:text-white'
                           )}
                           aria-current={tab === t.id ? 'page' : undefined}
                         >
@@ -424,7 +427,7 @@ export function AppShell () {
                 key={sec.id} type="button" onClick={() => pickSection(sec.id)}
                 className={cn(
                   'flex min-h-[56px] flex-col items-center justify-center gap-0.5 px-1 py-2 text-[10px] font-semibold transition',
-                  section === sec.id ? 'text-roksal-amber' : 'text-muted-foreground hover:text-foreground'
+                  section === sec.id ? 'text-roksal-amber-text' : 'text-muted-foreground hover:text-foreground'
                 )}
                 aria-current={section === sec.id ? 'page' : undefined}
               >
@@ -439,7 +442,7 @@ export function AppShell () {
               className={cn(
                 'flex min-h-[56px] flex-col items-center justify-center gap-0.5 px-1 py-2 text-[10px] font-semibold transition',
                 availableSections.slice(4).some((s) => s.id === section)
-                  ? 'text-roksal-amber'
+                  ? 'text-roksal-amber-text'
                   : 'text-muted-foreground hover:text-foreground'
               )}
               aria-label="Več sekcij"
@@ -472,7 +475,7 @@ export function AppShell () {
                     className={cn(
                       'flex min-h-[64px] w-full flex-col items-center justify-center gap-1 rounded-xl border px-1 py-2 text-[11px] font-semibold transition',
                       active
-                        ? 'border-roksal-amber bg-roksal-amber/10 text-roksal-amber'
+                        ? 'border-roksal-amber bg-roksal-amber/10 text-roksal-amber-text'
                         : 'border-border bg-background text-muted-foreground hover:border-roksal-amber/50 hover:text-foreground'
                     )}
                     aria-current={active ? 'page' : undefined}
@@ -591,7 +594,7 @@ function OfflineBadge () {
                 'inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold',
                 online
                   ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
-                  : 'bg-muted text-muted-foreground'
+                  : 'bg-secondary text-secondary-foreground'
               )}
             >
               <span className={cn('size-1.5 rounded-full', online ? 'bg-emerald-500' : 'bg-muted-foreground/60')} aria-hidden />

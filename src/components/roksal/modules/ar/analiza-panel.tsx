@@ -34,7 +34,7 @@ export function AnalizaPanel ({ analysis, setAnalysis }: {
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-semibold">{p.label}</span>
                   {p.estLenCm != null ? (
-                    <Badge variant="outline" className="border-roksal-amber/40 text-roksal-amber">
+                    <Badge variant="outline" className="border-roksal-amber/40 text-roksal-amber-text">
                       ≈ {(p.estLenCm / 100).toFixed(1).replace('.', ',')} m
                     </Badge>
                   ) : null}

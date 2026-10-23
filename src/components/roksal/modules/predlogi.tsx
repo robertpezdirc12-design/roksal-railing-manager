@@ -194,7 +194,7 @@ export default function PredlogiModule () {
                         </TableCell>
                       ) : null}
                       <TableCell className={cn('max-w-52', canWrite ? '' : 'pl-4')}>
-                        <div className="font-mono text-xs font-semibold text-roksal-amber">{r.sku}</div>
+                        <div className="font-mono text-xs font-semibold text-roksal-amber-text">{r.sku}</div>
                         <div className="truncate text-sm font-medium" title={r.name}>{r.name}</div>
                         {r.boms > 0 ? (
                           <div className="text-[11px] text-muted-foreground">{r.boms} {r.boms === 1 ? 'kosovnica' : r.boms === 2 ? 'kosovnici' : 'kosovnic'}</div>

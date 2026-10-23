@@ -401,7 +401,7 @@ export function PublicViz ({ token }: { token: string }) {
             <RoksalMark className="size-8 shrink-0 text-roksal-ink dark:text-foreground" />
             <div className="leading-tight">
               <p className="text-sm font-bold tracking-tight">ROKSAL</p>
-              <p className="text-[10px] font-medium uppercase tracking-widest text-roksal-amber">ograde in ograje</p>
+              <p className="text-[10px] font-medium uppercase tracking-widest text-roksal-amber-text">ograde in ograje</p>
             </div>
           </div>
           {state.kind === 'ok' ? (
@@ -435,7 +435,7 @@ export function PublicViz ({ token }: { token: string }) {
           <>
             {/* naslov projekta */}
             <div className="space-y-2">
-              <p className="text-[11px] font-semibold uppercase tracking-widest text-roksal-amber">Javni vizualizator</p>
+              <p className="text-[11px] font-semibold uppercase tracking-widest text-roksal-amber-text">Javni vizualizator</p>
               <h1 className="text-xl font-bold leading-snug sm:text-2xl">Prijava izbire za {state.data.project.title}</h1>
               <div className="flex flex-wrap items-center gap-1.5">
                 <Badge variant="secondary">{state.data.project.code}</Badge>

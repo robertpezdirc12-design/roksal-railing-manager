@@ -80,7 +80,7 @@ export default function OgradnjaModule () {
       {rows.length > 0 && (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {rows.map((r) => {
-            const st = STATUS_BADGES[r.status] ?? { label: r.status, cls: 'bg-muted text-muted-foreground' }
+            const st = STATUS_BADGES[r.status] ?? { label: r.status, cls: 'bg-secondary text-secondary-foreground' }
             return (
               <Card key={r.id} className="gap-3 py-4">
                 <CardContent className="space-y-3 px-4">

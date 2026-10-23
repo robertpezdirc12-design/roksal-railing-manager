@@ -105,7 +105,7 @@ export function DeliveryDetailDialog ({ id, onClose, onDone }: { id: string | nu
     <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
       <DialogHeader>
         <DialogTitle className="flex flex-wrap items-center gap-2">
-          <span className="font-mono text-roksal-amber">{d.code}</span>
+          <span className="font-mono text-roksal-amber-text">{d.code}</span>
           <StatusBadge status={d.status} />
         </DialogTitle>
         <DialogDescription>

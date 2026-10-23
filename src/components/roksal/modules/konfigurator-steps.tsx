@@ -346,7 +346,7 @@ export function StepIzracun ({ plan, busy, error, onRecalc, familyLabel }: {
                 <span className="font-mono text-xs text-muted-foreground">{l.sku}</span>
                 <span className="min-w-0 flex-1 truncate text-sm font-medium" title={l.name}>{l.name}</span>
                 {l.segmentKey ? (
-                  <Badge className="border-transparent bg-roksal-amber/15 text-roksal-amber dark:text-roksal-amber">{l.segmentKey}</Badge>
+                  <Badge className="border-transparent bg-roksal-amber/15 text-roksal-amber-text">{l.segmentKey}</Badge>
                 ) : null}
                 {l.covered ? (
                   <Badge className="border-transparent bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">na zalogi ({l.stockQty})</Badge>

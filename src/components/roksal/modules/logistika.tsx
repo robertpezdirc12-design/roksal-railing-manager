@@ -150,7 +150,7 @@ export default function LogistikaModule () {
               )}>
                 <span className={cn(
                   'text-sm font-bold',
-                  col.tone === 'today' && 'text-roksal-amber dark:text-amber-400',
+                  col.tone === 'today' && 'text-roksal-amber-text dark:text-amber-400',
                   col.tone === 'overdue' && 'text-red-700 dark:text-red-300'
                 )}>
                   {col.label}
@@ -163,7 +163,7 @@ export default function LogistikaModule () {
                     <Card className={cn('border-border/70 py-0 shadow-none', c.overdue && 'border-red-300 dark:border-red-800')}>
                       <CardContent className="space-y-1 p-3">
                         <div className="flex items-center justify-between gap-2">
-                          <span className="font-mono text-[11px] font-semibold text-roksal-amber">{c.code}</span>
+                          <span className="font-mono text-[11px] font-semibold text-roksal-amber-text">{c.code}</span>
                           {c.kind === 'proizvodnja' ? (
                             <Badge variant="secondary" className="border-transparent bg-secondary text-[10px] text-secondary-foreground">
                               <Factory className="mr-1 size-3" aria-hidden /> proizvodnja

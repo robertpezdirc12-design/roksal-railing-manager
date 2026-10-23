@@ -123,7 +123,7 @@ export function ProductAssetsSection ({ productId }: { productId: string }) {
               {a.note ? <p className="text-[10px] leading-snug text-muted-foreground" title={a.note}>{a.note.slice(0, 160)}{a.note.length > 160 ? '…' : ''}</p> : null}
               {a.sha256 ? <p className="truncate font-mono text-[9px] text-muted-foreground" title={a.sha256}>sha256: {a.sha256.slice(0, 12)}…</p> : null}
               {a.sourceUrl ? (
-                <a href={a.sourceUrl} target="_blank" rel="noreferrer" className="block truncate text-[10px] text-roksal-amber hover:underline" title={a.sourceUrl}>izvirnik (roksal.com)</a>
+                <a href={a.sourceUrl} target="_blank" rel="noreferrer" className="block truncate text-[10px] text-roksal-amber-text hover:underline" title={a.sourceUrl}>izvirnik (roksal.com)</a>
               ) : null}
             </div>
           </div>
@@ -165,7 +165,7 @@ export function ProductAssetsSection ({ productId }: { productId: string }) {
                 </div>
                 {a.sha256 ? <p className="truncate font-mono text-[9px] text-muted-foreground" title={a.sha256}>sha256: {a.sha256.slice(0, 12)}…</p> : null}
                 {a.sourceUrl ? (
-                  <a href={a.sourceUrl} target="_blank" rel="noreferrer" className="block truncate text-[10px] text-roksal-amber hover:underline" title={a.sourceUrl}>izvirnik (roksal.com)</a>
+                  <a href={a.sourceUrl} target="_blank" rel="noreferrer" className="block truncate text-[10px] text-roksal-amber-text hover:underline" title={a.sourceUrl}>izvirnik (roksal.com)</a>
                 ) : null}
               </div>
             </AnimatedListItem>

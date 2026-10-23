@@ -174,7 +174,7 @@ export function PreckaPanel (): React.ReactElement {
                       <span className="font-semibold">Foto {d.foto}</span>
                       <span className="text-muted-foreground">{d.kaj}</span>
                       {d.ocenaCm != null ? (
-                        <Badge variant="outline" className="border-roksal-amber/40 text-roksal-amber">
+                        <Badge variant="outline" className="border-roksal-amber/40 text-roksal-amber-text">
                           ≈ {(d.ocenaCm / 100).toFixed(1).replace('.', ',')} m
                         </Badge>
                       ) : <span className="text-xs text-muted-foreground">ocena ni mogoča</span>}

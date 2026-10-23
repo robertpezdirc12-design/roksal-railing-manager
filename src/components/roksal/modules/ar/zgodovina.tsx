@@ -211,7 +211,7 @@ export function Zgodovina ({ canWrite, snapshots }: {
                             {detail.analysis.placement.map((p, i) => (
                               <li key={i} className="rounded-md border bg-secondary/40 p-2">
                                 <span className="font-semibold">{p.label}</span>
-                                {p.estLenCm != null ? <span className="ml-2 text-xs text-roksal-amber">≈ {(p.estLenCm / 100).toFixed(1).replace('.', ',')} m</span> : null}
+                                {p.estLenCm != null ? <span className="ml-2 text-xs text-roksal-amber-text">≈ {(p.estLenCm / 100).toFixed(1).replace('.', ',')} m</span> : null}
                                 <p className="text-xs text-muted-foreground">{p.where}</p>
                               </li>
                             ))}

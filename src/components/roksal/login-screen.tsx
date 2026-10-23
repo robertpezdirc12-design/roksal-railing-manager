@@ -206,7 +206,7 @@ export function LoginScreen () {
         </div>
       </main>
       <div className="mt-4 text-center">
-        <a href="/demo" className="text-sm text-roksal-amber hover:underline">Brezplačen demo — preizkusite vse funkcije</a>
+        <a href="/demo" className="text-sm text-roksal-amber-text hover:underline">Brezplačen demo — preizkusite vse funkcije</a>
       </div>
       <footer className="mt-auto border-t bg-card/60 px-4 py-3 text-center text-xs text-muted-foreground">
         © 2026 Roksal d.o.o. · rekonstrukcija R431 (vir: Vercel deployment dpl_EeeiLg…)

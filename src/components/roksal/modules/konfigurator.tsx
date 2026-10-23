@@ -480,8 +480,8 @@ export default function KonfiguratorModule () {
                   title={`${s.label} — ${done ? 'opravljeno' : current ? 'trenutni korak' : 'pred nami'}`}
                   className={cn(
                     'flex min-h-11 items-center gap-1.5 rounded-lg px-2.5 text-[11px] font-semibold uppercase tracking-wide transition-colors',
-                    done && 'bg-roksal-green/15 text-roksal-green',
-                    current && 'bg-roksal-amber/20 text-roksal-amber ring-1 ring-roksal-amber/50',
+                    done && 'bg-roksal-green/15 text-emerald-700 dark:text-roksal-green',
+                    current && 'bg-roksal-amber/20 text-roksal-amber-text ring-1 ring-roksal-amber/50',
                     !done && !current && 'bg-secondary/60 text-muted-foreground',
                     i <= step && 'hover:bg-secondary',
                   )}

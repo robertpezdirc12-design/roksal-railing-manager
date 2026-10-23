@@ -68,7 +68,7 @@ function leadBadge (lead: VizChoiceRow['lead']): React.ReactNode {
     <Badge
       className={
         lead.status === 'PRETVORJEN' ? 'border-transparent bg-emerald-700 text-white'
-          : lead.status === 'IZGUBLJEN' ? 'border-transparent bg-muted text-muted-foreground'
+          : lead.status === 'IZGUBLJEN' ? 'border-transparent bg-secondary text-secondary-foreground'
             : 'border-transparent bg-amber-100 text-amber-900'
       }
     >

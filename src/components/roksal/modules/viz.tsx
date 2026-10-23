@@ -648,7 +648,7 @@ export default function VizModule () {
                   <span className="text-sm font-semibold">Skupaj (brez DDV)</span>
                   <span className="flex items-center gap-2">
                     {cenaBusy ? <Loader2 className="size-4 animate-spin text-muted-foreground" aria-hidden /> : null}
-                    <span className="text-lg font-bold tabular-nums text-roksal-amber">{fmtEUR(cena.skupaj)}</span>
+                    <span className="text-lg font-bold tabular-nums text-roksal-amber-text">{fmtEUR(cena.skupaj)}</span>
                   </span>
                 </div>
                 <p className="text-[11px] text-muted-foreground">

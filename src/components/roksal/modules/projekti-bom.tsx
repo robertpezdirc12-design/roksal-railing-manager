@@ -191,7 +191,7 @@ export function PackageBomDialog ({ pkg }: { pkg: PackageRow | null }) {
                 <span className="text-sm font-semibold">{g.label}</span>
                 <Badge variant="secondary" className="border-transparent bg-secondary text-secondary-foreground">{g.count} {g.count === 1 ? 'vrstica' : g.count < 5 ? 'vrstice' : 'vrstic'}</Badge>
                 {g.segments > 0 ? (
-                  <Badge variant="secondary" className="border-transparent bg-roksal-amber/15 text-roksal-amber">{g.segments} {g.segments === 1 ? 'segment' : g.segments < 5 ? 'segmenti' : 'segmentov'}</Badge>
+                  <Badge variant="secondary" className="border-transparent bg-roksal-amber/15 text-roksal-amber-text">{g.segments} {g.segments === 1 ? 'segment' : g.segments < 5 ? 'segmenti' : 'segmentov'}</Badge>
                 ) : null}
               </div>
               <Table>
@@ -203,7 +203,7 @@ export function PackageBomDialog ({ pkg }: { pkg: PackageRow | null }) {
                           (min-content 394 px) in razširi tabelo čez dialog. */}
                       <TableCell className="whitespace-normal pl-3">
                         {l.segmentKey ? (
-                          <Badge variant="outline" className="mb-1 mr-2 font-mono text-[10px] text-roksal-amber">{l.segmentKey}</Badge>
+                          <Badge variant="outline" className="mb-1 mr-2 font-mono text-[10px] text-roksal-amber-text">{l.segmentKey}</Badge>
                         ) : null}
                         <span className="font-mono text-xs text-muted-foreground">{l.item.sku}</span>
                         <span className="ml-2 font-medium">{l.item.name}</span>

@@ -93,7 +93,7 @@ export default function GalerijaModule () {
                     className="size-full rounded-t-lg object-cover transition-transform duration-300 group-hover:scale-[1.03]"
                   />
                   {it.project ? (
-                    <span className="absolute left-2 top-2 rounded-lg bg-background/85 px-2 py-1 font-mono text-[10px] font-bold text-roksal-amber backdrop-blur-sm">
+                    <span className="absolute left-2 top-2 rounded-lg bg-background/85 px-2 py-1 font-mono text-[10px] font-bold text-roksal-amber-text backdrop-blur-sm">
                       {it.project.code}
                     </span>
                   ) : null}

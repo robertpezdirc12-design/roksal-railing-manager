@@ -154,7 +154,7 @@ export default function RacuniModule () {
                 const open = Math.round((iv.total - iv.paid) * 100) / 100
                 return (
                   <TableRow key={iv.id} className="cursor-pointer" onClick={() => setSelected(iv.id)}>
-                    <TableCell className="pl-3 font-mono text-xs font-semibold text-roksal-amber">{iv.code}</TableCell>
+                    <TableCell className="pl-3 font-mono text-xs font-semibold text-roksal-amber-text">{iv.code}</TableCell>
                     <TableCell className="max-w-40 truncate">{iv.project?.customer?.name ?? '—'}</TableCell>
                     <TableCell><StatusBadge status={iv.status} /></TableCell>
                     <TableCell className="text-right tabular-nums">{fmtEUR(iv.total)}</TableCell>
@@ -310,7 +310,7 @@ function InvoiceDetailDialog ({ detail, canManagePayments, onPay, onChanged }: {
     <>
       <DialogHeader>
         <div className="flex items-center gap-2">
-          <span className="font-mono text-xs font-semibold text-roksal-amber">{detail.code}</span>
+          <span className="font-mono text-xs font-semibold text-roksal-amber-text">{detail.code}</span>
           <StatusBadge status={detail.status} />
         </div>
         <DialogTitle>Račun {detail.code}</DialogTitle>

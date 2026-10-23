@@ -100,7 +100,7 @@ export function YRefBlock ({ view, pxOf, onApply, idp }: {
       ) : !velja && a !== null && b !== null && a === b ? (
         <p className="text-[11px] text-muted-foreground">Izberite DVE različni točki.</p>
       ) : !vecerno && a !== null && b !== null ? (
-        <p className="text-[11px] text-roksal-amber">Izbrana para sta bolj VODORAVNA kot navpična — Y referenca naj meri višino.</p>
+        <p className="text-[11px] text-roksal-amber-text">Izbrana para sta bolj VODORAVNA kot navpična — Y referenca naj meri višino.</p>
       ) : null}
     </div>
   )

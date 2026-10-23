@@ -48,10 +48,10 @@ export function VozilaTab () {
               <Card className="h-full transition hover:border-roksal-amber/60">
                 <CardContent className="space-y-1.5 p-4">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="font-mono text-sm font-bold text-roksal-amber">{v.plate}</span>
+                    <span className="font-mono text-sm font-bold text-roksal-amber-text">{v.plate}</span>
                     {v.active
                       ? <Badge variant="secondary" className="border-transparent bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">aktivno</Badge>
-                      : <Badge variant="secondary" className="border-transparent bg-muted text-muted-foreground">neaktivno</Badge>}
+                      : <Badge variant="secondary" className="border-transparent bg-secondary text-secondary-foreground">neaktivno</Badge>}
                   </div>
                   <div className="text-sm font-semibold leading-snug">{v.name}</div>
                   {v.capacityNote ? <div className="text-xs text-muted-foreground">{v.capacityNote}</div> : null}

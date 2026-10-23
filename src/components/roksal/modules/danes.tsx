@@ -66,7 +66,7 @@ export default function DanesModule () {
       <div className="grid grid-cols-3 gap-3">
         <Card><CardContent className="p-4">
           <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Danes</div>
-          <div className="text-2xl font-bold text-roksal-amber">{todayList.length}</div>
+          <div className="text-2xl font-bold text-roksal-amber-text">{todayList.length}</div>
         </CardContent></Card>
         <Card><CardContent className="p-4">
           <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Odprtih</div>
@@ -182,7 +182,7 @@ function WorkOrderCard ({ wo, expanded, onToggle, onTransitioned }: {
         >
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <span className="font-mono text-xs font-semibold text-roksal-amber">{wo.code}</span>
+              <span className="font-mono text-xs font-semibold text-roksal-amber-text">{wo.code}</span>
               <StatusBadge status={wo.status} />
             </div>
             <div className="mt-1 font-semibold leading-snug text-foreground">{wo.title}</div>

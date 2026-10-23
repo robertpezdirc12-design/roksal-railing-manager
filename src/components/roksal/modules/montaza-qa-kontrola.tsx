@@ -214,7 +214,7 @@ export function MontazaQaSection ({ woId, canWrite, fotoOptions, onTransitioned 
                     aria-expanded={open}
                     onClick={() => { setExpanded(open ? null : c.id); setPending(null) }}
                   >
-                    {c.critical ? <ShieldAlert className="mt-0.5 size-4 shrink-0 text-roksal-amber" aria-label="Kritična točka" /> : null}
+                    {c.critical ? <ShieldAlert className="mt-0.5 size-4 shrink-0 text-roksal-amber-text" aria-label="Kritična točka" /> : null}
                     <span className="min-w-0 flex-1">
                       <span className="block break-words text-sm font-medium leading-snug">{c.label}</span>
                       <span className="mt-0.5 flex flex-wrap items-center gap-1.5">

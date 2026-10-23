@@ -75,7 +75,7 @@ export function ProductsTab () {
           onClick={() => setFamily('all')}
           className={cn(
             'shrink-0 snap-start rounded-full border px-3 py-1.5 text-xs font-medium transition',
-            family === 'all' ? 'border-roksal-amber bg-roksal-amber/10 text-roksal-amber' : 'border-border bg-background text-muted-foreground hover:border-roksal-amber/50'
+            family === 'all' ? 'border-roksal-amber bg-roksal-amber/10 text-roksal-amber-text' : 'border-border bg-background text-muted-foreground hover:border-roksal-amber/50'
           )}
         >
           Vsi ({famRows.reduce((s, f) => s + f.productCount, 0)})
@@ -86,7 +86,7 @@ export function ProductsTab () {
             onClick={() => setFamily(f.code)}
             className={cn(
               'shrink-0 snap-start rounded-full border px-3 py-1.5 text-xs font-medium transition',
-              family === f.code ? 'border-roksal-amber bg-roksal-amber/10 text-roksal-amber' : 'border-border bg-background text-muted-foreground hover:border-roksal-amber/50'
+              family === f.code ? 'border-roksal-amber bg-roksal-amber/10 text-roksal-amber-text' : 'border-border bg-background text-muted-foreground hover:border-roksal-amber/50'
             )}
           >
             {familyLabel(f.code, f.name)} ({f.productCount})
@@ -104,7 +104,7 @@ export function ProductsTab () {
               <Card className="h-full transition hover:border-roksal-amber/60 hover:shadow-sm">
                 <CardContent className="flex h-full flex-col gap-2 p-4">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="font-mono text-xs font-semibold text-roksal-amber">{p.sku}</span>
+                    <span className="font-mono text-xs font-semibold text-roksal-amber-text">{p.sku}</span>
                     <Badge variant="secondary" className="border-transparent bg-secondary text-xs text-secondary-foreground">{p.family.name}</Badge>
                   </div>
                   <button
@@ -121,7 +121,7 @@ export function ProductsTab () {
                     {p._count.components > 0 ? (
                       <Badge variant="secondary" className="border-transparent bg-secondary text-secondary-foreground"><ListTree className="mr-1 size-3" aria-hidden />{p._count.components} komponent</Badge>
                     ) : (
-                      <Badge variant="secondary" className="border-transparent bg-muted text-muted-foreground">brez BOM</Badge>
+                      <Badge variant="secondary" className="border-transparent bg-secondary text-secondary-foreground">brez BOM</Badge>
                     )}
                     {p.warrantyMonths > 0 ? (
                       <Badge variant="secondary" className="border-transparent bg-secondary text-secondary-foreground">{p.warrantyMonths} mes. garancije</Badge>
@@ -212,7 +212,7 @@ export function ProductDialog ({ detail, loading, canCalc, canWrite, onClose, on
       <DialogHeader>
         <DialogTitle className="flex flex-wrap items-center gap-2">
           {detail ? detail.name : 'Nalagam izdelek …'}
-          {detail ? <span className="font-mono text-xs font-semibold text-roksal-amber">{detail.sku}</span> : null}
+          {detail ? <span className="font-mono text-xs font-semibold text-roksal-amber-text">{detail.sku}</span> : null}
         </DialogTitle>
         {detail ? (
           <DialogDescription>
