@@ -70,7 +70,8 @@ function CalibrationTag ({ due }: { due: string | null }) {
   const now = Date.now()
   if (d < now) {
     return (
-      <span className="inline-flex items-center gap-1 text-xs font-semibold text-destructive">
+      // R580: kontrast — text-destructive (#ef4444) je na temni kartici 3,94:1 (pod AA); vzorec iz datoteke: red-600/400 kot »Popravljeno« in StatCard tono
+      <span className="inline-flex items-center gap-1 text-xs font-semibold text-red-600 dark:text-red-400">
         <CalendarClock className="size-3.5" aria-hidden />Umeritev potekla ({fmtDate(due)})
       </span>
     )
@@ -228,7 +229,7 @@ export default function OrodjarinaModule () {
                         </Button>
                       ) : null}
                       {isAdmin && e.status !== 'POKVARJENO' ? (
-                        <Button size="sm" variant="outline" className="min-h-11 text-destructive" disabled={busy} onClick={() => void runAction(e, 'broken')}>
+                        <Button size="sm" variant="outline" className="min-h-11 text-red-600 dark:text-red-400" disabled={busy} onClick={() => void runAction(e, 'broken')}>
                           <XCircle className="size-4" aria-hidden /> Pokvarjeno
                         </Button>
                       ) : null}

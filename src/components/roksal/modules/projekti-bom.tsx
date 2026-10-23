@@ -208,7 +208,7 @@ export function PackageBomDialog ({ pkg }: { pkg: PackageRow | null }) {
                         <span className="font-mono text-xs text-muted-foreground">{l.item.sku}</span>
                         <span className="ml-2 font-medium">{l.item.name}</span>
                         {l.wastePct != null && l.wastePct > 0 ? (
-                          <span className="ml-2 rounded bg-secondary px-1.5 py-0.5 text-[10px] text-muted-foreground" title={l.sourceRule ?? ''}>+ {l.wastePct} % odpad</span>
+                          <span className="ml-2 rounded bg-secondary px-1.5 py-0.5 text-[10px] text-secondary-foreground" title={l.sourceRule ?? ''}>+ {l.wastePct} % odpad</span>
                         ) : null}
                         {l.note ? <span className="block text-[11px] text-muted-foreground">{l.note}</span> : null}
                       </TableCell>

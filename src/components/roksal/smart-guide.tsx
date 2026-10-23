@@ -149,7 +149,7 @@ export function SmartGuide () {
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   {firstUseShown === entry.tabId && isMonter && (
-                    <Badge className="bg-roksal-amber text-roksal-ink">{L(['Vodeni uvod', 'Vođeni uvod'])}</Badge>
+                    <Badge className="bg-roksal-amber text-roksal-amber-ink">{L(['Vodeni uvod', 'Vođeni uvod'])}</Badge>
                   )}
                   <Badge variant="secondary" className="font-mono text-[10px]">v{entry.version}</Badge>
                 </div>

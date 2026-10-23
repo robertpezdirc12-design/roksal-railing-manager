@@ -233,7 +233,7 @@ export function AppShell () {
                 <Button variant="ghost" size="icon" className="relative" aria-label="Obvestila">
                   <Bell className="size-5" />
                   {notif.data && notif.data.unread > 0 ? (
-                    <span className="absolute -right-0.5 -top-0.5 flex size-4 items-center justify-center rounded-full bg-roksal-amber text-[10px] font-bold text-roksal-ink">
+                    <span className="absolute -right-0.5 -top-0.5 flex size-4 items-center justify-center rounded-full bg-roksal-amber text-[10px] font-bold text-roksal-amber-ink">
                       {notif.data.unread}
                     </span>
                   ) : null}

@@ -113,7 +113,7 @@ function DeliveryStatusBadge ({ status }: { status: string }) {
   if (status === 'SENT') return <Badge className="border-transparent bg-emerald-700 text-white">poslano</Badge>
   if (status === 'FAILED') return <Badge className="border-transparent bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300">spodletelo</Badge>
   if (status === 'DEAD') return <Badge className="border-transparent bg-red-700 text-white">mrtvo pismo</Badge>
-  return <Badge className="border-transparent bg-roksal-amber text-roksal-ink">čaka</Badge>
+  return <Badge className="border-transparent bg-roksal-amber text-roksal-amber-ink">čaka</Badge>
 }
 
 // ── Modul ────────────────────────────────────────────────────────────────────
@@ -208,7 +208,7 @@ export default function IntegracijeModule () {
 
       <p className="text-[11px] leading-relaxed text-muted-foreground">
         Celotna dokumentacija za partnerje (glave, podpis, backoff, idempotenca, katalog dogodkov):
-        <code className="mx-1 rounded bg-secondary px-1 py-0.5 font-mono text-[10px]">docs/webhooks.md</code>
+        <code className="mx-1 rounded bg-secondary px-1 py-0.5 font-mono text-[10px] text-secondary-foreground">docs/webhooks.md</code>
         v repozitoriju. Retry zamuda: cron teče dnevno ob 03:30 — prvi poskus vsake dostave je vedno takojšen.
       </p>
     </div>
@@ -235,13 +235,13 @@ function HelpButton () {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mb-2 flex items-center gap-1.5 font-semibold"><Webhook className="size-4 text-roksal-amber" aria-hidden /> Preverjanje podpisa dostave</div>
-            <p className="text-xs text-muted-foreground">Vsaka dostava nosi glavi <code className="rounded bg-secondary px-1 font-mono text-[10px]">X-ROKSAL-Timestamp</code> (epoch s) in <code className="rounded bg-secondary px-1 font-mono text-[10px]">X-ROKSAL-Signature</code>. Podpisano sporočilo je »timestamp.dobesedno telo«:</p>
+            <p className="text-xs text-muted-foreground">Vsaka dostava nosi glavi <code className="rounded bg-secondary px-1 font-mono text-[10px] text-secondary-foreground">X-ROKSAL-Timestamp</code> (epoch s) in <code className="rounded bg-secondary px-1 font-mono text-[10px] text-secondary-foreground">X-ROKSAL-Signature</code>. Podpisano sporočilo je »timestamp.dobesedno telo«:</p>
             <pre className="mt-2 overflow-x-auto rounded-lg bg-secondary/60 p-2 font-mono text-[11px] leading-relaxed" aria-label="Formula podpisa">{`key      = sha256_hex(secret)   # skrivnost, ki si jo izbere partner
 expected = HMAC-SHA256(key, timestamp + "." + rawBody)
 veljavno ⇔ X-ROKSAL-Signature === "sha256=" + expected`}</pre>
             <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
-              Preverjajte nad dobesednim telesom (bytes po žici) in zavrzite dogodke, starejše od 5 minut (replay okno) ter že viden <code className="rounded bg-secondary px-1 font-mono text-[10px]">id</code> (idempotenčni ključ dogodka).
-              Celoten priklad v Pythonu/Node: <code className="rounded bg-secondary px-1 font-mono text-[10px]">docs/webhooks.md</code> v repozitoriju.
+              Preverjajte nad dobesednim telesom (bytes po žici) in zavrzite dogodke, starejše od 5 minut (replay okno) ter že viden <code className="rounded bg-secondary px-1 font-mono text-[10px] text-secondary-foreground">id</code> (idempotenčni ključ dogodka).
+              Celoten priklad v Pythonu/Node: <code className="rounded bg-secondary px-1 font-mono text-[10px] text-secondary-foreground">docs/webhooks.md</code> v repozitoriju.
             </p>
             <Button size="sm" className="mt-3 w-full" onClick={() => setOpen(false)}>Zapri</Button>
           </div>

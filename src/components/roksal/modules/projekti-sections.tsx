@@ -97,7 +97,7 @@ export function ProgressSection ({ projectId, onNavigate }: { projectId: string;
 const TIMELINE_TYPE_STYLES: Record<string, string> = {
   ODPERTJE: 'bg-roksal-ink text-primary-foreground',
   PONUDBA: 'bg-secondary text-foreground',
-  PODPIS: 'bg-roksal-amber text-roksal-ink',
+  PODPIS: 'bg-roksal-amber text-roksal-amber-ink',
   MERITEV: 'bg-secondary text-foreground',
   NALOG: 'bg-secondary text-foreground',
   DOGAJEK: 'bg-secondary/70 text-muted-foreground',

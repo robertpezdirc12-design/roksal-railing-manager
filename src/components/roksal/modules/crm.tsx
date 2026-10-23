@@ -132,7 +132,8 @@ export default function CrmModule () {
                             <div className="flex flex-wrap items-center gap-2">
                               <span className="font-semibold">{l.name}</span>
                               <StatusBadge status={l.status} />
-                              <span className="rounded bg-secondary px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
+                              {/* R580: kontrast — muted-foreground na bg-secondary je 4,12:1 (pod AA); secondary-foreground je 9,2:1 */}
+                              <span className="rounded bg-secondary px-1.5 py-0.5 text-[11px] font-medium text-secondary-foreground">
                                 {SOURCES.find((s) => s.value === l.source)?.label ?? l.source}
                               </span>
                             </div>

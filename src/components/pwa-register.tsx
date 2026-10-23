@@ -113,7 +113,7 @@ export function PwaRegister () {
           <button
             type="button"
             onClick={applyUpdate}
-            className="h-9 rounded-full bg-roksal-amber px-4 text-sm font-bold text-roksal-ink transition-transform active:scale-95 hover:brightness-95"
+            className="h-9 rounded-full bg-roksal-amber px-4 text-sm font-bold text-roksal-amber-ink transition-transform active:scale-95 hover:brightness-95"
           >
             Osveži
           </button>

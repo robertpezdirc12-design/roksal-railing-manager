@@ -6,6 +6,11 @@
 @theme inline {
   --color-roksal-ink: var(--roksal-ink);
   --color-roksal-amber: var(--roksal-amber);
+  /* R580: barva besedila/ikone NA jantarni podlagi — NE obrača se v temni temi
+     (roksal-ink se obrne v svetlo, zato je bil števec obvestil v temni temi
+     neviden 1,35:1). Fiksna temna v obeh temah: 6,4:1 na svetlem / 7,9:1 na
+     temnem jantaru. */
+  --color-roksal-amber-ink: var(--roksal-amber-ink);
   --color-roksal-green: var(--roksal-green);
   --color-roksal-navy-soft: var(--roksal-navy-soft);
   --color-background: var(--background);
@@ -52,6 +57,7 @@
   --radius: 0.75rem;
   --roksal-ink: #1d2b3e;
   --roksal-amber: #f59e0b;
+  --roksal-amber-ink: #1d2b3e;
   --roksal-green: #10b981;
   --roksal-navy-soft: #2a3f5f;
   --background: #f7f9ff;
@@ -91,6 +97,7 @@
   /* Roksal dark — vrednosti iz produkcjskega CSS (popover #1a2744, input #2d3f5f) */
   --roksal-ink: #e2e8f0;
   --roksal-amber: #fbbf24;
+  --roksal-amber-ink: #1d2b3e;
   --roksal-green: #34d399;
   --roksal-navy-soft: #2a3f5f;
   --background: #131d31;

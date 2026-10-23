@@ -98,7 +98,7 @@ function CompareSlider ({ before, after }: { before: string; after: string }) {
       {/* ločilna črta + ročaj */}
       <div className="pointer-events-none absolute inset-y-0" style={{ left: `${pos}%` }} aria-hidden>
         <div className="absolute inset-y-0 w-0.5 -translate-x-1/2 bg-white shadow-[0_0_6px_rgba(0,0,0,0.45)]" />
-        <div className="absolute top-1/2 flex size-9 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-white bg-roksal-amber text-roksal-ink shadow-lg">
+        <div className="absolute top-1/2 flex size-9 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-white bg-roksal-amber text-roksal-amber-ink shadow-lg">
           <MoveHorizontal className="size-4" aria-hidden />
         </div>
       </div>
@@ -398,7 +398,7 @@ export function PublicViz ({ token }: { token: string }) {
       <header className="border-b bg-card">
         <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-3 px-4 py-3.5">
           <div className="flex items-center gap-2.5">
-            <RoksalMark className="size-8 shrink-0 text-roksal-ink" />
+            <RoksalMark className="size-8 shrink-0 text-roksal-ink dark:text-foreground" />
             <div className="leading-tight">
               <p className="text-sm font-bold tracking-tight">ROKSAL</p>
               <p className="text-[10px] font-medium uppercase tracking-widest text-roksal-amber">ograde in ograje</p>

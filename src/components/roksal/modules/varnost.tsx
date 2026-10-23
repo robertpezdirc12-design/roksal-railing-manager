@@ -113,7 +113,7 @@ export default function VarnostModule () {
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="truncate text-sm font-medium">{s.user?.name ?? '—'}</span>
-                        {s.current ? <Badge className="border-transparent bg-roksal-amber text-roksal-ink">trenutna</Badge> : null}
+                        {s.current ? <Badge className="border-transparent bg-roksal-amber text-roksal-amber-ink">trenutna</Badge> : null}
                       </div>
                       <div className="truncate text-xs text-muted-foreground">{s.user?.email} · od {fmtDateTime(s.createdAt)} · poteče {fmtDateTime(s.expiresAt)}</div>
                     </div>
@@ -243,7 +243,8 @@ function MaintenanceCard () {
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="text-sm font-medium">{d.label}</span>
-                    <code className="rounded bg-secondary px-1 font-mono text-[10px] text-muted-foreground">{d.job}</code>
+                    {/* R580: kontrast — čip na bg-secondary potrebuje secondary-foreground (muted = 4,12:1) */}
+                    <code className="rounded bg-secondary px-1 font-mono text-[10px] text-secondary-foreground">{d.job}</code>
                   </div>
                   <p className="mt-0.5 text-xs text-muted-foreground">{d.desc}</p>
                   <p className="text-[11px] text-muted-foreground/80">
@@ -298,7 +299,7 @@ function BackupCard () {
         </CardTitle>
         <CardDescription>
           Šifrirana kopija (AES-256) celotnega sistema — baza + repozitorij — z off-site hrambo na GitLabu.
-          Cilj RTO ≤ 30 min · RPO ≤ 24 h. Postopek obnove: <code className="rounded bg-secondary px-1 font-mono text-[10px]">docs/RECOVERY.md</code>.
+          Cilj RTO ≤ 30 min · RPO ≤ 24 h. Postopek obnove: <code className="rounded bg-secondary px-1 font-mono text-[10px] text-secondary-foreground">docs/RECOVERY.md</code>.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -319,7 +320,7 @@ function BackupCard () {
               <Badge className={last.ok ? 'border-transparent bg-emerald-600 text-white' : 'border-transparent bg-destructive text-white'}>
                 {last.ok ? 'uspešna' : 'napaka'}
               </Badge>
-              <Badge className={detail.sifrirano ? 'border-transparent bg-roksal-amber text-roksal-ink' : 'border-destructive text-destructive'}>
+              <Badge className={detail.sifrirano ? 'border-transparent bg-roksal-amber text-roksal-amber-ink' : 'border-destructive text-destructive'}>
                 {detail.sifrirano ? 'šifrirana AES-256' : 'NEšifrirana'}
               </Badge>
               <Badge className={offsiteOk
@@ -432,7 +433,7 @@ function DeliveryStatusBadge ({ status }: { status: string }) {
   if (status === 'SENT') return <Badge className="border-transparent bg-emerald-700 text-white">poslano</Badge>
   if (status === 'FAILED') return <Badge className="border-transparent bg-red-700 text-white">spodletelo</Badge>
   if (status === 'SKIPPED') return <Badge variant="secondary">izpuščeno</Badge>
-  return <Badge className="border-transparent bg-roksal-amber text-roksal-ink">čaka</Badge>
+  return <Badge className="border-transparent bg-roksal-amber text-roksal-amber-ink">čaka</Badge>
 }
 
 function ChannelBadge ({ channel }: { channel: string }) {

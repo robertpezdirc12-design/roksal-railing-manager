@@ -172,7 +172,7 @@ function PortalPreviewDialog ({ token, code }: { token: string | null; code: str
           <div className="rounded-xl bg-gradient-to-br from-[#1d2b3e] to-[#2a3f5f] p-4 text-primary-foreground">
             <div className="flex items-center justify-between gap-2">
               <span className="font-mono text-xs opacity-80">{d.project.code}</span>
-              <span className="rounded-full bg-roksal-amber px-2 py-0.5 text-[11px] font-bold text-roksal-ink">{d.project.statusLabel}</span>
+              <span className="rounded-full bg-roksal-amber px-2 py-0.5 text-[11px] font-bold text-roksal-amber-ink">{d.project.statusLabel}</span>
             </div>
             <h4 className="mt-1.5 text-lg font-bold leading-snug">{d.project.title}</h4>
             {d.project.address ? <p className="mt-0.5 inline-flex items-center gap-1 text-xs opacity-90"><MapPin className="size-3" aria-hidden />{d.project.address}</p> : null}
