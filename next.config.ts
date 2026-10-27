@@ -38,6 +38,17 @@ const csp = buildCsp({
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  // PESKOVNIK BASE44 (samo BASE44_PREVIEW_MODE=1): Next 16 preverja IZVOR
+  // zahtev po razvojnih virih (dev chunk-i, HMR). Predogled teče na
+  // https://3000-<BASE44_PUBLIC_HOST_SUFFIX>, kar ni niti localhost niti
+  // privzeti izvor — brez spodnjega se stran naloži, a razvojni viri (in s
+  // tem HMR) ostanejo zavrnjeni. Dovoljenje se vklopi IZKLJUČNO ob
+  // BASE44_PREVIEW_MODE=1 in je odsotno povsod drugje (produkcija, CI, lokalni
+  // razvoj: nespremenjeno vedenje). Vrednost pride iz okolja — nikoli ni
+  // zapisana na trdo.
+  ...(process.env.BASE44_PREVIEW_MODE === "1" && process.env.BASE44_PUBLIC_HOST_SUFFIX
+    ? { allowedDevOrigins: [`3000-${process.env.BASE44_PUBLIC_HOST_SUFFIX}`] }
+    : {}),
   // R496 (izrec audita): varnostne glave. CSP je od R536 v politiki (od R543
   // prek buildCsp zgoraj — glej komentar ob glavi).
   // Izbira je konservativna in preverjena glede na dejansko rabo v kodi:

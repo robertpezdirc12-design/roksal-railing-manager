@@ -1,0 +1,20 @@
+# Dockerfile.base44 — orodjarna za razvojno okolje Base44 (samo odvisnosti, NE koda)
+#
+# Zakaj dva runtime-a:
+#   * Next.js mora teči pod NODEJS-om: `next dev` v16 privzeto uporablja
+#     Turbopack, ta pa pod Bun runtime-om ne uspe razrešiti zunanjih modulov
+#     (`Failed to load external module @prisma/client-<hash>`; znana napaka
+#     vercel/next.js#86866, prisotna tudi v bun 1.4). Koda repozitorija ostane
+#     NEPREVZETA — sem se preseli samo binarka bun.
+#   * `bun install --frozen-lockfile` je edini pravi namestitveni pot (repo ima
+#     bun.lock in ne package-lock.json).
+#
+# Koda se NE kopira v sliko: v docker-compose.base44.yml je repozitorij
+# pripet (bind mount), zato vsaka sprememba velja takoj, brez ponovne gradnje.
+
+FROM node:22
+
+COPY --from=oven/bun:1 /usr/local/bin/bun /usr/local/bin/bun
+RUN ln -sf /usr/local/bin/bun /usr/local/bin/bunx
+
+WORKDIR /app

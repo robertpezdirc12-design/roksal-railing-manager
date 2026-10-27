@@ -1,0 +1,144 @@
+# docker-compose.base44.yml — razvojno okolje Base44 za Roksal Railing Manager
+#
+# Namen: pognati KLONIRANO IZVORNO KODO (ne predgrajene slike) z živim
+# ponovnim nalaganjem, tako da vsaka sprememba v repozitoriju takoj velja.
+#
+# Zagon:  docker compose -f docker-compose.base44.yml up -d --build
+# Ustavitev: docker compose -f docker-compose.base44.yml down
+#
+# Storitve:
+#   postgres — lokalna PostgreSQL baza (podatki v imenovanem volumnu)
+#   deps     — enkratna namestitev odvisnosti iz bun.lock (+ prisma generate)
+#   seed     — enkratno: `prisma migrate deploy` in demo podatki, SAMO če je baza prazna
+#   web      — `next dev` na 0.0.0.0:3000 (glavni predogled)
+#
+# Okoljske spremenljivke za zunanje storitve NE sodijo sem: platforma jih
+# dostavi v /run/base44/app.env. Aplikacija v tem okolju ne potrebuje nobene
+# zunanje poverilnice (glej AGENTS.md).
+
+services:
+  postgres:
+    image: postgres:16
+    restart: on-failure
+    environment:
+      # Lokalna infrastruktura — poverilnice generira ta datoteka (niso skrivnost uporabnika).
+      POSTGRES_USER: roksal
+      POSTGRES_PASSWORD: roksal
+      POSTGRES_DB: roksal
+    volumes:
+      - roksal-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U roksal -d roksal"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    labels:
+      base44.project: "Roksal Railing Manager — PostgreSQL"
+      base44.kind: infra
+
+  deps:
+    build:
+      context: .
+      dockerfile: Dockerfile.base44
+    image: roksal-base44-dev
+    working_dir: /app
+    restart: "no"
+    volumes:
+      - .:/app
+      - roksal-node-modules:/app/node_modules
+    environment:
+      # Repo je zaklenjen na bun.lock — namestitev mora iti skozi bun.
+      HUSKY: "0"
+    command:
+      - sh
+      - -ec
+      - |
+        CI=true bun install --frozen-lockfile
+        bunx prisma generate
+
+  seed:
+    image: roksal-base44-dev
+    working_dir: /app
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      deps:
+        condition: service_completed_successfully
+    volumes:
+      - .:/app
+      - roksal-node-modules:/app/node_modules
+    environment:
+      DATABASE_URL: postgresql://roksal:roksal@postgres:5432/roksal
+      # seed-guard (R534) zahteva izrecno potrditev destruktivnega koraka.
+      SEED_CONFIRM: YES_DEMO_DATA
+    command:
+      - sh
+      - -ec
+      - |
+        bunx prisma migrate deploy
+        # Demo podatki se naselijo SAMO v prazno bazo — ponovni `up` ne sme
+        # pobrisati podatkov, ki jih je uporabnik ustvaril v predogledu.
+        if bun -e "import { PrismaClient } from '@prisma/client'; const p = new PrismaClient(); p.user.count().then(c => process.exit(c > 0 ? 1 : 0)).catch(() => process.exit(0))"; then
+          SEED_CONFIRM=YES_DEMO_DATA bun run db:seed
+        else
+          echo "[seed] baza ze vsebuje uporabnike — demo seed preskocen"
+        fi
+
+  web:
+    image: roksal-base44-dev
+    working_dir: /app
+    restart: on-failure
+    depends_on:
+      postgres:
+        condition: service_healthy
+      seed:
+        condition: service_completed_successfully
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/app
+      - roksal-node-modules:/app/node_modules
+    env_file:
+      - /run/base44/app.env
+    environment:
+      DATABASE_URL: postgresql://roksal:roksal@postgres:5432/roksal
+      # Demo prijava (javno znana demo gesla) — v razvoju je to namerno odprto
+      # (produkcija zahteva še DEMO_PROD_KEY, glej src/lib/demo-access.ts).
+      DEMO_ACCESS: "on"
+      # R536/R537: next dev je bil v izvirnem peskovniku 2× ubit od OOM —
+      # enaka varovalka kot v ops/dev-serve.sh.
+      NODE_OPTIONS: --max-old-space-size=1536
+      # Platforma ju potrebuje za dovoljeni izvor razvojnih virov (next.config.ts).
+      BASE44_PREVIEW_MODE:
+      BASE44_PUBLIC_HOST_SUFFIX:
+    command:
+      - sh
+      - -ec
+      - |
+        CI=true bun install --frozen-lockfile
+        bunx prisma generate
+        exec ./node_modules/.bin/next dev -H 0.0.0.0 -p 3000
+    healthcheck:
+      # /api/health resnično preveri aplikacijo IN bazo (brez odvisnosti od curl,
+      # ki ga slika oven/bun ne vsebuje).
+      test:
+        - CMD
+        - bun
+        - -e
+        - "const r = await fetch('http://127.0.0.1:3000/api/health'); process.exit(r.ok ? 0 : 1)"
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      # Prva kompilacija ~200 poti traja (turbopack) — dolga milost ob zagonu.
+      start_period: 180s
+    labels:
+      base44.project: "Roksal Railing Manager"
+      base44.kind: web
+      base44.port: "3000"
+      base44.docs: /api/health
+
+volumes:
+  roksal-pgdata:
+  roksal-node-modules:
