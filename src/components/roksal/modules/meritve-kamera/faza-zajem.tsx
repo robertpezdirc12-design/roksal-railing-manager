@@ -7,9 +7,9 @@
 // R537-a: dobesedna selitev iz meritve-kamera.tsx — stanje je skupno (vstop)
 // in pride prek propsov; `capture` je krajevni (živi le tu).
 
-import { useRef, useState, useSyncExternalStore } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import type { Dispatch, RefObject, SetStateAction } from 'react'
-import { Aperture, Camera, ChevronDown, Cpu, Flashlight, FlashlightOff, Grid3x3, Image as ImageIcon, Info, Maximize2, Minimize2, Moon, Ruler, Sun, SwitchCamera, ZoomIn } from '@/components/roksal/custom-icons'
+import { Aperture, Camera, ChevronDown, Cpu, Flashlight, FlashlightOff, Grid3x3, Image as ImageIcon, Info, Maximize2, Minimize2, Moon, Ruler, Sun, SwitchCamera, Timer, ZoomIn } from '@/components/roksal/custom-icons'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -19,13 +19,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ErrorBox } from '@/components/roksal/ui-bits'
 import { fmtDate, useApi } from '@/lib/api-client'
 import { napisZmogljivosti, type NapravaZaIzbiro, type SmerKamere, type ZmogljivostiKamere } from '@/lib/camera-capabilities'
-import { napisNastavitev, type KameraNastavitve } from '@/lib/camera-prefs'
+import { napisNastavitev, nastaviAvtoZajem, shramba, type KameraNastavitve } from '@/lib/camera-prefs'
 import type { OrientationCheck } from '@/lib/exif-orientation'
 import { MEASURE_MODES, MODE_RULES, recommendMethod, type DeviceCaps, type MeasureMode } from '@/lib/measure-engine'
 import SceneOverlay from '@/components/roksal/scene-overlay'
 import { nextStepGuidance } from '@/lib/scene-understanding-core'
 import type { SceneUnderstandingState } from '@/hooks/use-scene-understanding'
-import { oceniSvetlobo, parsePhoto } from './kakovost'
+import { oceniOstrino, oceniSvetlobo, parsePhoto } from './kakovost'
 import { MAX_IMG_W, type CachedWoRow, type PhotoRow, type ProjectOption, type WorkOrderOption } from './tipi'
 import { Vodila } from './vodila'
 import { useFitRect } from './use-fit-rect'
@@ -67,6 +67,8 @@ export interface FazaZajemProps {
   preklopiNapravo: (deviceId: string) => Promise<void>
   /** R553: glajena svetlost živega predogleda (EWMA; null = brez vzorca). */
   svetloba: number | null
+  /** R580: glajena ostrina živega predogleda (EWMA; null = brez vzorca). */
+  ostrina: number | null
   existingPhotos: PhotoRow[]
   pickExisting: (p: PhotoRow) => void
   projects: ReturnType<typeof useApi<{ data: ProjectOption[] }>>
@@ -88,7 +90,7 @@ export function FazaZajem (props: FazaZajemProps) {
     mode, setMode, caps, startCamera, camActive, fileRef, onFile, videoRef, sceneState, guides, nastaviVodila,
     zmoKamere, torchNa, preklopiTorch, preklopiSmer, stopCamera, nastavitve, existingPhotos, pickExisting,
     smerKamere, zoomVrednost, nastaviZoomVrednost, ostrenjeNaTocki,
-    resToka, naprave, trenutnaNaprava, preklopiNapravo, svetloba,
+    resToka, naprave, trenutnaNaprava, preklopiNapravo, svetloba, ostrina,
     projects, projectId, setProjectId, workOrderId, setWorkOrderId, orderOptions, orders, online,
     location, setLocation, setOrientacija, acceptImage,
   } = props
@@ -201,6 +203,68 @@ export function FazaZajem (props: FazaZajemProps) {
     void acceptImage(url)
   }
 
+  // R580: ref na capture — učinek odštevanja kliče VEDNO zadnjo različico
+  // (brez nje bi bil v odvisnostih učinka zamrznjen posnetek propsov).
+  const captureRef = useRef(capture)
+  useEffect(() => { captureRef.current = capture })
+
+  // ── R580: SAMODEJNI ZAJEM — vklopi se zavedno (gumb, privzeto izklopljen,
+  // izbira si jo aplikacija zapomni), potem pa se kader zajame SAM, ko sta
+  // svetloba in ostrina dva zaporedna vzorca (2 × 1,5 s) v redu. Odštevanje
+  // 3-2-1 napove zajem; slab vzorec ga prekliče. Ročni gumb ostaja.
+  const [avtoZajem, setAvtoZajem] = useState(() => nastavitve.avtoZajem)
+  const [odstevanje, setOdstevanje] = useState<number | null>(null)
+  const dobriUtrinkiRef = useRef(0)
+
+  function preklopiAvtoZajem (): void {
+    const na = !avtoZajem
+    setAvtoZajem(na)
+    nastaviAvtoZajem(shramba(), na)
+    if (!na) setOdstevanje(null)
+  }
+
+  // Kvaliteta kadra → pripravljenost na samodejni zajem (svetuje, ne ukazuje
+  // napravi — §7: merjenje nikoli ne izide ukaz bliskavici; zajem je edini
+  // izid, ker je to edini dogodek, ki si ga monter z gumbom zaželi sam).
+  // Stanje živi v CASOVNIKIH (ne v telesu učinka — brez kaskadnih izrisov):
+  // interval 0,7 s preverja zadnja vzorca (posodobljena prek ref), dva
+  // zaporedna dobra vzorca pa zaženeta odštevanje; slab vzorec ga prekliče.
+  const zadnjiVzorciRef = useRef({ svetloba, ostrina, camActive })
+  useEffect(() => { zadnjiVzorciRef.current = { svetloba, ostrina, camActive } })
+  useEffect(() => {
+    if (!avtoZajem) return
+    const id = window.setInterval(() => {
+      const z = zadnjiVzorciRef.current
+      if (!z.camActive) { dobriUtrinkiRef.current = 0; setOdstevanje(null); return }
+      const svetlo = oceniSvetlobo(z.svetloba) === 'V_REDU'
+      const ostro = oceniOstrino(z.ostrina) === 'OSTRO'
+      if (svetlo && ostro) {
+        dobriUtrinkiRef.current += 1
+        if (dobriUtrinkiRef.current >= 2) setOdstevanje((o) => (o === null ? 3 : o))
+      } else {
+        dobriUtrinkiRef.current = 0
+        setOdstevanje(null)
+      }
+    }, 700)
+    return () => window.clearInterval(id)
+  }, [avtoZajem])
+
+  // Odštevanje: 3 → 2 → 1 → zajem (skupno 3 s napovedi). Ob zajemu camActive
+  // pade in zgornji časovnik počisti stanje; če zajem ne uspe (brez okvirja),
+  // naslednji dobri vzorec odštevanje znova zažene.
+  useEffect(() => {
+    if (odstevanje === null) return
+    const id = window.setTimeout(() => {
+      if (odstevanje <= 1) {
+        setOdstevanje(null)
+        captureRef.current()
+      } else {
+        setOdstevanje(odstevanje - 1)
+      }
+    }, 1000)
+    return () => window.clearTimeout(id)
+  }, [odstevanje])
+
   /** R550: tap-to-focus — normalizirana točka v okviru videa + prehodni obroč. */
   function naTapPredogled (e: React.MouseEvent<HTMLVideoElement>): void {
     // R553: pravkar končan pinč NI tap — sproženje ostrenja po umiku prstov
@@ -285,10 +349,22 @@ export function FazaZajem (props: FazaZajemProps) {
         size="icon"
         onClick={() => nastaviVodila(!guides)}
         aria-pressed={guides}
-        aria-label={guides ? 'Vodila: izklopi mrežo' : 'Vodila: vklopi mrežo'}
+        aria-label={guides ? 'Vodila: izklopi mrežo' : 'Vodila: vklopi mrežu'}
         title={guides ? 'Vodila (mreža) — izklopi' : 'Vodila (mreža) — vklopi'}
       >
         <Grid3x3 className="size-4" aria-hidden />
+      </Button>
+      {/* R580: samodejni zajem — vklop je zaveden (privzeto izklopljen),
+          aplikacija pa zajame, ko sta svetloba in ostrina v redu. */}
+      <Button
+        variant={avtoZajem ? 'default' : 'outline'}
+        size="icon"
+        onClick={preklopiAvtoZajem}
+        aria-pressed={avtoZajem}
+        aria-label={avtoZajem ? 'Samodejni zajem — izklopi' : 'Samodejni zajem — vklopi'}
+        title="Samodejni zajem — zajame sam, ko sta svetloba in ostrina v redu"
+      >
+        <Timer className="size-4" aria-hidden />
       </Button>
       <Button variant="outline" onClick={stopCamera}>Prekliči</Button>
     </div>
@@ -394,6 +470,29 @@ export function FazaZajem (props: FazaZajemProps) {
                   aria-label="Predogled kamere" />
                 {/* R550: shutter blisk — 180 ms bela zavesa; potrditev zajema. */}
                 {blisk ? <div className="pointer-events-none absolute inset-0 z-20 bg-white/90" aria-hidden /> : null}
+                {/* R580: živi pokazatelji samodejnega zajema — svetloba in
+                    ostrina kot potrjeno/čakanje; vzorca (null) NE štejeta
+                    kot potrjena (poštenost R553: brez dokaza ni trditve). */}
+                {avtoZajem && camActive ? (
+                  <div role="status" className="pointer-events-none absolute right-2 top-12 z-10 rounded-lg bg-black/70 px-2.5 py-1.5 text-[11px] font-medium text-white backdrop-blur-sm">
+                    <span className={oceniSvetlobo(svetloba) === 'V_REDU' ? 'text-emerald-300' : 'text-white/70'}>
+                      svetloba {oceniSvetlobo(svetloba) === 'V_REDU' ? '✓' : '…'}
+                    </span>
+                    <span className="mx-1.5 text-white/40">·</span>
+                    <span className={oceniOstrino(ostrina) === 'OSTRO' ? 'text-emerald-300' : 'text-white/70'}>
+                      ostrina {oceniOstrino(ostrina) === 'OSTRO' ? '✓' : '…'}
+                    </span>
+                  </div>
+                ) : null}
+                {/* R580: odštevanje samodejnega zajema — napoved zajema,
+                    gumb Prekliči ga ustavi (slab vzorec ga tudi sam). */}
+                {odstevanje !== null ? (
+                  <div className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-2 bg-black/40">
+                    <p className="text-5xl font-bold tabular-nums text-white drop-shadow-lg" aria-live="polite">{odstevanje}</p>
+                    <p className="text-xs font-medium text-white">Samodejni zajem — telefon drži pri miru</p>
+                    <Button variant="outline" size="sm" onClick={() => setOdstevanje(null)}>Prekliči</Button>
+                  </div>
+                ) : null}
                 {/* R550: prehodni obroč točke ostrenja (700 ms). */}
                 {fokusTocka ? (
                   <div className="pointer-events-none absolute z-10 size-16 -translate-x-8 -translate-y-8 rounded-full border-2 border-white/90 shadow-[0_0_0_2px_rgba(0,0,0,0.35)]"

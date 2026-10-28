@@ -12,7 +12,7 @@ import {
   type NapravaZaIzbiro, type SmerKamere, type ZmogljivostiKamere,
 } from '@/lib/camera-capabilities'
 import { napisNastavitev, nastaviSmer, nastaviSvetilko, preberiNastavitve, shramba, type KameraNastavitve } from '@/lib/camera-prefs'
-import { vzorecSvetlobe } from './kakovost'
+import { vzorecOstrine, vzorecSvetlobe } from './kakovost'
 import type { ToastFn } from './tipi'
 
 export function useKamera ({ toast }: { toast: ToastFn }) {
@@ -47,6 +47,10 @@ export function useKamera ({ toast }: { toast: ToastFn }) {
   const [trenutnaNaprava, setTrenutnaNaprava] = useState<string | null>(null)
   // R553: glajena (EWMA α=0,5) svetlost živega predogleda; `null` = brez vzorca.
   const [svetloba, setSvetloba] = useState<number | null>(null)
+  // R580 (SAMODEJNI ZAJEM): glajena (EWMA α=0,5) ostrina živega predogleda
+  // (Laplaceova varianca na 240 px — ista skala/prag kot analiza po zajemu);
+  // `null` = brez vzorca, UI nikoli ne laže z vrednostjo.
+  const [ostrina, setOstrina] = useState<number | null>(null)
   // R579: generacija toka — naraste ob vsakem uspešnem zagonu. Učinek priklopa
   // (spodaj) se sproži na [camActive, tokGeneracija], s čimer je priklop
   // zagotovljen po vsakem zagonu — tudi če bi se camActive v eni Reactovi
@@ -112,6 +116,7 @@ export function useKamera ({ toast }: { toast: ToastFn }) {
       setTorchNa(false)
       setZoomVrednost(null)
       setSvetloba(null)
+      setOstrina(null)
       setCamActive(true)
       // R509: uspešen zagon si zapomni smer (zapisi v brskalnik, ne v bazo).
       if (nastaviSmer(shramba(), smer)) setNastavitve((p) => ({ ...p, smer }))
@@ -133,6 +138,7 @@ export function useKamera ({ toast }: { toast: ToastFn }) {
       setResToka(null)
       setTrenutnaNaprava(null)
       setSvetloba(null)
+      setOstrina(null)
       // R550: napaka po IMENU (NotAllowed/NotFound/NotReadable/…) — monterju
       // povedan UKREP, ne generična opomba; padec na nalaganje ostaja.
       const razlaga = razloziNapakoKamere(e)
@@ -157,6 +163,7 @@ export function useKamera ({ toast }: { toast: ToastFn }) {
     setResToka(null)
     setTrenutnaNaprava(null)
     setSvetloba(null)
+    setOstrina(null)
   }, [])
 
   /**
@@ -209,6 +216,11 @@ export function useKamera ({ toast }: { toast: ToastFn }) {
       void vzorecSvetlobe(videoRef.current).then((b) => {
         if (b === null) return
         setSvetloba((prej) => prej === null ? b : prej * 0.5 + b * 0.5)
+      })
+      // R580: živi vzorec OSTRINE ob svetlobi — vir za samodejni zajem.
+      void vzorecOstrine(videoRef.current).then((v) => {
+        if (v === null) return
+        setOstrina((prej) => prej === null ? v : prej * 0.5 + v * 0.5)
       })
     }, 1500)
     return () => window.clearInterval(id)
@@ -275,7 +287,7 @@ export function useKamera ({ toast }: { toast: ToastFn }) {
   return {
     camActive, videoRef, fileRef, torchNa, zmoKamere, nastavitve, smerKamere,
     zoomVrednost, nastaviZoomVrednost, ostrenjeNaTocki,
-    resToka, naprave, trenutnaNaprava, svetloba, preklopiNapravo,
+    resToka, naprave, trenutnaNaprava, svetloba, ostrina, preklopiNapravo,
     startCamera, stopCamera, preklopiSmer, preklopiTorch,
   }
 }

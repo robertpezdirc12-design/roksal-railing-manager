@@ -44,7 +44,15 @@ import { techObject } from './json'
 // zapisi brez semena se izrišejo bajtno identično (izpeljava iz savedId na
 // odjemalcu ostane kot vzporedna združljivost). Struktura zapisa se spremeni
 // (novo neobvezno polje), raster pa ne — zato verzija motorja ostaja 1.4.0.
-export const ENGINE_VERSION = '1.4.0'
+// R580 (1.5.0): REALIZEM IZ SVETLOBE PRIZORA NA RAVNI ELEMENTOV — preliv
+// vsake palice/stebra obrne svetli greben na SONČNO stran (ocena smeri
+// svetlobe iz fotografije; prej fiksno levo), pokončne palice dobijo
+// kontaktne sence na tleh, horizontalne deske senco na desko pod sabo,
+// fasadne letvice senco na steno, INOX profili odsevajo nebo, oddaljeni
+// (zgornji) del ograje pa dobi rahel zračni zahod — perspektivna atmosfera.
+// Vse znotraj istih načel (§1/§2/§10): brez AI, izključno iz merjenja
+// fotografije; determinizem (seme) ohranjen.
+export const ENGINE_VERSION = '1.5.0'
 
 /** §15: obvezni žig na vsaki POTEM sliki in zaslonu. */
 export const VIZ_ZIG = 'VIZUALIZACIJA ZA PREDSTAVITEV'
@@ -1040,8 +1048,10 @@ export function izrisiOgrajo (
   // merila slike, ne iz fiksnega deleža višine fotografije. Sonce ~45° pomeni
   // senco, dolgo približno toliko kot je ograja visoka; perspektiva tla jo
   // skrajša (faktor 0,42). Prej sta 105 cm in 220 cm ograja vrgli ENAKO senco.
+  // R580: EN vir moči sence — za ograjo kot celoto in za sence posameznih
+  // elementov (palice/deske/letvice), da vse sence v prizoru soglašajo.
+  const sencaMoc = opcije.senca ?? 0.35 + (1 - svetloba.svetlost) * 0.35
   if (!jePovrsina) {
-    const sencaMoc = opcije.senca ?? 0.35 + (1 - svetloba.svetlost) * 0.35
     const pxNaCmVisina = razdalja(quadPx[0], quadPx[3]) / Math.max(1, cfg.heightCm)
     const dolzinaCm = cfg.heightCm * 0.9
     const dY = Math.max(4, dolzinaCm * pxNaCmVisina * 0.42)
@@ -1082,6 +1092,23 @@ export function izrisiOgrajo (
       { x: quadPx[0].x, y: quadPx[0].y + dY * 0.02 }
     )
     ctx.fill()
+    // ── R580: kontaktne sence posameznih pokončnih palic — vsaka sede na
+    // tla v smeri glavne sence (sončna stran palice ostane čista). Rišejo
+    // se TUKAJ (pred rezom za mehki rob), ker maska mehkega robu kasneje
+    // vse, kar je narisano IZVEN quada, odreže.
+    if (cfg.tip === 'POKOCNA' && razpored.palice.length > 0) {
+      const sY = Math.max(3, dY * 0.16)
+      const sX = -svetloba.smer * sY * 0.55
+      try { ctx.filter = `blur(${Math.max(1, sY * 0.3).toFixed(1)}px)` } catch { /* starejši brskalniki */ }
+      ctx.fillStyle = `rgba(12, 14, 18, ${(0.20 * sencaMoc).toFixed(3)})`
+      for (const palica of razpored.palice) {
+        const a = P(palica.xCm, 0)
+        const b = P(palica.xCm + palica.sirinaCm, 0)
+        potQuad(ctx, a, b, { x: b.x + sX, y: b.y + sY }, { x: a.x + sX, y: a.y + sY })
+        ctx.fill()
+      }
+      try { ctx.filter = 'none' } catch { /* brez */ }
+    }
     ctx.restore()
   } // konec if (!jePovrsina)
 
@@ -1121,14 +1148,39 @@ export function izrisiOgrajo (
   const svetla = zamesaj(osnovna, svetloba.zgoraj, 0.28 + material.sijaj * 0.22)
   const temna = zamesaj(osnovna, '#0b0d10', 0.32 - material.sijaj * 0.1)
 
-  /** vertikalni preliv palice/stebra (valjasti videz) */
+  /**
+   * Vertikalni preliv palice/stebra (valjasti videz). R580: svetli greben
+   * sledi SMERI svetlobe iz fotografije — sonce z leve (smer −1) ga postavi
+   * na levo stran profila, sonce z desne (smer +1) na desno (prej fiksno levo).
+   */
   const prelivVert = (x0: number, y0: number, x1: number, y1: number): CanvasGradient => {
     const g = ctx.createLinearGradient(x0, y0, x1, y1)
-    g.addColorStop(0, temna)
-    g.addColorStop(0.3, svetla)
-    g.addColorStop(0.55, osnovna)
-    g.addColorStop(1, temna)
+    if (svetloba.smer < 0) {
+      g.addColorStop(0, temna)
+      g.addColorStop(0.3, svetla)
+      g.addColorStop(0.55, osnovna)
+      g.addColorStop(1, temna)
+    } else {
+      g.addColorStop(0, temna)
+      g.addColorStop(0.45, osnovna)
+      g.addColorStop(0.7, svetla)
+      g.addColorStop(1, temna)
+    }
     return g
+  }
+
+  /**
+   * R580: svetla kantica po SONČNI strani palice/stebra (a→d je ena stranska
+   * ploskev, a→b prečni rob). En vir smeri svetlobe kot prelivVert.
+   */
+  const kantica = (a: Tocka, b: Tocka, c: Tocka, d: Tocka, barva: string, alfa: number, sirina: number): void => {
+    const t = svetloba.smer < 0 ? 0.32 : 0.68
+    ctx.strokeStyle = rgba(barva, alfa)
+    ctx.lineWidth = sirina
+    ctx.beginPath()
+    ctx.moveTo(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t)
+    ctx.lineTo(d.x + (c.x - d.x) * t, d.y + (c.y - d.y) * t)
+    ctx.stroke()
   }
 
   /**
@@ -1166,13 +1218,10 @@ export function izrisiOgrajo (
     ctx.fillStyle = prelivVert(a.x, a.y, d.x, d.y)
     potQuad(ctx, a, b, c, d)
     ctx.fill()
-    // svetli rob (odsev svetlobe na robu profila)
-    ctx.strokeStyle = rgba(svetla, 0.5 * variation)
-    ctx.lineWidth = Math.max(0.6, Math.abs(b.x - a.x) * 0.12)
-    ctx.beginPath()
-    ctx.moveTo((a.x + d.x) / 2 + (b.x - a.x) * 0.18, (a.y + d.y) / 2)
-    ctx.lineTo((b.x + c.x) / 2 - (b.x - a.x) * 0.1, (b.y + c.y) / 2)
-    ctx.stroke()
+    // R580: svetli rob na SONČNI strani profila; visok sijaj (INOX) dobi
+    // odsev barve NEBA iz fotografije — kovinski profil ulovi nebo.
+    const robBarva = material.sijaj >= 0.7 ? zamesaj(svetla, svetloba.zgoraj, 0.45) : svetla
+    kantica(a, b, c, d, robBarva, (material.sijaj >= 0.7 ? 0.62 : 0.5) * variation, Math.max(0.6, Math.abs(b.x - a.x) * 0.12))
     // senčni rob
     ctx.strokeStyle = rgba(temna, 0.55)
     ctx.lineWidth = Math.max(0.5, Math.abs(b.x - a.x) * 0.1)
@@ -1228,15 +1277,8 @@ export function izrisiOgrajo (
       ctx.fillStyle = prelivVert(a.x, a.y, d.x, d.y)
       potQuad(ctx, a, b, c, d)
       ctx.fill()
-      // svetla kantica ob robu profila (odsev svetlobe)
-      if (Math.abs(b.x - a.x) > 2.2) {
-        ctx.strokeStyle = rgba(svetla, 0.4 * v)
-        ctx.lineWidth = 0.7
-        ctx.beginPath()
-        ctx.moveTo(a.x + (b.x - a.x) * 0.32, a.y)
-        ctx.lineTo(d.x + (c.x - d.x) * 0.32, d.y)
-        ctx.stroke()
-      }
+      // svetla kantica ob robu profila (odsev svetlobe) — R580: sončna stran
+      if (Math.abs(b.x - a.x) > 2.2) kantica(a, b, c, d, svetla, 0.4 * v, 0.7)
       // R523: vir z množico izrezov (scenična) → mreža + izrez te letvice;
       // vir ENOJNE površine (DETAJL čip) → ena celica brez šivov + določena
       // VARIACIJA po letvici (podizrez 62–100 % in izmenično zrcalo, seme),
@@ -1257,6 +1299,16 @@ export function izrisiOgrajo (
       struktura(palica.xCm, 0, palica.xCm + palica.sirinaCm, cfg.heightCm,
         imaMnozico ? izreziPalic[Math.floor(rnd() * izreziPalic.length)] : izrezLetvice,
         !imaMnozico, zrcali)
+      // ── R580: senca letvice na steno ZA njo — tanka, na stran od sonca
+      // (deterministično iz ocene svetlobe; znotraj quada, kar je za letvice
+      // najbolj opazen znak globine v pravih namestitvenih fotografijah).
+      const sSir = palica.sirinaCm * 0.55
+      const xs = svetloba.smer < 0 ? palica.xCm + palica.sirinaCm : palica.xCm - sSir
+      try { ctx.filter = `blur(${Math.max(1.5, W * 0.003).toFixed(1)}px)` } catch { /* starejši brskalniki */ }
+      ctx.fillStyle = `rgba(12, 14, 18, ${(0.14 * sencaMoc).toFixed(3)})`
+      potQuad(ctx, P(xs, 0), P(xs + sSir, 0), P(xs + sSir, cfg.heightCm), P(xs, cfg.heightCm))
+      ctx.fill()
+      try { ctx.filter = 'none' } catch { /* brez */ }
     }
   } else if (cfg.tip === 'TERASA') {
     // R520: terasne deske ležijo po CELI globini označenega območja — vsaka
@@ -1282,6 +1334,15 @@ export function izrisiOgrajo (
       ctx.lineTo(b.x, b.y)
       ctx.stroke()
       struktura(0, deska.yCm, cfg.lengthCm, deska.yCm + deska.visinaCm)
+      // ── R580: lastna senca deske na desko/režo ZA njo (daljna kantica,
+      // stran od sonca) — enak trik kot pri PRECNA, prilagojen ravnini tal.
+      const sT = Math.max(1.2, Math.abs(a.y - d.y) * 0.12)
+      const oXT = -svetloba.smer * sT * 0.7
+      try { ctx.filter = `blur(${(sT * 0.8).toFixed(1)}px)` } catch { /* starejši brskalniki */ }
+      ctx.fillStyle = `rgba(12, 14, 18, ${(0.22 * sencaMoc).toFixed(3)})`
+      potQuad(ctx, d, c, { x: c.x + oXT, y: c.y - sT }, { x: d.x + oXT, y: d.y - sT })
+      ctx.fill()
+      try { ctx.filter = 'none' } catch { /* brez */ }
     }
   } else if (cfg.tip === 'POKOCNA') {
     // R524: DETAJL čipi uradnih lestvic se preslikajo z NAVADNO mrežo celic
@@ -1299,14 +1360,8 @@ export function izrisiOgrajo (
       ctx.fillStyle = prelivVert(a.x, a.y, d.x, d.y)
       potQuad(ctx, a, b, c, d)
       ctx.fill()
-      if (Math.abs(b.x - a.x) > 2.2) {
-        ctx.strokeStyle = rgba(svetla, 0.4 * v)
-        ctx.lineWidth = 0.7
-        ctx.beginPath()
-        ctx.moveTo(a.x + (b.x - a.x) * 0.32, a.y)
-        ctx.lineTo(d.x + (c.x - d.x) * 0.32, d.y)
-        ctx.stroke()
-      }
+      // R580: kantica na sončni strani palice (prej fiksno levo)
+      if (Math.abs(b.x - a.x) > 2.2) kantica(a, b, c, d, svetla, 0.4 * v, 0.7)
       struktura(palica.xCm, 0, palica.xCm + palica.sirinaCm, cfg.heightCm - 4)
     }
   } else if (cfg.tip === 'PRECNA') {
@@ -1333,6 +1388,19 @@ export function izrisiOgrajo (
       ctx.stroke()
       // R507 §3: deska je vedno iz DEJANSKEGA posnetka površine
       struktura(0.6, deska.yCm, cfg.lengthCm - 0.6, deska.yCm + deska.visinaCm)
+      // ── R580: lastna senca deske — tanka senco na režo/desko POD sabo, na
+      // stran od sonca (znotraj quada). Brez nje deska plava nad sliko.
+      const sD = Math.max(1.2, Math.abs(a.y - d.y) * 0.12)
+      const oX = -svetloba.smer * sD * 0.7
+      try { ctx.filter = `blur(${(sD * 0.8).toFixed(1)}px)` } catch { /* starejši brskalniki */ }
+      ctx.fillStyle = `rgba(12, 14, 18, ${(0.22 * sencaMoc).toFixed(3)})`
+      potQuad(ctx,
+        { x: a.x + oX, y: a.y },
+        { x: b.x + oX, y: b.y },
+        { x: b.x, y: b.y + sD },
+        { x: a.x, y: a.y + sD })
+      ctx.fill()
+      try { ctx.filter = 'none' } catch { /* brez */ }
     }
   } else if (cfg.tip === 'STEKLO') {
     // stekleno polnilo: prosojna plošča z odbojem
@@ -1403,6 +1471,20 @@ export function izrisiOgrajo (
     ctx.ellipse(p.x - r * 0.22, p.y - r * 0.25, r * 0.42, r * 0.3, -0.5, 0, Math.PI * 2)
     ctx.fill()
   }
+
+  // ── 6a. ZRAČNA GLOBINA (R580): oddaljeni (zgornji) del ograje dobi rahel
+  // megleni zahod barve neba — perspektivna atmosfera, kot jo v pravi
+  // fotografiji da globina. Subtilno (α ≤ 0,13), znotraj quada, brez AI.
+  ctx.save()
+  potQuad(ctx, quadPx[0], quadPx[1], quadPx[2], quadPx[3])
+  ctx.clip()
+  const yGor = Math.min(quadPx[3].y, quadPx[2].y)
+  const gGlobina = ctx.createLinearGradient(0, yGor, 0, yGor + hq * 0.5)
+  gGlobina.addColorStop(0, rgba(svetloba.zgoraj, 0.13))
+  gGlobina.addColorStop(1, rgba(svetloba.zgoraj, 0))
+  ctx.fillStyle = gGlobina
+  ctx.fillRect(0, 0, W, H)
+  ctx.restore()
 
   // ── 7. ZRNO (posnemi fotografijo — determinističen šum po celotnem območju) ─
   const zrno = 0.05 + material.struktura * 0.04

@@ -169,3 +169,55 @@ export async function vzorecSvetlobe (video: HTMLVideoElement | null): Promise<n
     return null
   }
 }
+
+/**
+ * R580 (SAMODEJNI ZAJEM): klasifikacija ostrine živega predogleda — ISTA
+ * skala (240 px Laplaceova varianca) in isti prag (BLUR_THRESHOLD) kot
+ * analyzeQuality, zato je »OSTRO« tu ista beseda kot pri analizi po zajemu.
+ * `NI_PODATKA` NI »ostro« — vzorca se lahko še ni izšel.
+ */
+export type OcenaOstrine = 'OSTRO' | 'MEHKO' | 'NI_PODATKA'
+
+export function oceniOstrino (v: number | null): OcenaOstrine {
+  if (v === null || !Number.isFinite(v)) return 'NI_PODATKA'
+  if (v < BLUR_THRESHOLD) return 'MEHKO'
+  return 'OSTRO'
+}
+
+/**
+ * R580: živi vzorec OSTRINE predogleda — Laplaceova variacija na 240 px
+ * širokem platnu (enaka skala kot analyzeQuality, da velja isti prag; R553
+ * je 48 px odbil kot nezanesljivega, 240 px na 1,5 s pa zmore brez zastoja).
+ * Vrne `null`, kadar vzorca ni mogoče vzeti (video se še prižiga / brez
+ * okvirja) — klicatelj NE laže z vrednostjo.
+ */
+export async function vzorecOstrine (video: HTMLVideoElement | null): Promise<number | null> {
+  if (!video || !video.videoWidth || !video.videoHeight) return null
+  try {
+    const w = 240
+    const h = Math.max(1, Math.round((video.videoHeight / video.videoWidth) * w)) || 1
+    const canvas = document.createElement('canvas')
+    canvas.width = w; canvas.height = h
+    const ctx = canvas.getContext('2d', { willReadFrequently: true })
+    if (!ctx) return null
+    ctx.drawImage(video, 0, 0, w, h)
+    const d = ctx.getImageData(0, 0, w, h).data
+    const gray = new Float32Array(w * h)
+    for (let i = 0; i < w * h; i++) {
+      gray[i] = 0.299 * d[i * 4] + 0.587 * d[i * 4 + 1] + 0.114 * d[i * 4 + 2]
+    }
+    let lapSum = 0; let lapSq = 0; let n = 0
+    for (let y = 1; y < h - 1; y++) {
+      for (let x = 1; x < w - 1; x++) {
+        const i = y * w + x
+        const lap = 4 * gray[i] - gray[i - 1] - gray[i + 1] - gray[i - w] - gray[i + w]
+        lapSum += lap; lapSq += lap * lap; n++
+      }
+    }
+    if (n === 0) return null
+    const variance = lapSq / n - (lapSum / n) ** 2
+    return Number.isFinite(variance) ? variance : null
+  } catch {
+    return null
+  }
+}

@@ -12,6 +12,10 @@
 // izklopil, jih noče videti vsakič znova. Privzeto ostajajo VKLOPLJENA (R455
 // §4 — poravnava ograje ob vodoravnici je del naloge, ne okras).
 //
+// R580: dodana je še izbira SAMODEJNEGA ZAJEMA. Za razliko od vodil je ta
+// privzeto IZKLOPLJENA — zajem, ki se zgodi sam od sebe, preseneča; monter
+// ga vklopi zavestno, aplikacija pa si zapomni, da ga ima rad.
+//
 // Dve poštenosti, ki ju narekuje §7:
 //   • shranjeno stanje je NIKOLI ukaz napravi. Svetilka se ob ponovnem obisku
 //     SAMODEJNO NE prižge — shrani se samo to, da je monter jo nazadnje imel
@@ -36,9 +40,13 @@ export interface KameraNastavitve {
   svetilkaNazadnje: boolean
   /** R573: ali ima monter radi vodila (mreža) v živem predogledu. */
   vodila: boolean
+  /** R580: ali ima monter rad SAMODEJNI ZAJEM (živič pri dobri svetlobi in
+   *  ostrini, z odštevanjem). Zajem se NE zgodi sam od sebe brez njegove
+   *  izbiře — privzeto IZKLOPJENO. */
+  avtoZajem: boolean
 }
 
-export const PRIVZETE_NASTAVITVE: KameraNastavitve = { smer: 'environment', svetilkaNazadnje: false, vodila: true }
+export const PRIVZETE_NASTAVITVE: KameraNastavitve = { smer: 'environment', svetilkaNazadnje: false, vodila: true, avtoZajem: false }
 
 /**
  * Brskalnikova shramba ali `null` (SSR, privatni način, zaprt dostop).
@@ -70,14 +78,17 @@ export function preberiNastavitve (s: Shramba | null): KameraNastavitve {
   // R573: vodila — samo IZRIČEN `false` pomeni izklop; starejši zapisi (brez
   // polja) in smeti padejo na privzeti VKLOP (R455), nikoli na »ugasnjeno«.
   const vodila = surovo.vodila === false ? false : PRIVZETE_NASTAVITVE.vodila
-  return { smer, svetilkaNazadnje: surovo.svetilkaNazadnje === true, vodila }
+  // R580: samodejni zajem — samo IZRIČEN `true` ga vklopi; starejši zapisi
+  // (brez polja) padejo na privzeti IZKLOP (zajem nikoli ne se zgodi sam).
+  const avtoZajem = surovo.avtoZajem === true ? true : PRIVZETE_NASTAVITVE.avtoZajem
+  return { smer, svetilkaNazadnje: surovo.svetilkaNazadnje === true, vodila, avtoZajem }
 }
 
 /** Zapiše nastavitve. Vrne `false`, ko pisanje ni mogoče (poln disk / privatni način). */
 export function zapisiNastavitve (s: Shramba | null, n: KameraNastavitve): boolean {
   if (!s) return false
   try {
-    s.setItem(PREFS_KLJUC, JSON.stringify({ smer: n.smer, svetilkaNazadnje: n.svetilkaNazadnje === true, vodila: n.vodila === true }))
+    s.setItem(PREFS_KLJUC, JSON.stringify({ smer: n.smer, svetilkaNazadnje: n.svetilkaNazadnje === true, vodila: n.vodila === true, avtoZajem: n.avtoZajem === true }))
     return true
   } catch { return false }
 }
@@ -95,6 +106,11 @@ export function nastaviSvetilko (s: Shramba | null, na: boolean): boolean {
 /** R573: merge čez obstoječe nastavitve — vodila (mreža v predogledu). */
 export function nastaviVodila (s: Shramba | null, na: boolean): boolean {
   return zapisiNastavitve(s, { ...preberiNastavitve(s), vodila: na === true })
+}
+
+/** R580: merge čez obstoječe nastavitve — samodejni zajem (privzeto izklopljen). */
+export function nastaviAvtoZajem (s: Shramba | null, na: boolean): boolean {
+  return zapisiNastavitve(s, { ...preberiNastavitve(s), avtoZajem: na === true })
 }
 
 /**

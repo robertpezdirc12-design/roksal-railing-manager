@@ -98,7 +98,7 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
 
   // ── kamera (R508/R509): zagon, smer, bliskavica, zmogljivosti, spomin ──
   const kamera = useKamera({ toast })
-  const { camActive, videoRef, fileRef, torchNa, zmoKamere, nastavitve, smerKamere, zoomVrednost, nastaviZoomVrednost, ostrenjeNaTocki, resToka, naprave, trenutnaNaprava, preklopiNapravo, svetloba, startCamera, stopCamera, preklopiSmer, preklopiTorch } = kamera
+  const { camActive, videoRef, fileRef, torchNa, zmoKamere, nastavitve, smerKamere, zoomVrednost, nastaviZoomVrednost, ostrenjeNaTocki, resToka, naprave, trenutnaNaprava, preklopiNapravo, svetloba, ostrina, startCamera, stopCamera, preklopiSmer, preklopiTorch } = kamera
 
   // ── R467 (issue #8 F1): živo razumevanje prizora med zajemom ──
   // R468 (F2 §3): trenutni nagib telefona (roll) za ločitev naklona telefona
@@ -884,7 +884,7 @@ export function KameraMeritevDialog ({ open, onClose, onSaved, initialProjectId,
           smerKamere={smerKamere} zoomVrednost={zoomVrednost} nastaviZoomVrednost={nastaviZoomVrednost}
           ostrenjeNaTocki={ostrenjeNaTocki}
           resToka={resToka} naprave={naprave} trenutnaNaprava={trenutnaNaprava}
-          preklopiNapravo={preklopiNapravo} svetloba={svetloba}
+          preklopiNapravo={preklopiNapravo} svetloba={svetloba} ostrina={ostrina}
           existingPhotos={existingPhotos} pickExisting={pickExisting} projects={projects}
           projectId={projectId} setProjectId={setProjectId} workOrderId={workOrderId}
           setWorkOrderId={setWorkOrderId} orderOptions={orderOptions} orders={orders} online={online}
